@@ -6418,3 +6418,30 @@ debug sections) and a full `strip` REMOVES DuckDB's metadata trailer — the fil
 drops to 33 MB and can no longer be loaded. The ~40 MB size is `-O3` code size
 (`.text` 26 MB vs 8.3 MB in the older 12 MB builds), not symbols; reducing it
 needs a compiler-flag decision (-O2/LTO), not a strip step.
+
+## Lateral dedup needs a SCOPE CHAIN, not just the current SELECT (2026-11-11)
+
+The lateral-dedup pass hoists repeated correlated extractions out of a SELECT's
+projection/WHERE into a `CROSS JOIN LATERAL`. Two things must agree about which
+aliases that lateral may reference, and both must use a CHAIN (this select's
+FROM/JOIN aliases **plus every enclosing select's**):
+
+- `_dedup_select` / `_dedup_nested_scopes` (hoisting) — `outer_visible` is
+  threaded top-down because dedup recurses children-FIRST; by the time a nested
+  select was processed, the parent's `_current_dedup_aliases` had already been
+  restored, so a local-only view rejected every candidate that referenced an
+  ancestor.
+- `_unwrap_scope_unsafe_laterals` (the post-pass that strips unsafe laterals) —
+  with a local-only view it would strip exactly the laterals the hoisting pass
+  had just legitimately created.
+
+Position rules, because SQL correlation is not uniform: projection/WHERE
+subqueries and LATERAL join tables inherit the chain; **FROM-subqueries and
+non-lateral JOIN tables get only the ancestors** (they cannot correlate to the
+select that owns them).
+
+DuckDB measurement that justifies the chain: a lateral resolves references 2
+levels up, 3 levels up, and inside a UNION operand (all bind successfully). The
+guard added in 65f4a70c2b3 asserted the opposite ("laterals cannot correlate
+past their own SELECT") and cost CMS2 1.34 MB -> 12.95 MB by disabling dedup for
+~75 copies of one extraction. After the chain: 12.95 MB -> 1.54 MB.

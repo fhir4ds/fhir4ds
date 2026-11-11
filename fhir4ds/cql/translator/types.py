@@ -1711,24 +1711,31 @@ class SQLFragment:
         # have the same visibility constraints (review HIGH-1).
         self._unwrap_scope_unsafe_laterals(self.main_query)
 
-    def _unwrap_scope_unsafe_laterals(self, node) -> None:
-        """Recursively validate lateral joins and remove scope-unsafe ones."""
+    def _unwrap_scope_unsafe_laterals(
+        self, node, outer_visible: frozenset = frozenset()
+    ) -> None:
+        """Recursively validate lateral joins and remove scope-unsafe ones.
+
+        Uses the same scope CHAIN as the hoisting pass: a lateral is unsafe only
+        when it references an alias that is in neither its own scope nor any
+        enclosing one (DuckDB resolves outer references through the chain).
+        """
         if node is None:
             return
         if isinstance(node, (list, tuple)):
             for item in node:
-                self._unwrap_scope_unsafe_laterals(item)
+                self._unwrap_scope_unsafe_laterals(item, outer_visible)
             return
         if not hasattr(node, "__dataclass_fields__"):
             return
 
-        if isinstance(node, SQLSelect) and node.joins:
-            visible = set()
-            if isinstance(node.from_clause, SQLAlias):
-                visible.add(node.from_clause.alias)
-            elif isinstance(node.from_clause, SQLIdentifier):
-                visible.add(node.from_clause.name)
+        if isinstance(node, SQLSelect):
+            visible = set(outer_visible) | self._select_local_aliases(node)
             visible.add("_pt")
+        else:
+            visible = set(outer_visible)
+
+        if isinstance(node, SQLSelect) and node.joins:
             kept_joins = []
             for join in node.joins:
                 if (
@@ -1758,7 +1765,9 @@ class SQLFragment:
             node.joins = kept_joins or None
 
         for field_name in node.__dataclass_fields__:
-            self._unwrap_scope_unsafe_laterals(getattr(node, field_name, None))
+            self._unwrap_scope_unsafe_laterals(
+                getattr(node, field_name, None), frozenset(visible)
+            )
 
     def _lateral_join_scope_safe(self, join: "SQLJoin", visible: set) -> bool:
         """A lateral may reference only its attach scope's visible aliases
@@ -1836,12 +1845,59 @@ class SQLFragment:
         if isinstance(query, SQLSelect):
             self._dedup_select(query, min_occ)
 
-    def _dedup_select(self, select: 'SQLSelect', min_occ: int) -> None:
-        """Deduplicate repeated expressions in a SELECT's projection and WHERE."""
-        self._dedup_nested_scopes(select.columns, min_occ)
-        self._dedup_nested_scopes(select.from_clause, min_occ)
-        self._dedup_nested_scopes(select.joins, min_occ)
-        self._dedup_nested_scopes(select.where, min_occ)
+    @staticmethod
+    def _select_local_aliases(select: 'SQLSelect') -> set:
+        """Aliases this select itself binds (FROM alias + JOIN aliases)."""
+        local = set()
+        for join in list(select.joins or []):
+            if isinstance(join, SQLJoin):
+                if join.alias:
+                    local.add(join.alias)
+                if isinstance(join.table, SQLAlias):
+                    local.add(join.table.alias)
+        if isinstance(select.from_clause, SQLAlias):
+            local.add(select.from_clause.alias)
+        elif isinstance(select.from_clause, SQLIdentifier):
+            local.add(select.from_clause.name)
+        return local
+
+    def _dedup_select(
+        self,
+        select: 'SQLSelect',
+        min_occ: int,
+        outer_visible: frozenset = frozenset(),
+    ) -> None:
+        """Deduplicate repeated expressions in a SELECT's projection and WHERE.
+
+        ``outer_visible`` carries the aliases of ENCLOSING selects. DuckDB
+        resolves a lateral's references through its enclosing scopes (verified:
+        2 and 3 levels up, and inside a UNION operand), so a repeated
+        correlated extraction may be hoisted even when it references an alias
+        that belongs to an ancestor rather than to this select. Without the
+        chain the collector only saw this select's own aliases and rejected
+        every such candidate (CMS2: 1.34 MB -> 12.95 MB, review BUGFIX-013).
+        """
+        # Aliases a LATERAL attached to THIS select may reference: its own FROM
+        # alias + JOIN aliases, plus every enclosing select's (scope chain).
+        local_aliases = self._select_local_aliases(select)
+        visible = frozenset(outer_visible) | local_aliases
+
+        # Recurse BEFORE hoisting here (children first), passing the right
+        # visibility per position: a FROM-subquery or a non-lateral JOIN table
+        # may NOT correlate to this select's aliases, while projection/WHERE
+        # subqueries (and LATERAL tables) may.
+        self._dedup_nested_scopes(select.columns, min_occ, visible)
+        self._dedup_nested_scopes(select.from_clause, min_occ, frozenset(outer_visible))
+        for join in list(select.joins or []):
+            if isinstance(join, SQLJoin):
+                is_lateral = "LATERAL" in (join.join_type or "").upper()
+                self._dedup_nested_scopes(
+                    join.table, min_occ, visible if is_lateral else frozenset(outer_visible)
+                )
+                self._dedup_nested_scopes(join.on_condition, min_occ, visible)
+            else:
+                self._dedup_nested_scopes(join, min_occ, frozenset(outer_visible))
+        self._dedup_nested_scopes(select.where, min_occ, visible)
 
         if select.from_clause is None:
             return
@@ -1849,22 +1905,8 @@ class SQLFragment:
         # (Star projections are qualified AFTER lateral construction —
         # see below — so appending laterals cannot widen them.)
 
-        # Aliases a LATERAL attached to this SELECT may legally reference:
-        # its own FROM alias + JOIN aliases. Outer-scope (correlated) aliases
-        # are NOT visible to the lateral (DuckDB limitation).
-        local_aliases = set()
-        for join in list(select.joins or []):
-            if isinstance(join, SQLJoin):
-                if join.alias:
-                    local_aliases.add(join.alias)
-                if isinstance(join.table, SQLAlias):
-                    local_aliases.add(join.table.alias)
-        if isinstance(select.from_clause, SQLAlias):
-            local_aliases.add(select.from_clause.alias)
-        elif isinstance(select.from_clause, SQLIdentifier):
-            local_aliases.add(select.from_clause.name)
         prev_aliases = getattr(self, "_current_dedup_aliases", None)
-        self._current_dedup_aliases = local_aliases
+        self._current_dedup_aliases = visible
         try:
             # 1) Collect candidate expressions and their serialized forms.
             # Lateral aliases appended to this SELECT are visible to the projection
@@ -1937,30 +1979,35 @@ class SQLFragment:
         # reference every alias visible to the WHERE clause.
         select.joins = list(select.joins or []) + lateral_joins
 
-    def _dedup_nested_scopes(self, value: Any, min_occ: int) -> None:
-        """Apply deduplication inside nested SELECT scopes without hoisting out."""
+    def _dedup_nested_scopes(
+        self, value: Any, min_occ: int, visible: frozenset = frozenset()
+    ) -> None:
+        """Apply deduplication inside nested SELECT scopes without hoisting out.
+
+        ``visible`` is the enclosing alias chain passed to nested selects.
+        """
         if value is None:
             return
 
         if isinstance(value, SQLSubquery):
             if isinstance(value.query, SQLSelect):
-                self._dedup_select(value.query, min_occ)
+                self._dedup_select(value.query, min_occ, visible)
             elif isinstance(value.query, (SQLUnion, SQLIntersect, SQLExcept)):
                 for operand in value.query.operands:
-                    self._dedup_nested_scopes(operand, min_occ)
+                    self._dedup_nested_scopes(operand, min_occ, visible)
             return
 
         if isinstance(value, SQLExists):
-            self._dedup_nested_scopes(value.subquery, min_occ)
+            self._dedup_nested_scopes(value.subquery, min_occ, visible)
             return
 
         if isinstance(value, SQLSelect):
-            self._dedup_select(value, min_occ)
+            self._dedup_select(value, min_occ, visible)
             return
 
         if isinstance(value, SQLJoin):
-            self._dedup_nested_scopes(value.table, min_occ)
-            self._dedup_nested_scopes(value.on_condition, min_occ)
+            self._dedup_nested_scopes(value.table, min_occ, visible)
+            self._dedup_nested_scopes(value.on_condition, min_occ, visible)
             return
 
         if isinstance(value, (SQLUnion, SQLIntersect, SQLExcept)):
