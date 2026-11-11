@@ -608,14 +608,33 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             return sql_text
         cte_map = getattr(self, "_phase2_cte_name_map", None) or {}
         import re as _re
+        unresolved: list = []
+
         def _sub(m):
             idx = int(m.group(1))
             if 0 <= idx < len(markers):
                 cte_name = cte_map.get(markers[idx].key)
                 if cte_name:
                     return f'"{cte_name}"'
+                unresolved.append((idx, str(markers[idx].key)))
+            else:
+                unresolved.append((idx, "<index out of range>"))
             return m.group(0)
-        return _re.sub(r"__f4ds_ph_(\d+)__", _sub, sql_text)
+
+        substituted = _re.sub(r"__f4ds_ph_(\d+)__", _sub, sql_text)
+        if unresolved:
+            # Leaking a marker into the statement produces an opaque
+            # `Referenced table "__f4ds_ph_0__" not found` much later. Fail at
+            # the point of knowledge instead (review REV-011).
+            from ..errors import TranslationError
+
+            details = ", ".join(f"#{i} {key}" for i, key in unresolved[:5])
+            raise TranslationError(
+                "Unresolved aggregate-fold retrieve placeholder(s) "
+                f"after Phase 2: {details}. The fold lowering serialized a "
+                "retrieve that never got a CTE emitted for it."
+            )
+        return substituted
 
     def translate_library_to_population_sql(
         self,
@@ -3146,16 +3165,6 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         # overrides can be resolved into structured CodeSystem references.
         for cs in library.codesystems:
             self._context.add_codesystem(cs.name, cs.id, cs.version)
-
-        # Record the library's data-model using declarations (e.g. `using
-        # USQualityCore` vs `using QICore`) so profiled retrieves can scope
-        # their meta.profile URL families: US Quality Core 0.1.0-cibuild
-        # (QI-Core 6) unifies the paired Condition profiles; QI-Core 5/6
-        # retrieves distinguish them (CMS72 vs CMS135 fixture semantics).
-        self._context.library_models = [
-            getattr(u, "model", None) or getattr(u, "local_identifier", "") or ""
-            for u in (library.using or [])
-        ]
 
         # Set up value sets
         for vs in library.valuesets:

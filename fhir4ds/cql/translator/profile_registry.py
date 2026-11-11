@@ -17,6 +17,37 @@ from ..paths import get_resource_path
 
 logger = logging.getLogger(__name__)
 
+
+_UNIFIED_WITH_CACHE: Optional[Dict[str, list]] = None
+
+
+def _load_unified_with() -> Dict[str, list]:
+    """Load profile URL equivalences from ``profile_equivalences.json``.
+
+    Kept as DATA rather than a Python literal: which profiles are
+    interchangeable is a clinical authoring decision, not a derived fact, and
+    every fixture that pins it is named in the file's ``_comment``.
+    """
+    global _UNIFIED_WITH_CACHE
+    if _UNIFIED_WITH_CACHE is not None:
+        return _UNIFIED_WITH_CACHE
+    table: Dict[str, list] = {}
+    try:
+        path = Path(get_resource_path("profiles", "profile_equivalences.json"))
+        if path.exists():
+            with open(path, encoding="utf-8") as handle:
+                raw = json.load(handle).get("unified_with", {})
+            if isinstance(raw, dict):
+                table = {
+                    key: list(value)
+                    for key, value in raw.items()
+                    if isinstance(value, list)
+                }
+    except (OSError, ValueError) as exc:
+        logger.warning("Could not load profile equivalences: %s", exc)
+    _UNIFIED_WITH_CACHE = table
+    return table
+
 # Default JSON config path (relative to this file's package)
 _DEFAULT_CONFIG = get_resource_path("profiles", "qicore-profiles.json")
 
@@ -52,6 +83,8 @@ class ProfileRegistry:
         self._url_to_type = url_to_type
         self._profiles_requiring_suffix = profiles_requiring_suffix
         self._property_extensions: Dict[str, dict] = property_extensions or {}
+        # Profile URL equivalences (see resources/profiles/profile_equivalences.json)
+        self._unified_with: Dict[str, list] = _load_unified_with()
         self._model_config = None  # set by from_model_config
         self._extension_paths: Optional[dict] = None
         self._raw_component_profile_keywords: Optional[list] = None
@@ -345,32 +378,6 @@ class ProfileRegistry:
                 return bool(info.get("meta_profile_filter"))
         return False
 
-    # US Quality Core 0.1.0-cibuild (QI-Core 6) unifies the paired
-    # Condition profiles: a retrieve on EITHER flavor matches both flavors'
-    # us-quality-core URLs (Condition.category carries the authoring
-    # distinction). The BASE us-quality-core-condition profile stays
-    # excluded (CMS108 fixture 23f1ece5). QI-Core (5/6) retrieves keep the
-    # flavors DISTINCT (CMS72 fixture 9f4bc5cc).
-    _UNIFIED_USQC_PAIRS = {
-        # One-directional: a ConditionEncounterDiagnosis retrieve also
-        # matches problems-health-concerns conditions (CMS135/146 fixtures);
-        # a ConditionProblemsHealthConcerns retrieve stays strict
-        # (CMS108/CMS72 fixtures distinguish the other direction).
-        "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/"
-        "us-quality-core-condition-encounter-diagnosis": [
-            "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/"
-            "us-quality-core-condition-problems-health-concerns",
-        ],
-        # The registry's primary URL is QI-Core; key the unification on the
-        # qicore ConditionEncounterDiagnosis canonical too so retrieves
-        # resolving through the primary chain get the sibling.
-        "http://hl7.org/fhir/us/qicore/StructureDefinition/"
-        "qicore-condition-encounter-diagnosis": [
-            "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/"
-            "us-quality-core-condition-problems-health-concerns",
-        ],
-    }
-
     def profile_filter_urls(self, profile_url: str) -> list:
         """All meta.profile URLs a retrieve with this profile_url should match.
 
@@ -391,7 +398,7 @@ class ProfileRegistry:
                 for alt in [info.get("url")] + list(info.get("alternate_urls") or []):
                     if alt and alt not in urls:
                         urls.append(alt)
-                for unified in self._UNIFIED_USQC_PAIRS.get(profile_url, []):
+                for unified in self._unified_with.get(profile_url, []):
                     if unified not in urls:
                         urls.append(unified)
                 return urls

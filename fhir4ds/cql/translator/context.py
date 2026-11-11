@@ -585,7 +585,6 @@ class SQLTranslationContext:
     # meta.profile URL family from this: US Quality Core 0.1.0-cibuild
     # (QI-Core 6) unifies the paired Condition profiles; QI-Core retrieves
     # distinguish them.
-    library_models: list = field(default_factory=list)
 
     # Precomputed column name mappings (FHIRPath → SQL column), from versioned FHIR R4 dir
     column_mappings: Optional[Dict[str, str]] = None

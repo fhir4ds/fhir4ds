@@ -1,0 +1,11 @@
+{
+  "_comment": "Hand-maintained profile URL equivalences for the meta.profile membership filter. NOT generated: regen_profiles.py derives the profile list from modelinfo, but which profiles are interchangeable is a clinical authoring decision, so it lives here instead of in Python (review REV-006). Each key is a profile URL; the value lists ADDITIONAL canonical URLs a retrieve on that profile must also accept. The relation is deliberately one-directional: a ConditionEncounterDiagnosis retrieve also matches problems-health-concerns conditions (CMS135/146 fixtures), while a ConditionProblemsHealthConcerns retrieve stays strict (CMS108/CMS72 fixtures distinguish that direction). The BASE us-quality-core-condition profile is intentionally absent (CMS108 fixture 23f1ece5), and pure QI-Core retrieves are NOT scoped away from this table: the QI-Core canonical is a key here because the QI-Core 2025 fixtures (CMS135/146) require the same unification.",
+  "unified_with": {
+    "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/us-quality-core-condition-encounter-diagnosis": [
+      "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/us-quality-core-condition-problems-health-concerns"
+    ],
+    "http://hl7.org/fhir/us/qicore/StructureDefinition/qicore-condition-encounter-diagnosis": [
+      "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/us-quality-core-condition-problems-health-concerns"
+    ]
+  }
+}
