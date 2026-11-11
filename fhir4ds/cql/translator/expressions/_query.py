@@ -6223,9 +6223,19 @@ class QueryMixin:
                     else None
                 )
                 _is_def_root = _root_ast is node
+                # Explicit `return distinct` ALWAYS de-duplicates, even nested
+                # (CMS506 counts distinct opioid medications inside a where
+                # clause: suppressing it counted duplicates and flipped the
+                # numerator on). The IMPLICIT default of plain `return` is only
+                # applied at a definition root, where it materialises into a CTE
+                # and cannot leak DISTINCT into scalar property extractions
+                # (CMS56 54/58 otherwise).
                 _return_distinct = bool(
-                    getattr(node.return_clause, 'distinct', False)
-                ) and _is_def_root
+                    getattr(node.return_clause, 'explicit_distinct', False)
+                ) or (
+                    bool(getattr(node.return_clause, 'distinct', False))
+                    and _is_def_root
+                )
                 # When early_list_transform is active, result is a lambda
                 # parameter placeholder (e.g., _lt_DayNumber).  The return
                 # expression already references the parameter directly, so

@@ -97,10 +97,37 @@ class RetrievePlaceholder(SQLExpression):
                 self.profile_url == other.profile_url)
 
 
+def _resolve_provisional_cte_name(
+    name: str, cte_name_map: Dict[Tuple[str, Optional[str], Optional[str]], str]
+) -> Optional[str]:
+    """Map a provisional "<Type>: <valueset>" CTE name to its real CTE name.
+
+    When a retrieve is used as a query source before phase 2 decides the final
+    CTE name, the alias symbol records a provisional ``<Type>: <valueset>``
+    name. References that bypass the RetrievePlaceholder (e.g. inside a
+    function-promotion body) then emit that provisional string, which is never
+    defined — CMS0334: ``"Observation: http://cts.nlm…"`` Catalog Error.
+    """
+    if ": http" not in name and ": urn:" not in name:
+        return None
+    resource_type, _, valueset = name.partition(": ")
+    if not resource_type or not valueset:
+        return None
+    exact = cte_name_map.get((resource_type, valueset, None))
+    if exact is not None:
+        return exact
+    candidates = {
+        v for k, v in cte_name_map.items()
+        if k[0] == resource_type and k[1] == valueset
+    }
+    return candidates.pop() if len(candidates) == 1 else None
+
+
 def resolve_placeholders(
     ast: SQLExpression,
     cte_name_map: Dict[Tuple[str, Optional[str], Optional[str]], str],
     _memo: Optional[dict] = None,
+    promotion_body: bool = False,
 ) -> SQLExpression:
     """Memoized resolve_placeholders — see _resolve_placeholders_impl.
 
@@ -116,7 +143,9 @@ def resolve_placeholders(
     hit = memo.get(memo_key)
     if hit is not None:
         return hit
-    resolved = _resolve_placeholders_impl(ast, cte_name_map, memo)
+    resolved = _resolve_placeholders_impl(
+        ast, cte_name_map, memo, promotion_body=promotion_body
+    )
     memo[memo_key] = resolved
     return resolved
 
@@ -125,6 +154,7 @@ def _resolve_placeholders_impl(
     ast: SQLExpression,
     cte_name_map: Dict[Tuple[str, Optional[str], Optional[str]], str],
     _memo: dict,
+    promotion_body: bool = False,
 ) -> SQLExpression:
     """
     Walk AST and replace all placeholders with CTE references.
@@ -158,6 +188,27 @@ def _resolve_placeholders_impl(
         # Base case: resolve this placeholder
         cte_name = cte_name_map.get(ast.key)
 
+        if cte_name is None and ast.valueset:
+            # Profile-agnostic fallback. The same retrieve can be registered
+            # under a different profile spelling: function-promotion CTE bodies
+            # are translated outside the measure's own retrieve scan and carry
+            # no profile_url, so their placeholder key missed the
+            # (type, valueset, profile) entry and the caller fell back to a
+            # URL-shaped CTE name that is never defined (CMS0334 promoted
+            # `lastEstimatedGestationalAge` → Catalog Error on
+            # "Observation: http://cts.nlm…"). Match on (type, valueset) when
+            # it is unambiguous — profile variants narrow the same row set.
+            exact = cte_name_map.get((ast.resource_type, ast.valueset, None))
+            if exact is not None:
+                cte_name = exact
+            else:
+                candidates = {
+                    v for k, v in cte_name_map.items()
+                    if k[0] == ast.resource_type and k[1] == ast.valueset
+                }
+                if len(candidates) == 1:
+                    cte_name = candidates.pop()
+
         if cte_name is None:
             # Debug logging for key mismatch diagnosis
             logger.debug(
@@ -179,6 +230,13 @@ def _resolve_placeholders_impl(
 
         # Return CTE reference
         return SQLIdentifier(cte_name, quoted=True)
+
+    # Provisional retrieve-name repair (see _resolve_provisional_cte_name).
+    if isinstance(ast, SQLIdentifier) and ast.quoted:
+        fixed = _resolve_provisional_cte_name(ast.name, cte_name_map)
+        if fixed is not None and fixed != ast.name:
+            return SQLIdentifier(name=fixed, quoted=True)
+        return ast
 
     # Recursive cases: transform children
     if isinstance(ast, SQLFunctionCall):

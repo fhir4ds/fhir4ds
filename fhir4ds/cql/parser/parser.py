@@ -2694,12 +2694,18 @@ class CQLParser:
         # (`intervalStart((SELECT DISTINCT …))`) and breaks CMS56's
         # `with … such that` correlation.
         distinct = True
+        explicit_distinct = False
         if self.match_and_advance(TokenType.DISTINCT, TokenType.DISTINCT_FN):
+            explicit_distinct = True
             distinct = True
         elif self.match_and_advance(TokenType.ALL):
             distinct = False  # explicit 'all' means no distinct
         expression = self.parse_expression()
-        return ReturnClause(expression=expression, distinct=distinct)
+        return ReturnClause(
+            expression=expression,
+            distinct=distinct,
+            explicit_distinct=explicit_distinct,
+        )
 
     def parse_sort_clause(self) -> SortClause:
         """Parse a sort clause.

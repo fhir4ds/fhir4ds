@@ -5802,6 +5802,42 @@ ledger). Durable doctrines:
 - **97-define Any backlog** (Property 48, Query 44, Binary 4, Identifier 1
   on DQM-47) is the known gap frontier for future type-map work.
 
+## Translator performance — function-CTE promotion is the dedup lever (2026-11-11, PERF-01)
+
+The whole `--suite 2025` gate runtime was ONE measure: CMS0334 spent 640 s of the
+gate's ~700 s, and 624 s of that was a single define's CTE
+(`Delivery Encounter With Estimated Gestational Age ≥ 37 Weeks`, 1.66 MB) holding
+~1,670 copies of one `fhirpath_text(TimeOfDelivery.resource, '(value).type().name')`
+extraction. Root cause: `lastEstimatedGestationalAge` sat in
+`_FUNCTION_CTE_PROMOTION_DENYLIST`, so every call inlined its body, and each
+inlined body re-inlined `lastTimeOfDelivery`'s body instead of using that
+function's promoted CTE. Promotion reduces this to one evaluation per row.
+
+Re-enabling it needed three supporting fixes (all load-bearing):
+
+1. **Profile-agnostic placeholder fallback** (`placeholder.resolve_placeholders`).
+   Promotion CTE bodies are translated outside the measure's own retrieve scan,
+   so their placeholder key carries no `profile_url` and missed the
+   `(type, valueset, profile)` entry, falling back to a URL-shaped CTE name.
+   Match on `(type, valueset)` when it is unambiguous.
+2. **Provisional retrieve-name repair.** Query sources record a provisional
+   `"<Type>: <valueset>"` CTE name on the alias symbol; references that bypass
+   the `RetrievePlaceholder` (promotion bodies) emitted that string verbatim →
+   `Catalog Error: Table with name "Observation: http://cts.nlm…" does not exist`.
+   `resolve_placeholders` now rewrites quoted identifiers matching that shape.
+3. **Declared-return-type inference** (`_is_cql_quantity_expr`). A promoted
+   Quantity-returning function resolves to an opaque row-keyed VARCHAR lookup, so
+   body-based inference failed and the comparison took the dynamic-value path
+   `TRY_CAST(<Quantity JSON> AS DOUBLE) >= 37` → NULL → every patient dropped
+   (CMS0334 fell to 57.8%). Inference now consults `FunctionInfo.return_type`
+   first, including functions in included libraries (`context.includes[*].functions`).
+
+Result: CMS0334 640 s → ~19.5 s execution (33×), SQL 2.69 MB → 0.77 MB, accuracy
+unchanged at 135/135. DOCTRINE: when a function is promoted to a CTE, its RESULT
+TYPE must travel with the lookup — an opaque lookup silently defeats unit-aware
+comparison. And keep the denylist honest: re-enable entries once their stated
+blocker is fixed, otherwise the inline blow-up returns.
+
 ## Playwright-First Doctrine (standing rule, 2026-10-17)
 
 Every identified UI/UX issue in the web surfaces gets confirmed via
@@ -6225,5 +6261,16 @@ THAProcedure))`; DISTINCT over the 2-row set changes the scalar's shape and ever
 Bisecting the four SELECT DISTINCT sites in that CTE confirmed exactly one site
 breaks it. Rule for future work: return-level de-duplication belongs at the
 CTE/definition boundary, never on an inner query select.
+
+**CORRECTION (2026-11-11, CMS506 regression → fixed):** root-scoping must apply
+ONLY to the IMPLICIT default of plain `return`. An EXPLICIT `return distinct`
+always de-duplicates, even inside a nested query. CMS506 counts distinct opioid
+medications inside a where clause
+(`Count("Opioid At Discharge" X where … return distinct X.medication) >= 2`);
+suppressing that because the query was not a definition root counted duplicates
+and flipped the numerator on one patient (37/38, gate 46/47).
+`ReturnClause.explicit_distinct` now records whether the keyword was spelled and
+`_query._return_distinct` is
+`explicit OR (distinct AND at_definition_root)`.
 
 CMS136 is now **64/64 (100%)**.

@@ -1862,7 +1862,9 @@ def run_optimization_phases(
     # Resolve placeholders in function promotion CTE bodies
     for fn_key, fn_ctes in context._function_promotion_ctes.items():
         for fn_cte_name, fn_cte_body in list(fn_ctes.items()):
-            resolved_body = resolve_placeholders(fn_cte_body, phase2_result.cte_name_map)
+            resolved_body = resolve_placeholders(
+                fn_cte_body, phase2_result.cte_name_map, promotion_body=True
+            )
             optimized_body = optimize_property_access(
                 resolved_body,
                 phase2_result.column_registry

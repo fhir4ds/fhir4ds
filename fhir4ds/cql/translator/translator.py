@@ -2530,10 +2530,14 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
     _FUNCTION_CTE_PROMOTION_THRESHOLD = 3
     _FUNCTION_CTE_SECONDARY_THRESHOLD = 2
     _FUNCTION_CTE_PROMOTION_DENYLIST = {
-        # Returns a Quantity from a retrieve-local let/sort query. Promoting it
-        # currently changes CMS0334 population results; keep it inline until the
-        # function CTE path preserves that query shape exactly.
-        "lastEstimatedGestationalAge",
+        # `lastEstimatedGestationalAge` is deliberately NOT denylisted: leaving it
+        # inline re-expands `lastTimeOfDelivery`'s entire body at every use site.
+        # CMS0334's gestational-age CTE then carries ~1,670 copies of one
+        # TimeOfDelivery extraction and costs 624 s of the measure's 640 s. The
+        # let-clause promotion bugs that motivated the denylist (per-occurrence
+        # let CTE naming) are fixed, so promotion is re-enabled and validated
+        # against the CMS0334 fixture.
+        # "lastEstimatedGestationalAge",
         # Location/ICU helpers depend on nested collection/singleton semantics
         # that are not preserved by row-keyed scalar function CTE lookups.
         "GetLocation",

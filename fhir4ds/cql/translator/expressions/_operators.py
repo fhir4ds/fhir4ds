@@ -2030,6 +2030,16 @@ class OperatorsMixin:
             if node.else_expr is not None:
                 return self._is_cql_quantity_expr(node.else_expr, _depth + 1)
             return False
+        # `X as Quantity` / `cast X as Quantity` IS a Quantity. Several CQL
+        # libraries declare a Quantity result only through a trailing cast
+        # (PCMaternal.lastEstimatedGestationalAge ends with `.value as Quantity`
+        # and has NO return-type annotation), so the body-based inference below
+        # cannot see it and the comparison falls into the numeric path.
+        if isinstance(node, BinaryExpression) and str(node.operator).lower() in ("as", "cast"):
+            _target = getattr(node.right, "name", None)
+            if _target and self._bare_cql_type_name(_target) == "Quantity":
+                return True
+
         # Fluent method invocations (X.f()): the function body decides the
         # type (CMS156 `Order.getMedicationCode().medicationStrengthPerUnit()`
         # is a Quantity — without this the operand fell to the scalar DOUBLE
@@ -2040,8 +2050,47 @@ class OperatorsMixin:
             _MethodInv = None
         if _MethodInv is not None and isinstance(node, _MethodInv):
             func_info = self.context.get_function(node.method)
-            if func_info and func_info.expression:
-                return self._is_cql_quantity_expr(func_info.expression, _depth + 1)
+            # Declared return type wins: a promoted fluent function resolves to
+            # a row-keyed CTE lookup (opaque VARCHAR), and its body may not be
+            # recognisable as Quantity, so without this the comparison fell into
+            # the numeric-projection path — TRY_CAST(<Quantity JSON> AS DOUBLE)
+            # → NULL → every patient dropped (CMS0334 57.8% when
+            # lastEstimatedGestationalAge started being promoted).
+            # A function may declare a Quantity result while its body is not
+            # recognisable as one — and a PROMOTED function resolves to an opaque
+            # row-keyed CTE lookup where the declared type is the only evidence.
+            # Without this the comparison takes the numeric-projection path
+            # (TRY_CAST(<Quantity JSON> AS DOUBLE) → NULL; CMS0334 dropped to
+            # 57.8% once lastEstimatedGestationalAge started being promoted).
+            _candidates = [func_info]
+            _candidates += [
+                (getattr(_inc, "functions", None) or {}).get(node.method)
+                for _inc in (getattr(self.context, "includes", None) or {}).values()
+            ]
+            # Fluent functions from included libraries live in the inliner
+            # registry (keyed by bare or "Library.name").
+            _inl = getattr(self.context, "function_inliner", None)
+            _inl_fns = getattr(_inl, "_functions", None) or {}
+            _candidates.append(_inl_fns.get(node.method))
+            for _k, _v in _inl_fns.items():
+                if isinstance(_k, str) and _k.endswith("." + node.method):
+                    _candidates.append(_v)
+            for _fi in _candidates:
+                if _fi is None:
+                    continue
+                if self._bare_cql_type_name(getattr(_fi, "return_type", None)) == "Quantity":
+                    return True
+            # Most of these helpers carry NO return-type annotation — the type is
+            # expressed only by a trailing `as Quantity` in the body
+            # (PCMaternal.lastEstimatedGestationalAge), so recurse into any
+            # candidate body reachable (current library, includes, inliner).
+            for _fi in _candidates:
+                _body = getattr(_fi, "expression", None) if _fi is not None else None
+                if _body is None and _fi is not None:
+                    _body = getattr(_fi, "body", None)
+                if _body is not None and self._is_cql_quantity_expr(_body, _depth + 1):
+                    return True
+            return False
         # FunctionRef: check built-in aggregates and user-defined functions
         if isinstance(node, FunctionRef):
             if node.name.lower() == "coalesce":

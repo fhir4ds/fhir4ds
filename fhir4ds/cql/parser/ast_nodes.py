@@ -788,6 +788,10 @@ class ReturnClause(ASTNode):
 
     expression: Expression
     distinct: bool = False
+    # True when the CQL spelled the `distinct` keyword explicitly. Explicit
+    # de-duplication always applies; the IMPLICIT default (plain `return`) is
+    # only applied at a definition root (see _query._return_distinct).
+    explicit_distinct: bool = False
 
 
 @dataclass
