@@ -442,6 +442,13 @@
       "namespace": "USQualityCore",
       "url": "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/us-quality-core-taskrejected"
     },
+    "USQualityCoreMedicationRequest": {
+      "base_type": "MedicationRequest",
+      "label": "US Quality Core MedicationRequest",
+      "meta_profile_filter": true,
+      "namespace": "USQualityCore",
+      "url": "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/us-quality-core-medicationrequest"
+    },
     "VitalSignsProfile": {
       "base_type": "Observation",
       "label": "Vital Signs Profile",

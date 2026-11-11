@@ -21,6 +21,17 @@ NS = "{urn:hl7-org:elm-modelinfo:r1}"
 OUT = REPO / "fhir4ds/cql/resources/profiles/uscore-usqualitycore-profiles.json"
 
 
+# Retrievable typeInfos that omit `target` but MUST still be registered so
+# their retrieves get a meta.profile membership test. Keep this list tiny and
+# justified: registering such a profile switches on the filter for that
+# retrieve, which is only safe when the fixtures reliably declare the
+# canonical. (Counter-example: registering all 42 missing-target profiles
+# drops CMS177 100% -> 97.6%, because its Encounters carry no meta.profile.)
+_MISSING_TARGET_ALLOWLIST = {
+    ("USQualityCore", "MedicationRequest"),
+}
+
+
 def parse_modelinfo(path: Path) -> dict:
     """Collect retrievable typeInfos that carry an explicit ``target``.
 
@@ -44,9 +55,22 @@ def parse_modelinfo(path: Path) -> dict:
             continue
         target = ti.get("target")
         name = ti.get("name")
-        if not target or not name:
+        if not name:
             continue
-        out[name] = {
+        if not target:
+            # Allowlisted profiles derive their base type from the typeInfo
+            # name itself (the modelinfo omits `target` when it would repeat
+            # the name, e.g. USQualityCore.MedicationRequest).
+            if (ti.get("namespace", ""), name) not in _MISSING_TARGET_ALLOWLIST:
+                continue
+            target = name
+        key = name
+        if ti.get("target") is None:
+            # Namespace-qualify allowlisted entries so the key states which
+            # model declared it (e.g. USQualityCoreMedicationRequest).
+            key = f"{ti.get('namespace', '')}{name}"
+
+        out[key] = {
             "base_type": target,
             "url": ti.get("identifier") or "",
             "meta_profile_filter": True,
