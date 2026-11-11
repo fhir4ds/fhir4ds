@@ -6179,6 +6179,15 @@ static void CollapseIntervalsFunc(DataChunk &args, ExpressionState &state, Vecto
 		}
 
 		std::string json_str = intervals[idx].GetString();
+		// Single-interval transport: query-define value columns can carry one
+		// interval object (not wrapped in an array) — wrap it so collapse of a
+		// single interval yields the interval itself (mirrors the Python UDF).
+		{
+			size_t first = json_str.find_first_not_of(" \t\r\n");
+			if (first != std::string::npos && json_str[first] == '{') {
+				json_str = "[" + json_str + "]";
+			}
+		}
 		auto parsed = cql::parse_interval_array(json_str);
 
 		if (parsed.empty()) {
@@ -6347,6 +6356,15 @@ static void CollapseIntervalsPerFunc(DataChunk &args, ExpressionState &state, Ve
 		}
 
 		std::string json_str = intervals[idx].GetString();
+		// Single-interval transport: query-define value columns can carry one
+		// interval object (not wrapped in an array) — wrap it so collapse of a
+		// single interval yields the interval itself (mirrors the Python UDF).
+		{
+			size_t first = json_str.find_first_not_of(" \t\r\n");
+			if (first != std::string::npos && json_str[first] == '{') {
+				json_str = "[" + json_str + "]";
+			}
+		}
 		auto parsed = cql::parse_interval_array(json_str);
 
 		if (parsed.empty()) {
