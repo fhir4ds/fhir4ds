@@ -448,13 +448,6 @@
       "meta_profile_filter": true,
       "namespace": "USCore",
       "url": "http://hl7.org/fhir/us/core/StructureDefinition/us-core-vital-signs"
-    },
-    "USQualityCoreMedicationRequest": {
-      "base_type": "MedicationRequest",
-      "label": "US Quality Core Medication Request",
-      "meta_profile_filter": true,
-      "namespace": "USQualityCore",
-      "url": "http://fhir.org/guides/astp/us-quality-core/StructureDefinition/us-quality-core-medicationrequest"
     }
   }
 }

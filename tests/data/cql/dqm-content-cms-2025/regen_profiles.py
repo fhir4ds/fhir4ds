@@ -22,6 +22,21 @@ OUT = REPO / "fhir4ds/cql/resources/profiles/uscore-usqualitycore-profiles.json"
 
 
 def parse_modelinfo(path: Path) -> dict:
+    """Collect retrievable typeInfos that carry an explicit ``target``.
+
+    Profiles WITHOUT a ``target`` attribute are deliberately EXCLUDED, and this
+    is load-bearing rather than incidental: 38 USQualityCore and 4 USCore
+    profiles omit it (e.g. ``USQualityCore.Encounter``, ``USQualityCore.Coverage``),
+    and registering them switches on a ``meta.profile`` membership test for
+    those retrieves. Measured 2026-11-11: adding all 42 (base_type derived from
+    the typeInfo name) drops CMS177 from 100% to 97.6%, because that measure's
+    fixtures carry Encounters with no ``meta.profile`` at all — they are visible
+    today precisely because these profiles stay unfiltered.
+
+    Do not "complete" this list without re-running ``--suite cms2025`` and
+    ``--suite 2025``; the filtered-profile set is an empirically tuned boundary,
+    not a mechanical transform of the modelinfo.
+    """
     root = ET.parse(path).getroot()
     out = {}
     for ti in root.iter(f"{NS}typeInfo"):
