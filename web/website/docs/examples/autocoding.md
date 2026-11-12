@@ -2,7 +2,7 @@
 id: autocoding
 title: NLP
 sidebar_label: NLP
-description: "Run the real fhir4ds AutoCoder and the medterm4ds NER pipeline in your browser against a live terminology service — auto-code text-only concepts and turn clinical notes into derived Condition resources."
+description: "Run the real fhir4ds AutoCoder and the medterm4ds NER pipeline in your browser against a live terminology service — auto-code text-only concepts and turn clinical notes into typed derived FHIR resources."
 ---
 
 import AutocodingDemo from '@site/src/components/AutocodingDemo';
@@ -16,8 +16,9 @@ against `[Code: <valueset>]` can't match them. Progress notes hold the
 richest clinical detail in the record, as prose. This page runs the real
 NLP machinery against both: the **AutoCoder** turns text-only concepts
 into coded Codings with a full audit trail, and the **annotations**
-engine reads clinical notes by meaning and derives structured Condition
-resources from them.
+engine reads clinical notes by meaning and derives structured FHIR resources
+from them — a Condition, MedicationStatement, Immunization, Procedure or
+Observation, chosen per concept.
 
 Both run the **real thing**: `fhir4ds-v2` executes in your browser
 (Pyodide), the `AutoCoder` is the shipped implementation, and the
@@ -73,7 +74,23 @@ the search query itself.
 The same terminology service also reads free text. The example below runs
 the NER cascade (`CodeSystem/$extract`) on a clinical note — live, against
 the public Space — and wraps every affirmed concept as a derived FHIR
-Condition resource: coded, audit-trailed, and queryable.
+resource: coded, audit-trailed, and queryable.
+
+The **resource type comes from the concept**, not from a single default. The
+extractor reports a `result_type` per concept, and that drives the mapping:
+
+| `result_type` | derived resource |
+|---|---|
+| `condition`, `symptom` | **Condition** |
+| `medication`, `drug_class` | **MedicationStatement** |
+| `vaccine` | **Immunization** |
+| `procedure` | **Procedure** |
+| `lab`, `vital` | **Observation** |
+
+In the note below, `metformin` becomes a MedicationStatement and a vaccine
+mention becomes an Immunization — filing either as a Condition would put
+pharmacy data in the problem list and quietly break any measure that retrieves
+`[Condition]`.
 
 <NotesDemo />
 
@@ -84,6 +101,6 @@ Condition resource: coded, audit-trailed, and queryable.
 - [Terminology service](/docs/user-guide/terminology/terminology-service/) —
   endpoints: in-process medterm4ds or any FHIR R4 sidecar.
 - [Notes pipeline](/docs/user-guide/terminology/notes-pipeline/) — free-text
-  notes to derived Condition resources (NER cascade).
+  notes to typed derived resources (NER cascade).
 - [Terminology search demo](https://terminology.fhir4ds.com/docs/examples/terminology-search) —
   the terminology operations themselves, live.

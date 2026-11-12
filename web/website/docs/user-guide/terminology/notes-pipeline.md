@@ -6,7 +6,34 @@ sidebar_label: Notes Pipeline
 
 # Clinical Notes NER Pipeline
 
-The `NotesPipeline` (`fhir4ds.cql.loader.notes_pipeline`) derives structured FHIR Condition resources from free-text clinical notes. It extracts text from configured note paths on a FHIR resource, runs each fragment through `medterm4ds.extract()` (a medspaCy + GLiNER + SapBERT cascade), and wraps every affirmed concept in a synthetic Condition carrying both [Auto-Coding](./autocoding.md)'s autocoding extension (`engine="medterm4ds-ner"`) and a `derived-from-text` extension for full audit.
+The `NotesPipeline` (`fhir4ds.cql.loader.notes_pipeline`) derives structured FHIR resources from free-text clinical notes. It extracts text from configured note paths on a FHIR resource, runs each fragment through `medterm4ds.extract()` (a medspaCy + GLiNER + SapBERT cascade), and wraps every affirmed concept in the resource its type implies, carrying both [Auto-Coding](./autocoding.md)'s autocoding extension (`engine="medterm4ds-ner"`) and a `derived-from-text` extension for full audit.
+
+### Which resource does a concept become?
+
+The extractor reports a `result_type` per concept; that decides the resource
+(mapping lives in `fhir4ds.cql.loader.derived_resources`):
+
+| `result_type` | derived resource | coded concept on |
+|---|---|---|
+| `condition`, `symptom` | `Condition` | `code` |
+| `medication`, `drug_class` | `MedicationStatement` | `medication` |
+| `vaccine` (or ATC `J07*`) | `Immunization` | `vaccineCode` |
+| `procedure` | `Procedure` | `code` |
+| `lab`, `vital` | `Observation` | `code` |
+
+Non-Condition resources get the required `status` element (`active` /
+`completed` / `final`) and reference the patient through their own element —
+`Immunization` uses `patient`, the others `subject`. An unknown or missing
+`result_type` falls back to `Condition`.
+
+Two mapping details worth knowing, because `result_type` describes the
+**resolved anchor**, not the clinical category:
+
+- `symptom` and `condition` are both Conditions — FHIR has no symptom resource.
+- A **vaccine that resolves to an ATC group** (for example "influenza vaccine"
+  → `J07BB`) reports `result_type = drug_class`. ATC chapter `J07` is the
+  vaccines chapter, so the mapping overrides those to `Immunization`; without
+  that rule a vaccine would land in the medication list.
 
 This is Phase 4 of the medterm4ds integration. The reference NER backend is documented in the [medterm4ds extraction service](https://terminology.fhir4ds.com).
 
@@ -44,8 +71,9 @@ resource = {
     "summary": note_text,
 }
 
-conditions = pipeline.extract_conditions(resource)
-# → list of derived Condition dicts
+resources = pipeline.extract_resources(resource)
+# → list of derived resources, typed by result_type
+#   (extract_conditions() still works as a deprecated alias)
 ```
 
 Each derived Condition looks like:
@@ -120,9 +148,9 @@ config = NotesPipelineConfig(
     note_paths={...},              # override DEFAULT_NOTE_PATHS (merged, not replaced)
     mode="hybrid",                 # "lexical" / "semantic" / "hybrid" — None = medterm4ds default
     min_grade="certain",           # "certain" / "probable" / "possible" — concepts below this are dropped
-    include_negated=False,         # also emit Conditions for negated concepts (status=negated)
-    include_uncertain=False,       # also emit Conditions for uncertain concepts
-    include_historical=False,      # also emit Conditions for historical (past) concepts
+    include_negated=False,         # also emit resources for negated concepts (status=negated)
+    include_uncertain=False,       # also emit resources for uncertain concepts
+    include_historical=False,      # also emit resources for historical (past) concepts
     verification_status="unconfirmed",  # default for derived Conditions
     clinical_status="active",      # default for derived Conditions
     batch_size=1,                  # batch size for parallel augmentation
@@ -130,34 +158,34 @@ config = NotesPipelineConfig(
 )
 ```
 
-Strict-by-default: only affirmed concepts at-or-above `"certain"` match grade generate Conditions. Loosen `min_grade="probable"` for higher recall; set `include_negated=True` if you also want the "no CKD" to produce a (negated) Condition.
+Strict-by-default: only affirmed concepts at-or-above `"certain"` match grade generate resources. Loosen `min_grade="probable"` for higher recall; set `include_negated=True` if you also want the "no CKD" to produce a (negated) resource.
 
-## 5. Deterministic Condition IDs
+## 5. Deterministic resource IDs
 
-The derived Condition `id` is `sha256(<ID_SALT>:<source_ref>:<span_start>:<span_end>:<system>:<code>)` truncated to 32 characters, where `<system>` is the **post-normalization** FHIR canonical URL. Two consequences:
+The derived resource `id` is `sha256(<ID_SALT>:<source_ref>:<span_start>:<span_end>:<system>:<code>)` truncated to 32 characters, where `<system>` is the **post-normalization** FHIR canonical URL. Two consequences:
 
-- **Re-runs are byte-identical.** Running the pipeline twice on the same source produces the same Conditions — no deduplication needed downstream.
-- **Different code systems at the same span don't collide.** A SNOMED and an ICD10 coding at the same span produce different Conditions.
+- **Re-runs are byte-identical.** Running the pipeline twice on the same source produces the same resources — no deduplication needed downstream.
+- **Different code systems at the same span don't collide.** A SNOMED and an ICD10 coding at the same span produce different resources.
 
 ## 6. Audit: derived-from-text extension
 
-Every derived Condition carries a `derived-from-text` extension with:
+Every derived resource carries a `derived-from-text` extension with:
 
 - `source-ref` — the source resource reference (e.g. `"ClinicalImpression/ci-001"`)
 - `source-path` — the dotted path the text came from (e.g. `"summary"`)
 - `span-start` / `span-end` — character offsets into the extracted fragment
 - `matched-text` — the verbatim text span that produced this concept
 
-This is the audit trail: a clinician reviewing a derived Condition can click straight through to the exact sentence in the source note that generated it.
+This is the audit trail: a clinician reviewing a derived resource can click straight through to the exact sentence in the source note that generated it.
 
 ## 7. Invariants
 
 The pipeline is built to fail safe under batch load pressure:
 
 - **NEVER raises.** Every exception is caught, logged at WARNING, and `extract_conditions` returns `[]`. A single bad resource cannot break the batch.
-- **No Condition-on-Condition derivation.** If the source `resourceType` is `"Condition"`, the pipeline returns `[]` — prevents infinite loops when derived Conditions get re-fed into the loader.
+- **No derivation from a derived resource.** A resource that already carries the `derived-from-text` marker (any of the emitted types) returns `[]`, and a source `Condition` is always skipped — prevents infinite loops when derived resources get re-fed into the loader.
 - **System URL normalization.** medterm4ds returns UMLS mnemonics (`SNOMEDCT_US`); the pipeline expands them to FHIR canonical URLs (`http://snomed.info/sct`) via the same map used by the [Terminology Service](./terminology-service.md).
-- **Deterministic output.** Same source + same medterm4ds index → byte-identical Conditions. Re-running the pipeline is a no-op.
+- **Deterministic output.** Same source + same medterm4ds index → byte-identical resources. Re-running the pipeline is a no-op.
 
 ## 8. Batch loading
 
@@ -181,7 +209,7 @@ With `workers > 1`, the pipeline spawns a `multiprocessing.Pool` with module-lev
 
 ## 9. What this pipeline is NOT
 
-- It is **not** a substitute for clinician review. Derived Conditions ship with `verificationStatus=unconfirmed` by design.
+- It is **not** a substitute for clinician review. Derived Conditions ship with `verificationStatus=unconfirmed` by design (other derived types carry the required `status` instead).
 - It does **not** handle every FHIR resource — only the 8 types in `DEFAULT_NOTE_PATHS`. Add custom paths for other types.
 - It does **not** run in the browser. The medspaCy + transformers + SapBERT stack is WASM-incompatible and the model weights are ~400MB. For a server-backed live demo, host medterm4ds alongside the pipeline; for an offline demo, pre-compute and ship the results as JSON.
 

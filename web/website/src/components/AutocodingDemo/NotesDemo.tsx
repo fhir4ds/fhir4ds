@@ -1,10 +1,14 @@
 /**
- * Notes → Conditions demo: type (or pick) a clinical note, and the live
+ * Notes → FHIR resources demo: type (or pick) a clinical note, and the live
  * medterm4ds Space runs the NER cascade (`CodeSystem/$extract`) over it.
- * Affirmed concepts become derived FHIR Condition resources — the same
- * output shape as fhir4ds' NotesPipeline: a Coding with the autocoding
- * audit extension (engine=medterm4ds-ner) and a derived-from-text
- * extension recording where in the note each condition came from.
+ * Affirmed concepts become derived FHIR resources — the same output shape as
+ * fhir4ds' NotesPipeline: a Coding with the autocoding audit extension
+ * (engine=medterm4ds-ner) and a derived-from-text extension recording where in
+ * the note each concept came from.
+ *
+ * The RESOURCE TYPE follows the extractor's `result_type`, so a vaccine lands
+ * on an Immunization and a medication on a MedicationStatement rather than
+ * everything becoming a Condition.
  */
 import React, {useEffect, useMemo, useState} from 'react';
 import BrowserOnly from '@docusaurus/BrowserOnly';
@@ -61,7 +65,67 @@ function systemName2(source: string): string {
   return map[source.toUpperCase()] ?? source;
 }
 
-function buildCondition(concept: Concept, note: string): any {
+// Resource type per extraction `result_type`. MIRRORS the Python source of
+// truth in fhir4ds/cql/loader/derived_resources.py — keep the two in step.
+// `symptom` shares Condition (FHIR has no symptom resource); `drug_class`
+// shares MedicationStatement; `lab`/`vital` share Observation.
+const RESOURCE_TYPE_BY_RESULT: Record<string, string> = {
+  condition: 'Condition',
+  symptom: 'Condition',
+  medication: 'MedicationStatement',
+  drug_class: 'MedicationStatement',
+  vaccine: 'Immunization',
+  procedure: 'Procedure',
+  lab: 'Observation',
+  vital: 'Observation',
+};
+
+// Element that carries the coded concept, per resource type.
+const CODE_FIELD: Record<string, string> = {
+  Condition: 'code',
+  MedicationStatement: 'medication',
+  Immunization: 'vaccineCode',
+  Procedure: 'code',
+  Observation: 'code',
+};
+
+// Element that references the patient (Immunization uses `patient`).
+const SUBJECT_FIELD: Record<string, string> = {
+  Condition: 'subject',
+  MedicationStatement: 'subject',
+  Immunization: 'patient',
+  Procedure: 'subject',
+  Observation: 'subject',
+};
+
+// Required status element for every non-Condition type (affirmed mention).
+const STATUS_BY_RESOURCE: Record<string, string> = {
+  MedicationStatement: 'active',
+  Immunization: 'completed',
+  Procedure: 'completed',
+  Observation: 'final',
+};
+
+// ATC chapter J07 is "VACCINES". A vaccine mention resolved to an ATC group
+// ("influenza vaccine" -> J07BB) reports result_type 'drug_class', because the
+// type axis describes the ANCHOR and not the clinical category — so the code
+// system gets a say here. Mirrors VACCINE_ATC_PREFIXES in the Python module.
+const VACCINE_ATC_PREFIX = 'J07';
+
+function resourceTypeFor(resultType?: string, code?: string, source?: string): string {
+  const mapped =
+    RESOURCE_TYPE_BY_RESULT[(resultType ?? '').trim().toLowerCase()] ?? 'Condition';
+  if (
+    mapped === 'MedicationStatement' &&
+    source?.trim().toUpperCase() === 'ATC' &&
+    code?.trim().toUpperCase().startsWith(VACCINE_ATC_PREFIX)
+  ) {
+    return 'Immunization';
+  }
+  return mapped;
+}
+
+function buildDerivedResource(concept: Concept, note: string): any {
   const system = SYSTEM_BY_SOURCE[concept.source.toUpperCase()] ?? null;
   const coding: any = {
     system,
@@ -81,18 +145,10 @@ function buildCondition(concept: Concept, note: string): any {
     ],
   };
   const codeable: any = {coding: [coding], text: concept.display};
-  return {
-    resourceType: 'Condition',
-    code: codeable,
-    verificationStatus: {
-      coding: [
-        {
-          system: 'http://terminology.hl7.org/CodeSystem/condition-ver-status',
-          code: 'unconfirmed',
-        },
-      ],
-    },
-    subject: {reference: 'Patient/demo'},
+  const resourceType = resourceTypeFor(concept.result_type, concept.code, concept.source);
+  const resource: any = {
+    resourceType,
+    [CODE_FIELD[resourceType]]: codeable,
     extension: [
       {
         url: 'http://fhir4ds.org/fhir/StructureDefinition/derived-from-text',
@@ -107,8 +163,22 @@ function buildCondition(concept: Concept, note: string): any {
       },
     ],
     note: [{text: `Derived from note: "${note.slice(0, 80)}…"`}],
-    _derivedFromNote: undefined,
+    [SUBJECT_FIELD[resourceType]]: {reference: 'Patient/demo'},
   };
+  if (resourceType === 'Condition') {
+    resource.verificationStatus = {
+      coding: [
+        {
+          system: 'http://terminology.hl7.org/CodeSystem/condition-ver-status',
+          code: 'unconfirmed',
+        },
+      ],
+    };
+  } else {
+    // Every other mapped type has a REQUIRED status element.
+    resource.status = STATUS_BY_RESOURCE[resourceType];
+  }
+  return resource;
 }
 
 function Inner(): JSX.Element {
@@ -192,12 +262,12 @@ function Inner(): JSX.Element {
     return <div className="adc-note-annotated">{parts}</div>;
   }, [concepts, note]);
 
-  const conditions = useMemo(
+  const derivedResources = useMemo(
     () =>
       (concepts ?? [])
         .filter((c) => c.status === 'affirmed')
         .slice(0, 6)
-        .map((c) => buildCondition(c, note)),
+        .map((c) => buildDerivedResource(c, note)),
     [concepts, note],
   );
 
@@ -259,7 +329,7 @@ function Inner(): JSX.Element {
           including the <em>assertion context</em>. Watch what it does with
           &quot;a history of&quot;: those concepts are extracted but marked
           historical (amber); only affirmed findings (green) become
-          Conditions. Negated text is struck through, family history flagged.
+          resources. Negated text is struck through, family history flagged.
         </p>
         {annotatedNote && (
           <div className="adc-note-wrap">{annotatedNote}</div>
@@ -271,19 +341,23 @@ function Inner(): JSX.Element {
 
       <div className="adc-step">
         <div className="adc-step-title">
-          <span className="adc-num">3</span> Derived Condition resources
+          <span className="adc-num">3</span> Derived FHIR resources
         </div>
         <p className="adc-narrative">
-          Each affirmed concept becomes a structured Condition — coded,
-          unconfirmed (a machine suggestion), with an audit trail recording the
-          engine, confidence, match grade, and the exact character span in the
-          note it came from. This is the shape fhir4ds&apos;{' '}
-          <code>NotesPipeline</code> produces; downstream CQL and measures can
-          query it like any other Condition.
+          Each affirmed concept becomes the resource its <code>result_type</code>{' '}
+          implies — a <strong>Condition</strong> for a disease or symptom, a{' '}
+          <strong>MedicationStatement</strong> for a drug or drug class, an{' '}
+          <strong>Immunization</strong> for a vaccine, a{' '}
+          <strong>Procedure</strong> for a procedure, and an{' '}
+          <strong>Observation</strong> for a lab or vital sign. Filing a vaccine
+          as a diagnosis is how derived data becomes unusable downstream. Every
+          resource carries the audit trail (engine, confidence, match grade, exact
+          character span) on the coding and the note provenance on the resource.
+          This is the shape fhir4ds&apos; <code>NotesPipeline</code> produces.
         </p>
-        {conditions.length > 0 && (
+        {derivedResources.length > 0 && (
           <div className="adc-tree adc-tree-lg">
-            <JsonTree value={conditions} expanded collapseKey="extension" />
+            <JsonTree value={derivedResources} expanded collapseKey="extension" />
           </div>
         )}
       </div>
