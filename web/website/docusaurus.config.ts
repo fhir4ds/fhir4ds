@@ -250,7 +250,7 @@ const config: Config = {
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} FHIR4DS. Built with Docusaurus.`,
+      copyright: `Copyright © ${new Date().getFullYear()} Montavon Informatics LLC. Built with Docusaurus.`,
     },
     prism: {
       theme: prismThemes.oneDark,

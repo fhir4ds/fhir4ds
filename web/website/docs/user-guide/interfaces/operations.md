@@ -8,8 +8,8 @@ sidebar_label: Operations Layer
 
 The operations layer (`fhir4ds.operations`) defines every user-facing engine
 capability **once**, with typed, versioned result envelopes. All interfaces —
-the [Python API](#python-usage), the [CLI](./cli), and the
-[MCP server](./mcp) — are thin adapters over the same operations, so any
+the [Python API](#python-usage), the [CLI](/docs/user-guide/interfaces/cli/), and the
+[MCP server](/docs/user-guide/interfaces/mcp/) — are thin adapters over the same operations, so any
 surface produces identical results for the same inputs.
 
 ## Capabilities (v1)

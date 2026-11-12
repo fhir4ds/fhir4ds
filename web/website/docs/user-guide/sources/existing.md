@@ -29,7 +29,7 @@ fhir4ds.attach(con, source)
 
 ## Schema Requirements
 
-The existing table or view must conform to the standard FHIR4DS schema contract (`id`, `resourceType`, `resource`, `patient_ref`). For details on the required types, see the [Data Sources & Zero-ETL Schema Contract](../data-sources#1-the-resources-view).
+The existing table or view must conform to the standard FHIR4DS schema contract (`id`, `resourceType`, `resource`, `patient_ref`). For details on the required types, see the [Data Sources & Zero-ETL Schema Contract](/docs/user-guide/data-sources/#1-the-resources-view).
 
 ## FHIRDataLoader vs Adapter Approach
 

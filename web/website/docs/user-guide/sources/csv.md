@@ -19,7 +19,7 @@ If your CSV already has `id`, `resourceType`, `resource`, and `patient_ref` colu
 
 The key to using CSVSource is the `projection_sql` parameter — a SQL `SELECT` that maps your CSV columns to the four required schema columns (`id`, `resourceType`, `resource`, `patient_ref`).
 
-For details on the expected format of these columns, see the [Data Sources & Zero-ETL Schema Contract](../data-sources#1-the-resources-view).
+For details on the expected format of these columns, see the [Data Sources & Zero-ETL Schema Contract](/docs/user-guide/data-sources/#1-the-resources-view).
 
 Use the `{source}` placeholder in your `FROM` clause. At registration time, it's replaced with `read_csv_auto('<your_file_path>')`.
 

@@ -87,7 +87,7 @@ With Hive partitioning enabled, queries that filter on partition columns (e.g., 
 
 Your source files (Parquet, NDJSON, etc.) must conform to the standard FHIR4DS schema contract, including the `id`, `resourceType`, `resource`, and `patient_ref` columns.
 
-For a detailed description of the required types and formatting (specifically for `patient_ref`), see the [Data Sources & Zero-ETL Schema Contract](../data-sources#1-the-resources-view).
+For a detailed description of the required types and formatting (specifically for `patient_ref`), see the [Data Sources & Zero-ETL Schema Contract](/docs/user-guide/data-sources/#1-the-resources-view).
 
 If any column is missing or has an incompatible type, `SchemaValidationError` is raised at registration time.
 
