@@ -487,3 +487,73 @@ def test_in_process_is_healthy_returns_false_without_engine_surface(
     # discovery surface attrs the probe looks for.
     adapter._engine = object()
     assert adapter.is_healthy() is False
+
+
+# ----------------------------------------------------------------------
+# Iteration 23 / Domain 12 HISTORIAN — expand_intensional return shapes
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "return_value,expected_codes",
+    [
+        # medterm4ds 0.0.10 returns the code list directly.
+        ([{"system": "http://snomed.info/sct", "code": "a"},
+          {"system": "http://snomed.info/sct", "code": "b"}], ["a", "b"]),
+        # Later builds return (codes, depth_cap_hit).
+        (([{"system": "http://snomed.info/sct", "code": "c"}], True), ["c"]),
+    ],
+)
+def test_expand_intensional_accepts_both_medterm4ds_return_shapes(
+    monkeypatch: pytest.MonkeyPatch, return_value, expected_codes
+) -> None:
+    """medterm4ds's expand_intensional_value_set has an ANNOTATION/RUNTIME mismatch.
+
+    Its published signature says ``-> list[dict]`` while medterm4ds 0.0.10
+    actually returns ``(list, depth_cap_hit)`` at runtime (verified by calling
+    it directly). Code written against the annotation would break on the
+    runtime shape, so the adapter accepts BOTH: a strict unpack is unsafe
+    against a function whose documented and actual shapes disagree, and the
+    surrounding degrade-and-warn path would turn that mismatch into a silent
+    empty expansion.
+    """
+    import medterm4ds.apps.fhir_api as fhir_api_mod
+
+    monkeypatch.setattr(
+        fhir_api_mod, "expand_intensional_value_set",
+        lambda engine, vs, count, *, include_retired=False: return_value,
+    )
+
+    from fhir4ds.cql.terminology.in_process_adapter import (
+        InProcessTerminologyEndpoint,
+    )
+
+    adapter = InProcessTerminologyEndpoint()
+    adapter._engine = object()  # bypass engine provisioning; test the call contract
+    refs = adapter.expand_intensional({"resourceType": "ValueSet", "compose": {}})
+    assert [r.code for r in refs] == expected_codes
+    assert adapter._consecutive_failures == 0
+
+
+def test_expand_intensional_positional_count_and_include_retired(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """count is POSITIONAL and include_retired must be True (membership policy)."""
+    import medterm4ds.apps.fhir_api as fhir_api_mod
+
+    seen: dict = {}
+
+    def fake(engine, vs, count, *, include_retired=False):
+        seen.update(count=count, include_retired=include_retired)
+        return []
+
+    monkeypatch.setattr(fhir_api_mod, "expand_intensional_value_set", fake)
+
+    from fhir4ds.cql.terminology.in_process_adapter import (
+        InProcessTerminologyEndpoint,
+    )
+
+    adapter = InProcessTerminologyEndpoint()
+    adapter._engine = object()
+    adapter.expand_intensional({"resourceType": "ValueSet", "compose": {}})
+    assert seen == {"count": 1000, "include_retired": True}

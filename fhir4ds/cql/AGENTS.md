@@ -6714,3 +6714,301 @@ depth. Same doctrine as REV-001: every extraction-side status flag needs a
 config knob that reaches BOTH paths; keep
 `test_notes_pipeline_forwards_include_family_v22_qa003` green when adding
 new status flags.
+
+## Iteration 5 / Domain 6 HISTORIAN — FHIR R4 ValueSet membership extraction
+
+**Single source of truth:** `fhir4ds/cql/valueset_codes.py::
+extract_codes_from_valueset_resource` (pure stdlib; no duckdb/medterm4ds
+import). Both `fhir4ds/cql/loader/fhir_loader.py` (bound under the historical
+private name `_extract_codes_from_valueset_resource`, which
+`fhir4ds/devserver/api.py` imports directly) and
+`fhir4ds/cql/dependency/resolver.py::_index_valueset` now delegate to it. The
+resolver previously carried an independent copy; the two had already drifted
+identically, which is why the fix is centralized rather than patched twice.
+
+FHIR R4 semantics implemented (verified against
+`https://hl7.org/fhir/R4/valueset.profile.json`, snapshot elements):
+
+- **`ValueSet.expansion.contains` is authoritative.** When an expansion is
+  present it IS the membership (what a terminology server computed from
+  filters/excludes/activity). `compose` must NOT be re-read on top of it —
+  doing so re-adds codes the expansion deliberately omitted, and duplicates
+  rows. Previously both call sites read expansion AND compose.
+- **`expansion.contains.contains` (0..*) is recursive** ("Codes contained
+  under this entry"). Hierarchical expansions (SNOMED/ICD ancestor trees —
+  what a terminology server returns for is-a expansions) were silently
+  truncated to top-level ancestors, under-reporting membership. The tree is
+  now flattened depth-first.
+- **`expansion.contains.code` is 0..1** ("Code - if blank, this is not a
+  selectable code"). Grouping/header nodes carry no code and are NOT members;
+  they used to produce `code=None` rows that made `load_valuesets` raise
+  `ValueError`. Blank codes are skipped.
+- **`compose.exclude` (0..*) removes codes** ("Explicitly exclude codes from
+  a code system or other value sets"). Was ignored entirely, so excluded codes
+  stayed members (false-positive clinical evidence). Supported forms: explicit
+  `concept` list; `filter` with `property=concept`/`op='='` (VSAC's
+  exclude-one-code spelling); no `concept`/`filter` at all = the whole system
+  is excluded.
+- **Unenumerable excludes fail loud, unless moot.** `is-a`/`descendent-of`/
+  regex filters and nested `valueSet` references cannot be enumerated locally
+  → `ValueSetExpansionError` (a `ValueError` subclass). BUT only when there
+  are included codes to remove: a system-only include (VSAC's
+  fully-intensional shape, e.g. the SOPT race ValueSet) yields zero codes, so
+  its filter excludes are moot and the existing zero-code WARNING is the
+  honest signal. Raising there would fail every measure loading that
+  ValueSet — this is why the guard is `has_included_codes`.
+- Members are de-duplicated by `(system, code)` preserving authored order: a
+  code reachable through two parents in a hierarchical expansion is one
+  member.
+
+NOT A BUG registry additions (verified this launch):
+
+- `compose.include` with `filter`/`valueSet` and no `concept` list still
+  yields zero codes with only a WARNING (unchanged, pre-existing). Enumerating
+  it needs a terminology server; `vsac_adapter.expand_intensional` raises in
+  the same situation, but the loader's warning-then-empty behaviour is pinned
+  by existing tests and is not a membership *mis*statement.
+- `resolve()` bare-id cross-type ambiguity (a bare `p1` matching Patient and
+  Practitioner with `LIMIT 1`) remains documented convenience, not a bug.
+- `load_valuesets` is ADDITIVE on reload (no delete-before-insert), unlike
+  `load_resources`; membership is a set so duplicate rows are inert.
+
+### Same contract on the terminology-endpoint adapters (found by the same walk)
+
+The identical FHIR R4 rule was violated in three more places, all fixed by
+sharing the new module:
+
+- `terminology/http_adapter.py::_contains_to_coderefs` walked only the
+  TOP-LEVEL `expansion.contains` list, so an HTTP `$expand` response with a
+  hierarchical expansion (what a server returns for an is-a expansion) lost
+  every descendant. Now uses `iter_expansion_codes` (recursive, blank-code
+  skip preserved).
+- `terminology/vsac_adapter.py::_expand_versioned` had the same flat walk over
+  paged `expansion.contains`. Now uses `iter_expansion_codes`.
+- `terminology/vsac_adapter.py::expand_intensional` read
+  `compose.include[].concept[]` and IGNORED `compose.exclude`, so excluded
+  codes came back as members. It now subtracts `excluded_members(...)` after
+  normalizing both sides through `SystemResolver` (a SNOMED module-URL exclude
+  still matches the base-system member).
+
+`in_process_adapter.expand_intensional` is NOT affected: it delegates to
+medterm4ds, which owns ValueSet expansion. Nothing else in `fhir4ds/` reads
+`expansion`/`compose` for membership (`grep -rn 'get("expansion")'` is the
+audit query; keep it that way — new membership readers must call
+`fhir4ds/cql/valueset_codes.py`, not re-walk the FHIR shape).
+
+## Iteration 6 / Domain 6 EXPLORER — membership UDF must read the cache LIVE
+
+`fhir4ds/cql/duckdb/udf/valueset.py::createValuesetMembershipUdf` must NOT
+snapshot its `valueset_codes_cache` argument. `FHIRDataLoader` registers the
+UDF exactly once per connection
+(`_VALUESET_UDF_REGISTERED_CONNECTIONS`) and every subsequent
+`load_valuesets` call only clears/repopulates the shared dict in place
+(`_refresh_in_valueset_udf`). A factory-time snapshot makes every ValueSet
+loaded after the first `load_valuesets` call invisible: `in_valueset` answers
+SQL NULL (CQL unknown) instead of true/false — silent under-membership on the
+Python-fallback engine (browser/WASM and any unsigned dev connection). The
+native C++ cache rebuilds from the table on every load, so N/N parity hides
+the bug on native connections.
+
+Current implementation: `_normalized(url)` memoizes the tuple normalization on
+the IDENTITY of that URL's entry set (`cached[0] is entries`), because the
+loader replaces sets (`clear()` + `setdefault(url, set())`) rather than
+mutating them. Keep both documented cache shapes working (bare strings →
+`("", code)`, `(system, code)` tuples pass through) and keep the "no valueset
+data loaded" warning keyed off the live dict.
+
+`load_valuesets` also validates `display` as a string (FHIR R4
+`expansion.contains.display` is `string 0..1`). Without it the pyarrow bulk
+insert leaks a raw `ArrowTypeError` (INV-8). Validation runs before any insert,
+so a rejected batch commits nothing. Corpus check when touching this: 0
+non-string displays across the 712 corpus ValueSets.
+
+## Iteration 7 / Domain 7 SKEPTIC — ingestion costs must be scope-bounded
+
+Two measured cliffs in the ValueSet ingestion path, both fixed:
+
+- **Hierarchy depth**: `_collect_expansion_codes` (valueset_codes.py) is
+  ITERATIVE by requirement, not style. A recursive walk raised a raw
+  `RecursionError` from the public loader at ~1000 nesting levels (CPython's
+  frame limit); the explicit stack has no ceiling and is ~40% faster on deep
+  trees. Keep it iterative and keep the depth-first DOCUMENT order (push
+  children reversed).
+- **Cache refresh scope**: `_refresh_in_valueset_udf` / 
+  `_refresh_cpp_in_valueset_cache` must be scoped to the URLs just written.
+  Re-reading and rebuilding the whole `valueset_codes` table per call cost
+  O(rows in table) per incremental load — measured 273 ms/call at a 200k-row
+  table vs 8 ms scoped (33x), i.e. quadratic aggregate cost when loading a
+  corpus one ValueSet at a time. `load_valuesets` passes
+  `urls=sorted(set(valueset_urls))`; `clear_valuesets` passes `urls=None` for a
+  full reset. The native add-only path is correct ONLY because
+  `valueset_codes` is additive — if a delete/replace path is ever added to
+  `load_valuesets`, the native branch must clear again.
+  CONSEQUENCE TO DOCUMENT FOR USERS: rows written to `valueset_codes` by
+  direct SQL (outside `load_valuesets`) are not observed by later incremental
+  loads; use `clear_valuesets()` + reload, or a full refresh, after external
+  mutation.
+- **Capability probing**: `_cpp_valueset_cache_available()` probes
+  `duckdb_functions()` once per loader. Do not "detect" native cache support by
+  attempting a mutating call: the previous code only discovered it on
+  `cql_valueset_cache_clear()` (silently swallowed) and then logged a WARNING
+  per load from `cql_valueset_cache_add()`, spamming any build without the
+  cache API.
+
+## Iteration 8 / Domain 7 HISTORIAN — measured throughput baselines and the
+## engine-declaration rule for perf probes
+
+Baselines (idle machine, duckdb 1.5.6, Python 3.10.12, WSL2; use these to spot
+a regression, not as SLAs):
+
+| stage | per-unit cost |
+|---|---|
+| ValueSet extraction | 0.5-0.7 µs per code (flat 100k = 66 ms) |
+| `load_resources` | 7.7-14.8 µs per row (falls with batch size) |
+| `translate_cql` | ~197-234 µs per define after warm-up (5-define cold call ~120 ms) |
+| ViewDefinition gen+exec (NATIVE) | 0.3-1.1 µs per column-cell |
+| `fhirpath` navigation | ~0.9 µs per navigated node |
+| repeated translation memory | plateaus ~0.18 MB after ~500 runs (bounded caches) |
+| independent connections in threads | 4 connections = 2.4x throughput (GIL-bound, graceful) |
+
+**PERF-PROBE RULE (gotcha that produced a false 61-second "cliff"):** a
+connection built with plain `duckdb.connect()` cannot load the bundled unsigned
+extension, so `fhir4ds.register()` silently falls back to the Python FHIRPath
+UDFs — roughly 1000x slower per call. Measure FHIRPath-bearing paths
+(ViewDefinition execution, CQL translation+execution, DQM runs) on
+`duckdb.connect(config={"allow_unsigned_extensions": True})` and state the
+engine in the probe output. A "cliff" measured on a default connection is an
+engine artefact until re-measured natively.
+
+## Iteration 9 / Domain 7 EXPLORER — hostile-scale ceilings (all verified linear)
+
+Adversarial scale probe results on this tree (all PASS, native engine):
+
+- 100,000-code ValueSet: extract 66 ms, `load_valuesets` 624 ms, traced peak
+  59 MB; membership stays **1.1 µs** per call at that size.
+- **10,000 ValueSets in ONE bulk load**: 0.11 s, all 10,000 cached — the
+  iteration-7 scoped refresh chunks `IN`-lists at
+  `_VALUESET_REFRESH_CHUNK = 500`, so 20 chunks in one call must (and do) cache
+  every URL. Regression guard: `test_scoped_refresh_chunks_large_url_batches`.
+- 100,000 resources in one `load_resources`: 1.70 s (17.0 µs/row), peak 54 MB.
+- 1,000-column × 2,000-row ViewDefinition: gen 199 ms, exec 761 ms, 575 KB SQL,
+  exact shape — linear in cells (0.38 µs/cell).
+- 2-level `forEach` over 200 × 50 × 2 nodes: 0.05 s, exactly 20,000 rows.
+- `fhirpath` over a 0.5 MB / 12,000-node document: 8 ms, 12,000 items.
+
+NOT A BUG (upstream, pinned with a vanilla repro): concurrent reads on a SINGLE
+DuckDB connection are not thread-safe — 16 threads gave 15 correct counts and 1
+`TypeError: 'NoneType' object is not subscriptable`, reproduced on vanilla
+duckdb with no fhir4ds registered. Use one connection per thread or
+`cursor()`. Independent connections scale gracefully (1/2/4 → 236/269/390 ms
+total, correct counts).
+
+## Iteration 10 / Domain 8 SKEPTIC — attribution on the ValueSet boundaries
+
+Two INV-8 (typed, actionable errors) gaps in the paths iterations 5-7 created:
+
+- **`load_valuesets` must name the offending ValueSet.** Extraction errors are
+  re-raised with `valuesets[i] (url=...)` context while PRESERVING the
+  exception type (`ValueSetExpansionError` stays a `ValueError`) and chaining
+  the cause. Every sibling validation in that method already names the index;
+  a corpus of hundreds of ValueSets with an unattributed error is unactionable.
+  Regression: `TestValuesetExtractionErrorsAreAttributed`.
+- **`DependencyResolver._index_valueset` must not abort the corpus.** It now
+  follows the class convention (`_index_json_file`, `_index_cql_file`:
+  warn + skip) but RECORDS the failure: `resolver.valueset_index_errors[url] =
+  "<path>: <cause>"` plus a WARNING that states membership against that
+  ValueSet will be false until fixed. Before this, one malformed file raised an
+  unattributed `TypeError` out of `DependencyResolver(paths=[corpus])` and
+  blocked every measure loaded from that tree. A silent skip is not acceptable
+  either — it under-reports membership, so the record is mandatory; surface
+  `valueset_index_errors` in any diagnostics output you add.
+  Regression: `test_resolver_records_bad_valueset_file_without_aborting`.
+
+## Iteration 11 / Domain 8 HISTORIAN — closed-connection symmetry (INV-8)
+
+Every connection-touching public method of `FHIRDataLoader` must report a
+closed connection as `Cannot <operation>: DuckDB connection is closed`. Before
+this pass only `__init__`/`load_resource`/`load_file`/`load_directory` did; the
+rest leaked the raw `Connection Error: Connection already closed!`, which names
+no FHIR4DS operation.
+
+Implementation: `_translate_closed_connection(operation)` decorator (module
+level, applied to `load_resources`, `load_bundle`, `load_ndjson`,
+`load_from_url`, `load_valuesets`, `count`, `clear`, `count_valueset_codes`,
+`clear_valuesets`, `valueset_table_exists`; `load_resource` keeps its inline
+guard). Two properties are load-bearing:
+- it is a MESSAGE TRANSLATION, not a pre-flight `SELECT 1` — no extra round
+  trip on the happy path (`count()` runs in loops);
+- it is IDEMPOTENT (an already-`Cannot …` message passes through), so a call
+  chain reports the innermost precise operation instead of stacking prefixes.
+
+PINNED, do not "fix": `load_bundle({"resourceType": "Bundle"})` with no entries
+returns 0 without touching the connection (no work to do, and it does not claim
+work it did not do). `DependencyResolver(paths=[missing])` tolerates missing
+search paths and `resolve_valueset`/`resolve_library` return `None` for unknown
+names (documented `Optional[...]`), unlike the raising `build_context` path.
+`create_connection(**kwargs)` forwards to `duckdb.connect`, so a bad `config=`
+surfaces the ENGINE's error (documented passthrough; do not swallow it).
+
+## Iteration 12 / Domain 8 EXPLORER — the error path is a contract too
+
+Adversarial verification of the iteration-10/11 error surfaces (24/24 PASS):
+
+- 5,000 consecutive failures → one stable typed message, 0 rows committed, and
+  traced memory returns to 0.00 MB after 2,000 more: the error path does not
+  accumulate state.
+- The attribution wrap is EXACTLY ONE layer: `exc.__cause__` holds the original
+  extraction error with un-attributed text and no further cause. Do not nest
+  re-wraps (retry loops would produce `valuesets[0]: valuesets[0]: …`).
+- `table_name` injection attempts (`resources; DROP TABLE …`, quotes, spaces,
+  digit-leading names) all raise `ValueError` and leave `valueset_codes`
+  intact.
+- Resolver over 150 files with 100 malformed ValueSets: all 100 recorded with
+  their paths, all 50 good ones indexed, no abort.
+- Closed-connection messages are stable across 1,000 calls; exceptions pickle
+  (multiprocessing-safe).
+- **DESIGN PIN — url echo uses `repr()`** (`valuesets[1] (url='…')`), so `\n`/
+  `\t` in a hostile URL are escaped and cannot forge log lines or terminal
+  control sequences. Assertions must check the repr form and the ABSENCE of a
+  raw newline; do not "simplify" this to an f-string with `{vs_url}`.
+
+## Iteration 22 / Domain 12 SKEPTIC — adapter failure models are intentionally different
+
+PINNED, do not "align" these two:
+- `InProcessTerminologyEndpoint.expand()` degrades to `[]` on helper failure or
+  an unsupported URL, logs a WARNING and increments the circuit breaker. The
+  local medterm4ds engine is an OPTIONAL feature: absent engine / unsupported
+  URL means "no terminology data here", not an outage.
+  Pinned by `test_expand_degrades_to_empty_on_helper_error` and
+  `test_in_process_circuit_breaker_trips_and_short_circuits`.
+- `HTTPTerminologyEndpoint.expand()` re-raises after counting the failure — a
+  remote service that fails IS an outage and callers must see it.
+Both feed `DependencyResolver.resolve_valueset`, which wraps the call in
+`try/except → WARNING + None` and is the only place that must degrade.
+
+Adapter symbol surface verified against the INSTALLED medterm4ds (0.0.10):
+`LocalDuckDBEngine`, `connect`, `Terminology`,
+`apps.fhir_api.expand_url_pattern`, `apps.fhir_api.expand_intensional_value_set`,
+`services.discovery.search_names` all present. The pyproject pin
+(`>=0.0.12,<0.0.13`) does NOT match the installed 0.0.10 — that is the
+user-directed ahead-of-index pin; re-verify symbol presence when 0.0.12 is
+published (release-time check, not a code defect).
+
+## Iteration 23 / Domain 12 HISTORIAN — intensional expansion return shape
+
+`InProcessTerminologyEndpoint.expand_intensional()` accepts BOTH shapes because
+medterm4ds's own contract is ambiguous: `expand_intensional_value_set` is
+annotated `-> list[dict]` but returns `(codes, depth_cap_hit)` at runtime in
+0.0.10 (verified by calling it directly). Keep the
+`isinstance(result, tuple) and len(result) == 2` check — do not "simplify" it to
+a strict unpack (breaks if a build honours the annotation) or to plain iteration
+(breaks today). Guards:
+`test_expand_intensional_accepts_both_medterm4ds_return_shapes`,
+`test_expand_intensional_positional_count_and_include_retired`.
+
+RETRACTION worth remembering: an earlier version of this note claimed the
+strict unpack silently disabled intensional expansion (HIGH). That was a PROBE
+ARTEFACT — a 1-key mock dict produced "not enough values to unpack". The live
+call returns 748 codes on the ORIGINAL code path. A mock is an assumption: call
+the real partner function and print its runtime type before filing a
+cross-package defect.

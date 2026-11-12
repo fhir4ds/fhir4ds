@@ -323,3 +323,78 @@ def test_recursive_path_scan(tmp_path):
 
     assert lib is not None
     assert lib.name == "Nested"
+
+
+def test_resolver_valueset_uses_shared_fhir_r4_extraction(tmp_path):
+    """Iteration 5 / Domain 6 HISTORIAN.
+
+    `_index_valueset` used to carry its own copy of the ValueSet extraction
+    (flat expansion only, compose.exclude ignored). It now delegates to
+    `fhir4ds.cql.valueset_codes` so the resolver and `FHIRDataLoader` cannot
+    drift: hierarchical expansions are flattened and compose.exclude removes
+    codes.
+    """
+    vs_file = tmp_path / "HierValueSet.json"
+    vs_file.write_text(json.dumps({
+        "resourceType": "ValueSet",
+        "url": "http://example.org/ValueSet/Hier",
+        "status": "active",
+        "expansion": {"contains": [
+            {"system": "http://snomed.info/sct", "code": "parent", "contains": [
+                {"system": "http://snomed.info/sct", "code": "child"},
+            ]},
+        ]},
+    }))
+    resolver = DependencyResolver(paths=[tmp_path])
+    vs = resolver.resolve_valueset("http://example.org/ValueSet/Hier")
+    assert vs is not None
+    assert [c["code"] for c in vs.codes] == ["parent", "child"]
+
+
+def test_resolver_valueset_honors_compose_exclude(tmp_path):
+    vs_file = tmp_path / "ExclValueSet.json"
+    vs_file.write_text(json.dumps({
+        "resourceType": "ValueSet",
+        "url": "http://example.org/ValueSet/Excl",
+        "status": "active",
+        "compose": {
+            "include": [{"system": "http://snomed.info/sct", "concept": [
+                {"code": "A"}, {"code": "B"}]}],
+            "exclude": [{"system": "http://snomed.info/sct", "concept": [
+                {"code": "B"}]}],
+        },
+    }))
+    resolver = DependencyResolver(paths=[tmp_path])
+    vs = resolver.resolve_valueset("http://example.org/ValueSet/Excl")
+    assert vs is not None
+    assert [c["code"] for c in vs.codes] == ["A"]
+
+
+def test_resolver_records_bad_valueset_file_without_aborting(tmp_path):
+    """Iteration 10 / Domain 8 SKEPTIC.
+
+    Delegating `_index_valueset` to the shared extractor made a malformed
+    ValueSet file abort `DependencyResolver(paths=[corpus])` with an
+    unattributed TypeError — one bad file blocked the whole corpus. The sibling
+    indexers warn+skip; ValueSets now do the same but RECORD the failure
+    (url -> "<path>: <cause>") because a silent skip under-reports membership.
+    """
+    good = tmp_path / "Good.json"
+    good.write_text(json.dumps({
+        "resourceType": "ValueSet", "url": "http://ex.org/VS/good", "status": "active",
+        "compose": {"include": [{"system": "s", "concept": [{"code": "ok"}]}]},
+    }))
+    bad = tmp_path / "Bad.json"
+    bad.write_text(json.dumps({
+        "resourceType": "ValueSet", "url": "http://ex.org/VS/bad", "status": "active",
+        "expansion": {"contains": "not-a-list"},
+    }))
+
+    resolver = DependencyResolver(paths=[tmp_path])  # must not raise
+
+    assert resolver.resolve_valueset("http://ex.org/VS/good").codes == [
+        {"system": "s", "code": "ok", "display": None}]
+    assert resolver.resolve_valueset("http://ex.org/VS/bad") is None
+    recorded = resolver.valueset_index_errors["http://ex.org/VS/bad"]
+    assert "Bad.json" in recorded
+    assert "must be a list" in recorded

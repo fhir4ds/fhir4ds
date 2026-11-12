@@ -583,3 +583,44 @@ publish_dir=str(publish_dir), flush_autostart=False),
     assert "patient-view.json" in files
     queries = sorted(path.name for path in (publish_dir / "sqlqueries").glob("*.json"))
     assert "SqlOnFhirExample.json" in queries
+
+
+# ---------------------------------------------------------------------------
+# Iteration 26 / Domain 13 HISTORIAN — resource types are a CLOSED set
+# ---------------------------------------------------------------------------
+
+
+def test_post_rejects_an_unknown_resource_type(client):
+    """`POST /NotAResourceType` used to answer 201 and persist the row.
+
+    FHIR defines `Resource` as a closed set, so an unrecognized type is not a
+    resource at all. Persisting it poisons later ViewDefinition/analytics
+    queries and type filters, and the type is echoed back to clients as if it
+    were valid. The known set is data-driven from the published fhir-types
+    value set (the same source the CQL retrieve guard uses).
+    """
+    response = client.post("/NotAResourceType", json={"resourceType": "NotAResourceType"})
+    assert response.status_code == 400
+    body = response.json()
+    assert body["resourceType"] == "OperationOutcome"
+    assert body["issue"][0]["code"] == "not-supported"
+    assert "not a known FHIR resource type" in body["issue"][0]["diagnostics"]
+
+
+def test_bundle_transaction_rejects_an_unknown_resource_type(client):
+    bundle = {
+        "resourceType": "Bundle", "type": "transaction",
+        "entry": [{
+            "resource": {"resourceType": "NotAResourceType", "id": "x1"},
+            "request": {"method": "POST", "url": "NotAResourceType"},
+        }],
+    }
+    response = client.post("/Bundle", json=bundle)
+    assert response.status_code == 400
+
+
+@pytest.mark.parametrize("resource_type", ["Patient", "Observation", "Slot", "Appointment"])
+def test_known_resource_types_still_write(client, resource_type):
+    response = client.post(f"/{resource_type}", json={"resourceType": resource_type})
+    assert response.status_code == 201, response.text
+    assert response.headers["Location"].lstrip("/").startswith(f"{resource_type}/")

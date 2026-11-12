@@ -138,6 +138,11 @@ def search_controls(query_params: Any) -> tuple[int | None, int]:
     mistyped value yields a FHIR ``OperationOutcome`` instead of a bare 422.
     """
     count = _optional_integer(query_params, "_count")
+    if count is not None and count < 0:
+        # FHIR `_count` is a non-negative integer. The sibling `_offset` below
+        # has always rejected negatives; `_count` silently accepted them (a
+        # negative page size is meaningless, and the gate is right here).
+        raise bad_request("_count must be >= 0", expression=["_count"])
     offset = _optional_integer(query_params, "_offset") or 0
     if offset < 0:
         raise bad_request("_offset must be >= 0", expression=["_offset"])

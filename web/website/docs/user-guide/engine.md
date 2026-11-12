@@ -57,6 +57,26 @@ Instead of managing multiple extensions and UDFs manually, a single call to `reg
 ### C++/Python Fallback
 The C++ DuckDB extensions provide maximum performance for large-scale population analytics. However, in environments where binary extensions are restricted, the engine transparently falls back to pure-Python vectorized implementations to ensure your code remains functional and accurate.
 
+Fallback never changes results — only speed. The native and Python engines are parity-tested, so the conformance suites pass on both.
+
+### Environment switches
+Three environment variables tune the engine. They are read at connection time.
+
+| Variable | Effect |
+|---|---|
+| `FHIR4DS_REQUIRE_CPP=1` | Make a missing native extension **fatal** instead of a silent fallback. Use this in CI or production where you expect the C++ engine: it raises `RuntimeError` both when DuckDB's version line has no bundled binary (`1.5.x` and `2.0.x` are shipped) and when the bundled file is missing. Without it, both cases log and fall back. The literal value `1` is what enables it — `true`/`yes` are ignored. |
+| `FHIR4DS_USE_CPP_VALUESET_CACHE=0` | Force the Python ValueSet membership cache even when the native extension exposes its own. Useful when mixing native UDFs with a `valueset_codes` table that is refreshed outside the loader. |
+| `FHIR4DS_CQL_LATERAL_DEDUP=0` | Disable the CQL translator's lateral-dedup optimization (which hoists repeated correlated extractions into `CROSS JOIN LATERAL`). An escape hatch if a hand-written query misbehaves; translated SQL grows substantially. |
+
+```python
+import os
+os.environ["FHIR4DS_REQUIRE_CPP"] = "1"   # fail loudly if the native engine is unavailable
+
+import fhir4ds
+con = fhir4ds.create_connection(allow_unsigned_extensions=True)
+assert fhir4ds.register(con)["fhirpath_cpp"], "native engine expected"
+```
+
 ### Automated Terminology
 The engine manages the orchestration between CQL logic and ValueSet expansion. It handles terminology resolution automatically during the translation phase, allowing you to use standard codes and systems without manual mapping.
 

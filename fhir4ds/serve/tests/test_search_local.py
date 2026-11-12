@@ -309,3 +309,27 @@ def test_generic_writes_refuse_registry_owned_types(client):
     delete = client.delete("/Library/x", headers=FHIR_JSON)
     assert delete.status_code == 400
     assert delete.json()["issue"][0]["code"] == "not-supported"
+
+
+# ---------------------------------------------------------------------------
+# Iteration 27 / Domain 13 EXPLORER — `_count` bound symmetry
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("bad_count", ["-5", "-1", "abc", "1.5"])
+def test_negative_or_malformed_count_is_rejected(client, bad_count):
+    """FHIR `_count` is a non-negative integer.
+
+    `_offset` has always rejected negatives, but `_count` silently accepted
+    them (a negative page size is meaningless). Both bounds now answer 400 with
+    a FHIR OperationOutcome instead of a bare 422.
+    """
+    response = client.get("/Patient", params={"_count": bad_count})
+    assert response.status_code == 400
+    assert response.json()["resourceType"] == "OperationOutcome"
+
+
+def test_zero_and_positive_count_are_accepted(client):
+    for value in ("0", "5"):
+        response = client.get("/Patient", params={"_count": value})
+        assert response.status_code == 200, response.text

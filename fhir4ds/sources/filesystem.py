@@ -11,7 +11,12 @@ import os
 import warnings
 from typing import Any
 
-from fhir4ds.sources.base import quote_identifier, quote_sql_literal, validate_schema
+from fhir4ds.sources.base import (
+    SchemaValidationError,
+    quote_identifier,
+    quote_sql_literal,
+    validate_schema,
+)
 
 _CLOUD_PREFIXES = ("s3://", "az://", "abfs://", "gs://", "gcs://")
 
@@ -297,7 +302,7 @@ class FileSystemSource:
         rows = con.execute(f"DESCRIBE SELECT * FROM {scan_expr}").fetchall()
         return {row[0] for row in rows}
 
-    def _raw_fhir_patient_ref_sql(self, resource_expr: str) -> str:
+    def _raw_fhir_patient_ref_sql(self, resource_expr: str, has_id: bool = True) -> str:
         """Build SQL that derives patient_ref from a raw FHIR resource JSON.
 
         Follows the shared patient-identity doctrine (see
@@ -311,9 +316,14 @@ class FileSystemSource:
         scanned for the first urn:uuid or Patient-typed entry, mirroring the
         loader's candidate scan.
         """
-        candidates = [
-            "CASE WHEN src.resourceType = 'Patient' THEN src.id::VARCHAR END"
-        ]
+        # ``has_id`` is False for raw FHIR documents that omit Resource.id
+        # (0..1 in FHIR): there is no ``src.id`` column to reference, and an
+        # id-less Patient has no id to contribute anyway.
+        candidates = (
+            ["CASE WHEN src.resourceType = 'Patient' THEN src.id::VARCHAR END"]
+            if has_id
+            else []
+        )
         # First candidate entry per element path: an urn:uuid or Patient-typed
         # reference (relative/absolute, optionally version-specific).
         first_typed = (
@@ -371,27 +381,34 @@ class FileSystemSource:
                 FROM {scan_expr} AS src
             """
 
-        if self._format in ("ndjson", "json") and {"id", "resourceType"}.issubset(columns):
+        if self._format in ("ndjson", "json") and "resourceType" in columns:
+            # Raw FHIR JSON/NDJSON: one row per file/line. ``id`` is OPTIONAL
+            # here — FHIR Resource.id is 0..1, so a legal Bundle (or any
+            # resource) may omit it. Emitting a missing ``src.id`` reference
+            # produced a raw DuckDB binder error instead of the documented
+            # "stored as a single inert row" behaviour.
+            id_expr = "src.id::VARCHAR" if "id" in columns else "NULL::VARCHAR"
             resource_expr = "to_json(src)"
             return f"""
                 CREATE OR REPLACE VIEW resources AS
                 SELECT
-                    src.id::VARCHAR           AS id,
+                    {id_expr}                 AS id,
                     src.resourceType::VARCHAR AS resourceType,
                     {resource_expr}::JSON     AS resource,
-                    {self._raw_fhir_patient_ref_sql(resource_expr)}::VARCHAR AS patient_ref
+                    {self._raw_fhir_patient_ref_sql(resource_expr, has_id="id" in columns)}::VARCHAR AS patient_ref
                 FROM {scan_expr} AS src
             """
 
-        return f"""
-            CREATE OR REPLACE VIEW resources AS
-            SELECT
-                src.id::VARCHAR           AS id,
-                src.resourceType::VARCHAR AS resourceType,
-                src.resource::JSON        AS resource,
-                src.patient_ref::VARCHAR  AS patient_ref
-            FROM {scan_expr} AS src
-        """
+        # Neither the canonical fhir4ds schema nor a raw FHIR document shape.
+        # Fail with the actual cause instead of emitting SQL that DuckDB
+        # rejects with a binder error about a column the caller never had.
+        raise SchemaValidationError(
+            f"FileSystemSource cannot derive the 'resources' view from "
+            f"{self._path_pattern!r} (format={self._format!r}). Expecting either "
+            f"the fhir4ds schema ['id', 'resourceType', 'resource', 'patient_ref'] "
+            f"or raw FHIR documents carrying 'resourceType' (optionally 'id'); "
+            f"found columns {sorted(columns)!r}."
+        )
 
     # ------------------------------------------------------------------
     # SourceAdapter interface
@@ -505,14 +522,17 @@ class FileSystemSource:
             paths = ", ".join(quote_sql_literal(path) for path in changed_files)
             scan = f"read_json_auto([{paths}])"
 
-        if "patient_ref" in self._scan_column_names(self._con, scan):
+        scan_columns = self._scan_column_names(self._con, scan)
+        if "patient_ref" in scan_columns:
             rows = self._con.execute(f"""
                 SELECT DISTINCT patient_ref FROM {scan}
             """).fetchall()
         else:
             # Raw-FHIR files have no patient_ref column; derive it with the
             # shared patient-identity doctrine, mirroring _resources_view_sql.
-            ref_expr = self._raw_fhir_patient_ref_sql("to_json(src)")
+            ref_expr = self._raw_fhir_patient_ref_sql(
+                "to_json(src)", has_id="id" in scan_columns
+            )
             rows = self._con.execute(f"""
                 SELECT DISTINCT {ref_expr}::VARCHAR AS patient_ref FROM {scan} AS src
             """).fetchall()

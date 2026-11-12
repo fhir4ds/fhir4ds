@@ -28,6 +28,21 @@ The SQLQuery hashes with a NULL guard, so optional foreign keys stay NULL.
 
 ## Known Fragile Areas
 
+- ROOT-JOIN RIGHT/FULL OVER A SHARED SOURCE TABLE (2026-11-12, v0.0.23 D5
+  HISTORIAN): the shared-table `resourceType` restriction defines the base
+  RELATION, not a row filter. Emitting it as a `WHERE` predicate silently
+  degrades `right`/`full` root joins to inner joins, because the rows those
+  join types exist to preserve carry a NULL base resource and the predicate
+  is then false. `_generate_single_resource` now wraps the source table in a
+  filtered subquery and passes `base_type_filter_in_from=True`, which makes
+  `_build_single_query` skip the WHERE predicate (both the flat and the
+  pipelined-chain path). The flag is per-query generator state
+  (`self._base_type_filter_in_from`, reset at the top of `generate()`) so
+  union-branch builds inherit it and a reused `SQLGenerator` cannot leak it
+  into a later ViewDefinition. When touching the shared-table filter, keep
+  `TestRootJoinRightAndFullPreserveUnmatchedRows` green (right=2 / full=4 /
+  inner=1 / left=2 rowsets).
+
 - UNNEST LOWERING (2026-10-27, feat/unnest-cte-lowering): forEach/
   forEachOrNull/repeat lower to a PIPELINED SUBQUERY CHAIN, not correlated
   LATERAL joins (the lateral form is O(N x payload): DuckDB re-parses the
@@ -1024,6 +1039,18 @@ The SQLQuery hashes with a NULL guard, so optional foreign keys stay NULL.
   and direct `SQLGenerator` dataclass validation aligned.
 
 ## NOT A BUG Registry
+
+- V23-002-D5 (2026-11-12): a `view`-target root join with no `view_tables`
+  entry resolves to `<view_schema>.<view_name>`, and `view_schema` defaults to
+  `"omop"` — so `SQLGenerator().generate()` on such a ViewDefinition emits
+  `JOIN "omop"."<view>"`, which fails unless that schema exists. This is a
+  DOCUMENTED convention with working overrides (verified: setting
+  `gen.view_schema = "main"` resolves and executes correctly, and
+  `runner.generate_view_sql(..., view_schema=...)` exposes the same knob),
+  matching the one-way `viewdef` → OMOP runner contract. Do not "fix" it by
+  silently dropping the schema qualification: that would make the reference
+  search-path dependent. A caller wanting an unqualified or different
+  relation supplies `view_tables` / `view_schema`.
 
 - SOF-VD-07 HISTORIAN (2026-08-23): repeat paths accept full FHIRPath
   expressions (where()-filters, `|` unions, children(), $this), not just dotted

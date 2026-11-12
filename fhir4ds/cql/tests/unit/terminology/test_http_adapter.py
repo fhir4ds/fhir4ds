@@ -616,3 +616,51 @@ def test_is_healthy_returns_false_on_connection_refused():
 
     with patch.object(_httpx_mod, "Client", return_value=_ConnRefusedClient()):
         assert adapter.is_healthy() is False
+
+
+# ----------------------------------------------------------------------
+# Iteration 5 / Domain 6 HISTORIAN — hierarchical expansions
+# ----------------------------------------------------------------------
+
+
+def test_expand_walks_hierarchical_contains_tree():
+    """FHIR R4 expansion.contains.contains (0..*) is recursive.
+
+    A terminology server answers an is-a expansion with a hierarchy
+    (ancestors carrying their descendants). A flat walk silently drops every
+    descendant, under-reporting membership.
+    """
+    payload = _expand_payload([
+        {
+            "system": "http://snomed.info/sct",
+            "code": "73211009",
+            "display": "Diabetes mellitus",
+            "contains": [
+                {"system": "http://snomed.info/sct", "code": "44054006",
+                 "contains": [
+                     {"system": "http://snomed.info/sct", "code": "deep"},
+                 ]},
+                {"system": "http://snomed.info/sct", "code": "46635009"},
+            ],
+        },
+    ])
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir")
+    with patch.object(adapter, "_client", return_value=_MockClient(_MockResponse(payload), [])):
+        refs = adapter.expand("http://ex.org/VS/hier")
+    assert [r.code for r in refs] == ["73211009", "44054006", "deep", "46635009"]
+
+
+def test_expand_skips_blank_code_grouping_nodes_in_hierarchy():
+    """expansion.contains.code is 0..1 — a grouping header is not a member."""
+    payload = _expand_payload([
+        {
+            "display": "Grouping header",
+            "contains": [
+                {"system": "http://snomed.info/sct", "code": "real-code"},
+            ],
+        },
+    ])
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir")
+    with patch.object(adapter, "_client", return_value=_MockClient(_MockResponse(payload), [])):
+        refs = adapter.expand("http://ex.org/VS/grouped")
+    assert [r.code for r in refs] == ["real-code"]

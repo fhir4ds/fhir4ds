@@ -188,3 +188,207 @@ class TestRootJoinDefaultModeExecution:
         sql = SQLGenerator().generate(vd)
         rows = con.execute(sql).fetchall()
         assert rows == [("o1", "8480-6", "3038553")]
+
+
+class TestRootJoinRightAndFullPreserveUnmatchedRows:
+    """V23-002-D5: right/full joins over a shared source_table.
+
+    The shared-table resourceType restriction defines the base RELATION, not a
+    row filter. Emitting it as a WHERE predicate drops exactly the
+    join-preserved rows that carry a NULL base resource (their `t.resource` is
+    NULL, so the predicate is false), which silently degrades RIGHT and FULL
+    joins to inner joins. The restriction belongs on the FROM side.
+    """
+
+    RIGHT_FULL_VD = {
+        "resource": "Patient",
+        "joins": [
+            {
+                "name": "pr",
+                "resource": "Practitioner",
+                "type": "right",
+                "on": [{"path": "id"}, {"path": "pr.id"}],
+            }
+        ],
+        "select": [
+            {
+                "column": [
+                    {"path": "id", "name": "pid"},
+                    {"path": "pr.id", "name": "prid"},
+                ]
+            }
+        ],
+    }
+
+    def _load(self, con):
+        for r in (
+            {"resourceType": "Patient", "id": "p1"},
+            {"resourceType": "Patient", "id": "p2"},
+            {"resourceType": "Practitioner", "id": "p1"},
+            {"resourceType": "Practitioner", "id": "p9"},  # no matching patient
+        ):
+            con.execute("INSERT INTO __vd_src VALUES (?)", [json.dumps(r)])
+
+    def test_right_join_keeps_unmatched_joined_rows(self):
+        con = _make_conn()
+        self._load(con)
+        vd = parse_view_definition(self.RIGHT_FULL_VD)
+        sql = SQLGenerator(source_table="__vd_src").generate(vd)
+        assert "RIGHT JOIN" in sql
+        # The base relation is restricted in FROM, not by a WHERE row filter.
+        assert "SELECT * FROM \"__vd_src\"" in sql
+        assert "json_extract_string(t.resource, '$.resourceType')" not in sql
+        rows = sorted(str(r) for r in con.execute(sql).fetchall())
+        assert rows == ["('p1', 'p1')", "(None, 'p9')"]
+
+    def test_full_join_keeps_rows_from_both_sides(self):
+        con = _make_conn()
+        self._load(con)
+        vd = parse_view_definition(
+            {**self.RIGHT_FULL_VD,
+             "joins": [{**self.RIGHT_FULL_VD["joins"][0], "type": "full"}]}
+        )
+        sql = SQLGenerator(source_table="__vd_src").generate(vd)
+        assert "FULL JOIN" in sql
+        rows = sorted(str(r) for r in con.execute(sql).fetchall())
+        assert rows == [
+            "('p1', 'p1')",
+            "('p2', None)",
+            "(None, 'p9')",
+        ]
+
+    def test_inner_and_left_keep_the_where_filter(self):
+        """Only right/full move the restriction into FROM."""
+        con = _make_conn()
+        self._load(con)
+        for jtype, expected in (("inner", 1), ("left", 2)):
+            vd = parse_view_definition(
+                {**self.RIGHT_FULL_VD,
+                 "joins": [{**self.RIGHT_FULL_VD["joins"][0], "type": jtype}]}
+            )
+            sql = SQLGenerator(source_table="__vd_src").generate(vd)
+            assert "SELECT * FROM \"__vd_src\"" not in sql
+            assert "json_extract_string(t.resource, '$.resourceType') = 'Patient'" in sql
+            assert len(con.execute(sql).fetchall()) == expected
+
+    def test_filter_does_not_leak_across_generate_calls(self):
+        """A reused generator must not carry the FROM-restriction decision."""
+        con = _make_conn()
+        self._load(con)
+        gen = SQLGenerator(source_table="__vd_src")
+        gen.generate(parse_view_definition(
+            {**self.RIGHT_FULL_VD,
+             "joins": [{**self.RIGHT_FULL_VD["joins"][0], "type": "right"}]}
+        ))
+        plain = {k: v for k, v in self.RIGHT_FULL_VD.items() if k != "joins"}
+        sql = gen.generate(parse_view_definition(plain))
+        assert "json_extract_string(t.resource, '$.resourceType') = 'Patient'" in sql
+        assert len(con.execute(sql).fetchall()) == 2
+
+
+class TestJoinPrefixedPathInSelectWhere:
+    """V23-003-D5: select-level `where` must route join-prefixed paths.
+
+    Root `where` routes `<alias>.` paths to the joined table's resource, but
+    select-level `where` resolved them against the BASE resource, where the
+    alias does not exist. The predicate then quietly evaluated to empty and
+    dropped every row — a silent wrong rowset with no error.
+    """
+
+    VD = {
+        "resource": "Patient",
+        "joins": [
+            {
+                "name": "jp",
+                "resource": "Practitioner",
+                "type": "right",
+                "on": [{"path": "id"}, {"path": "jp.id"}],
+            }
+        ],
+        "select": [
+            {
+                "column": [
+                    {"path": "id", "name": "pid"},
+                    {"path": "jp.id", "name": "jid"},
+                ]
+            }
+        ],
+    }
+
+    def _load(self, con):
+        for r in (
+            {"resourceType": "Patient", "id": "p1"},
+            {"resourceType": "Practitioner", "id": "x1"},
+        ):
+            con.execute("INSERT INTO __vd_src VALUES (?)", [json.dumps(r)])
+
+    def test_select_where_routes_to_joined_table(self):
+        con = _make_conn()
+        self._load(con)
+        vd = parse_view_definition(
+            {
+                **self.VD,
+                "select": [
+                    {**self.VD["select"][0], "where": [{"path": "jp.id.exists()"}]}
+                ],
+            }
+        )
+        sql = SQLGenerator(source_table="__vd_src").generate(vd)
+        assert 'fhirpath_json("jp".resource' in sql
+        assert "fhirpath_json(t.resource, 'jp.id" not in sql
+        assert con.execute(sql).fetchall() == [(None, "x1")]
+
+    def test_select_where_matches_root_where_rowset(self):
+        con = _make_conn()
+        self._load(con)
+        root = parse_view_definition(
+            {**self.VD, "where": [{"path": "jp.id.exists()"}]}
+        )
+        sel = parse_view_definition(
+            {
+                **self.VD,
+                "select": [
+                    {**self.VD["select"][0], "where": [{"path": "jp.id.exists()"}]}
+                ],
+            }
+        )
+        gen = SQLGenerator(source_table="__vd_src")
+        assert (
+            sorted(con.execute(gen.generate(root)).fetchall())
+            == sorted(con.execute(gen.generate(sel)).fetchall())
+        )
+
+    def test_select_where_without_join_prefix_unchanged(self):
+        con = _make_conn()
+        self._load(con)
+        vd = parse_view_definition(
+            {
+                **self.VD,
+                "joins": [{**self.VD["joins"][0], "type": "left"}],
+                "select": [
+                    {
+                        **self.VD["select"][0],
+                        "where": [{"path": "id = 'p1'"}],
+                    }
+                ],
+            }
+        )
+        sql = SQLGenerator(source_table="__vd_src").generate(vd)
+        assert "fhirpath_json(t.resource" in sql
+        assert con.execute(sql).fetchall() == [("p1", None)]
+
+    def test_join_prefixed_select_where_inside_iteration_rejected(self):
+        vd = parse_view_definition(
+            {
+                **self.VD,
+                "select": [
+                    {
+                        "forEach": "name",
+                        "column": [{"path": "family", "name": "fam"}],
+                        "where": [{"path": "jp.id.exists()"}],
+                    }
+                ],
+            }
+        )
+        with pytest.raises(ValidationError, match="iteration context"):
+            SQLGenerator(source_table="__vd_src").generate(vd)

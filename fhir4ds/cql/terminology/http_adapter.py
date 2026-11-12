@@ -303,16 +303,21 @@ class HTTPTerminologyEndpoint:
     def _contains_to_coderefs(cls, contains: list[dict[str, Any]]) -> list[CodeRef]:
         """Convert raw FHIR contains dicts into normalized CodeRef dataclasses.
 
+        Walks the RECURSIVE ``expansion.contains`` tree
+        (``expansion.contains.contains`` 0..*, "Codes contained under this
+        entry"): a hierarchical server expansion nests descendants under
+        ancestors, so a flat walk silently drops them. Blank codes are skipped
+        (0..1, "not a selectable code").
+
         System normalization (INV-5): every ``system`` value flows through
         ``SystemResolver.normalize()`` so SNOMED module URLs reduce to
         ``http://snomed.info/sct`` before they leave the adapter.
         """
+        from ..valueset_codes import iter_expansion_codes
+
         refs: list[CodeRef] = []
-        for item in contains:
-            if not isinstance(item, dict):
-                continue
-            system = SystemResolver.normalize(item.get("system"))
-            code = item.get("code")
+        for raw_system, code, display in iter_expansion_codes(contains):
+            system = SystemResolver.normalize(raw_system)
             if system is None or code is None:
                 # Skip half-formed entries — they cannot join against
                 # any valueset_codes row downstream.
@@ -321,7 +326,7 @@ class HTTPTerminologyEndpoint:
                 CodeRef(
                     system=system,
                     code=str(code),
-                    display=item.get("display"),
+                    display=display,
                 )
             )
         return refs

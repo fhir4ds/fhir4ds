@@ -166,6 +166,28 @@ class VCACTerminologyEndpoint:
                         display=concept.get("display"),
                     )
                 )
+        # `compose.exclude` removes codes from the set (FHIR R4). Ignoring it
+        # made excluded codes members — false-positive clinical evidence.
+        # Unenumerable exclusions raise unless there is nothing to remove.
+        from ..valueset_codes import excluded_members
+
+        excluded_pairs, excluded_systems = excluded_members(
+            compose, has_included_codes=bool(codes)
+        )
+        if excluded_pairs or excluded_systems:
+            normalized_pairs = {
+                (SystemResolver.normalize(sys) or sys or "", code)
+                for sys, code in excluded_pairs
+            }
+            normalized_systems = {
+                SystemResolver.normalize(sys) or sys or "" for sys in excluded_systems
+            }
+            codes = [
+                ref
+                for ref in codes
+                if (ref.system, ref.code) not in normalized_pairs
+                and ref.system not in normalized_systems
+            ]
         return codes
 
     def search_text(
@@ -292,13 +314,14 @@ class VCACTerminologyEndpoint:
             contains = expansion.get("contains") or []
             if not contains:
                 break  # server exhausted — stop paging
-            for item in contains:
-                if not isinstance(item, dict):
-                    continue
-                code = item.get("code")
+            # ``expansion.contains`` is recursive (hierarchical expansions nest
+            # descendants under ancestors); a flat walk drops them.
+            from ..valueset_codes import iter_expansion_codes
+
+            for system, code, display in iter_expansion_codes(contains):
                 if not code:
                     continue
-                rows.append([item.get("system") or "", str(code), item.get("display")])
+                rows.append([system or "", str(code), display])
             page_index += 1
             if total is not None and len(rows) >= int(total):
                 break

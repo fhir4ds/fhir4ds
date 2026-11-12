@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import TYPE_CHECKING, Callable, Dict, List, Set, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Set, Tuple
 
 import orjson
 
@@ -610,14 +610,35 @@ def createValuesetMembershipUdf(
 
     The cache accepts both documented entry shapes: bare string codes
     (treated as system-less ``("", code)`` entries) and ``(system, code)``
-    tuples. Mixed shapes are normalized once at factory time.
+    tuples. Mixed shapes are normalized per URL on first use.
+
+    The cache is read LIVE, not snapshotted. Callers (``FHIRDataLoader``)
+    register this UDF exactly once per connection and then update their cache
+    dict in place on every subsequent ``load_valuesets`` call, so a snapshot
+    would make every ValueSet loaded after the first call invisible —
+    membership then answered NULL (unknown) instead of true/false, diverging
+    from the native C++ cache which is repopulated on each load.
+    Normalization is memoized per URL on (identity, size) of that URL's entry
+    set. ``FHIRDataLoader._refresh_in_valueset_udf`` replaces the sets on every
+    load (``clear()`` then ``setdefault(url, set())``), which changes both; a
+    caller that grows a set in place changes the size. Add a test before
+    assuming any other mutation shape is observed.
     """
-    normalized_cache: Dict[str, Set[tuple] | Set[str]] = {}
-    for url, entries in valueset_codes_cache.items():
+    normalized_by_url: Dict[str, tuple[Any, int, Set[tuple]]] = {}
+
+    def _normalized(url: str) -> Set[tuple]:
+        entries = valueset_codes_cache.get(url)
+        if not entries:
+            return set()
+        cached = normalized_by_url.get(url)
+        if cached is not None and cached[0] is entries and cached[1] == len(entries):
+            return cached[2]
         if all(isinstance(entry, str) for entry in entries):
-            normalized_cache[url] = {("", code) for code in entries}
+            normalized = {("", code) for code in entries}
         else:
-            normalized_cache[url] = entries
+            normalized = set(entries)
+        normalized_by_url[url] = (entries, len(entries), normalized)
+        return normalized
 
     def fhirpath_in_valueset(resource: str | None, path: str, valueset_url: str) -> bool | None:
         """Check if a code in the resource is in the specified valueset.
@@ -630,9 +651,9 @@ def createValuesetMembershipUdf(
             return None
 
         try:
-            vs_codes = normalized_cache.get(valueset_url, set())
+            vs_codes = _normalized(valueset_url)
             if not vs_codes:
-                if not normalized_cache:
+                if not valueset_codes_cache:
                     _logger.warning(
                         "in_valueset called but no valueset data is loaded. "
                         "Load valuesets first with registerValuesetUdfs()."
