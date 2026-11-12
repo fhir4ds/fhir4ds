@@ -54,7 +54,7 @@ from .runner import SQLQueryRunner, DependencyResolver
 from .dispatch import run_sql, SQLDispatchError
 from .lint import lint_sql_body, LintWarning
 
-__version__ = "0.0.22"
+__version__ = "0.0.23"
 
 __all__ = [
     # Version

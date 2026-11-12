@@ -3,9 +3,10 @@
 # fhir4ds serve — Hugging Face Docker Space (bulk-publish demo server).
 #
 # Differs from the production image (deploy/docker/fhir4ds-serve/Dockerfile):
-#   1. installs the wheel baked next to this Dockerfile (built from the dev
-#      tree — carries boot-time dataset rehydration, which the PyPI 0.0.20
-#      pin predates; revert to the PyPI install when a release ships it);
+#   1. installs the released wheel from PyPI at a PINNED version, so the Space
+#      never picks up a newer release implicitly. To run a build that is not
+#      published yet, bake the wheel next to this Dockerfile and COPY+install
+#      it instead — but keep the pin for the published image;
 #   2. runs as UID 1000 — Hugging Face starts the container as user 1000;
 #   3. ships the demo seed: SMART scheduling-links NDJSON (Slot/Schedule/
 #      Location/PractitionerRole/Device) plus the definition registries.
@@ -29,7 +30,7 @@ RUN apt-get update \
 
 ARG DUCKDB_VERSION=1.5.5
 RUN python -m pip install --no-cache-dir \
-        "fhir4ds-v2[serve,hf]==0.0.21" \
+        "fhir4ds-v2[serve,hf]==0.0.23" \
         "duckdb==${DUCKDB_VERSION}"
 # Hugging Face runs the container as UID 1000; create it before any COPY so
 # the application files are owned by the runtime user.
