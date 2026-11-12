@@ -112,6 +112,16 @@ const STATUS_BY_RESOURCE: Record<string, string> = {
 // system gets a say here. Mirrors VACCINE_ATC_PREFIXES in the Python module.
 const VACCINE_ATC_PREFIX = 'J07';
 
+// Types the pipeline can derive; the demo's filter mirrors
+// NotesPipelineConfig.resource_types (see notes_pipeline.py).
+const DERIVED_TYPES = [
+  'Condition',
+  'MedicationStatement',
+  'Immunization',
+  'Procedure',
+  'Observation',
+] as const;
+
 function resourceTypeFor(resultType?: string, code?: string, source?: string): string {
   const mapped =
     RESOURCE_TYPE_BY_RESULT[(resultType ?? '').trim().toLowerCase()] ?? 'Condition';
@@ -185,6 +195,8 @@ function Inner(): JSX.Element {
   const [note, setNote] = useState(DEFAULT_NOTE);
   const [concepts, setConcepts] = useState<Concept[] | null>(null);
   const [error, setError] = useState('');
+  // Mirrors NotesPipelineConfig.resource_types: everything enabled by default.
+  const [allowedTypes, setAllowedTypes] = useState<string[]>([...DERIVED_TYPES]);
   const [busy, setBusy] = useState(false);
 
   async function run(text: string): Promise<void> {
@@ -266,9 +278,12 @@ function Inner(): JSX.Element {
     () =>
       (concepts ?? [])
         .filter((c) => c.status === 'affirmed')
-        .slice(0, 6)
-        .map((c) => buildDerivedResource(c, note)),
-    [concepts, note],
+        .map((c) => buildDerivedResource(c, note))
+        // Excluded types are skipped, never coerced — same rule as the
+        // Python allowlist.
+        .filter((r) => allowedTypes.includes(r.resourceType))
+        .slice(0, 6),
+    [concepts, note, allowedTypes],
   );
 
   return (
@@ -355,6 +370,31 @@ function Inner(): JSX.Element {
           character span) on the coding and the note provenance on the resource.
           This is the shape fhir4ds&apos; <code>NotesPipeline</code> produces.
         </p>
+        <div className="adc-presets" role="group" aria-label="Limit derived resource types">
+          {DERIVED_TYPES.map((t) => {
+            const on = allowedTypes.includes(t);
+            return (
+              <button
+                key={t}
+                className={`adc-preset ${on ? 'active' : ''}`}
+                aria-pressed={on}
+                onClick={() =>
+                  setAllowedTypes((prev) =>
+                    prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t],
+                  )
+                }>
+                {t}
+              </button>
+            );
+          })}
+        </div>
+        {derivedResources.length === 0 && (
+          <div className="adc-hint">
+            {allowedTypes.length === 0
+              ? 'Every resource type is filtered out — enable at least one above.'
+              : 'No affirmed concept maps to an enabled resource type.'}
+          </div>
+        )}
         {derivedResources.length > 0 && (
           <div className="adc-tree adc-tree-lg">
             <JsonTree value={derivedResources} expanded collapseKey="extension" />

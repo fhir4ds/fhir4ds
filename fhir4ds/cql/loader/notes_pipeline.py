@@ -148,6 +148,16 @@ class NotesPipelineConfig:
             on derived Conditions. Default ``"unconfirmed"``.
         clinical_status: Default ``clinicalStatus.coding[0].code`` on
             derived Conditions. Default ``"active"``.
+        resource_types: Optional allowlist of DERIVED FHIR resource types.
+            ``None`` (default) derives whatever the concept's ``result_type``
+            maps to (Condition / MedicationStatement / Immunization /
+            Procedure / Observation). Pass e.g. ``("Condition",)`` to derive
+            problem-list content only, or
+            ``("Condition", "MedicationStatement")`` for a medication-focused
+            load. Concepts that map to an excluded type are skipped, not
+            coerced into an allowed one — a vaccine filtered out of an
+            Immunization-less load does NOT become a Condition. Unknown names
+            raise ``ValueError`` at construction.
         batch_size: Number of resources processed per call to
             :meth:`extract_conditions_batch`. Default ``1`` preserves
             today's per-resource code path byte-for-byte. Larger values
@@ -186,6 +196,7 @@ class NotesPipelineConfig:
     include_family: bool = False
     verification_status: str = "unconfirmed"
     clinical_status: str = "active"
+    resource_types: Optional[tuple[str, ...]] = None
     batch_size: int = 1
     workers: int = 1
     parallel_threshold: int = 200
@@ -211,6 +222,37 @@ class NotesPipelineConfig:
                 f"NotesPipelineConfig.batch_size must be a positive int (>=1), "
                 f"got {self.batch_size!r}"
             )
+        if self.resource_types is not None:
+            if isinstance(self.resource_types, str):
+                # A bare string is almost certainly a mistake: iterating it
+                # would silently allowlist single letters.
+                raise ValueError(
+                    "NotesPipelineConfig.resource_types must be a sequence of "
+                    f"resource types, not a string ({self.resource_types!r}); "
+                    'use ("Condition",) instead.'
+                )
+            try:
+                requested = tuple(self.resource_types)
+            except TypeError:
+                raise ValueError(
+                    "NotesPipelineConfig.resource_types must be a sequence of "
+                    f"resource types, got {self.resource_types!r}"
+                ) from None
+            if not requested:
+                raise ValueError(
+                    "NotesPipelineConfig.resource_types is empty; pass None to "
+                    "derive every type, or name at least one of "
+                    f"{sorted(DERIVED_RESOURCE_TYPES)}"
+                )
+            unknown = [r for r in requested if r not in DERIVED_RESOURCE_TYPES]
+            if unknown:
+                raise ValueError(
+                    f"NotesPipelineConfig.resource_types has unknown type(s) "
+                    f"{unknown}; valid types are {sorted(DERIVED_RESOURCE_TYPES)}"
+                )
+            # frozen dataclass: normalise in place
+            object.__setattr__(self, "resource_types", requested)
+
         if not isinstance(self.parallel_threshold, int) or self.parallel_threshold < 0:
             raise ValueError(
                 f"NotesPipelineConfig.parallel_threshold must be a non-negative int, "
@@ -779,6 +821,13 @@ class NotesPipeline:
             code=_safe_getattr(concept, "code"),
             source=_safe_getattr(concept, "source"),
         )
+
+        # Configurable type allowlist. Excluded types are SKIPPED, never
+        # coerced into an allowed one (a filtered-out vaccine must not become
+        # a Condition).
+        allowed_types = self._config.resource_types
+        if allowed_types is not None and resource_type not in allowed_types:
+            return None
 
         condition: dict[str, Any] = {
             "resourceType": resource_type,

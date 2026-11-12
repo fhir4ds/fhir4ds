@@ -151,6 +151,8 @@ config = NotesPipelineConfig(
     include_negated=False,         # also emit resources for negated concepts (status=negated)
     include_uncertain=False,       # also emit resources for uncertain concepts
     include_historical=False,      # also emit resources for historical (past) concepts
+    resource_types=None,           # None = every mapped type; else an allowlist,
+                                   # e.g. ("Condition", "MedicationStatement")
     verification_status="unconfirmed",  # default for derived Conditions
     clinical_status="active",      # default for derived Conditions
     batch_size=1,                  # batch size for parallel augmentation
@@ -159,6 +161,33 @@ config = NotesPipelineConfig(
 ```
 
 Strict-by-default: only affirmed concepts at-or-above `"certain"` match grade generate resources. Loosen `min_grade="probable"` for higher recall; set `include_negated=True` if you also want the "no CKD" to produce a (negated) resource.
+
+### Limiting which resource types you derive
+
+`resource_types` restricts derivation to the types you actually want:
+
+```python
+# problem-list load: conditions only
+NotesPipelineConfig(resource_types=("Condition",))
+
+# medication-focused load
+NotesPipelineConfig(resource_types=("Condition", "MedicationStatement"))
+
+# default: every mapped type
+NotesPipelineConfig(resource_types=None)
+```
+
+The allowlist is applied **after** the `result_type` mapping, so it speaks in
+FHIR resource names. Two rules matter:
+
+- A concept whose type is excluded is **skipped**, never coerced. Filtering
+  Immunization out of a load does not turn vaccines into Conditions.
+- Unknown names (including a typo like `"Observaton"`) raise `ValueError` at
+  construction, listing the valid types — a silent no-op would look like
+  "the note had nothing in it".
+
+Valid names are `Condition`, `MedicationStatement`, `Immunization`, `Procedure`
+and `Observation`.
 
 ## 5. Deterministic resource IDs
 

@@ -87,6 +87,10 @@ extractor reports a `result_type` per concept, and that drives the mapping:
 | `procedure` | **Procedure** |
 | `lab`, `vital` | **Observation** |
 
+You can restrict the set with `NotesPipelineConfig(resource_types=(...))` — for
+example `("Condition",)` for a problem-list load; excluded concepts are skipped,
+never coerced into an allowed type.
+
 In the note below, `metformin` becomes a MedicationStatement and a vaccine
 mention becomes an Immunization — filing either as a Condition would put
 pharmacy data in the problem list and quietly break any measure that retrieves

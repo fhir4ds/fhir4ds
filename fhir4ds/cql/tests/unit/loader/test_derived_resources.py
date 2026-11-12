@@ -239,3 +239,82 @@ class TestLoopPrevention:
         via_alias = pipeline.extract_conditions(_source_resource())
         assert via_alias and via_alias[0]["resourceType"] == "MedicationStatement"
         assert via_alias[0]["id"] == derived["id"]
+
+
+class TestResourceTypeAllowlist:
+    """``NotesPipelineConfig.resource_types`` limits which types are derived."""
+
+    def _derive_many(self, fake_module, config: NotesPipelineConfig, result_types):
+        fake_module.extract = lambda text, **kw: [
+            _Concept(
+                code=f"code-{i}",
+                source="SNOMEDCT_US",
+                display=f"concept {i}",
+                matched_text=f"concept {i}",
+                result_type=rt,
+                span_start=i * 10,
+                span_end=i * 10 + 5,
+            )
+            for i, rt in enumerate(result_types)
+        ]
+        pipeline = NotesPipeline(config)
+        return pipeline.extract_resources(_source_resource())
+
+    def test_default_derives_every_mapped_type(self, fake_medterm4ds):
+        derived = self._derive_many(
+            fake_medterm4ds,
+            NotesPipelineConfig(),
+            ["condition", "medication", "vaccine", "procedure", "lab"],
+        )
+        assert [r["resourceType"] for r in derived] == [
+            "Condition",
+            "MedicationStatement",
+            "Immunization",
+            "Procedure",
+            "Observation",
+        ]
+
+    def test_allowlist_keeps_only_listed_types(self, fake_medterm4ds):
+        derived = self._derive_many(
+            fake_medterm4ds,
+            NotesPipelineConfig(resource_types=("Condition", "Immunization")),
+            ["condition", "medication", "vaccine", "procedure", "lab"],
+        )
+        assert [r["resourceType"] for r in derived] == ["Condition", "Immunization"]
+
+    def test_excluded_concept_is_skipped_not_coerced(self, fake_medterm4ds):
+        """A filtered-out vaccine must NOT reappear as a Condition."""
+        derived = self._derive_many(
+            fake_medterm4ds,
+            NotesPipelineConfig(resource_types=("Condition",)),
+            ["vaccine"],
+        )
+        assert derived == []
+
+    def test_allowlist_of_every_type_is_a_no_op(self, fake_medterm4ds):
+        everything = tuple(sorted({"Condition", "MedicationStatement", "Immunization", "Procedure", "Observation"}))
+        derived = self._derive_many(
+            fake_medterm4ds,
+            NotesPipelineConfig(resource_types=everything),
+            ["condition", "vaccine"],
+        )
+        assert [r["resourceType"] for r in derived] == ["Condition", "Immunization"]
+
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            "Condition",          # bare string would allowlist single letters
+            [],                   # empty allowlist derives nothing — reject
+            ["Condition", "Observaton"],  # typo
+        ],
+    )
+    def test_invalid_allowlist_values_are_rejected_at_construction(self, bad):
+        with pytest.raises(ValueError):
+            NotesPipelineConfig(resource_types=bad)
+
+    def test_unknown_type_error_names_the_valid_options(self):
+        with pytest.raises(ValueError) as excinfo:
+            NotesPipelineConfig(resource_types=["Nope"])
+        message = str(excinfo.value)
+        for resource_type in ("Condition", "MedicationStatement", "Immunization", "Procedure", "Observation"):
+            assert resource_type in message
