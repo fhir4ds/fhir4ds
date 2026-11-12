@@ -63,7 +63,7 @@
   spec-correct (was 8/14); FP-20 parity test_environment_type_parity.py
   12/12 pass (was 11/12 + 1 new); FHIRPath duckdb integration 435/435
   pass (was 434, +1 new); full conformance 2822/2822 unchanged. Probe
-  artifacts: `/mnt/d/fhir4ds/.temp/qa/fp20_skeptic_2026_06_30/probe{,2,3,4,5}.py`.
+  artifacts: `~/src/fhir4ds/.temp/qa/fp20_skeptic_2026_06_30/probe{,2,3,4,5}.py`.
 
   **(QA-002 LOW §3.2/§5.2 DEFERRED — out of FP-20 scope):** Side
   discovery while probing `%resource.descendants().reference`. Choice-
@@ -158,7 +158,7 @@
   surfaces these defects — systematic spec-walkthrough and hypothesis-
   driven probes systematically miss them.
 
-  Probe artifact: `/mnt/d/fhir4ds/.temp/qa/fp19_explorer_2026_06_30/probe.py`
+  Probe artifact: `~/src/fhir4ds/.temp/qa/fp19_explorer_2026_06_30/probe.py`
   (182 EVAL cases × 2 modes = 364 parity cells / 9 vector groups).
 
 - **FHIRPath FP-19 HISTORIAN iter 1 §7 Aggregates (STU) + §8 Lexical
@@ -199,7 +199,7 @@
   spec-defined outputs.
 
   Probe artifact:
-  `/mnt/d/fhir4ds/.temp/qa/fp19_historian_2026_06_30/probe.py`
+  `~/src/fhir4ds/.temp/qa/fp19_historian_2026_06_30/probe.py`
   (175 cases / 33 spec-rule groups). Full FHIRPath integration 433/433
   (no regression). Existing `test_aggregate_lexical_parity.py` 7/7 pass.
   No source changes, no new tests, no native rebuild required.
@@ -278,7 +278,7 @@
     fix pattern would close this 9th instance. **Belongs to future §6.6
     math-precision chunk, not §7/§8.**
 
-  Probe artifacts: `/mnt/d/fhir4ds/.temp/qa/fp19_skeptic_2026_06_30/probe.py`
+  Probe artifacts: `~/src/fhir4ds/.temp/qa/fp19_skeptic_2026_06_30/probe.py`
   (100+ cases / 12 hypothesis groups), `probe2.py` (60+ focused FP-19-scope
   cases), plus inline shells (22 whitespace+comment deep edges, 22
   case-sensitivity cases, 8 aggregate scope semantics). Full conformance
@@ -353,7 +353,7 @@
   binary64 precision differences documented as architect drift);
   FHIRPath integration 433/433 (was 410, +23 new tests); full
   conformance 2822/2822 unchanged. Probes:
-  `/mnt/d/fhir4ds/.temp/qa/fp18_historian_2026_06_30/probe.py` (142
+  `~/src/fhir4ds/.temp/qa/fp18_historian_2026_06_30/probe.py` (142
   cases / 9 spec-rule groups), `division_drift.py` (14 cases),
   `bool_coercion.py` (20 cases).
 
@@ -455,7 +455,7 @@
   Post-fix: SKEPTIC probe round 1 + round 3 0 diffs; round 2 1 diff
   (QA-005 spec-equivalent); FHIRPath pytest 397/397 (was 379, +18 new
   tests); full conformance 2822/2822 unchanged. Probe artifacts:
-  `/mnt/d/fhir4ds/.temp/qa/fp18_skeptic_2026_06_30/probe{,2,3}.py`.
+  `~/src/fhir4ds/.temp/qa/fp18_skeptic_2026_06_30/probe{,2,3}.py`.
 
   **NOT A BUG Registry (FP-18 SKEPTIC additions):**
   - DateTime Z offset preservation vs +00:00 normalization: per §4.1.7
@@ -532,7 +532,7 @@
   spec-walkthrough (2026-06-30):** **VERIFIED CLEAN.** A fresh HISTORIAN
   systematic spec-walkthrough independently confirming the prior FP-17
   SKEPTIC clean run. 146 cases across 3 fresh probe files in
-  `/mnt/d/fhir4ds/.temp/qa/fp17_historian_iter1_run2_2026_06_30/`:
+  `~/src/fhir4ds/.temp/qa/fp17_historian_iter1_run2_2026_06_30/`:
   (1) `probe.py` (40 cells) — literal §6.5.1-§6.5.5 truth tables
   transcribed cell-by-cell from the FHIRPath v2.0.0 spec text, including
   the absorbing rows (§6.5.1 false∧X=false, §6.5.2 true∨X=true, §6.5.5
@@ -608,7 +608,7 @@
   new regression tests, no native rebuild. Full conformance 2822/2822
   unchanged (ViewDefinition 134/134, FHIRPath 935/935, CQL 1706/1706,
   DQM 47/47). Probes:
-  `/mnt/d/fhir4ds/.temp/qa/fp17_skeptic_2026_06_29/probe.py` (74 cases /
+  `~/src/fhir4ds/.temp/qa/fp17_skeptic_2026_06_29/probe.py` (74 cases /
   9 groups), `probe2.py` (30 cases / 13 vector groups),
   `probe3.py` (7 engine-level errors + 20 validity checks).
 
@@ -657,7 +657,7 @@
   covering 100+ parametrized cases), no native rebuild. Full
   conformance 2822/2822 unchanged (ViewDefinition 134/134, FHIRPath
   935/935, CQL 1706/1706, DQM 47/47). Probes:
-  `/mnt/d/fhir4ds/.temp/qa/fp16_historian_2026_06_29/probe.py`
+  `~/src/fhir4ds/.temp/qa/fp16_historian_2026_06_29/probe.py`
   (79 cases / 9 groups), `probe2.py` (57 cases / 11 groups deep
   edges), `probe3.py` (30 eval + 30 validity), `probe_spec.py`
   (15 spec anchors + 25 validity pairs), `probe_singleton.py`
@@ -752,7 +752,7 @@
   pytest 1507/1507 (was 1501, +6 from 3 new tests); full conformance
   2822/2822 unchanged. No native C++ rebuild required (all fixes are
   Python-fallback-only). Probe artifact:
-  `/mnt/d/fhir4ds/.temp/qa/fp15_explorer_2026_06_29/probe.py` (648
+  `~/src/fhir4ds/.temp/qa/fp15_explorer_2026_06_29/probe.py` (648
   cases / 12 vectors), `analyze.py` (V6 categorization),
   `diag_v7_v8.py` (root-cause isolation), `focused.py`.
 
@@ -866,7 +866,7 @@
   probe 0 native↔fallback diffs for the 3 resolved issue categories;
   FHIRPath pytest 376/376 (was 373, +3 new tests); full conformance
   2822/2822 unchanged. Probe artifact:
-  `/mnt/d/fhir4ds/.temp/qa/fp15_historian_2026_06_29/probe.py` (334 cases).
+  `~/src/fhir4ds/.temp/qa/fp15_historian_2026_06_29/probe.py` (334 cases).
 
   **NOT A BUG Registry (FP-15 HISTORIAN additions):**
   - Form parity (`is TypeSpecifier` vs `is(type)` and `as TypeSpecifier`
@@ -979,7 +979,7 @@
   hierarchy table in a future iteration.
 
   Probe artifacts:
-  `/mnt/d/fhir4ds/.temp/qa/fp15_skeptic_2026_06_29/probe.py` (145 cases,
+  `~/src/fhir4ds/.temp/qa/fp15_skeptic_2026_06_29/probe.py` (145 cases,
   9 hypothesis groups), `probe_round2.py` (57 cases, extended edge cases).
 
 - **FHIRPath FP-14 EXPLORER iter 1 §6.2 Comparison Decimal arithmetic
@@ -1046,7 +1046,7 @@
   - Cross-unit temperature: FP-13 HISTORIAN QA-002 carry-over and
     FP-14 SKEPTIC fixes verified intact.
 
-  Probe artifacts: `/mnt/d/fhir4ds/.temp/qa/fp14_explorer_2026_06_29/probe.py`
+  Probe artifacts: `~/src/fhir4ds/.temp/qa/fp14_explorer_2026_06_29/probe.py`
   (152 cases / 15 groups), `probe_round2.py` (53 cases / 7 groups),
   `probe_round3.py` (56 cases / 7 groups), `diag_power_arith.py`
   (root-cause diagnostic).
@@ -1110,7 +1110,7 @@
     returns `false` (equal value), `>=` returns `true`.
 
   Probe artifacts:
-  `/mnt/d/fhir4ds/.temp/qa/fp14_historian_2026_06_29/probe.py`
+  `~/src/fhir4ds/.temp/qa/fp14_historian_2026_06_29/probe.py`
   (267 cases / 16 groups / 5 UDF wrappers),
   `probe_spec.py` (36 spec anchors). Full conformance 2822/2822
   unchanged (ViewDefinition 134/134, FHIRPath 935/935, CQL 1706/1706,
@@ -1186,7 +1186,7 @@
     which does not invoke `convertQuantityToBase`. The
     `isOffsetTemperatureUnit` guard only triggers when units differ.
 
-  Probe artifacts: `/mnt/d/fhir4ds/.temp/qa/fp14_skeptic_2026_06_29/probe.py`
+  Probe artifacts: `~/src/fhir4ds/.temp/qa/fp14_skeptic_2026_06_29/probe.py`
   (89 cases, 9 hypothesis groups).
 
 - **FHIRPath FP-13 HISTORIAN iter 1 §6.1 Equality cross-unit
@@ -1241,7 +1241,7 @@
     whitespace "replace not collapse", calendar-vs-UCUM year/month
     equality returns empty.
 
-  Probe artifacts: `/mnt/d/fhir4ds/.temp/qa/fp13_historian_2026_06_29/probe.py`
+  Probe artifacts: `~/src/fhir4ds/.temp/qa/fp13_historian_2026_06_29/probe.py`
   (154 cases), `probe2.py` (37 cases), `probe3.py` (40 cases).
 
 - **FHIRPath FP-13 SKEPTIC iter 1 §6.1 Equality verification
@@ -1281,7 +1281,7 @@
   functions including 100+ parametrized cases. No source changes,
   no new tests. Full conformance 2822/2822 unchanged (ViewDefinition
   134/134, FHIRPath 935/935, CQL 1706/1706, DQM 47/47). Probe
-  artifacts: `/mnt/d/fhir4ds/.temp/qa/fp13_skeptic_2026_06_29/probe{,2,3}.py`.
+  artifacts: `~/src/fhir4ds/.temp/qa/fp13_skeptic_2026_06_29/probe{,2,3}.py`.
 
   **NOT A BUG Registry (FP-13):**
   - String equivalence whitespace handling: implementation uses
@@ -1380,7 +1380,7 @@
   HISTORIAN fixes intact; FHIRPath pytest 1496/1496 (was 1493, +3 new
   tests); full conformance 2822/2822 unchanged. Native C++ rebuilt and
   copied to both package and user install paths.
-  Probe artifact: `/mnt/d/fhir4ds/.temp/qa/fp12_explorer_2026_06_29/probe.py`.
+  Probe artifact: `~/src/fhir4ds/.temp/qa/fp12_explorer_2026_06_29/probe.py`.
 
 - **FHIRPath FP-12 HISTORIAN iter 1 §5.8.1/§5.9.2/§5.9.3 Tree Navigation
   + Utility Functions native↔fallback parity (2026-06-29):**
@@ -1448,7 +1448,7 @@
   SKEPTIC fix intact (trace projection scoped per item); FP-12 EXPLORER
   fix intact (primitive shadow metadata visible); FHIRPath pytest
   1493/1493 (was 1490, +3); full conformance 2822/2822 unchanged.
-  Probe artifact: `/mnt/d/fhir4ds/.temp/qa/fp12_historian_2026_06_29/probe.py`.
+  Probe artifact: `~/src/fhir4ds/.temp/qa/fp12_historian_2026_06_29/probe.py`.
 
 - **FHIRPath FP-11 EXPLORER iter 1 §5.7.7/§5.7.10/§5.7.3/§5.7.8 Math
   pathological-input parity (2026-06-29):** **4 ISSUES RESOLVED, 1
@@ -1558,7 +1558,7 @@
   extension rebuilt and copied. Post-fix: EXPLORER probe 125/127 (was
   113/127); FHIRPath pytest 1490/1490 (was 1486, +4 new tests); full
   conformance 2822/2822 unchanged. Probe:
-  `/mnt/d/fhir4ds/.temp/qa/fp11_explorer_2026_06_29/probe.py`.
+  `~/src/fhir4ds/.temp/qa/fp11_explorer_2026_06_29/probe.py`.
 
 - **FHIRPath FP-11 HISTORIAN iter 1 §5.7.3/§5.7.5/§5.7.6/§5.7.9 Math
   text-rendering parity (2026-06-28):** **1 ISSUE RESOLVED.** A fresh
@@ -1607,7 +1607,7 @@
   FHIRPath pytest 1486/1486 (was 1485, +1 new regression test
   `test_math_ln_exp_sqrt_log_text_parity_fp11_historian` with 15 cases);
   full conformance 2822/2822 unchanged. Probe:
-  `/mnt/d/fhir4ds/.temp/qa/fp11_historian_2026_06_28/probe.py`.
+  `~/src/fhir4ds/.temp/qa/fp11_historian_2026_06_28/probe.py`.
 
 - **FHIRPath FP-10 HISTORIAN iter 1 §5.6.6-§5.6.12 String Manipulation
   (Transform) (2026-06-28):** **0 NEW ISSUES — VERIFIED CLEAN.** A fresh
@@ -1632,7 +1632,7 @@
   native — documented platform limitation per spec §5.6.10 note). Full
   conformance 2822/2822 unchanged. HISTORIAN methodology confirmed
   high-confidence verification on a surface that prior SKEPTIC pass had
-  already hardened. Probe: `/mnt/d/fhir4ds/.temp/qa/fp10_historian_2026_06_28/probe.py`.
+  already hardened. Probe: `~/src/fhir4ds/.temp/qa/fp10_historian_2026_06_28/probe.py`.
 
 - **FHIRPath FP-10 SKEPTIC iter 1 §5.6.6-§5.6.12 String Manipulation
   (Transform) (2026-06-28):** **3 ISSUES RESOLVED.** A fresh SKEPTIC
@@ -1813,7 +1813,7 @@
   semantics (calendar vs UCUM); the new guards are surgical workarounds.
   Deeper redesign to group units by dimension/category explicitly is
   documented design debt, not a bug. Probe hygiene: root-pin
-  `sys.path.insert(0, "/mnt/d/fhir4ds")` plus `assert fhir4ds.__file__`
+  `sys.path.insert(0, "~/src/fhir4ds")` plus `assert fhir4ds.__file__`
   guard, per FP-08 HISTORIAN archive.
 
   The 6 remaining probe "diffs" are all `Observation.valueDecimal.*`
@@ -1929,7 +1929,7 @@
   `sys.path[0]` resolved to `/tmp` when the probe was launched from
   there. This produced 11 phantom diffs (the prior SKEPTIC fixes were
   absent from the older installed wheel). The fix was a one-line
-  `sys.path.insert(0, "/mnt/d/fhir4ds")` at the top of the probe plus
+  `sys.path.insert(0, "~/src/fhir4ds")` at the top of the probe plus
   an `assert fhir4ds.__file__.startswith(...)` guard. The same root-
   pinning discipline is already documented for prior probes
   (`.temp/qa/fp14_explorer_fresh_probe.py` etc.); this iteration
@@ -3689,7 +3689,7 @@
   string, so it reaches the function body and produces the spec-defined
   result (`indexOf('')→0`, `startsWith('')→true`, `endsWith('')→true`,
   `contains('')→true`). Probe artifact:
-  `/mnt/d/fhir4ds/.temp/qa/fp09_historian_2026_06_28/probe.py`. Full
+  `~/src/fhir4ds/.temp/qa/fp09_historian_2026_06_28/probe.py`. Full
   conformance 2822/2822 unchanged.
 
 - **FHIRPath FP-09 SKEPTIC §5.6.1-§5.6.5 string search parity (2026-06-28):**

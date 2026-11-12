@@ -20,7 +20,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 from conformance_log import log_run  # noqa: E402
 
 from fhir4ds.dqm.tests.conformance.cli import _discover_measures  # noqa: E402
-from fhir4ds.dqm.tests.conformance.config import SKIP_ON_FAILURE  # noqa: E402
+from fhir4ds.dqm.tests.conformance.config import (  # noqa: E402
+    CANONICAL_SUITES,
+    SKIP_ON_FAILURE,
+    SUITE_QI_CORE,
+    normalize_suite,
+)
 from fhir4ds.dqm.tests.conformance.database import BenchmarkDatabase  # noqa: E402
 from fhir4ds.dqm.tests.conformance.loader import load_test_suite  # noqa: E402
 from fhir4ds.dqm.tests.conformance.runner import run_measure  # noqa: E402
@@ -28,7 +33,20 @@ from fhir4ds.dqm.tests.conformance.runner import run_measure  # noqa: E402
 # Suppress UserWarnings (like unresolved CQL definition fallbacks) to prevent I/O spam
 warnings.simplefilter("ignore", UserWarning)
 
-OUTPUT_FILE = Path("conformance/reports/dqm_report.json")
+# One report per content suite. The qi-core path is unchanged so existing CI
+# artifacts and docs keep resolving; us-core gets its own file.
+DEFAULT_REPORTS = {
+    "qi-core": Path("conformance/reports/dqm_report.json"),
+    "us-core": Path("conformance/reports/us_core_dqm_report.json"),
+    "qi-core-2026": Path("conformance/reports/dqm_2026_report.json"),
+}
+
+# Human labels used in the conformance log / console output.
+SUITE_LABELS = {
+    "qi-core": "DQM (QI-Core 2025)",
+    "us-core": "DQM (US-Core 2025)",
+    "qi-core-2026": "DQM (QI-Core 2026)",
+}
 
 def _elapsed_ms(start: float) -> float:
     return (time.perf_counter() - start) * 1000
@@ -79,10 +97,33 @@ def main():
             "bind (see QA-016 for the remaining binder issues)."
         ),
     )
+    parser.add_argument(
+        "--suite",
+        type=normalize_suite,
+        choices=list(CANONICAL_SUITES),
+        default=SUITE_QI_CORE,
+        metavar="{" + ",".join(CANONICAL_SUITES) + "}",
+        help=(
+            "Content suite to run: 'qi-core' (ecqm-content-qicore-2025, default) "
+            "or 'us-core' (dqm-content-cms-2025 CMS US Core measures) or "
+            "'qi-core-2026'. Legacy spellings '2025', 'cms2025' and '2026' are "
+            "still accepted."
+        ),
+    )
+    parser.add_argument(
+        "--output",
+        default=None,
+        help=(
+            "Report path. Defaults per suite: qi-core -> "
+            "conformance/reports/dqm_report.json, us-core -> "
+            "conformance/reports/us_core_dqm_report.json."
+        ),
+    )
     args = parser.parse_args()
     audit_enabled = bool(args.audit)
 
-    suite = "2025"
+    suite = args.suite
+    output_file = Path(args.output) if args.output else DEFAULT_REPORTS[suite]
     suite_start = time.perf_counter()
     suite_timings = {}
 
@@ -232,11 +273,11 @@ def main():
     }
 
     # Save report
-    OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(OUTPUT_FILE, "w") as f:
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_file, "w") as f:
         json.dump(report, f, indent=2)
 
-    print(f"\nConformance report generated at {OUTPUT_FILE}")
+    print(f"\nConformance report generated at {output_file}")
     print(f"Summary: {passed_measures}/{total_measures} measures passed ({passed_measures/total_measures:.1%})")
     print("\nSuite timings:")
     for key, value in suite_timings.items():
@@ -251,7 +292,7 @@ def main():
     _print_slowest(report, "sql_execution_ms", "SQL execution")
     _print_slowest(report, "sql_write_ms", "SQL writing")
     _print_slowest(report, "test_suite_load_ms", "test suite loading")
-    log_run("DQM (QI Core 2025)", OUTPUT_FILE)
+    log_run(SUITE_LABELS[suite], output_file)
 
 if __name__ == "__main__":
     main()

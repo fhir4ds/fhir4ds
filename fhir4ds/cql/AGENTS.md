@@ -224,11 +224,11 @@
   - 200-deep `((((1))))` parser error "Expression exceeds maximum nesting
     depth": deliberate guard against pathological input. 50-deep works.
 - Workspace environmental note: Running probes from
-  `/mnt/d/fhir4ds/.temp/qa/...` causes Python to load the user-installed
+  `~/src/fhir4ds/.temp/qa/...` causes Python to load the user-installed
   wheel at `~/.local/lib/python3.10/site-packages/fhir4ds/...` instead
   of local dev source. The installed wheel predates CQL-01 SKEPTIC/
   HISTORIAN fixes. Future probes in this workspace must prepend
-  `/mnt/d/fhir4ds` to `sys.path` and assert `fhir4ds.__file__` points
+  `~/src/fhir4ds` to `sys.path` and assert `fhir4ds.__file__` points
   to dev source.
 
 ## CQL-02 SKEPTIC Iteration 1 (Clinical Types) — 2026-06-30
@@ -409,7 +409,7 @@
   ReplaceMatches, Split, SplitOnMatches, StartsWith, Substring, Upper.
   11 vector groups, ~95 cases × 2 backends (Python fallback + C++
   extension) = 190 case-evaluations. Probe at
-  `/mnt/d/fhir4ds/.temp/qa/cql12_explorer_2026_07_01_fresh/probe.py`.
+  `~/src/fhir4ds/.temp/qa/cql12_explorer_2026_07_01_fresh/probe.py`.
 - `QA-001` RESOLVED. CQL §17 ReplaceMatches: "If any argument is null,
   the result is null." `cqlRegexReplaceMatches` at
   `fhir4ds/cql/duckdb/udf/string.py:87-118` previously caught
@@ -565,9 +565,9 @@
 
 ### Probe Artifacts
 
-- `/mnt/d/fhir4ds/.temp/qa/cql13_skeptic_2026_07_01/predictions.md`
-- `/mnt/d/fhir4ds/.temp/qa/cql13_skeptic_2026_07_01/probe.py` (70+ cases)
-- `/mnt/d/fhir4ds/.temp/qa/cql13_skeptic_2026_07_01/probe2.py` (targeted
+- `~/src/fhir4ds/.temp/qa/cql13_skeptic_2026_07_01/predictions.md`
+- `~/src/fhir4ds/.temp/qa/cql13_skeptic_2026_07_01/probe.py` (70+ cases)
+- `~/src/fhir4ds/.temp/qa/cql13_skeptic_2026_07_01/probe2.py` (targeted
   edge cases)
 
 ## NOT A BUG Registry (CQL-02 HISTORIAN additions)
@@ -792,7 +792,7 @@
   verifier ran 155 spec-grounded cases with exact value matching.
   Independent of prior SKEPTIC/HISTORIAN passes — found **2 fresh bugs**
   both had missed.
-- Probe artifacts: `/mnt/d/fhir4ds/.temp/qa/cql13_explorer_2026_07_01_fresh/`.
+- Probe artifacts: `~/src/fhir4ds/.temp/qa/cql13_explorer_2026_07_01_fresh/`.
 
 ### QA-001 RESOLVED — `_duration_high_boundary` year-target with year-precision operand (HIGH)
 
@@ -3800,8 +3800,8 @@ zero parity divergences:
 
 ### Probe Artifacts
 
-- `/mnt/d/fhir4ds/.temp/qa/cql18_historian_2026_07_02/probe.py`
-- `/mnt/d/fhir4ds/.temp/qa/cql18_historian_2026_07_02/probe_translate.py`
+- `~/src/fhir4ds/.temp/qa/cql18_historian_2026_07_02/probe.py`
+- `~/src/fhir4ds/.temp/qa/cql18_historian_2026_07_02/probe_translate.py`
 
 ## CQL-18 EXPLORER Iteration 1 (List Operators Part 1) — 2026-07-02
 
@@ -3896,15 +3896,15 @@ forced Python fallback DuckDB registrations, zero parity diffs:
 
 ### Probe Artifacts
 
-- `/mnt/d/fhir4ds/.temp/qa/cql18_explorer_2026_07_02_fresh/probe.py`
+- `~/src/fhir4ds/.temp/qa/cql18_explorer_2026_07_02_fresh/probe.py`
   (broad-spectrum 8-vector fuzz, 80+ cases)
-- `/mnt/d/fhir4ds/.temp/qa/cql18_explorer_2026_07_02_fresh/probe2.py`
+- `~/src/fhir4ds/.temp/qa/cql18_explorer_2026_07_02_fresh/probe2.py`
   (targeted spec-grounded, 20 cases)
-- `/mnt/d/fhir4ds/.temp/qa/cql18_explorer_2026_07_02_fresh/verify.py`
+- `~/src/fhir4ds/.temp/qa/cql18_explorer_2026_07_02_fresh/verify.py`
   (Exists/Includes verifiers)
-- `/mnt/d/fhir4ds/.temp/qa/cql18_explorer_2026_07_02_fresh/parity.py`
+- `~/src/fhir4ds/.temp/qa/cql18_explorer_2026_07_02_fresh/parity.py`
   (Python↔C++ parity, 57 cases)
-- `/mnt/d/fhir4ds/.temp/qa/cql18_explorer_2026_07_02_fresh/run1.log`
+- `~/src/fhir4ds/.temp/qa/cql18_explorer_2026_07_02_fresh/run1.log`
 
 ## CQL-19 HISTORIAN Iteration 1 (List Operators Part 2) — 2026-07-02
 
@@ -4120,11 +4120,11 @@ zero parity diffs:
 
 ## Probe Artifacts (CQL-19 EXPLORER)
 
-- `/mnt/d/fhir4ds/.temp/qa/cql19_explorer_2026_07_02/probe.py` (V1-V11)
-- `/mnt/d/fhir4ds/.temp/qa/cql19_explorer_2026_07_02/probe2.py` (V12-V22)
-- `/mnt/d/fhir4ds/.temp/qa/cql19_explorer_2026_07_02/probe3.py` (V23-V31)
-- `/mnt/d/fhir4ds/.temp/qa/cql19_explorer_2026_07_02/verify*.py`
-- `/mnt/d/fhir4ds/.temp/qa/cql19_explorer_2026_07_02/results.json`
+- `~/src/fhir4ds/.temp/qa/cql19_explorer_2026_07_02/probe.py` (V1-V11)
+- `~/src/fhir4ds/.temp/qa/cql19_explorer_2026_07_02/probe2.py` (V12-V22)
+- `~/src/fhir4ds/.temp/qa/cql19_explorer_2026_07_02/probe3.py` (V23-V31)
+- `~/src/fhir4ds/.temp/qa/cql19_explorer_2026_07_02/verify*.py`
+- `~/src/fhir4ds/.temp/qa/cql19_explorer_2026_07_02/results.json`
 
 ## CQL-20 EXPLORER Iteration 1 (Aggregate Functions) — 2026-07-02
 
@@ -4190,9 +4190,9 @@ zero parity diffs:
 
 ### Probe Artifacts (CQL-20 EXPLORER)
 
-- `/mnt/d/fhir4ds/.temp/qa/cql20_explorer_2026_07_02/probe.py`
+- `~/src/fhir4ds/.temp/qa/cql20_explorer_2026_07_02/probe.py`
   (104 cases × 2 backends covering all 15 chunk items)
-- `/mnt/d/fhir4ds/.temp/qa/cql20_explorer_2026_07_02/findings.json`
+- `~/src/fhir4ds/.temp/qa/cql20_explorer_2026_07_02/findings.json`
 
 ## CQL-21 SKEPTIC Iteration 1 (Clinical Operators) — 2026-07-02
 
@@ -4274,10 +4274,10 @@ zero parity diffs:
 
 ### Probe Artifacts (CQL-21 SKEPTIC)
 
-- `/mnt/d/fhir4ds/.temp/qa/cql21_skeptic_2026_07_02/probe.py` (40+
+- `~/src/fhir4ds/.temp/qa/cql21_skeptic_2026_07_02/probe.py` (40+
   cases across 3 libraries: AgeIn/CalculateAgeIn, Equal/Equivalent,
   ValueSet operators)
-- `/mnt/d/fhir4ds/.temp/qa/cql21_skeptic_2026_07_02/probe2.py`
+- `~/src/fhir4ds/.temp/qa/cql21_skeptic_2026_07_02/probe2.py`
   (targeted ambiguity + uncertainty probes — revealed QA-001)
 
 ## CQL-21 HISTORIAN Iteration 1 (Clinical Operators) — 2026-07-02
@@ -4335,7 +4335,7 @@ zero parity diffs:
 
 ### Probe Artifacts (CQL-21 HISTORIAN)
 
-- `/mnt/d/fhir4ds/.temp/qa/cql21_historian_2026_07_02_fresh/probe.py`
+- `~/src/fhir4ds/.temp/qa/cql21_historian_2026_07_02_fresh/probe.py`
   (57 cases x 2 backends: 26 AgeIn, 23 Equal/Equivalent, 8 ValueSet)
 
 ## Known Fragile Areas (CQL-21 HISTORIAN additions)
@@ -4409,13 +4409,13 @@ zero parity diffs:
 
 ### Probe Artifacts (CQL-21 EXPLORER)
 
-- `/mnt/d/fhir4ds/.temp/qa/cql21_explorer_2026_07_02_fresh/probe.py`
+- `~/src/fhir4ds/.temp/qa/cql21_explorer_2026_07_02_fresh/probe.py`
   (53 cases x 2 backends: 24 AgeIn, 15 Equal/Equivalent, 12 ValueSet,
   2 ExpandValueSet)
-- `/mnt/d/fhir4ds/.temp/qa/cql21_explorer_2026_07_02_fresh/probe2.py`
+- `~/src/fhir4ds/.temp/qa/cql21_explorer_2026_07_02_fresh/probe2.py`
   (23 cases x 2 backends: CalculateAgeIn direct UDF calls with boundary
   year values)
-- `/mnt/d/fhir4ds/.temp/qa/cql21_explorer_2026_07_02_fresh/probe3.py`
+- `~/src/fhir4ds/.temp/qa/cql21_explorer_2026_07_02_fresh/probe3.py`
   (8 cases x 2 backends: nested clinical expression chains)
 
 ## CQL-22 SKEPTIC Iteration 1 (Errors and Messaging) — 2026-07-02
@@ -4480,7 +4480,7 @@ zero parity diffs:
 
 ### Probe Artifacts (CQL-22 SKEPTIC)
 
-- `/mnt/d/fhir4ds/.temp/qa/cql22_skeptic_probe.py` (12 hypotheses:
+- `~/src/fhir4ds/.temp/qa/cql22_skeptic_probe.py` (12 hypotheses:
   integer code rejection, Message/Warning/Trace severity informational
   loss, uppercase severity acceptance, unknown severity handling,
   native C++ registration check, source type preservation, null/false
@@ -4559,11 +4559,11 @@ zero parity diffs:
 
 ### Probe Artifacts (CQL-22 HISTORIAN)
 
-- `/mnt/d/fhir4ds/.temp/qa/cql22_historian_2026_07_02_fresh/probe.py`
+- `~/src/fhir4ds/.temp/qa/cql22_historian_2026_07_02_fresh/probe.py`
   (76-case systematic spec-walkthrough: 6 batteries covering source
   passthrough, condition, code, severity, message+Error content, and
   official conformance cases).
-- `/mnt/d/fhir4ds/.temp/qa/cql22_historian_2026_07_02_fresh/probe2.py`
+- `~/src/fhir4ds/.temp/qa/cql22_historian_2026_07_02_fresh/probe2.py`
   (17-case arity + nested-Message + Message-in-arithmetic + FHIR-resource
   source edge case probe).
 
@@ -4605,9 +4605,9 @@ zero parity diffs:
 
 ### Probe Artifacts (CQL-22 EXPLORER)
 
-- `/mnt/d/fhir4ds/.temp/qa/cql22_explorer_2026_07_02_fresh/probe.py`
+- `~/src/fhir4ds/.temp/qa/cql22_explorer_2026_07_02_fresh/probe.py`
   (124-case pathological-input fuzz across 8 batteries).
-- `/mnt/d/fhir4ds/.temp/qa/cql22_explorer_2026_07_02_fresh/probe2.py`
+- `~/src/fhir4ds/.temp/qa/cql22_explorer_2026_07_02_fresh/probe2.py`
   (21-case auxiliary probe across 6 batteries: list-code rejection,
   deeply nested conditions, parameter/runtime expressions, severity
   edge cases, CQL escape sequences).
@@ -4628,7 +4628,7 @@ zero parity diffs:
   `python3 script.py` (rather than `pytest`) resolve `fhir4ds` to the
   locally-installed site-packages copy, which may be stale relative to
   source. The probe files at the paths above explicitly prepend
-  `/mnt/d/fhir4ds` to `sys.path` to use source. Pytest is unaffected
+  `~/src/fhir4ds` to `sys.path` to use source. Pytest is unaffected
   because it runs from the project root, which Python implicitly adds
   to `sys.path`. This does not affect any conformance suite or any
   consumer using `pip install -e .`.
@@ -5453,7 +5453,7 @@ duckdb suite 780 passed / 5 skipped.
   tighter).
 - Gate: conformance 2832/2832; CQL pytest 5710 passed / 9 skipped;
   test_logical_parity.py 53/53.
-- Probes: /mnt/d/fhir4ds/.temp/qa/cql04_historian2_2026_08_20/probe.py.
+- Probes: ~/src/fhir4ds/.temp/qa/cql04_historian2_2026_08_20/probe.py.
 
 ## CQL-05 Structural Type Operators (2026-08-20, SKEPTIC launch)
 
@@ -5555,7 +5555,7 @@ converts.
     fraction-digit Decimal literal rounds half-up (repo path; stale
     site-packages copies may still hard-reject — always use PYTHONPATH).
 - Fragile area: stale site-packages `fhir4ds` shadowing the repo when
-  PYTHONPATH is unset — probes must run with `PYTHONPATH=/mnt/d/fhir4ds`.
+  PYTHONPATH is unset — probes must run with `PYTHONPATH=~/src/fhir4ds`.
 
 ## CQL-10 Arithmetic Part 1 (SKEPTIC re-launch iter 1, 2026-08-21) — ALL RESOLVED
 

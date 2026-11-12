@@ -339,7 +339,7 @@ remain in effect. Post-remediation status (2026-Q2):
   `_operators.py` static guard; null/Any/dynamic operands pass through to
   runtime null semantics. Validation harness trap: probe scripts under
   `.temp/` run with sys.path[0]=script dir, so `fhir4ds` resolves from
-  site-packages — always validate with `PYTHONPATH=/mnt/d/fhir4ds`.
+  site-packages — always validate with `PYTHONPATH=~/src/fhir4ds`.
   CQL-09 SKEPTIC doctrine (2026-08-21): composite EQUALITY must preserve
   uncertainty — `{1, null} = {1, 2}` is null (null-null list elements are
   equal, one-sided null elements are uncertain), and interval equality via
@@ -1570,7 +1570,7 @@ spec-grounded against FHIRPath 2018Sep §9-§12.
 ### FHIRPath §9-§12 — FP-20 HISTORIAN launch (2026-08-18, spec-compliance campaign)
 
 **Second personality on §9–§12 (120+ fresh dual-path probe cases in
-`/mnt/d/fhir4ds/.temp/qa/fp20_historian{2,3,4}_probe.py`): 1 MEDIUM fix,
+`~/src/fhir4ds/.temp/qa/fp20_historian{2,3,4}_probe.py`): 1 MEDIUM fix,
 0 parity diffs after fix.** Spec grounding: fetched 2018Sep spec text for
 trace()/type()/logical-operator/division semantics and the official
 2018Sep `FHIRPath.g4` (compared against repo grammar).
@@ -1613,7 +1613,7 @@ trace()/type()/logical-operator/division semantics and the official
 **Third personality on §9–§12: ZERO findings; chunk CLOSED CLEAN after three
 consecutive clean launches (SKEPTIC, HISTORIAN, EXPLORER).** 131 fresh
 dual-path (native extension vs forced Python fallback) probe cases in
-`/mnt/d/fhir4ds/.temp/qa/fp20_explorer2_2026_08_19/` — 0 parity diffs,
+`~/src/fhir4ds/.temp/qa/fp20_explorer2_2026_08_19/` — 0 parity diffs,
 0 spec violations.
 
 - VERIFIED CLEAN: %context/%rootResource original-node invariant under
@@ -2146,7 +2146,7 @@ quantity abbreviated-UCUM/fractional/negative spellings.
 ### FHIRPath FP-04 SKEPTIC §5.2 filtering/projection audit (2026-08-17, spec-compliance campaign)
 
 First personality on §5.2 where/select/repeat/ofType (105 dual-path probe
-cases in `/mnt/d/fhir4ds/.temp/qa/fp04_skeptic_2026_08_17/`). where/select/
+cases in `~/src/fhir4ds/.temp/qa/fp04_skeptic_2026_08_17/`). where/select/
 repeat semantics (strict singleton-boolean criteria, select flattening,
 repeat `=`-dedup fixpoint incl. quantity-aware `1 'cm'`/`10 'mm'` → 1) are
 parity-correct and spec-correct.
@@ -2177,7 +2177,7 @@ parity-correct and spec-correct.
 ### FHIRPath FP-04 EXPLORER §5.2 audit (2026-08-17, spec-compliance campaign)
 
 Third personality on §5.2 closed the FP-04 chunk: 62 dual-path
-evaluations (probe at `/mnt/d/fhir4ds/.temp/qa/fp04_explorer3_probe.py`),
+evaluations (probe at `~/src/fhir4ds/.temp/qa/fp04_explorer3_probe.py`),
 ZERO parity diffs, ZERO spec violations, conformance 2832/2832 held, no
 code changes. Final chunk tally: SKEPTIC 1 fix + 1 LOW INTENDED,
 HISTORIAN clean, EXPLORER clean.
@@ -2214,7 +2214,7 @@ HISTORIAN clean, EXPLORER clean.
 ### FHIRPath FP-04 HISTORIAN §5.2 audit (2026-08-17, spec-compliance campaign)
 
 Second personality on §5.2 where/select/repeat/ofType (79 fresh dual-path
-probe cases in `/mnt/d/fhir4ds/.temp/qa/fp04_historian_2026_08_17/`):
+probe cases in `~/src/fhir4ds/.temp/qa/fp04_historian_2026_08_17/`):
 ZERO parity diffs, ZERO new spec violations; no code changes; conformance
 2832/2832 held. The SKEPTIC structural-type fix was re-verified
 spec-correct and regression-free on 12 edge cases.
@@ -2248,7 +2248,7 @@ spec-correct and regression-free on 12 edge cases.
 
 Fresh v1.1-campaign audit of §5.1 Existence (141 dual-path probe cases + 25-case
 blast-radius battery + 2 focused batteries in
-`/mnt/d/fhir4ds/.temp/qa/fp03_skeptic_2026_08_16/`). Verified clean: the full
+`~/src/fhir4ds/.temp/qa/fp03_skeptic_2026_08_16/`). Verified clean: the full
 allTrue/anyTrue/allFalse/anyFalse truth tables incl. non-Boolean error paths
 and all four empty-input corners; all/exists criteria singleton doctrine,
 vacuous all() on empty input, $index exposure and scope restoration;
@@ -2300,12 +2300,12 @@ conformance 2832/2832 held):
   `fhir4ds/fhirpath/duckdb/extensions/` and site-packages.
 
 ENVIRONMENT REMINDER (repeat): run dual-path probes with
-`PYTHONPATH=/mnt/d/fhir4ds` or imports resolve from stale site-packages.
+`PYTHONPATH=~/src/fhir4ds` or imports resolve from stale site-packages.
 
 ### FHIRPath FP-03 EXPLORER existence audit (2026-08-17, spec-compliance campaign)
 
 Third personality on §5.1 Existence (150 fresh dual-path probe cases in
-`/mnt/d/fhir4ds/.temp/qa/fp03_explorer_2026_08_17/`): ZERO parity diffs,
+`~/src/fhir4ds/.temp/qa/fp03_explorer_2026_08_17/`): ZERO parity diffs,
 ZERO new spec violations; no code changes; conformance 2832/2832 held.
 
 - Adversarial chaining battery: §5.1 outputs feeding `not()`, `and`/`or`
@@ -2335,7 +2335,7 @@ ZERO new spec violations; no code changes; conformance 2832/2832 held.
 ### FHIRPath FP-03 HISTORIAN existence audit (2026-08-17, spec-compliance campaign)
 
 Second personality on §5.1 Existence (141 fresh dual-path probe cases in
-`/mnt/d/fhir4ds/.temp/qa/fp03_historian_2026_08_17/`): ZERO parity diffs,
+`~/src/fhir4ds/.temp/qa/fp03_historian_2026_08_17/`): ZERO parity diffs,
 ZERO new spec violations; no code changes; conformance 2832/2832 held.
 
 - Both SKEPTIC fixes re-verified spec-correct and regression-free (8
@@ -2481,7 +2481,7 @@ mismatch), `23 = 23 '1'` → true, continuous-build-only divergences documented
 resolves `import fhir4ds` from the STALE site-packages copy (script dir is
 sys.path[0], not the cwd) while the native extension there is current —
 producing phantom "fallback lost the fix" parity failures. Always run
-dual-path probes with `PYTHONPATH=/mnt/d/fhir4ds`.
+dual-path probes with `PYTHONPATH=~/src/fhir4ds`.
 
 ### FHIRPath FP-02 EXPLORER operator audit (2026-08-16, spec-compliance campaign)
 
@@ -2570,7 +2570,7 @@ spec-mandated empty-collection semantics, multi-item needle rejection,
 and equality-based dedup/membership. No source changes, no new
 regression tests (surface already spec-compliant), no native C++
 rebuild. Full conformance 2822/2822 unchanged. Probes:
-`/mnt/d/fhir4ds/.temp/qa/fp16_skeptic_2026_06_29/probe{,2,3,4,5}.py`.
+`~/src/fhir4ds/.temp/qa/fp16_skeptic_2026_06_29/probe{,2,3,4,5}.py`.
 
 ### FHIRPath Subsetting Integer Arguments and `intersect()` Equality
 
@@ -2611,7 +2611,7 @@ masquerade as engine exceptions — re-verify flagged cases with a direct
 
 **FP-05 spec-compliance EXPLORER confirmation (2026-08-17): clean; chunk
 closed.** Third personality on §5.3/§5.4 (144 fresh dual-path adversarial
-chaining cases in `/mnt/d/fhir4ds/.temp/qa/fp05_explorer_2026_08_17/`):
+chaining cases in `~/src/fhir4ds/.temp/qa/fp05_explorer_2026_08_17/`):
 zero parity diffs, zero spec violations; conformance 2832/2832 held; no
 code changes. Doctrine pin (do not "fix"): `tail()` is ZERO-ARG (§5.3.4,
 "equivalent to skip(1)") — `tail(n)` is wrong ARITY and correctly yields
@@ -2646,7 +2646,7 @@ the spec grammar before filing.
 ### FP-06 spec-compliance SKEPTIC rerun doctrine pins (2026-08-17)
 
 Fresh §5.5.1–§5.5.3 dual-path audit (209 cases, probe
-`/mnt/d/fhir4ds/.temp/qa/fp06_skeptic_2026_08_17/`): zero parity diffs, zero
+`~/src/fhir4ds/.temp/qa/fp06_skeptic_2026_08_17/`): zero parity diffs, zero
 spec violations, conformance 2832/2832, no code changes. Two NOT A BUG pins:
 
 - `convertsToInteger('2147483648')` → **false** in BOTH engines (QA-001, LOW
@@ -2664,7 +2664,7 @@ spec violations, conformance 2832/2832, no code changes. Two NOT A BUG pins:
 ### FP-06 HISTORIAN rerun fixes (2026-08-17)
 
 Second personality on §5.5.1–§5.5.3 (123 fresh dual-path cases, probe
-`/mnt/d/fhir4ds/.temp/qa/fp06_historian_2026_08_17/`): three fallback-only
+`~/src/fhir4ds/.temp/qa/fp06_historian_2026_08_17/`): three fallback-only
 parity fixes, all Python-side (native already correct; extension NOT rebuilt).
 
 - **Python `re` `$` end-anchor matches before a single trailing newline**
@@ -2703,7 +2703,7 @@ parity fixes, all Python-side (native already correct; extension NOT rebuilt).
 ### FP-06 EXPLORER rerun fix (2026-08-17)
 
 Third personality on §5.5.1–§5.5.3 (100 dual-path adversarial chaining
-cases, probe `/mnt/d/fhir4ds/.temp/qa/fp06_explorer3_2026_08_17/`):
+cases, probe `~/src/fhir4ds/.temp/qa/fp06_explorer3_2026_08_17/`):
 
 - **Fallback `iif_macro` hid criterion-defined defineVariable variables
   (QA-001, MEDIUM, FIXED)**: the FP-06 HISTORIAN fix snapshot/restored
@@ -2734,7 +2734,7 @@ cases, probe `/mnt/d/fhir4ds/.temp/qa/fp06_explorer3_2026_08_17/`):
 ### FP-07 spec-compliance SKEPTIC audit (2026-08-17): §5.5.4/§5.5.5/§5.5.6
 
 Fresh dual-path audit of Date/DateTime/Decimal conversion (129 cases, probe
-`/mnt/d/fhir4ds/.temp/qa/fp07_skeptic_2026_08_17/probe.py`, live N1 spec +
+`~/src/fhir4ds/.temp/qa/fp07_skeptic_2026_08_17/probe.py`, live N1 spec +
 official R4 fixtures). One fix (QA-003, MEDIUM): the third `$`-anchor
 sibling `longDecimalStringRegex` (misc.py) matched `'5L\n'`, and the
 fallback `to_decimal` then raised an unhandled `decimal.ConversionSyntax`
@@ -2771,7 +2771,7 @@ shared-convention pins (LOW INTENDED, both engines agree, no fixture pins):
 ### FP-07 HISTORIAN confirmation (2026-08-17): §5.5.4–§5.5.6 clean; chunk closed
 
 Second personality on Date/DateTime/Decimal conversion (107 fresh dual-path
-cases, probe `/mnt/d/fhir4ds/.temp/qa/fp07_historian_2026_08_17/probe.py`):
+cases, probe `~/src/fhir4ds/.temp/qa/fp07_historian_2026_08_17/probe.py`):
 zero parity diffs, zero spec violations, conformance 2832/2832 held, no code
 changes. The SKEPTIC `longDecimalStringRegex` `\Z` fix re-verified
 regression-free (`'5L\n'` → empty both engines; `'-5L'`/`'+5L'` ok;
@@ -2793,7 +2793,7 @@ consistent for wrong-type fmt args and arity forms.
 ### preserve authored `Z`
 
 Third personality on §5.5.4–§5.5.6 (123 fresh dual-path cases, probe
-`/mnt/d/fhir4ds/.temp/qa/fp07_explorer3_2026_08_17/probe{,2}.py`): converted
+`~/src/fhir4ds/.temp/qa/fp07_explorer3_2026_08_17/probe{,2}.py`): converted
 temporals as ± operands (both orders), convertsTo* feeding iif/where/select,
 roundtrip precision/offset losslessness, toDecimal at the 28-sig-digit
 ROUND_HALF_EVEN boundary × FP-01 exact arithmetic (all clean —
@@ -2869,7 +2869,7 @@ indexOf expectations as `['1']`, not `[1]`.
 **FP-09 spec-compliance EXPLORER confirmation (2026-08-17): §5.6.1-§5.6.5
 clean; chunk closed.** Third personality on string search (82 fresh
 dual-path adversarial chaining checks + 10 is_valid checks in
-`/mnt/d/fhir4ds/.temp/qa/fp09_explorer3_2026_08_17/probe.py`): zero parity
+`~/src/fhir4ds/.temp/qa/fp09_explorer3_2026_08_17/probe.py`): zero parity
 diffs, zero spec violations, conformance 2832/2832 held, no code changes.
 Verified-clean seams (do not "fix"): indexOf feeding substring (incl.
 indexOf→-1 → `{}`), substring→endsWith composition, startsWith|endsWith
@@ -3419,7 +3419,7 @@ RESOLVED, extension rebuilt + redeployed, conformance 2832/2832 held):
 ### FHIRPath FP-08 HISTORIAN §5.5.7-§5.5.9 audit (2026-08-17, spec-compliance campaign)
 
 Second personality on Quantity/String/Time conversion (117 fresh
-dual-path probes, /mnt/d/fhir4ds/.temp/qa/fp08_historian_2026_08_17/).
+dual-path probes, ~/src/fhir4ds/.temp/qa/fp08_historian_2026_08_17/).
 All 3 SKEPTIC fixes re-verified spec-correct and regression-free (duration
 table incl. plurals/roundtrips, 28-sig-digit rendering on fresh variants,
 T-prefixed partial toTime forms). Two MEDIUM fixes, both Python-side
@@ -3461,7 +3461,7 @@ T-prefixed partial toTime forms). Two MEDIUM fixes, both Python-side
 ### FHIRPath FP-08 EXPLORER §5.5.7-§5.5.9 audit (2026-08-17, spec-compliance campaign)
 
 Third personality on Quantity/String/Time conversion (95 fresh dual-path
-probe cases, /mnt/d/fhir4ds/.temp/qa/fp08_explorer3_2026_08_17/probe.py).
+probe cases, ~/src/fhir4ds/.temp/qa/fp08_explorer3_2026_08_17/probe.py).
 Both fixes verified, conformance 2832/2832 held, fhirpath tree 1745 passed:
 
 - **QA-001 (HIGH, FIXED): fallback `conv_unit_to` never converted
@@ -3504,7 +3504,7 @@ Both fixes verified, conformance 2832/2832 held, fhirpath tree 1745 passed:
 ### FHIRPath FP-10 spec-compliance SKEPTIC rerun (2026-08-17): §5.6.6-§5.6.12 string transform
 
 Fresh dual-path audit (82 + 31 probe cases + helper comparisons,
-/mnt/d/fhir4ds/.temp/qa/fp10_skeptic2_2026_08_17/). Verified clean: upper/lower
+~/src/fhir4ds/.temp/qa/fp10_skeptic2_2026_08_17/). Verified clean: upper/lower
 Unicode case mapping both engines (ß→SS, ς↔Σ, ﬃ→FFI, İ lower to i+U+0307,
 CJK/Deseret/Georgian/Armenian, prior-launch native tables intact); replace()
 literal all-instances semantics incl. metachar-as-literal, ''-pattern
@@ -3554,7 +3554,7 @@ RESOLVED; extension rebuilt + redeployed to repo bundle and ~/.duckdb caches):
 ### spec-compliant on BOTH engines
 
 Second personality on §5.6.6-§5.6.12 (107 fresh dual-path cases,
-/mnt/d/fhir4ds/.temp/qa/fp10_historian2_2026_08_17/probe.py). All 5 SKEPTIC
+~/src/fhir4ds/.temp/qa/fp10_historian2_2026_08_17/probe.py). All 5 SKEPTIC
 fixes re-verified intact. Two fixes, one pin; extension rebuilt + redeployed
 (repo bundle, user site-packages, ~/.duckdb caches v1.3.0/v1.5.2);
 conformance 2832/2832, fhirpath pytest tree 1774/1774.
@@ -3601,7 +3601,7 @@ conformance 2832/2832, fhirpath pytest tree 1774/1774.
 ### non-greedy; chunk closed
 
 Third personality on §5.6.6-§5.6.12 (69 dual-path cases + is_valid checks,
-/mnt/d/fhir4ds/.temp/qa/fp10_explorer3_2026_08_17/probe.py). One fix
+~/src/fhir4ds/.temp/qa/fp10_explorer3_2026_08_17/probe.py). One fix
 (QA-001, MEDIUM, RESOLVED); everything else parity-clean: locale-sensitive
 case mapping (Turkish ı/İ, Greek ς/Σ context-free, Cyrillic, fullwidth),
 toChars/length code-point semantics on astral/ZWJ/regional-indicator/
@@ -3712,7 +3712,7 @@ and STU3 functions.json — NOT the launch brief's hints):
 ### FHIRPath FP-11 HISTORIAN §5.7 math audit (2026-08-17, spec-compliance campaign)
 
 Second personality on §5.7 (81 fresh dual-path engine cases + direct-helper
-probe, `/mnt/d/fhir4ds/.temp/qa/fp11_historian2_2026_08_17/`): engine parity
+probe, `~/src/fhir4ds/.temp/qa/fp11_historian2_2026_08_17/`): engine parity
 clean except the pinned <=1 ULP transcendental drift; all 4 SKEPTIC fixes
 re-verified on both engines (Quantity operands, resource-driven math,
 iteration chaining, log-base guards all fresh angles).
@@ -3838,7 +3838,7 @@ fhirpath tree 1822, tree-utility parity 20/20.
 ### FHIRPath FP-12 EXPLORER fixes (2026-08-17): nested-path typing parity
 
 Third personality on §5.8/§5.9 (123 fresh dual-path cases,
-`/mnt/d/fhir4ds/.temp/qa/fp12_explorer3_2026_08_17/probe{,2,3}.py`). Chunk
+`~/src/fhir4ds/.temp/qa/fp12_explorer3_2026_08_17/probe{,2,3}.py`). Chunk
 closed (SKEPTIC 2, HISTORIAN 4, EXPLORER 2 fixes). Conformance 2832/2832,
 fhirpath tree 1824.
 
@@ -3879,7 +3879,7 @@ fhirpath tree 1824.
 ### FHIRPath FP-13 spec-compliance HISTORIAN launch (2026-08-17): §6.1 Equality
 
 Second personality on §6.1 (~180 fresh dual-path cases in
-`/mnt/d/fhir4ds/.temp/qa/fp13_historian_2026_08_17/`). One MEDIUM fixed:
+`~/src/fhir4ds/.temp/qa/fp13_historian_2026_08_17/`). One MEDIUM fixed:
 
 - **Fixed: string `~` whitespace class (QA-001, MEDIUM).** §6.1.2 String
   Equivalence normalizes whitespace "as defined in the Whitespace lexical
@@ -3961,7 +3961,7 @@ Second personality on §6.1 (~180 fresh dual-path cases in
 ### FHIRPath FP-13 EXPLORER §6.1 audit (2026-08-17, spec-compliance campaign)
 
 Third personality on §6.1 Equality (133 fresh dual-path probe cases in
-`/mnt/d/fhir4ds/.temp/qa/fp13_explorer3_2026_08_17/`). Two HIGH fixes, both
+`~/src/fhir4ds/.temp/qa/fp13_explorer3_2026_08_17/`). Two HIGH fixes, both
 native-only (fallback already correct; extension rebuilt + redeployed,
 md5 bfd0ac84…):
 
@@ -4013,7 +4013,7 @@ md5 bfd0ac84…):
 Fresh dual-path audit of < <= > >= (64 adversarial cases + the FULL official
 R4 fixture batch testLessThan/testLessOrEqual/testGreaterThan/
 testGreaterOrEqual, 81/81 correct in BOTH engines; probes in
-/mnt/d/fhir4ds/.temp/qa/fp14_skeptic_2026_08_18/). The ENGINE surfaces are
+~/src/fhir4ds/.temp/qa/fp14_skeptic_2026_08_18/). The ENGINE surfaces are
 §6.2-compliant: string ordering is Unicode code-point lexicographic (emoji
 U+1F600 > U+FFFD, not UTF-16 order), temporal ordering is offset-aware
 instant semantics when both operands carry offsets (Z = +00:00 = -00:00),
@@ -5325,14 +5325,14 @@ explorer tests in test_list_part2_parity.py (47/47); master gate fresh
 ## SOF-VD-06 HISTORIAN launch note (2026-08-23)
 - forEach chunk re-confirmed CLEAN (0 fixes; 2 LOW INTENDED). New pins vs SKEPTIC: column+forEach on the SAME select is the canonical spec form (SD forEach definition references "the corresponding column structure"); forEach works inside unionAll branches AND unionAll nests under a forEach select (per-focus cross join); column.constant is NOT a v2 Column field (rejected; constants are the top-level `constant` array, singular misspelling gets a helpful error); %parent is not a builtin (FHIRPATH_BUILTIN_VARIABLES = rowIndex/context/resource/rootResource/ucum) and is correctly rejected; forEach over mixed-type primitive collections and over explicitly-empty JSON array elements behaves per FHIRPath flatten semantics.
 - INTENDED: forEach+unionAll on the same select is accepted (no SD constraint forbids; sql-expressions only forbids forEach+forEachOrNull) — semantics spec-silent, output deterministic; nested lateral joins carry NO row-order guarantee (spec imposes none; never order-assert across unnest levels).
-- QA harness pitfalls that masqueraded as bugs (all bisected to probe bugs): harness norm() json.loads numeric strings ("11111" -> int); stray resource-shaped keys (e.g. `contained`) inside the VIEW dict are silently ignored by the parser — fixtures must live in the resource; nested-select column paths are focus-relative. Probes: /mnt/d/fhir4ds/.temp/qa/sof_vd06_historian/p1-p10.
+- QA harness pitfalls that masqueraded as bugs (all bisected to probe bugs): harness norm() json.loads numeric strings ("11111" -> int); stray resource-shaped keys (e.g. `contained`) inside the VIEW dict are silently ignored by the parser — fixtures must live in the resource; nested-select column paths are focus-relative. Probes: ~/src/fhir4ds/.temp/qa/sof_vd06_historian/p1-p10.
 - Gates fresh: viewdef pytest 1185, ViewDef conformance 144/144, run_all.py 2832/2832; fhirpath.duckdb_extension md5 57d0634b6ee6eddee9fc06a1355bef5a repo==site-packages (no rebuild).
 
 ## SOF-VD-06 EXPLORER launch note (2026-08-23)
 - forEach/forEachOrNull chunk third personality, chaos pass: CLEAN (0 fixes; 2 LOW INTENDED). Chunk triangulated across SKEPTIC/HISTORIAN/EXPLORER — closed.
 - New pins (native==fallback parity on all): heavy FHIRPath forEach targets are fine — exists()-gated iteration, `where().first()` targets, iif()-driven branch targets, filtered `extension.where(url=...)`, `contained.ofType(Observation)` fast path under iteration, BackboneElement chains at depth (`identifier.type.coding`). FHIRPath JSON-null array elements `[a,null,b]` are excluded from the collection, so iteration yields no row for null and `%rowIndex` counts the FILTERED collection (both iterators). A forEach/forEachOrNull expression that ERRORS at FHIRPath evaluation (e.g. type error inside a where) degrades uniformly to tolerant-empty: forEach -> 0 rows, forEachOrNull -> 1 null-preserved row (Process(S,N) defines no error semantics; identical on both engines — do not "fix" one iterator to raise). List-valued %constants are inexpressible per SD (constant value[x] are primitive singletons) — parser rejection of `valueCode: [..]` is correct; mandate items about iterating %constant lists are out of spec. `%rowIndex` composes with arithmetic and where clauses at depth 3-5; depth-5 nesting generates exactly one flat JOIN LATERAL per level, deterministic SQL. `$this = %context` is true per iterated focus at depth 2; `%rootResource` resolves from depth. Singleton boolean/count() foci yield one row.
 - Probe-harness note: multi-item input to a singleton string function (`name.given.substring(0,3)`) errors engine-side (FHIRPath singleton doctrine) — surfaces as empty under forEach, NOT a viewdef bug; use `.select(substring(..))` or `.first().substring(..)` for mapped semantics.
-- Probes: /mnt/d/fhir4ds/.temp/qa/sof_vd06_explorer/p1-p4 (p3 = forced-Python-fallback parity via duckdb.__version__ monkeypatch). Gates fresh: viewdef pytest 1185, ViewDef 144/144, run_all.py 2832/2832 FIRST PASS; fhirpath.duckdb_extension md5 57d0634b6ee6eddee9fc06a1355bef5a repo==site-packages (no rebuild).
+- Probes: ~/src/fhir4ds/.temp/qa/sof_vd06_explorer/p1-p4 (p3 = forced-Python-fallback parity via duckdb.__version__ monkeypatch). Gates fresh: viewdef pytest 1185, ViewDef 144/144, run_all.py 2832/2832 FIRST PASS; fhirpath.duckdb_extension md5 57d0634b6ee6eddee9fc06a1355bef5a repo==site-packages (no rebuild).
 
 ## SOF-VD-07 SKEPTIC launch note (2026-08-23)
 - select.repeat chunk: all 19 official repeat.json fixtures set-equal via official-runner adaptation; %rowIndex under repeat is a 0-based per-repeated-row counter (correct); repeat+where on same select filters repeated nodes; parser rejects repeat-as-string / empty array / repeat+forEach / repeat+forEachOrNull (SD constraint). Canonical SD ground truth (main branch XML): repeat 0..* string, "recursively follow each path to any depth ... combined using a union operation"; the RELEASED ig/2.0.0 SD snapshot has NO repeat element (repeat is main-branch + fixtures only).
@@ -5373,7 +5373,7 @@ explorer tests in test_list_part2_parity.py (47/47); master gate fresh
   work; file absent at HEAD db1e4164; native long div/mod parity only).
 - Gates fresh: fhirpath+viewdef pytest 1440 passed (6 pre-existing fails
   above); ViewDef conformance 144/144; run_all.py 2832/2832. Probes:
-  /mnt/d/fhir4ds/.temp/qa/probe.py.
+  ~/src/fhir4ds/.temp/qa/probe.py.
 
 ## SOF-VD-08 SKEPTIC launch note (2026-08-23)
 - select.unionAll chunk: 1 HIGH fixed, rest conformant. FIXED QA-001: `_generate_single_resource` (fhir4ds/viewdef/generator.py) suppressed forEachOrNull null-preserved rows across UNION ALL alternatives keyed by resolved PATH — an independent SIBLING select repeating the wrapper's forEachOrNull path lost its null row in non-first alternatives (2 rows -> 1; wrapper+same-path sibling 1 -> 0). Per Process(S,N) step 3 each selection structure emits its own null row; only wrapper copies replicated by `_expand_select_unions` share one. Fix: `_union_origin_id` instance marker on wrappers (survives copy.copy), `_collect_union_wrapper_ids` replaces path tracking. Regression: tests/unit/test_union.py::TestUnionAllForEachOrNullSuppression. Official union.json fixtures never place forEachOrNull as wrapper/sibling of unionAll — this class of bug is fixture-invisible; check the suppression scope whenever touching union expansion.
@@ -5804,7 +5804,7 @@ ledger). Durable doctrines:
 
 ## Translator performance — function-CTE promotion is the dedup lever (2026-11-11, PERF-01)
 
-The whole `--suite 2025` gate runtime was ONE measure: CMS0334 spent 640 s of the
+The whole `--suite qi-core` gate runtime was ONE measure: CMS0334 spent 640 s of the
 gate's ~700 s, and 624 s of that was a single define's CTE
 (`Delivery Encounter With Estimated Gestational Age ≥ 37 Weeks`, 1.66 MB) holding
 ~1,670 copies of one `fhirpath_text(TimeOfDelivery.resource, '(value).type().name')`
@@ -6319,7 +6319,7 @@ user-facing mode rather than an implicit rule.
   resource of their type.
 
 **Non-strict is a real trade-off, and the CMS 2025 data shows the cost.** Full
-`--suite cms2025` tally: strict **73/73 PERFECT**; `--no-strict-profiles`
+`--suite us-core` tally: strict **73/73 PERFECT**; `--no-strict-profiles`
 **67/73**, mean accuracy 99.78%. The six regressions are all over-inclusion —
 5 of them false-positive Denominator Exclusions:
 
@@ -6332,7 +6332,7 @@ user-facing mode rather than an implicit rule.
 | CMS108 | 100.0% | 99.3% |
 | CMS72 | 100.0% | 99.4% |
 
-The same relaxation costs the QI-Core suite: `--suite 2025 --no-strict-profiles`
+The same relaxation costs the QI-Core suite: `--suite qi-core --no-strict-profiles`
 is 45/47, regressing the same two families (CMS72 99.4%, CMS832 97.1%).
 
 **The six regressions are the standard working, not a bug to chase.** The
@@ -6391,8 +6391,8 @@ profile `us-quality-core-enounter-diagnosis` (missing `c`), which makes that
 Condition invisible to *every* Condition retrieve; the expected DENEX of 0 still
 holds, but the case is not exercising what its name claims.
 
-Verification on the strict-mode tree: `--suite cms2025 --skip-errors` 73/73,
-`--suite 2025 --skip-errors` 47/47, CQL conformance 1706/1706.
+Verification on the strict-mode tree: `--suite us-core --skip-errors` 73/73,
+`--suite qi-core --skip-errors` 47/47, CQL conformance 1706/1706.
 
 ## Bundled extension ABI slots — one source tree, three ABIs (2026-11-12)
 
@@ -6561,7 +6561,7 @@ export LD_LIBRARY_PATH=/tmp/gdbroot/usr/lib/x86_64-linux-gnu:/tmp/gdbroot/lib/x8
 # 2) run the suite under it; a captured crash prints the signal then the stack
 gdb -batch -nx -ex "set pagination off" -ex run \
     -ex "echo \n=== CRASH BACKTRACE ===\n" -ex "bt 40" \
-    --args python3 -u -m fhir4ds.dqm.tests.conformance.cli --suite 2025 --skip-errors
+    --args python3 -u -m fhir4ds.dqm.tests.conformance.cli --suite qi-core --skip-errors
 ```
 
 `bt` on a NORMAL exit prints "No stack." and gdb exits 1 — treat exit 1 as
@@ -6574,9 +6574,33 @@ you need to run the suite many times:
 
 ```bash
 gcc -shared -fPIC -O1 -g -o crashtrace.so crashtrace.c -ldl
-LD_PRELOAD=$PWD/crashtrace.so python3 -m fhir4ds.dqm.tests.conformance.cli --suite 2025
+LD_PRELOAD=$PWD/crashtrace.so python3 -m fhir4ds.dqm.tests.conformance.cli --suite qi-core
 ```
 
 Both harnesses are in `/tmp/jm/` for this session only; re-create from these
 commands. Keep `ulimit -c 0` (WSL pipes cores to `wsl-capture-crash`, so no
 usable core file is produced) and `ulimit -s 65536`.
+
+## Conformance suite names: `qi-core` / `us-core` (2026-11-12)
+
+The DQM suites are named for WHAT they are, not for the content-package year:
+
+| canonical | content package | gate result |
+|---|---|---|
+| `qi-core` | ecqm-content-qicore-2025 | 47/47 |
+| `us-core` | dqm-content-cms-2025 (CMS US Core) | 73/73 |
+| `qi-core-2026` | dqm-content-qicore-2026 | not gated |
+
+Legacy spellings `2025`, `cms2025` and `2026` are still accepted by `--suite`
+(`config.normalize_suite` normalises, and `fhir4ds/dqm/tests/unit/test_suite_naming.py`
+pins both directions), so existing CI jobs and older notes keep working.
+
+**Both DQM suites are part of the release gate.** `conformance/scripts/run_all.py`
+invokes `run_dqm.py` once per suite and writes a separate report for each
+(`dqm_report.json` for qi-core, `us_core_dqm_report.json` for us-core), so the
+master run is now:
+
+    ViewDefinition 144 + FHIRPath 935 + CQL 1706 + DQM qi-core 47
+    + DQM us-core 73 + OMOP 38 = 2943/2943
+
+`run_dqm.py` also takes `--output` if a different report path is needed.

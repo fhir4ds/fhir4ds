@@ -8,6 +8,22 @@ import re
 import sys
 from pathlib import Path
 
+from .config import (
+    CANONICAL_SUITES,
+    SUITE_QI_CORE,
+    SUITE_QI_CORE_2026,
+    SUITE_US_CORE,
+    normalize_suite,
+)
+
+
+def _normalize_suite_arg(value: str) -> str:
+    """argparse ``type=`` adapter accepting canonical AND legacy suite names."""
+    try:
+        return normalize_suite(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from None
+
 
 def main():
     # Deeply-nested CQL libraries (e.g. with many included fluent functions)
@@ -68,9 +84,16 @@ def main():
     )
     parser.add_argument(
         "--suite",
-        choices=["2025", "2026", "cms2025"],
-        default="2025",
-        help="Content suite: '2025' (ecqm-content-qicore-2025, default), '2026' (dqm-content-qicore-2026), or 'cms2025' (dqm-content-cms-2025 US Core measures)",
+        type=_normalize_suite_arg,
+        choices=list(CANONICAL_SUITES),
+        default=SUITE_QI_CORE,
+        metavar="{" + ",".join(CANONICAL_SUITES) + "}",
+        help=(
+            "Content suite: 'qi-core' (ecqm-content-qicore-2025, default), "
+            "'us-core' (dqm-content-cms-2025 CMS US Core measures), or "
+            "'qi-core-2026' (dqm-content-qicore-2026). Legacy spellings "
+            "'2025', 'cms2025' and '2026' are still accepted."
+        ),
     )
     parser.add_argument(
         "--verbose", "-v",
@@ -375,11 +398,12 @@ def main():
         print(f"\nSummary written to: {summary_path}")
 
 
-def _discover_measures(suite: str = "2025"):
+def _discover_measures(suite: str = SUITE_QI_CORE):
     """Auto-discover all measures from the selected content suite.
 
     Args:
-        suite: "2025" (ecqm-content-qicore-2025), "2026" (dqm-content-qicore-2026),
+        suite: canonical suite name — "qi-core", "us-core", "qi-core-2026"
+            (legacy "2025"/"cms2025"/"2026" accepted),
             or "cms2025" (dqm-content-cms-2025 US Core measures).
     """
     from .config import (
@@ -443,17 +467,18 @@ def _discover_measures(suite: str = "2025"):
         if measure_vs_bundle.exists():
             vs_paths.append(measure_vs_bundle)
 
-        # For 2026 and cms2025, also include 2025 CQL dir for shared libraries
+        # For qi-core-2026 and us-core, also include the qi-core CQL dir for
+        # shared libraries
         # (CumulativeMedicationDuration, FHIRHelpers, etc.). The CMS US Core
         # repo references hl7.fhir.uv.cql.FHIRHelpers 4.0.1 but does not ship
         # the CQL source (IG tooling resolves it at build time).
         inc_paths = [cql_dir]
-        if suite in ("2026", "cms2025"):
+        if _normalize_suite_arg(suite) in (SUITE_QI_CORE_2026, SUITE_US_CORE):
             from .config import SUITE_2025_DIR
             fallback_cql = SUITE_2025_DIR / "input" / "cql"
             if fallback_cql.exists():
                 inc_paths.append(fallback_cql)
-        if suite in ("2026", "cms2025"):
+        if _normalize_suite_arg(suite) in (SUITE_QI_CORE_2026, SUITE_US_CORE):
             # Vendored shared libraries (FHIRCommon, USCoreCommon,
             # USCoreElements) that the CMS repo — and the 2026 QI-Core repo
             # since its US CQL 1.0.0 dependency update — reference but do not

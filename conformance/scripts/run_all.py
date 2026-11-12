@@ -18,16 +18,21 @@ warnings.simplefilter("ignore", UserWarning)
 sys.path.insert(0, str(Path(__file__).parent))
 from conformance_log import _collect_stats  # noqa: E402
 
-# Configuration
+# Configuration: (name, script, report, extra script args).
+# Every entry here is part of the release gate. The DQM runner is invoked once
+# per content suite so BOTH measure suites are covered:
+#   qi-core  = ecqm-content-qicore-2025   (the historical 47-measure gate)
+#   us-core  = dqm-content-cms-2025       (the CMS US Core 73-measure suite)
 SCRIPTS = [
-    ("ViewDefinition", "conformance/scripts/run_viewdef.py", "conformance/reports/viewdef_report.json"),
-    ("FHIRPath (R4)", "conformance/scripts/run_fhirpath_r4.py", "conformance/reports/fhirpath_report.json"),
-    ("CQL", "conformance/scripts/run_cql.py", "conformance/reports/cql_report.json"),
-    ("DQM (QI Core 2025)", "conformance/scripts/run_dqm.py", "conformance/reports/dqm_report.json"),
-    ("OMOP Mapping", "conformance/scripts/run_omop.py", "conformance/reports/omop_report.json"),
+    ("ViewDefinition", "conformance/scripts/run_viewdef.py", "conformance/reports/viewdef_report.json", ()),
+    ("FHIRPath (R4)", "conformance/scripts/run_fhirpath_r4.py", "conformance/reports/fhirpath_report.json", ()),
+    ("CQL", "conformance/scripts/run_cql.py", "conformance/reports/cql_report.json", ()),
+    ("DQM (QI-Core 2025)", "conformance/scripts/run_dqm.py", "conformance/reports/dqm_report.json", ("--suite", "qi-core")),
+    ("DQM (US-Core 2025)", "conformance/scripts/run_dqm.py", "conformance/reports/us_core_dqm_report.json", ("--suite", "us-core")),
+    ("OMOP Mapping", "conformance/scripts/run_omop.py", "conformance/reports/omop_report.json", ()),
 ]
 
-def run_script(name, path):
+def run_script(name, path, extra_args=()):
     """Run a conformance script and handle output."""
     print(f"\n>>> Running {name} conformance suite...")
     # SOF-VD-11 EXPLORER QA-002: on WSL/drvfs the working directory can
@@ -42,7 +47,11 @@ def run_script(name, path):
         absolute = str(Path(__file__).resolve().parent / Path(path).name)
     for attempt in (1, 2):
         try:
-            subprocess.run([sys.executable, absolute], check=True, capture_output=False)
+            subprocess.run(
+                [sys.executable, absolute, *extra_args],
+                check=True,
+                capture_output=False,
+            )
             return True
         except subprocess.CalledProcessError as e:
             if attempt == 1 and e.returncode == 1:
@@ -79,8 +88,8 @@ def main():
     print("=" * 60)
 
     # Run all scripts
-    for name, path, _ in SCRIPTS:
-        run_script(name, path)
+    for name, path, _report, extra_args in SCRIPTS:
+        run_script(name, path, extra_args)
 
     # Display Summary Table
     print("\n" + "=" * 60)
@@ -90,7 +99,7 @@ def main():
     grand_total = 0
     grand_passed = 0
 
-    for name, _, report_path in SCRIPTS:
+    for name, _path, report_path, _args in SCRIPTS:
         p, t, r = get_summary(report_path)
         print(f"{name:<25} | {p:<8} | {t:<8} | {r:>6.1f}%")
         grand_total += t
@@ -103,7 +112,7 @@ def main():
 
     # Build a synthetic combined report for the master log entry
     all_failures = []
-    for _, _, report_path in SCRIPTS:
+    for _name, _path, report_path, _args in SCRIPTS:
         _, _, failures = _collect_stats(report_path)
         all_failures.extend(failures)
 
