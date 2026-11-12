@@ -6537,3 +6537,46 @@ repeated extractions (the scope-chain fix in BUGFIX-013 made that safe), or
 promote the QICoreCommon conversion functions instead of inlining them 1,270
 times. The `test_cms2_disambiguation_macros` size bound is 1.7 MB with this
 history recorded in its docstring, so it still catches the 12.95 MB class.
+
+## Capturing a native crash without root (2026-11-12, BUGFIX-019)
+
+An intermittent SIGSEGV appeared in full QI-Core runs (kernel log:
+`segfault at 0 ip 0000000000000000`, i.e. a call through a null function
+pointer; a second one faulted inside python3.10). It has NOT reproduced since
+the extensions were rebuilt (2 crashes in 9 runs before; 0 in ~15 after), and a
+3-run control with the OLD binaries restored was also clean — so the rebuild
+cannot be *proven* to be the fix. The capture recipe is recorded here because
+nothing about it is obvious and `gdb` was not installed:
+
+```bash
+# 1) gdb without root: fetch the .debs and unpack them locally
+mkdir -p /tmp/gdbdl && cd /tmp/gdbdl
+for p in gdb libbabeltrace1 libdebuginfod1 libsource-highlight4v5 libmpfr6 \
+         libipt2 libxxhash0 libexpat1 liblzma5 libzstd1 libpython3.10 \
+         libboost-regex1.74.0; do apt-get download $p; done
+for d in *.deb; do dpkg -x "$d" /tmp/gdbroot; done
+export LD_LIBRARY_PATH=/tmp/gdbroot/usr/lib/x86_64-linux-gnu:/tmp/gdbroot/lib/x86_64-linux-gnu
+/tmp/gdbroot/usr/bin/gdb --version      # 12.1, no root needed
+
+# 2) run the suite under it; a captured crash prints the signal then the stack
+gdb -batch -nx -ex "set pagination off" -ex run \
+    -ex "echo \n=== CRASH BACKTRACE ===\n" -ex "bt 40" \
+    --args python3 -u -m fhir4ds.dqm.tests.conformance.cli --suite 2025 --skip-errors
+```
+
+`bt` on a NORMAL exit prints "No stack." and gdb exits 1 — treat exit 1 as
+"no crash" and grep the log for `Program received signal`.
+
+An `LD_PRELOAD` alternative was also built (`crashtrace.c` → `crashtrace.so`):
+a SIGSEGV handler that writes the fault address and up to 40 frames resolved
+with `dladdr` (module + nearest exported symbol), avoiding gdb's overhead when
+you need to run the suite many times:
+
+```bash
+gcc -shared -fPIC -O1 -g -o crashtrace.so crashtrace.c -ldl
+LD_PRELOAD=$PWD/crashtrace.so python3 -m fhir4ds.dqm.tests.conformance.cli --suite 2025
+```
+
+Both harnesses are in `/tmp/jm/` for this session only; re-create from these
+commands. Keep `ulimit -c 0` (WSL pipes cores to `wsl-capture-crash`, so no
+usable core file is produced) and `ulimit -s 65536`.
