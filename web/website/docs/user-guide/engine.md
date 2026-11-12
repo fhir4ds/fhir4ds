@@ -71,8 +71,8 @@ FHIR4DS is organized into several functional pillars. Use the guides below to di
 
 The `fhirpath` module provides a high-performance C++ DuckDB extension for executing expressions directly against FHIR JSON columns.
 
-- **Learn more**: [FHIRPath Guide](./extraction/fhirpath)
-- **Database integration**: [Native DuckDB Integration](./duckdb)
+- **Learn more**: [FHIRPath Guide](/docs/user-guide/extraction/fhirpath/)
+- **Database integration**: [Native DuckDB Integration](/docs/user-guide/duckdb/)
 </details>
 
 <details>
@@ -80,7 +80,7 @@ The `fhirpath` module provides a high-performance C++ DuckDB extension for execu
 
 The `viewdef` module implements the HL7 SQL-on-FHIR v2 specification, allowing you to define flat projections of complex FHIR resources in portable JSON.
 
-- **Guide**: [ViewDefinition Modeling](./modeling/viewdef)
+- **Guide**: [ViewDefinition Modeling](/docs/user-guide/modeling/viewdef/)
 </details>
 
 <details>
@@ -88,7 +88,7 @@ The `viewdef` module implements the HL7 SQL-on-FHIR v2 specification, allowing y
 
 The `cql` module translates Clinical Quality Language into optimized DuckDB SQL queries that process entire populations in a single pass.
 
-- **Basics**: [Clinical Quality Language (CQL)](./analytics/cql)
+- **Basics**: [Clinical Quality Language (CQL)](/docs/user-guide/analytics/cql/)
 - **Internals**: [Translation Logic](/docs/api-reference/cql/)
 </details>
 
@@ -97,7 +97,7 @@ The `cql` module translates Clinical Quality Language into optimized DuckDB SQL 
 
 The `dqm` (Digital Quality Measures) module manages the full lifecycle of evaluation, from loading CMS bundles to generating auditable evidence.
 
-- **Workflow & Audit**: [DQM Orchestration](./quality/dqm)
+- **Workflow & Audit**: [DQM Orchestration](/docs/user-guide/quality/dqm/)
 - **Production Recipes**: [Source-to-DQM Production Recipes](/docs/examples/dqm-recipes/)
 </details>
 
@@ -105,7 +105,7 @@ The `dqm` (Digital Quality Measures) module manages the full lifecycle of evalua
 
 For repeatable batch runs and project automation, use the operations guides:
 
-- **CLI**: [Command Line Interface](./interfaces/cli)
+- **CLI**: [Command Line Interface](/docs/user-guide/interfaces/cli/)
 
 ---
 

@@ -6,7 +6,9 @@ description: "FHIR4DS license and third-party attribution terms."
 
 # Licensing & Support
 
-FHIR4DS is a commercial-grade open-source project. To ensure both the sustainability of the project and the flexibility required by enterprise users, we utilize a dual-licensing model.
+FHIR4DS is owned and maintained by **Montavon Informatics LLC**.
+
+It is a commercial-grade open-source project. To ensure both the sustainability of the project and the flexibility required by enterprise users, we utilize a dual-licensing model.
 
 ## Open Source License
 

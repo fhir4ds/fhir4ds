@@ -10,7 +10,7 @@ readme = "README.md"
 license = {text = "AGPL-3.0-only"}
 requires-python = ">=3.10"
 authors = [
-    {name = "FHIR4DS Team"}
+    {name = "Montavon Informatics LLC"}
 ]
 keywords = ["fhir", "fhirpath", "cql", "duckdb", "healthcare", "sql", "analytics", "hl7"]
 classifiers = [

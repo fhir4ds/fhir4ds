@@ -17,7 +17,7 @@ This adapter requires that your Postgres tables **already contain FHIR resource 
 
 ## Prerequisites
 
-Your Postgres tables must conform to the [Standard FHIR4DS Schema Contract](../data-sources#1-the-resources-view), specifically:
+Your Postgres tables must conform to the [Standard FHIR4DS Schema Contract](/docs/user-guide/data-sources/#1-the-resources-view), specifically:
 - A column containing the **FHIR resource ID** (castable to VARCHAR).
 - A column containing the **complete FHIR resource as JSON/JSONB**.
 - A column containing the **raw Patient ID** (castable to VARCHAR, no prefixes).
