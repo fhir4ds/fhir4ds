@@ -6511,3 +6511,29 @@ and restore with `git restore --source=HEAD --worktree -- ...`. Never leave a
 pin staged, and verify afterwards: `git status --porcelain extensions/*/src`
 must be empty and the guard symbols must be present (e.g.
 `grep -c interval_open_null_uncertain extensions/cql/src/cql_extension.cpp` -> 18).
+
+## CMS2 SQL size: the +205 KB is `as Interval<T>` conversion, not a lost macro (2026-11-12, BUGFIX-018)
+
+CMS2's no-audit SQL is ~1.54 MB where the branch point was ~1.34 MB. Diagnosis,
+so nobody re-chases the wrong thing:
+
+- `cql_value_is_interval_like` calls went 510 -> 0, which looks like the Option D
+  macro refactor being undone. It is not: the emitter still exists
+  (`_query.py::_translate_is_type_check`) and still fires — a minimal
+  `C.abatement is Interval<DateTime>` repro emits the macro on both trees.
+- The real growth is **`json_extract_string` 44 -> 2,594** (+2,550), of which
+  `$.start` = 1,524 and `$.end` = 1,016. Those come from the
+  `as Interval<DateTime>` FHIRHelpers Period->Interval conversion in
+  `_operators.py` (~line 2580), which emits a `CASE` with an inline start/end
+  extraction per occurrence. There are ~1,270 such conversions in CMS2 after
+  QICoreCommon's `toInterval`/`abatementInterval` bodies are inlined.
+- Once the cast makes the point type statically known, the companion
+  `is Interval<DateTime>` checks fold away — hence 0 macros AND more bytes.
+
+So this is a behaviour change with a size cost, not a correctness defect (both
+suites stay at 100%). Optimization lead for a future perf chunk: hoist the two
+per-conversion `json_extract_string` calls the way the lateral dedup hoists
+repeated extractions (the scope-chain fix in BUGFIX-013 made that safe), or
+promote the QICoreCommon conversion functions instead of inlining them 1,270
+times. The `test_cms2_disambiguation_macros` size bound is 1.7 MB with this
+history recorded in its docstring, so it still catches the 12.95 MB class.
