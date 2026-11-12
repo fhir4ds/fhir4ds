@@ -5897,7 +5897,10 @@ Known fragile areas — all FIXED in iterations 1-2, keep regression-tested:
 
 - **Each ABI variant must build from its matching source state**: 1.5.5
   plain bundles ← `3e753080fbd^` (pre-port) @ v1.5.5 submodules; 1.5.6
-  bundles ← HEAD @ v1.5.6; 2.0 bundles ← `3e753080fbd` @ v2.0.0. HEAD
+  bundles ← HEAD @ v1.5.6; 2.0 bundles ← `3e753080fbd` @ v2.0.0.
+  **SUPERSEDED 2026-11-12**: extensions/common/duckdb_compat.hpp lets ONE source
+  tree build all three ABIs, so no per-ABI source pin is needed — see "Bundled
+  extension ABI slots — one source tree, three ABIs". Historic: HEAD
   source does NOT compile against v2.0.0 (member-vs-accessor API split).
 - **The build tree can silently no-op**: artifacts newer than objects make
   `make fhirpath_loadable_extension` claim success while linking nothing;
@@ -6391,33 +6394,47 @@ holds, but the case is not exercising what its name claims.
 Verification on the strict-mode tree: `--suite cms2025 --skip-errors` 73/73,
 `--suite 2025 --skip-errors` 47/47, CQL conformance 1706/1706.
 
-## Bundled extension ABI slots — one build per filename (2026-11-11, REV-005)
+## Bundled extension ABI slots — one source tree, three ABIs (2026-11-12)
 
-The three bundled binaries are ABI-specific and the filename selects the
-consumer, so each must hold a build for ITS DuckDB version:
+The three bundled filenames are ABI-specific and DuckDB selects one purely by
+suffix. ALL of them build from HEAD sources; there is no per-ABI source pin:
 
-| file | DuckDB ABI | source state |
-|---|---|---|
-| `*.duckdb_extension` | 1.5.5 | previous release build |
-| `*.duckdb156_extension` | 1.5.6 | current source |
-| `*.duckdb2_extension` | 2.0 | 2.0 source |
+| file | DuckDB ABI |
+|---|---|
+| `*.duckdb_extension` | 1.5.5 |
+| `*.duckdb156_extension` | 1.5.6 |
+| `*.duckdb2_extension` | 2.0.0 |
 
-A campaign rebuild once wrote the 1.5.6 artifact into BOTH cql slots
-(byte-identical, ABI trailer `v1.5.6`), so native CQL could not load on
-DuckDB 1.5.5 — a version the package still supports (`duckdb>=1.5.5,<2`).
-Verify after any rebuild: `tail -c 4096 <file> | strings -a | grep -E '^v1\.5\.|^v2\.'`
-must match the slot, and repo md5 must equal the installed copy.
+`extensions/common/duckdb_compat.hpp` bridges the 1.5.x ↔ 2.0 API split
+(`validity()`, `data<T>()`, `bind_info()`, `const_value()`, `FHIR4DS_BIND_FN`,
+plus the `vector/list_vector.hpp` include and the `Utf8Proc::UTF8ToCodepoint`
+length argument). It detects 2.0 by `__has_include` on
+`duckdb/common/vector/flat_vector.hpp`, which exists in no 1.5.x tag. The
+`CQL_FN_IDENTIFIER` shim in cql_extension.cpp handles 1.5.5 (plain string) vs
+1.5.6+ (`Identifier`) function registration.
 
-Known open item: the 1.5.5 slots hold the PREVIOUS release builds, so the
-1.5.6 slots carry newer native fixes than 1.5.5 does. Producing a genuine
-v1.5.5 rebuild of current source requires the pre-port source state
-(`3e753080fbd^`) plus v1.5.5 submodules and was left to the release owner.
+Two packaging failures shipped before this existed, both silent:
 
-Do NOT `strip` these artifacts. `strip --strip-debug` is a no-op (they carry no
-debug sections) and a full `strip` REMOVES DuckDB's metadata trailer — the file
-drops to 33 MB and can no longer be loaded. The ~40 MB size is `-O3` code size
-(`.text` 26 MB vs 8.3 MB in the older 12 MB builds), not symbols; reducing it
-needs a compiler-flag decision (-O2/LTO), not a strip step.
+- `cql.duckdb2_extension` was stamped with a commit hash instead of the tag
+  while its fhirpath sibling was stamped `v2.0.0`; DuckDB compares that string
+  EXACTLY, so only fhirpath went native on a released 2.0.0 wheel. Cause: the
+  duckdb submodule is a shallow clone, `git describe` degrades to
+  `v2.0.0-devNNNNN`, and DuckDB then stamps the hash.
+- A rebuild wrote the 1.5.6 artifact into BOTH cql slots, so native CQL could
+  not load on 1.5.5 despite `duckdb>=1.5.5,<2` being supported.
+
+Build/verify with `scripts/build_extension_bundles.py` (`--verify`,
+`--build --abi X`, `--dry-run`); `fhir4ds/extension_bundles.json` is the shared
+slot manifest. Every build passes `OVERRIDE_GIT_DESCRIBE=v<abi>` (the tag is
+authoritative regardless of clone depth) and the script REFUSES to install a
+bundle whose embedded stamp does not match its slot.
+
+Sizes (2026-11-12, all from HEAD, release config): 1.5.5 ≈ 12.1 MB,
+1.5.6 ≈ 12.1-12.4 MB, 2.0 ≈ 14.1-14.3 MB. An earlier 1.5.6 pair shipped at
+~40 MB because those builds came from mis-configured build trees; with a clean
+configure the whole set is ~12-14 MB per binary. Do NOT strip: full `strip`
+removes DuckDB's metadata trailer (the file becomes unloadable) and
+`--strip-debug` is a no-op.
 
 ## Lateral dedup needs a SCOPE CHAIN, not just the current SELECT (2026-11-11)
 
@@ -6476,13 +6493,6 @@ The script always passes `OVERRIDE_GIT_DESCRIBE=v<abi>` (making the tag
 authoritative regardless of clone depth), re-reads the produced file and
 REFUSES to install it if the embedded stamp does not match the slot, and
 restores sources, submodule commit and build cache in a `finally` block.
-
-Known slot-specific rule: the 2.0 slots pin `source_pin: 3e753080fbd` because
-HEAD sources do not compile against v2.0.0 (private `bind_info`/`value`
-accessors, `ListVector` moved to `vector/list_vector.hpp`, const-correct
-`FlatVector`). That pin predates the campaign's native features, so the 2.0
-bundles lack the open-null interval guards and `.value` unwrapping — porting
-current sources onto the 2.0 API is a separate chunk.
 
 ### Pinning extension sources for an ABI build — use `git restore`, never `git checkout`
 
