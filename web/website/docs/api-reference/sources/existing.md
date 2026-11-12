@@ -2,6 +2,7 @@
 id: sources-existing
 title: ExistingTableSource
 sidebar_label: ExistingTableSource
+description: "ExistingTableSource API: wrap a resources table or view you already loaded into the standard FHIR4DS source-adapter interface."
 ---
 
 # ExistingTableSource

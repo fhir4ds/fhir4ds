@@ -2,6 +2,7 @@
 id: mongo-fhir-server
 title: MongoFhirServerSource
 sidebar_label: MongoFhirServerSource
+description: "MongoFhirServerSource API: mount current FHIR resources from a Mongo-backed FHIR server as the standard FHIR4DS resources view."
 ---
 
 # MongoFhirServerSource

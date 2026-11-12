@@ -2,6 +2,7 @@
 id: fhirpath
 title: FHIRPath Evaluation
 sidebar_label: FHIRPath
+description: "Evaluate FHIRPath expressions against FHIR data: navigation, extraction, the function library and DuckDB-backed native execution."
 ---
 
 # FHIRPath Evaluation

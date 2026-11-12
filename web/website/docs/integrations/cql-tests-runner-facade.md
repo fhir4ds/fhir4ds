@@ -3,6 +3,7 @@ id: cql-tests-runner-facade
 title: CQL Tests Runner Facade
 sidebar_label: CQL Tests Runner Facade
 draft: true
+description: "A narrow FHIR R4 $cql facade for running cqframework/cql-tests-runner against the local CQL engine: a conformance harness, not a general server."
 ---
 
 # CQL Tests Runner Facade

@@ -1,6 +1,7 @@
 ---
 title: HapiPostgresSource
 sidebar_label: HapiPostgresSource
+description: "HapiPostgresSource API: mount a HAPI FHIR JPA Server PostgreSQL database as the standard FHIR4DS resources view."
 ---
 
 # HapiPostgresSource

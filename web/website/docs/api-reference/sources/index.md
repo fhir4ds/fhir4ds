@@ -2,6 +2,7 @@
 id: sources
 title: fhir4ds.sources
 sidebar_label: sources
+description: "Zero-ETL source adapters that mount external data as the standard resources view, so measures, FHIRPath and ViewDefinitions run on it directly."
 ---
 
 # fhir4ds.sources

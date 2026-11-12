@@ -1,3 +1,7 @@
+---
+description: "Embed the FHIR4DS DuckDB C++ extensions and Python translation logic directly in your own WebAssembly application."
+---
+
 # WASM Engine
 
 For developers building custom clinical applications, FHIR4DS provides a suite of **DuckDB C++ extensions** and **Python-based translation logic** that can be integrated directly into your own WebAssembly-powered browser application.

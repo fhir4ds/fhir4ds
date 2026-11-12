@@ -2,12 +2,13 @@
 id: mcp
 title: MCP Server
 sidebar_label: MCP Server
+description: "Run the fhir4ds MCP stdio server so Claude and other MCP clients can call FHIR4DS capabilities as typed tools."
 ---
 
 # MCP Server (`fhir4ds-mcp`)
 
 fhir4ds ships an [Model Context Protocol](https://modelcontextprotocol.io)
-stdio server exposing the [operations layer](./operations) as MCP tools, so
+stdio server exposing the [operations layer](/docs/user-guide/interfaces/operations/) as MCP tools, so
 any MCP client — Claude Desktop, opencode, Cursor — gets a closed
 draft → evaluate → fix loop for CQL authoring.
 
@@ -42,7 +43,7 @@ fhir4ds-mcp   # stdio server; the MCP client manages the process
 | `resource_schema_tree_tool` | `resource_schema_tree` | Recursive schema tree for a resource type |
 
 Every tool returns the shared envelope (`schema: 1`, `ok`, `passed`,
-`diagnostics`) — identical shapes to the [CLI](./cli) on the same inputs.
+`diagnostics`) — identical shapes to the [CLI](/docs/user-guide/interfaces/cli/) on the same inputs.
 
 ## Datasets
 

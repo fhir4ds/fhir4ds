@@ -2,6 +2,7 @@
 id: terminology-service
 title: Terminology Service
 sidebar_label: Terminology Service
+description: "The terminology-service seam between FHIR4DS and any FHIR R4 terminology provider: value sets, coding matches, search and extraction."
 ---
 
 # Terminology Service

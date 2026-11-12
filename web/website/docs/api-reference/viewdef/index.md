@@ -2,6 +2,7 @@
 id: viewdef
 title: viewdef
 sidebar_label: viewdef
+description: "API reference for the SQL-on-FHIR v2 ViewDefinition implementation: parse, validate, generate SQL and read tabular results on DuckDB."
 ---
 
 # `fhir4ds.viewdef`

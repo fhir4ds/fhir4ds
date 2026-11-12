@@ -2,6 +2,7 @@
 id: dqm-recipes
 title: Source-to-DQM Production Recipes
 sidebar_label: Production Recipes
+description: "Production recipes for connecting CSV, PostgreSQL, HAPI FHIR, Mongo or file-lake data sources to Digital Quality Measure evaluation."
 ---
 
 # Source-to-DQM Production Recipes

@@ -1,6 +1,7 @@
 ---
 id: duckdb
 title: Native DuckDB Integration
+description: "Native DuckDB integration: how the C++ extensions accelerate FHIRPath and CQL, and how to register and use them in your own database."
 ---
 
 # Native DuckDB Integration

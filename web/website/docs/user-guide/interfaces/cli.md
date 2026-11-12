@@ -2,6 +2,7 @@
 id: cli
 title: Command Line Interface
 sidebar_label: CLI
+description: "The fhir4ds command-line interface for production workflows: run measures, translate libraries and script repeatable jobs from a shell or CI."
 ---
 
 # Command Line Interface
@@ -97,7 +98,7 @@ Depending on the output config, each measure directory can include:
 | `definitions.<format>` | Machine-friendly CQL define outputs. |
 | `definitions.schema.json` | Mapping from output columns to authored CQL define names. |
 
-For full output details, see [Digital Quality Measures](../quality/dqm) and
+For full output details, see [Digital Quality Measures](/docs/user-guide/quality/dqm/) and
 [Source-to-DQM Production Recipes](/docs/examples/dqm-recipes/).
 
 ## CQL Facade Command
@@ -245,7 +246,7 @@ one patient's membership in a population column or the value of any define:
 ```
 
 Unknown patients or defines become case failures with a reason — never a
-crash. See the [Operations Layer](./operations) page for the shared envelope
+crash. See the [Operations Layer](/docs/user-guide/interfaces/operations/) page for the shared envelope
 and diagnostics contract behind this command.
 
 
@@ -316,4 +317,4 @@ human-oriented editing surfaces; the SMART on FHIR launch is an OAuth
 browser flow. Automation consumers should load data via
 `cql evaluate --data` / `load_dataset_tool` and authenticate with their own
 SMART credentials. See the
-[operations](./operations) alignment matrix for details.
+[operations](/docs/user-guide/interfaces/operations/) alignment matrix for details.

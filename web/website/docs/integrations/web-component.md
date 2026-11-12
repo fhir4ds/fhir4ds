@@ -1,3 +1,7 @@
+---
+description: "Build custom clinical apps on the FHIR4DS WASM engine in React, Vue, Svelte or plain JavaScript: all evaluation happens in the browser."
+---
+
 # Custom Web Components
 
 The FHIR4DS WASM engine is designed to be the foundation for custom clinical applications. Because it runs entirely in the browser, you can use any modern UI framework (React, Vue, Svelte) or standard **Web Components** to build tailored workflows.

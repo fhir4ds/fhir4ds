@@ -1,5 +1,6 @@
 ---
 hide_table_of_contents: true
+description: "Run standard CMS eCQM quality measures against patient data in your browser, with no install and no server, and inspect population results."
 ---
 
 # Quality Measures

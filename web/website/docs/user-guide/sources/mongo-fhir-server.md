@@ -2,6 +2,7 @@
 id: mongo-fhir-server
 title: Connecting to Mongo FHIR Servers
 sidebar_label: Mongo FHIR Server
+description: "Query a Mongo-backed FHIR server in place through DuckDB's community Mongo extension: no extract step and no copy."
 ---
 
 # Connecting to Mongo FHIR Servers
