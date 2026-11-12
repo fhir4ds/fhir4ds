@@ -2,6 +2,7 @@
 id: sources-filesystem
 title: FileSystemSource
 sidebar_label: FileSystemSource
+description: "FileSystemSource API: query Parquet, NDJSON and Iceberg FHIR files on local disk, S3, Azure Blob or GCS with no loading step."
 ---
 
 # FileSystemSource

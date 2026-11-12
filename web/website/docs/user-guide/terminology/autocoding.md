@@ -2,6 +2,7 @@
 id: autocoding
 title: Auto-Coding Text-Only Concepts
 sidebar_label: Auto-Coding
+description: "Auto-code text-only CodeableConcepts: turn free text into coded Codings with match grades and a full audit trail so CQL value sets match."
 ---
 
 # Auto-Coding Text-Only Concepts

@@ -2,6 +2,7 @@
 id: mongo-fhir-server
 title: Mongo FHIR Server Integration
 sidebar_label: Mongo FHIR Server
+description: "Connect FHIR4DS analytics to Mongo-backed FHIR servers such as Helix and icanbwell deployments that store current resources per collection."
 ---
 
 # Mongo FHIR Server Integration

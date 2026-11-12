@@ -2,6 +2,7 @@
 id: sources-csv
 title: CSVSource
 sidebar_label: CSVSource
+description: "CSVSource API: map flat CSV columns onto the FHIR4DS schema with a SQL projection, then query them with CQL, FHIRPath or ViewDefinitions."
 ---
 
 # CSVSource

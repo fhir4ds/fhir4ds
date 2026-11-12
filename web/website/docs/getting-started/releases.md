@@ -1,6 +1,7 @@
 ---
 id: releases
 title: What's New
+description: "Release notes for every FHIR4DS version: highlights, breaking changes, new capabilities and conformance results, newest first."
 ---
 
 # What's New

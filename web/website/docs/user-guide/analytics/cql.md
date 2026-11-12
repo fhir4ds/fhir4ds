@@ -2,6 +2,7 @@
 id: cql
 title: Clinical Quality Language (CQL)
 sidebar_label: CQL
+description: "How FHIR4DS translates Clinical Quality Language (CQL) to SQL on DuckDB, and how to run measures and expression logic at population scale."
 ---
 
 # Clinical Quality Language (CQL)

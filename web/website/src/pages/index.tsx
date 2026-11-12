@@ -3,6 +3,7 @@ import clsx from 'clsx';
 import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import useBaseUrl from '@docusaurus/useBaseUrl';
+import Head from '@docusaurus/Head';
 import Layout from '@theme/Layout';
 import Heading from '@theme/Heading';
 import styles from './index.module.css';
@@ -377,6 +378,31 @@ export default function Home(): ReactNode {
     <Layout
       title={siteConfig.title}
       description="SQL-Native CQL Evaluation for FHIR — Production-Accurate, In-Browser, Auditable">
+      {/* Homepage-only structured data. SoftwareSourceCode rather than
+          SoftwareApplication: this is an open-source library, and the
+          Application type invites "is it installable from a store" signals
+          that do not apply. Site-level Organization/WebSite JSON-LD is added
+          globally from docusaurus.config.ts headTags. */}
+      <Head>
+        <script type="application/ld+json">
+          {JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'SoftwareSourceCode',
+            name: 'FHIR4DS',
+            alternateName: 'FHIR for Data Science',
+            description:
+              'SQL-native clinical reasoning engine: translate CQL, FHIRPath and SQL-on-FHIR ViewDefinitions to DuckDB SQL for population health analytics.',
+            url: 'https://fhir4ds.com/',
+            codeRepository: 'https://github.com/fhir4ds/fhir4ds',
+            programmingLanguage: ['Python', 'C++', 'SQL'],
+            runtimePlatform: 'DuckDB',
+            license: 'https://www.gnu.org/licenses/agpl-3.0.html',
+            applicationCategory: 'Healthcare data science / developer tool',
+            author: {'@type': 'Organization', name: 'Montavon Informatics LLC'},
+            publisher: {'@type': 'Organization', name: 'Montavon Informatics LLC'},
+          })}
+        </script>
+      </Head>
       <Hero />
       <StatsBar />
       <InteractiveSnippet />

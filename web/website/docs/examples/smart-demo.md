@@ -1,5 +1,6 @@
 ---
 hide_table_of_contents: true
+description: "A FHIR4DS workbench on live EHR data: authenticate with a patient portal, load clinical data into DuckDB, then run CQL and FHIRPath queries."
 ---
 
 # SMART on FHIR

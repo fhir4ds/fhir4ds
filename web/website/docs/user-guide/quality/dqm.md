@@ -2,6 +2,7 @@
 id: dqm
 title: Digital Quality Measures (DQM)
 sidebar_label: DQM
+description: "Evaluate FHIR Measure resources and their CQL logic against a DuckDB FHIR view: digital quality measures for batch runs and notebooks."
 ---
 
 # Digital Quality Measures (DQM)

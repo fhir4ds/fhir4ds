@@ -3,6 +3,7 @@ id: fhir4ds
 title: fhir4ds API Reference
 sidebar_label: fhir4ds
 slug: /api-reference/fhir4ds
+description: "Unified entry point for the FHIR4DS toolkit: connect, register UDFs, load FHIR data and dispatch to CQL, FHIRPath, ViewDefinition and DQM."
 ---
 
 # fhir4ds

@@ -2,6 +2,7 @@
 id: hapi-postgres
 title: Connecting to HAPI FHIR PostgreSQL
 sidebar_label: Direct Database Connection
+description: "Query a HAPI FHIR JPA Server PostgreSQL database in place from DuckDB via HapiPostgresSource, with no extract-and-load step."
 ---
 
 # Connecting to HAPI FHIR PostgreSQL

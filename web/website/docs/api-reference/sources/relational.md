@@ -2,6 +2,7 @@
 id: sources-relational
 title: PostgresSource
 sidebar_label: PostgresSource
+description: "PostgresSource API: query FHIR resources stored as JSON columns in PostgreSQL without copying the data out of the database."
 ---
 
 # PostgresSource

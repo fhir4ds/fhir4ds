@@ -2,6 +2,7 @@
 id: viewdef
 title: ViewDefinition Modeling
 sidebar_label: ViewDefinition
+description: "Model analytical tables from FHIR with SQL-on-FHIR v2 ViewDefinitions: columns, forEach, unionAll and generation to DuckDB SQL."
 ---
 
 # ViewDefinition Modeling

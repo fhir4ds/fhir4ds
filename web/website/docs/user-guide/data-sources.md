@@ -2,6 +2,7 @@
 id: data-sources
 title: Data Sources & Zero-ETL
 sidebar_label: Data Sources
+description: "Zero-ETL data sources: attach FHIR data where it already lives, in CSV, PostgreSQL, HAPI, Mongo or files, behind one schema contract."
 ---
 
 # Data Sources & Zero-ETL

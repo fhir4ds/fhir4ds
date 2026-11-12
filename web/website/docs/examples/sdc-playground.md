@@ -1,5 +1,6 @@
 ---
 hide_table_of_contents: true
+description: "Explore Structured Data Capture (SDC) forms with live FHIRPath evaluation and SQL-on-FHIR pre-population, running entirely in the browser."
 ---
 
 # SDC Forms
