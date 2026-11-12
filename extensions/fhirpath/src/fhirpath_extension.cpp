@@ -1,6 +1,7 @@
 #define DUCKDB_EXTENSION_MAIN
 
 #include "fhirpath_extension.hpp"
+#include "duckdb_compat.hpp"
 #include "fhirpath/ast.hpp"
 #include "fhirpath/arena_allocator.hpp"
 #include "fhirpath/evaluator.hpp"
@@ -370,14 +371,19 @@ struct FhirpathState {
 static FhirpathState GetFhirpathState(ExpressionState &state) {
 	EnsureGlobalState();
 	auto &func_expr = state.expr.Cast<BoundFunctionExpression>();
-	if (func_expr.bind_info) {
-		return FhirpathState(static_cast<FhirpathBindData *>(func_expr.bind_info.get()));
+	if (fhir4ds_compat::bind_info(func_expr)) {
+		return FhirpathState(static_cast<FhirpathBindData *>(fhir4ds_compat::bind_info(func_expr)));
 	}
 	return FhirpathState();
 }
 
+#ifdef FHIR4DS_DUCKDB_V2
+static unique_ptr<FunctionData> FhirpathBind(ClientContext &context,
+                                             vector<unique_ptr<Expression>> &arguments) {
+#else
 static unique_ptr<FunctionData> FhirpathBind(ClientContext &context, ScalarFunction &bound_function,
                                              vector<unique_ptr<Expression>> &arguments) {
+#endif
 	auto data = make_uniq<FhirpathBindData>();
 
 	// Phase 7: Detect constant expressions at bind time
@@ -389,8 +395,8 @@ static unique_ptr<FunctionData> FhirpathBind(ClientContext &context, ScalarFunct
 			// Try to get the constant value directly from the expression
 			if (arguments[1]->GetExpressionType() == ExpressionType::VALUE_CONSTANT) {
 				auto &const_expr = arguments[1]->Cast<BoundConstantExpression>();
-				if (!const_expr.value.IsNull()) {
-					auto expr_str = const_expr.value.GetValue<string>();
+				if (!fhir4ds_compat::const_value(const_expr).IsNull()) {
+					auto expr_str = fhir4ds_compat::const_value(const_expr).GetValue<string>();
 					auto ast = data->parser->parse(expr_str);
 					if (ast) {
 						data->precompiled_ast = ast;
@@ -1023,11 +1029,11 @@ static void FhirpathFunction(DataChunk &args, ExpressionState &state, Vector &re
 		total_size += fp_results.size();
 	}
 
-	auto list_entries = FlatVector::GetData<list_entry_t>(result);
+	auto list_entries = fhir4ds_compat::data<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		list_entries[i] = {row_offsets[i], row_counts[i]};
 		if (!row_valid[i]) {
-			FlatVector::Validity(result).SetInvalid(i);
+			fhir4ds_compat::validity(result).SetInvalid(i);
 		}
 	}
 	ListVector::SetListSize(result, total_size);
@@ -1046,8 +1052,8 @@ static void FhirpathTextFunction(DataChunk &args, ExpressionState &state, Vector
 	auto expressions = UnifiedVectorFormat::GetData<string_t>(expr_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetData<string_t>(result);
-	auto &result_mask = FlatVector::Validity(result);
+	auto result_data = fhir4ds_compat::data<string_t>(result);
+	auto &result_mask = fhir4ds_compat::validity(result);
 
 	fhirpath::Evaluator str_helper;
 
@@ -1124,8 +1130,8 @@ static void FhirpathNumberFunction(DataChunk &args, ExpressionState &state, Vect
 	auto expressions = UnifiedVectorFormat::GetData<string_t>(expr_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetData<double>(result);
-	auto &result_mask = FlatVector::Validity(result);
+	auto result_data = fhir4ds_compat::data<double>(result);
+	auto &result_mask = fhir4ds_compat::validity(result);
 
 	fhirpath::Evaluator str_helper;
 
@@ -1234,8 +1240,8 @@ static void FhirpathDateFunction(DataChunk &args, ExpressionState &state, Vector
 	auto expressions = UnifiedVectorFormat::GetData<string_t>(expr_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetData<string_t>(result);
-	auto &result_mask = FlatVector::Validity(result);
+	auto result_data = fhir4ds_compat::data<string_t>(result);
+	auto &result_mask = fhir4ds_compat::validity(result);
 
 	fhirpath::Evaluator str_helper;
 
@@ -1338,8 +1344,8 @@ static void FhirpathBoolFunction(DataChunk &args, ExpressionState &state, Vector
 	auto expressions = UnifiedVectorFormat::GetData<string_t>(expr_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetData<bool>(result);
-	auto &result_mask = FlatVector::Validity(result);
+	auto result_data = fhir4ds_compat::data<bool>(result);
+	auto &result_mask = fhir4ds_compat::validity(result);
 
 	fhirpath::Evaluator str_helper;
 
@@ -1450,8 +1456,8 @@ static void FhirpathJsonFunction(DataChunk &args, ExpressionState &state, Vector
 	auto expressions = UnifiedVectorFormat::GetData<string_t>(expr_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetData<string_t>(result);
-	auto &result_mask = FlatVector::Validity(result);
+	auto result_data = fhir4ds_compat::data<string_t>(result);
+	auto &result_mask = fhir4ds_compat::validity(result);
 
 	fhirpath::Evaluator str_helper;
 
@@ -1786,8 +1792,8 @@ static void FhirpathTimestampFunction(DataChunk &args, ExpressionState &state, V
 	auto expressions = UnifiedVectorFormat::GetData<string_t>(expr_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetData<string_t>(result);
-	auto &result_mask = FlatVector::Validity(result);
+	auto result_data = fhir4ds_compat::data<string_t>(result);
+	auto &result_mask = fhir4ds_compat::validity(result);
 
 	fhirpath::Evaluator str_helper;
 
@@ -1828,8 +1834,8 @@ static void FhirpathQuantityFunction(DataChunk &args, ExpressionState &state, Ve
 	auto expressions = UnifiedVectorFormat::GetData<string_t>(expr_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetData<string_t>(result);
-	auto &result_mask = FlatVector::Validity(result);
+	auto result_data = fhir4ds_compat::data<string_t>(result);
+	auto &result_mask = fhir4ds_compat::validity(result);
 
 	fhirpath::Evaluator str_helper;
 
@@ -1866,7 +1872,7 @@ static void FhirpathIsValidFunction(DataChunk &args, ExpressionState &state, Vec
 	auto expressions = UnifiedVectorFormat::GetData<string_t>(expr_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetData<bool>(result);
+	auto result_data = fhir4ds_compat::data<bool>(result);
 
 	// Use thread_local parser — Parser has mutable state and is NOT thread-safe
 	static thread_local fhirpath::Parser tls_parser;
@@ -2010,11 +2016,11 @@ static void FhirpathPredicateFunction(DataChunk &args, ExpressionState &state, V
 		total_size += 1;
 	}
 
-	auto list_entries = FlatVector::GetData<list_entry_t>(result);
+	auto list_entries = fhir4ds_compat::data<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		list_entries[i] = {row_offsets[i], row_counts[i]};
 		if (!row_valid[i]) {
-			FlatVector::Validity(result).SetInvalid(i);
+			fhir4ds_compat::validity(result).SetInvalid(i);
 		}
 	}
 	ListVector::SetListSize(result, total_size);
@@ -2162,7 +2168,7 @@ static void FhirpathRepeatFunction(DataChunk &args, ExpressionState &state, Vect
 		}
 	}
 
-	auto list_entries = FlatVector::GetData<list_entry_t>(result);
+	auto list_entries = fhir4ds_compat::data<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		list_entries[i] = {row_offsets[i], row_counts[i]};
 	}
@@ -2174,73 +2180,73 @@ static void FhirpathRepeatFunction(DataChunk &args, ExpressionState &state, Vect
 static void LoadInternal(ExtensionLoader &loader) {
 	// fhirpath(JSON, VARCHAR) → VARCHAR[]
 	auto fhirpath_func = ScalarFunction("fhirpath", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                                    LogicalType::LIST(LogicalType::VARCHAR), FhirpathFunction, FhirpathBind);
+	                                    LogicalType::LIST(LogicalType::VARCHAR), FhirpathFunction, FHIR4DS_BIND_FN(FhirpathBind));
 
 	loader.RegisterFunction(fhirpath_func);
 
 	// fhirpath_text(JSON, VARCHAR) → VARCHAR
 	auto text_func = ScalarFunction("fhirpath_text", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                                LogicalType::VARCHAR, FhirpathTextFunction, FhirpathBind);
+	                                LogicalType::VARCHAR, FhirpathTextFunction, FHIR4DS_BIND_FN(FhirpathBind));
 	text_func.SetNullHandling(FunctionNullHandling::SPECIAL_HANDLING);
 
 	loader.RegisterFunction(text_func);
 
 	// fhirpath_number(JSON, VARCHAR) → DOUBLE
 	auto number_func = ScalarFunction("fhirpath_number", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                                  LogicalType::DOUBLE, FhirpathNumberFunction, FhirpathBind);
+	                                  LogicalType::DOUBLE, FhirpathNumberFunction, FHIR4DS_BIND_FN(FhirpathBind));
 	number_func.SetNullHandling(FunctionNullHandling::SPECIAL_HANDLING);
 
 	loader.RegisterFunction(number_func);
 
 	// fhirpath_date(JSON, VARCHAR) → VARCHAR
 	auto date_func = ScalarFunction("fhirpath_date", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                                LogicalType::VARCHAR, FhirpathDateFunction, FhirpathBind);
+	                                LogicalType::VARCHAR, FhirpathDateFunction, FHIR4DS_BIND_FN(FhirpathBind));
 	date_func.SetNullHandling(FunctionNullHandling::SPECIAL_HANDLING);
 
 	loader.RegisterFunction(date_func);
 
 	// fhirpath_bool(JSON, VARCHAR) → BOOLEAN
 	auto bool_func = ScalarFunction("fhirpath_bool", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                                LogicalType::BOOLEAN, FhirpathBoolFunction, FhirpathBind);
+	                                LogicalType::BOOLEAN, FhirpathBoolFunction, FHIR4DS_BIND_FN(FhirpathBind));
 	bool_func.SetNullHandling(FunctionNullHandling::SPECIAL_HANDLING);
 
 	loader.RegisterFunction(bool_func);
 
 	// fhirpath_json(JSON, VARCHAR) → VARCHAR
 	auto json_func = ScalarFunction("fhirpath_json", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                                LogicalType::VARCHAR, FhirpathJsonFunction, FhirpathBind);
+	                                LogicalType::VARCHAR, FhirpathJsonFunction, FHIR4DS_BIND_FN(FhirpathBind));
 	json_func.SetNullHandling(FunctionNullHandling::SPECIAL_HANDLING);
 
 	loader.RegisterFunction(json_func);
 
 	// fhirpath_timestamp(JSON, VARCHAR) → VARCHAR
 	auto timestamp_func = ScalarFunction("fhirpath_timestamp", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                                     LogicalType::VARCHAR, FhirpathTimestampFunction, FhirpathBind);
+	                                     LogicalType::VARCHAR, FhirpathTimestampFunction, FHIR4DS_BIND_FN(FhirpathBind));
 	timestamp_func.SetNullHandling(FunctionNullHandling::SPECIAL_HANDLING);
 
 	loader.RegisterFunction(timestamp_func);
 
 	// fhirpath_quantity(JSON, VARCHAR) → VARCHAR
 	auto quantity_func = ScalarFunction("fhirpath_quantity", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                                    LogicalType::VARCHAR, FhirpathQuantityFunction, FhirpathBind);
+	                                    LogicalType::VARCHAR, FhirpathQuantityFunction, FHIR4DS_BIND_FN(FhirpathBind));
 	quantity_func.SetNullHandling(FunctionNullHandling::SPECIAL_HANDLING);
 
 	loader.RegisterFunction(quantity_func);
 
 	// fhirpath_is_valid(VARCHAR) → BOOLEAN
 	auto is_valid_func = ScalarFunction("fhirpath_is_valid", {LogicalType::VARCHAR}, LogicalType::BOOLEAN,
-	                                    FhirpathIsValidFunction, FhirpathBind);
+	                                    FhirpathIsValidFunction, FHIR4DS_BIND_FN(FhirpathBind));
 
 	loader.RegisterFunction(is_valid_func);
 
 	// fhirpath_predicate(JSON, VARCHAR) → VARCHAR[]
 	auto predicate_func = ScalarFunction("fhirpath_predicate", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                                     LogicalType::LIST(LogicalType::VARCHAR), FhirpathPredicateFunction, FhirpathBind);
+	                                     LogicalType::LIST(LogicalType::VARCHAR), FhirpathPredicateFunction, FHIR4DS_BIND_FN(FhirpathBind));
 	loader.RegisterFunction(predicate_func);
 
 	// fhirpath_repeat(JSON, VARCHAR) → VARCHAR[]
 	auto repeat_func = ScalarFunction("fhirpath_repeat", {LogicalType::VARCHAR, LogicalType::VARCHAR},
-	                                  LogicalType::LIST(LogicalType::VARCHAR), FhirpathRepeatFunction, FhirpathBind);
+	                                  LogicalType::LIST(LogicalType::VARCHAR), FhirpathRepeatFunction, FHIR4DS_BIND_FN(FhirpathBind));
 	repeat_func.SetNullHandling(FunctionNullHandling::SPECIAL_HANDLING);
 	loader.RegisterFunction(repeat_func);
 }
