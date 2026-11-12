@@ -8,16 +8,16 @@ import Layout from '@theme/Layout';
 import Heading from '@theme/Heading';
 import styles from './index.module.css';
 
-const PRODUCT_VERSION = '0.0.22';
+const PRODUCT_VERSION = '0.0.23';
 const SQL_EXECUTION_MEAN_ALL_MEASURES = '~3.9ms';
 const SQL_EXECUTION_MEAN_SHARED_MEASURES = '~6.9ms';
 const JAVA_EXECUTION_MEAN_SHARED_MEASURES = '~936ms';
 const MEAN_SPEEDUP_SHARED_MEASURES = '~137×';
-const TOTAL_CONFORMANCE_TESTS = '2,832';
+const TOTAL_CONFORMANCE_TESTS = '2,943';
 const CQL_CONFORMANCE_TESTS = '1,706';
 const FHIRPATH_CONFORMANCE_TESTS = '935';
 const VIEWDEF_CONFORMANCE_TESTS = '144';
-const ECQM_MEASURES = '47/47';
+const ECQM_MEASURES = '47/47 + 73/73';
 
 // ── Stats bar ────────────────────────────────────────────────────────────────
 
@@ -187,7 +187,7 @@ const FEATURES: Feature[] = [
         <li><strong style={{color: 'rgb(95, 237, 131)'}}>100%</strong> CQL ({CQL_CONFORMANCE_TESTS} tests)</li>
         <li><strong style={{color: 'rgb(95, 237, 131)'}}>100%</strong> FHIRPath ({FHIRPATH_CONFORMANCE_TESTS} tests)</li>
         <li><strong style={{color: 'rgb(95, 237, 131)'}}>100%</strong> SQL-on-FHIR v2 ({VIEWDEF_CONFORMANCE_TESTS} tests)</li>
-        <li><strong style={{color: 'rgb(95, 237, 131)'}}>{ECQM_MEASURES}</strong> eCQM measures</li>
+        <li><strong style={{color: 'rgb(95, 237, 131)'}}>{ECQM_MEASURES}</strong> eCQM measures (QI-Core 2025 + US-Core 2025)</li>
       </ul>
     ),
   },

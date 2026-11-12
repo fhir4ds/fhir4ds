@@ -11,6 +11,90 @@ entry follows the same format: **highlights**, **breaking changes** (always
 listed, even when there are none), topic sections, **conformance** (where
 recorded), **known issues**, and **upgrade** notes.
 
+## Version 0.0.23
+*November 2026*
+
+### Highlights
+
+- **Both DQM suites are now part of the release gate.** QI-Core 2025 passes
+  **47/47** and US-Core 2025 passes **73/73**, alongside ViewDefinition
+  144/144, FHIRPath 935/935, CQL 1706/1706 and OMOP 38/38 — **2943/2943**
+  overall. A single DQM suite per release could not catch a regression that
+  affected only one measure corpus.
+- **ValueSet expansion follows FHIR R4 shape**: nested
+  `expansion.contains.contains` is walked recursively, `compose.exclude` is
+  honored, and a ValueSet that ships an `expansion` no longer has its
+  `compose` re-resolved against the terminology service. Code extraction
+  moved into one shared module (`fhir4ds.cql.valueset_codes`) that the
+  loader, the dependency resolver, and both terminology adapters all call,
+  so the four surfaces can no longer disagree about which codes a ValueSet
+  contains.
+- **ValueSet membership works on the Python fallback engine.** The membership
+  UDF captured the cache when its factory ran, but the UDF is registered once
+  per connection — so every ValueSet loaded *after* registration was
+  invisible and membership answered `NULL` instead of `true`. It now reads
+  the cache live.
+- **`FHIR4DS_REQUIRE_CPP=1` is strict.** On a DuckDB line with no matching
+  extension build, asking for native engines was silently downgraded to the
+  Python fallback; both extensions now fail loudly instead. The documented
+  environment switches gained a user-facing section in the engine guide.
+- **`fhir4ds serve` rejects unknown resource types.** `POST /NotAResourceType`
+  answered `201` and persisted the row (inside bundles too); resource types
+  are a closed set and now answer `400 not-supported`.
+- **ViewDefinition root joins**: `right` and `full` joins preserve their
+  unmatched rows again — the root resource-type restriction had been applied
+  as a row predicate, which is always false for a join-preserved `NULL` side,
+  so both degraded to inner joins. Select-level `where` also routes
+  join-prefixed paths now, matching root `where`.
+- **Loading robustness**: `FileSystemSource` accepts legal id-less raw
+  documents (FHIR `Resource.id` is `0..1`), and malformed documents raise a
+  typed error naming the accepted shapes instead of leaking a DuckDB binder
+  message. ValueSet extraction errors carry `valuesets[i] (url=...)`
+  attribution, and one malformed ValueSet file no longer aborts corpus
+  indexing unattributed.
+
+### Scale
+
+- The ValueSet expansion walk is iterative: deeply nested expansions no
+  longer raise a raw `RecursionError` around 1000 levels of nesting.
+- `load_valuesets` refreshes only the URLs it just loaded instead of
+  rebuilding the whole cache on every call (273 ms → 8 ms at 200k cached
+  codes).
+
+### Website / demos
+
+- wasm-demo, cql-clinic, cql-cleanroom, viewing-room, bulk-publisher and the
+  auto-coding demo all run on the 0.0.23 wheel.
+
+### Breaking changes
+
+- None to the Python or SQL API.
+- **Dependency note**: `[terminology]` and `[ner]` both pin
+  `medterm4ds>=0.0.12,<0.0.13`. medterm4ds 0.0.12 is not yet on PyPI, so
+  those two extras will not resolve until it is published; core installs are
+  unaffected. The extras previously pinned *disjoint* bounds (`<0.0.11` and
+  `<0.0.10`), so requesting both together could never resolve — they are now
+  composable.
+
+### Conformance
+
+- Full conformance suite: **2943/2943** (ViewDefinition 144, FHIRPath 935,
+  CQL 1706, DQM QI-Core 2025 47, DQM US-Core 2025 73, OMOP 38).
+
+### Known issues
+
+- Carried from 0.0.22: audit evidence findings for where-filtered retrieves
+  are retrieve-level — they list every candidate resource examined, including
+  ones that did not satisfy the filter. Result values remain correct.
+- Pre-existing, unrelated to this release: one unit test in
+  `fhir4ds/cql/tests/unit/test_sql_optimization.py` asserts an unwrapped
+  interval low bound while the generator deliberately emits
+  `COALESCE(bound, sentinel)` (a 0.0.7 correctness fix).
+
+### Upgrade
+
+- `pip install fhir4ds-v2==0.0.23` — no migration steps.
+
 ## Version 0.0.22
 *November 2026*
 

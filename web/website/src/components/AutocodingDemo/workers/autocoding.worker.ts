@@ -35,7 +35,7 @@ interface WorkerReply {
 const PYODIDE_CDN = 'https://cdn.jsdelivr.net/pyodide/v0.27.7/full/';
 const TERMINOLOGY_BASE =
   'https://fhir4ds-terminology-demo-server.hf.space/fhir';
-const FHIR4DS_WHEEL_FALLBACK = 'fhir4ds_v2-0.0.22-py3-none-any.whl';
+const FHIR4DS_WHEEL_FALLBACK = 'fhir4ds_v2-0.0.23-py3-none-any.whl';
 
 function getAssetBase(): string {
   return `${self.location.origin}/bulk-publisher-app`;
