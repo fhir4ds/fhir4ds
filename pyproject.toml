@@ -103,7 +103,13 @@ mongo = [
 # adapter. medterm4ds is published on PyPI so it is declared normally —
 # pip install 'fhir4ds-v2[terminology]' pulls both.
 #
-# Bounded to <0.0.11: medterm4ds 0.0.10 (search performance release —
+# Bounded to <0.0.13: medterm4ds 0.0.12. NOTE — 0.0.12 is not yet published
+# on PyPI (as of 2026-11-12), so `pip install 'fhir4ds-v2[terminology]'` /
+# 'fhir4ds-v2[ner]' will not resolve until it is released. Both extras are
+# pinned to the same bound so they stay mutually satisfiable; they had
+# drifted apart (terminology <0.0.11, ner <0.0.10) and could not be
+# installed together.
+# 0.0.10 was the last independently reviewed release (search performance —
 # cached lexical orphan surfaces, hybrid fusion depth 25, v3-index-ready
 # posting keys with a 2-char acronym casing guard; reviewed
 # independently 2026-11-05, SHIP-WITH-FINDINGS, v2-index behavior
@@ -122,7 +128,7 @@ mongo = [
 # USER_DIRECTIVES in fhir4ds-private/docs/prompts/.ai_loop/.
 terminology = [
     "httpx>=0.24",
-    "medterm4ds>=0.0.10,<0.0.11",
+    "medterm4ds>=0.0.12,<0.0.13",
 ]
 # Phase 4 — Clinical Notes NER. Pulls the medspaCy + HuggingFace NER +
 # SapBERT cascade transitively via medterm4ds[extraction]. fhir4ds
@@ -130,7 +136,7 @@ terminology = [
 # those heavy deps are owned by medterm4ds so the core ``import fhir4ds``
 # path remains zero-dep.
 ner = [
-    "medterm4ds[extraction]>=0.0.9,<0.0.10",
+    "medterm4ds[extraction]>=0.0.12,<0.0.13",
 ]
 # Agentic interfaces: MCP stdio server (fhir4ds-mcp). Optional per the
 # operations-layer FDD — core install stays dependency-lean.
