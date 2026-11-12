@@ -1,4 +1,5 @@
 #include "fhirpath/evaluator.hpp"
+#include "duckdb_compat.hpp"
 #include "shared/ucum_units.hpp"
 #include "utf8proc_wrapper.hpp"
 #include "yyjson.hpp"
@@ -87,7 +88,13 @@ static size_t utf8ByteToChar(const std::string &s, size_t byte_pos) {
 
 static int32_t readUtf8Codepoint(const std::string &s, size_t byte, int &char_bytes) {
 	char_bytes = 0;
+#ifdef FHIR4DS_DUCKDB_V2
+	// DuckDB 2.0 added an explicit remaining-length argument so a codepoint
+	// cannot be read past the buffer.
+	int32_t cp = duckdb::Utf8Proc::UTF8ToCodepoint(s.c_str() + byte, char_bytes, s.size() - byte);
+#else
 	int32_t cp = duckdb::Utf8Proc::UTF8ToCodepoint(s.c_str() + byte, char_bytes);
+#endif
 	if (char_bytes <= 0 || byte + static_cast<size_t>(char_bytes) > s.size()) {
 		char_bytes = 1;
 		return static_cast<unsigned char>(s[byte]);

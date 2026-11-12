@@ -62,7 +62,7 @@ inline T *data(duckdb::Vector &vector) {
 // Templates so the expression types only need to be complete at the CALL SITE
 // (the planner headers are not includable this early in every DuckDB version).
 template <typename Expr>
-inline duckdb::FunctionData *bind_info(Expr &expr) {
+inline auto bind_info(Expr &expr) {
 #ifdef FHIR4DS_DUCKDB_V2
 	return expr.BindInfo().get();
 #else
@@ -71,7 +71,7 @@ inline duckdb::FunctionData *bind_info(Expr &expr) {
 }
 
 template <typename Expr>
-inline const duckdb::Value &const_value(Expr &expr) {
+inline decltype(auto) const_value(Expr &expr) {
 #ifdef FHIR4DS_DUCKDB_V2
 	return expr.GetValue();
 #else
