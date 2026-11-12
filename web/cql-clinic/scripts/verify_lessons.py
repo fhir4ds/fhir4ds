@@ -3,7 +3,7 @@
 fixtures using the same code path as the browser (native extension +
 removeListExtractFhirpathWrappers postprocess), then write expected.json.
 
-Usage: PYTHONPATH=/mnt/d/fhir4ds python3 scripts/verify_lessons.py
+Usage: PYTHONPATH=~/src/fhir4ds python3 scripts/verify_lessons.py
 """
 
 import json

@@ -67,40 +67,38 @@ class ASTHelpersMixin:
                     if isinstance(j.table, SQLAlias) and j.table.alias:
                         aliases.add(j.table.alias.lower())
 
-        # Recurse into all child nodes
-        for attr_name in (
-            'from_clause', 'where', 'columns', 'joins', 'query',
-            'left', 'right', 'operand', 'operands', 'args', 'items',
-            'body', 'expression', 'expr', 'conditions', 'else_clause',
-            'order_by', 'group_by', 'having',
-        ):
-            child = getattr(expr, attr_name, None)
-            if child is None:
-                continue
-            if isinstance(child, list):
-                for item in child:
-                    if hasattr(item, 'to_sql'):
-                        aliases |= ASTHelpersMixin._collect_defined_aliases(
-                            item, _visited
-                        )
-                    # Handle tuple items (CASE WHEN conditions)
-                    elif isinstance(item, tuple):
-                        for sub in item:
-                            if hasattr(sub, 'to_sql'):
-                                aliases |= ASTHelpersMixin._collect_defined_aliases(
-                                    sub, _visited
-                                )
-            elif hasattr(child, 'to_sql'):
-                aliases |= ASTHelpersMixin._collect_defined_aliases(
-                    child, _visited
+        # Walk EVERY child node generically.  A hand-maintained attribute list
+        # silently missed subquery-bearing attributes (SQLExists.subquery,
+        # SQLJoin.on_condition, SQLCase.when_clauses, ...), so a definition whose
+        # body contained `EXISTS (SELECT * FROM "Condition: ..." AS C ...)` looked
+        # like it referenced a dangling `C` and was replaced by the FALSE fallback
+        # CTE — silently emptying Hospice."Has Hospice Services" and
+        # PalliativeCare."Has Palliative Care in the Measurement Period"
+        # (CMS347 denominator exceptions, CMS136 hospice exclusion).
+        def _walk_children(node) -> None:
+            if node is None:
+                return
+            if isinstance(node, (list, tuple)):
+                for item in node:
+                    _walk_children(item)
+                return
+            if isinstance(node, SQLAlias) and node.alias and node is not expr:
+                pass  # aliases counted by their owning SELECT/JOIN
+            if hasattr(node, "to_sql"):
+                aliases.update(
+                    ASTHelpersMixin._collect_defined_aliases(node, _visited)
                 )
-            # Handle Join objects
-            if attr_name == 'joins' and isinstance(child, list):
-                for j in child:
-                    if hasattr(j, 'on_condition') and j.on_condition and hasattr(j.on_condition, 'to_sql'):
-                        aliases |= ASTHelpersMixin._collect_defined_aliases(
-                            j.on_condition, _visited
-                        )
+                return
+            # SQLJoin and other non-expression dataclasses: walk their fields
+            fields = getattr(node, "__dict__", None)
+            if isinstance(fields, dict):
+                for value in fields.values():
+                    _walk_children(value)
+
+        for attr_name, value in list(getattr(expr, "__dict__", {}).items()):
+            if attr_name == "_visited":
+                continue
+            _walk_children(value)
 
         return aliases
 
@@ -876,17 +874,36 @@ class ASTHelpersMixin:
         return len(col_counts) > 1
 
     def _count_select_columns(self, node) -> int | None:
-        """Count the number of columns a SQL node produces."""
-        from ..translator.types import SQLSelect, SQLSubquery, SQLIdentifier
+        """Count the number of columns a SQL node produces.
+
+        A ``SELECT * FROM (<subquery>) AS x WHERE ...`` wrapper IS countable: its
+        shape is the subquery's shape. Returning ``None`` (unknown) for those made
+        `_union_has_column_mismatch` miss the very case it exists for — a
+        resource-row branch narrowed to (patient_id, resource) unioned with a
+        ``SELECT *`` branch over a retrieve CTE that carries precomputed columns.
+        DuckDB then rejects the whole statement with "Set operations can only
+        apply to expressions with the same number of result columns"
+        (CMS124/CMS138).
+        """
+        from ..translator.types import SQLSelect, SQLSubquery, SQLIdentifier, SQLAlias
         if isinstance(node, SQLSubquery):
             return self._count_select_columns(node.query)
         if isinstance(node, SQLSelect):
-            if not node.columns:
-                return None  # SELECT * — unknown
-            # SELECT * represented as [SQLIdentifier(name="*")] is also unknown
-            if (len(node.columns) == 1
+            star = (
+                not node.columns
+                or (
+                    len(node.columns) == 1
                     and isinstance(node.columns[0], SQLIdentifier)
-                    and node.columns[0].name == "*"):
+                    and node.columns[0].name == "*"
+                )
+            )
+            if star:
+                # SELECT * FROM (<subquery>) AS alias — delegate to the subquery.
+                inner = node.from_clause
+                if isinstance(inner, SQLAlias):
+                    inner = inner.expr
+                if isinstance(inner, (SQLSubquery, SQLSelect)):
+                    return self._count_select_columns(inner)
                 return None
             return len(node.columns)
         return None

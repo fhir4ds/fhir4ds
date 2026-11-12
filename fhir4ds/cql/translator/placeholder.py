@@ -97,9 +97,64 @@ class RetrievePlaceholder(SQLExpression):
                 self.profile_url == other.profile_url)
 
 
+def _resolve_provisional_cte_name(
+    name: str, cte_name_map: Dict[Tuple[str, Optional[str], Optional[str]], str]
+) -> Optional[str]:
+    """Map a provisional "<Type>: <valueset>" CTE name to its real CTE name.
+
+    When a retrieve is used as a query source before phase 2 decides the final
+    CTE name, the alias symbol records a provisional ``<Type>: <valueset>``
+    name. References that bypass the RetrievePlaceholder (e.g. inside a
+    function-promotion body) then emit that provisional string, which is never
+    defined — CMS0334: ``"Observation: http://cts.nlm…"`` Catalog Error.
+    """
+    if ": http" not in name and ": urn:" not in name:
+        return None
+    resource_type, _, valueset = name.partition(": ")
+    if not resource_type or not valueset:
+        return None
+    exact = cte_name_map.get((resource_type, valueset, None))
+    if exact is not None:
+        return exact
+    candidates = {
+        v for k, v in cte_name_map.items()
+        if k[0] == resource_type and k[1] == valueset
+    }
+    return candidates.pop() if len(candidates) == 1 else None
+
+
 def resolve_placeholders(
     ast: SQLExpression,
-    cte_name_map: Dict[Tuple[str, Optional[str], Optional[str]], str]
+    cte_name_map: Dict[Tuple[str, Optional[str], Optional[str]], str],
+    _memo: Optional[dict] = None,
+    promotion_body: bool = False,
+) -> SQLExpression:
+    """Memoized resolve_placeholders — see _resolve_placeholders_impl.
+
+    Function inlining shares AST subtrees by reference, so definition ASTs
+    can be DAGs; the rebuild-per-parent recursion would expand a DAG into an
+    exponential tree (CMS136). Memoize by node identity: each node object is
+    resolved once and the SAME resolved object is reused in every position,
+    preserving sharing. Safe because the input tree keeps every node alive
+    for the duration of the walk, so id() keys cannot be recycled.
+    """
+    memo = {} if _memo is None else _memo
+    memo_key = id(ast)
+    hit = memo.get(memo_key)
+    if hit is not None:
+        return hit
+    resolved = _resolve_placeholders_impl(
+        ast, cte_name_map, memo, promotion_body=promotion_body
+    )
+    memo[memo_key] = resolved
+    return resolved
+
+
+def _resolve_placeholders_impl(
+    ast: SQLExpression,
+    cte_name_map: Dict[Tuple[str, Optional[str], Optional[str]], str],
+    _memo: dict,
+    promotion_body: bool = False,
 ) -> SQLExpression:
     """
     Walk AST and replace all placeholders with CTE references.
@@ -133,6 +188,27 @@ def resolve_placeholders(
         # Base case: resolve this placeholder
         cte_name = cte_name_map.get(ast.key)
 
+        if cte_name is None and ast.valueset:
+            # Profile-agnostic fallback. The same retrieve can be registered
+            # under a different profile spelling: function-promotion CTE bodies
+            # are translated outside the measure's own retrieve scan and carry
+            # no profile_url, so their placeholder key missed the
+            # (type, valueset, profile) entry and the caller fell back to a
+            # URL-shaped CTE name that is never defined (CMS0334 promoted
+            # `lastEstimatedGestationalAge` → Catalog Error on
+            # "Observation: http://cts.nlm…"). Match on (type, valueset) when
+            # it is unambiguous — profile variants narrow the same row set.
+            exact = cte_name_map.get((ast.resource_type, ast.valueset, None))
+            if exact is not None:
+                cte_name = exact
+            else:
+                candidates = {
+                    v for k, v in cte_name_map.items()
+                    if k[0] == ast.resource_type and k[1] == ast.valueset
+                }
+                if len(candidates) == 1:
+                    cte_name = candidates.pop()
+
         if cte_name is None:
             # Debug logging for key mismatch diagnosis
             logger.debug(
@@ -155,18 +231,25 @@ def resolve_placeholders(
         # Return CTE reference
         return SQLIdentifier(cte_name, quoted=True)
 
+    # Provisional retrieve-name repair (see _resolve_provisional_cte_name).
+    if isinstance(ast, SQLIdentifier) and ast.quoted:
+        fixed = _resolve_provisional_cte_name(ast.name, cte_name_map)
+        if fixed is not None and fixed != ast.name:
+            return SQLIdentifier(name=fixed, quoted=True)
+        return ast
+
     # Recursive cases: transform children
     if isinstance(ast, SQLFunctionCall):
         return SQLFunctionCall(
             name=ast.name,
-            args=[resolve_placeholders(arg, cte_name_map) for arg in ast.args],
+            args=[resolve_placeholders(arg, cte_name_map, _memo) for arg in ast.args],
             distinct=ast.distinct
         )
 
     elif isinstance(ast, SQLLambda):
         return SQLLambda(
             param=ast.param,
-            body=resolve_placeholders(ast.body, cte_name_map)
+            body=resolve_placeholders(ast.body, cte_name_map, _memo)
         )
 
     elif isinstance(ast, SQLSelect):
@@ -175,11 +258,11 @@ def resolve_placeholders(
         for col in ast.columns:
             if isinstance(col, tuple):
                 resolved_columns.append((
-                    resolve_placeholders(col[0], cte_name_map),
+                    resolve_placeholders(col[0], cte_name_map, _memo),
                     col[1]
                 ))
             else:
-                resolved_columns.append(resolve_placeholders(col, cte_name_map))
+                resolved_columns.append(resolve_placeholders(col, cte_name_map, _memo))
 
         resolved_joins = None
         if ast.joins:
@@ -188,23 +271,23 @@ def resolve_placeholders(
                 if isinstance(join, SQLJoin):
                     resolved_joins.append(SQLJoin(
                         join_type=join.join_type,
-                        table=resolve_placeholders(join.table, cte_name_map),
+                        table=resolve_placeholders(join.table, cte_name_map, _memo),
                         alias=join.alias,
-                        on_condition=resolve_placeholders(join.on_condition, cte_name_map) if join.on_condition else None
+                        on_condition=resolve_placeholders(join.on_condition, cte_name_map, _memo) if join.on_condition else None
                     ))
                 else:
                     resolved_joins.append(join)
 
         return SQLSelect(
             columns=resolved_columns,
-            from_clause=resolve_placeholders(ast.from_clause, cte_name_map) if ast.from_clause else None,
+            from_clause=resolve_placeholders(ast.from_clause, cte_name_map, _memo) if ast.from_clause else None,
             joins=resolved_joins,
-            where=resolve_placeholders(ast.where, cte_name_map) if ast.where else None,
-            group_by=[resolve_placeholders(g, cte_name_map) for g in ast.group_by] if ast.group_by else None,
-            having=resolve_placeholders(ast.having, cte_name_map) if ast.having else None,
+            where=resolve_placeholders(ast.where, cte_name_map, _memo) if ast.where else None,
+            group_by=[resolve_placeholders(g, cte_name_map, _memo) for g in ast.group_by] if ast.group_by else None,
+            having=resolve_placeholders(ast.having, cte_name_map, _memo) if ast.having else None,
             order_by=[
                 (
-                    resolve_placeholders(expr, cte_name_map)
+                    resolve_placeholders(expr, cte_name_map, _memo)
                     if not isinstance(expr, str) else expr,
                     direction,
                 )
@@ -218,109 +301,109 @@ def resolve_placeholders(
     elif isinstance(ast, SQLBinaryOp):
         return SQLBinaryOp(
             operator=ast.operator,
-            left=resolve_placeholders(ast.left, cte_name_map),
-            right=resolve_placeholders(ast.right, cte_name_map)
+            left=resolve_placeholders(ast.left, cte_name_map, _memo),
+            right=resolve_placeholders(ast.right, cte_name_map, _memo)
         )
 
     elif isinstance(ast, SQLUnaryOp):
         return SQLUnaryOp(
             operator=ast.operator,
-            operand=resolve_placeholders(ast.operand, cte_name_map),
+            operand=resolve_placeholders(ast.operand, cte_name_map, _memo),
             prefix=ast.prefix
         )
 
     elif isinstance(ast, SQLCase):
         resolved_when = [
-            (resolve_placeholders(cond, cte_name_map), resolve_placeholders(result, cte_name_map))
+            (resolve_placeholders(cond, cte_name_map, _memo), resolve_placeholders(result, cte_name_map, _memo))
             for cond, result in ast.when_clauses
         ]
         return SQLCase(
             when_clauses=resolved_when,
-            else_clause=resolve_placeholders(ast.else_clause, cte_name_map) if ast.else_clause else None,
-            operand=resolve_placeholders(ast.operand, cte_name_map) if ast.operand else None
+            else_clause=resolve_placeholders(ast.else_clause, cte_name_map, _memo) if ast.else_clause else None,
+            operand=resolve_placeholders(ast.operand, cte_name_map, _memo) if ast.operand else None
         )
 
     elif isinstance(ast, SQLList):
         return SQLList(
-            items=[resolve_placeholders(item, cte_name_map) for item in ast.items]
+            items=[resolve_placeholders(item, cte_name_map, _memo) for item in ast.items]
         )
 
     elif isinstance(ast, SQLArray):
         return SQLArray(
-            elements=[resolve_placeholders(elem, cte_name_map) for elem in ast.elements]
+            elements=[resolve_placeholders(elem, cte_name_map, _memo) for elem in ast.elements]
         )
 
     elif isinstance(ast, SQLAlias):
         return SQLAlias(
-            expr=resolve_placeholders(ast.expr, cte_name_map),
+            expr=resolve_placeholders(ast.expr, cte_name_map, _memo),
             alias=ast.alias
         )
 
     elif isinstance(ast, SQLSubquery):
         return SQLSubquery(
-            query=resolve_placeholders(ast.query, cte_name_map)
+            query=resolve_placeholders(ast.query, cte_name_map, _memo)
         )
 
     elif isinstance(ast, SQLUnion):
         return SQLUnion(
-            operands=[resolve_placeholders(op, cte_name_map) for op in ast.operands],
+            operands=[resolve_placeholders(op, cte_name_map, _memo) for op in ast.operands],
             distinct=ast.distinct
         )
 
     elif isinstance(ast, SQLCast):
         return SQLCast(
-            expression=resolve_placeholders(ast.expression, cte_name_map),
+            expression=resolve_placeholders(ast.expression, cte_name_map, _memo),
             target_type=ast.target_type,
             try_cast=ast.try_cast,
         )
 
     elif isinstance(ast, SQLExists):
         return SQLExists(
-            subquery=resolve_placeholders(ast.subquery, cte_name_map)
+            subquery=resolve_placeholders(ast.subquery, cte_name_map, _memo)
         )
 
     elif isinstance(ast, SQLInterval):
         return SQLInterval(
-            low=resolve_placeholders(ast.low, cte_name_map) if ast.low else None,
-            high=resolve_placeholders(ast.high, cte_name_map) if ast.high else None,
+            low=resolve_placeholders(ast.low, cte_name_map, _memo) if ast.low else None,
+            high=resolve_placeholders(ast.high, cte_name_map, _memo) if ast.high else None,
             low_closed=ast.low_closed,
             high_closed=ast.high_closed,
         )
 
     elif isinstance(ast, SQLIntersect):
         return SQLIntersect(
-            operands=[resolve_placeholders(op, cte_name_map) for op in ast.operands]
+            operands=[resolve_placeholders(op, cte_name_map, _memo) for op in ast.operands]
         )
 
     elif isinstance(ast, SQLExcept):
         return SQLExcept(
-            operands=[resolve_placeholders(op, cte_name_map) for op in ast.operands]
+            operands=[resolve_placeholders(op, cte_name_map, _memo) for op in ast.operands]
         )
 
     elif isinstance(ast, SQLWindowFunction):
         return SQLWindowFunction(
             function=ast.function,
-            function_args=[resolve_placeholders(a, cte_name_map) for a in ast.function_args],
-            partition_by=[resolve_placeholders(p, cte_name_map) for p in ast.partition_by],
-            order_by=[(resolve_placeholders(expr, cte_name_map), direction) for expr, direction in ast.order_by],
+            function_args=[resolve_placeholders(a, cte_name_map, _memo) for a in ast.function_args],
+            partition_by=[resolve_placeholders(p, cte_name_map, _memo) for p in ast.partition_by],
+            order_by=[(resolve_placeholders(expr, cte_name_map, _memo), direction) for expr, direction in ast.order_by],
             frame_clause=ast.frame_clause,
         )
 
     elif isinstance(ast, SQLNamedArg):
         return SQLNamedArg(
             name=ast.name,
-            value=resolve_placeholders(ast.value, cte_name_map) if ast.value else None,
+            value=resolve_placeholders(ast.value, cte_name_map, _memo) if ast.value else None,
         )
 
     elif isinstance(ast, SQLExtract):
         return SQLExtract(
             extract_field=ast.extract_field,
-            source=resolve_placeholders(ast.source, cte_name_map) if ast.source else None,
+            source=resolve_placeholders(ast.source, cte_name_map, _memo) if ast.source else None,
         )
 
     elif isinstance(ast, SQLStructFieldAccess):
         return SQLStructFieldAccess(
-            expr=resolve_placeholders(ast.expr, cte_name_map),
+            expr=resolve_placeholders(ast.expr, cte_name_map, _memo),
             field_name=ast.field_name,
         )
 
@@ -331,8 +414,8 @@ def resolve_placeholders(
         from ..translator.fluent_functions import DeferredTemplateSubstitution
         return DeferredTemplateSubstitution(
             template=ast._template,
-            resource_expr=resolve_placeholders(ast._resource_expr, cte_name_map),
-            args=[resolve_placeholders(arg, cte_name_map) for arg in ast._args],
+            resource_expr=resolve_placeholders(ast._resource_expr, cte_name_map, _memo),
+            args=[resolve_placeholders(arg, cte_name_map, _memo) for arg in ast._args],
             func_def=ast._func_def,
             substitutor=ast._substitutor,
         )

@@ -203,6 +203,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         audit_expressions: bool = True,
         closure_loaded: bool = False,
         terminology_endpoint: Optional[Any] = None,
+        strict_profiles: bool = True,
     ) -> None:
         """
         Initialize the translator.
@@ -228,6 +229,13 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 stored on the translator as ``self.terminology_endpoint`` for
                 use by future retrieve-time ValueSet expansion hooks. ``None``
                 (the default) preserves existing behavior byte-for-byte.
+            strict_profiles: STRICT PROFILE MODE, default True. When True a
+                profile-qualified retrieve (``[USCore.BodyWeightProfile: ...]``)
+                requires the profile canonical in the resource's
+                ``meta.profile`` (US Core / QI-Core membership). When False that
+                conjunct is omitted and the retrieve matches the base resource
+                type instead — use it for data that does not populate
+                ``meta.profile``. The negation-profile exclusion is unaffected.
         """
         from .model_config import ModelConfig, DEFAULT_MODEL_CONFIG
         self._model_config = model_config or DEFAULT_MODEL_CONFIG
@@ -239,6 +247,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 warnings.warn(f"Schema config issue: {e}", stacklevel=2)
 
         self._connection = connection
+        self._strict_profiles = strict_profiles
         self._use_fhirpath_udfs = use_fhirpath_udfs
         self._library_loader = library_loader
         # Shared cache across all translator instances in the recursion.
@@ -469,6 +478,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         resolved_asts, phase1_result, phase2_result, opt_stats = run_optimization_phases(
             library, self._context, self
         )
+        self._phase2_cte_name_map = phase2_result.cte_name_map
 
         # Copy column registry from phase2_result to context for property access optimization
         # This enables property access in expressions.py to use precomputed columns
@@ -581,7 +591,50 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             from_clause=SQLIdentifier(name=final_name, quoted=True),
         )
         fragment = SQLFragment(main_query=final_select_ast, ctes=cte_defs)
-        return fragment.to_sql()
+        return self._substitute_fold_placeholders(fragment.to_sql())
+
+
+    def _substitute_fold_placeholders(self, sql_text: str) -> str:
+        """Replace fold-marker identifiers with quoted retrieve CTE names.
+
+        The aggregate fold lowering serializes source expressions to raw SQL
+        strings; unresolved RetrievePlaceholder nodes inside them were swapped
+        for ``__f4ds_ph_N__`` markers (see _translate_query). Phase 2 built the
+        retrieve CTEs for those placeholders; swap the marker text for the
+        quoted CTE reference here (CMS136).
+        """
+        markers = getattr(self._context, "_fold_marker_placeholders", None)
+        if not markers:
+            return sql_text
+        cte_map = getattr(self, "_phase2_cte_name_map", None) or {}
+        import re as _re
+        unresolved: list = []
+
+        def _sub(m):
+            idx = int(m.group(1))
+            if 0 <= idx < len(markers):
+                cte_name = cte_map.get(markers[idx].key)
+                if cte_name:
+                    return f'"{cte_name}"'
+                unresolved.append((idx, str(markers[idx].key)))
+            else:
+                unresolved.append((idx, "<index out of range>"))
+            return m.group(0)
+
+        substituted = _re.sub(r"__f4ds_ph_(\d+)__", _sub, sql_text)
+        if unresolved:
+            # Leaking a marker into the statement produces an opaque
+            # `Referenced table "__f4ds_ph_0__" not found` much later. Fail at
+            # the point of knowledge instead (review REV-011).
+            from ..errors import TranslationError
+
+            details = ", ".join(f"#{i} {key}" for i, key in unresolved[:5])
+            raise TranslationError(
+                "Unresolved aggregate-fold retrieve placeholder(s) "
+                f"after Phase 2: {details}. The fold lowering serialized a "
+                "retrieve that never got a CTE emitted for it."
+            )
+        return substituted
 
     def translate_library_to_population_sql(
         self,
@@ -735,6 +788,8 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             resolved_asts, phase1_result, phase2_result, opt_stats = run_optimization_phases(
                 library, self._context, self
             )
+            self._phase2_cte_name_map = phase2_result.cte_name_map
+
         except RecursionError:
             resolving = list(self._context._resolving_definitions)
             if resolving:
@@ -889,7 +944,11 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                         cdef.name == _quoted_base and _i not in _type_of
                         for _i, cdef in enumerate(cte_defs)
                     ):
-                        from ..errors import TranslationError
+                        # NOTE: no local import here — a function-local
+                        # `from ..errors import TranslationError` shadows the
+                        # module-level import for the WHOLE function scope,
+                        # turning the earlier required-parameter raise into
+                        # UnboundLocalError.
                         raise TranslationError(
                             f"retrieve-cache base CTE name collision: "
                             f"{_quoted_base} already exists as a non-retrieve CTE"
@@ -928,6 +987,10 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         # These must come before main definitions so they can be referenced
         # Topologically sort included definitions so dependencies come first
         included_ordered = self._sort_included_definitions(self._included_definitions)
+        # Track CTE names case-insensitively (DuckDB CTE names are
+        # case-insensitive) — initialized BEFORE section 4 so the included
+        # let-CTE injection can dedupe against existing names.
+        seen_lower: dict[str, str] = {}
         # Reset the pre-compute name map so it accumulates fresh for this SQL generation.
         # Compound boolean definitions reference constituent boolean CTEs by name; the map
         # lets the pre-compute body substitute audit-CTE names with pre-compute equivalents,
@@ -941,6 +1004,20 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             for precte in self._pending_precte:
                 cte_defs.append(precte)
             self._pending_precte.clear()
+            # Inject let-variable CTEs registered under this included
+            # definition BEFORE its CTE — without this, lets promoted while
+            # translating the included define's body are only injected in the
+            # main-definitions loop below, i.e. AFTER this consumer, and
+            # DuckDB raises "Table _let_... does not exist" (forward
+            # reference; CMS104).
+            for let_cte_name, let_cte_body in list(
+                self._context._let_variable_ctes.get(prefixed_name, {}).items()
+            ):
+                _fixed_body = self._resolve_let_cte_source(let_cte_body, _prov_to_actual)
+                quoted = f'"{let_cte_name}"'
+                if quoted.lower() not in seen_lower:
+                    seen_lower[quoted.lower()] = quoted
+                    cte_defs.append(CTEDefinition(name=quoted, query=_fixed_body))
             cte_defs.append(CTEDefinition(name=f'"{prefixed_name}"', query=cte_ast))
 
         # 5. Build CTEs for each definition (in dependency order)
@@ -960,7 +1037,6 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             definition_ctes[prefixed_name] = (quoted_name, inc_has_resource)
 
         # Track CTE names case-insensitively (DuckDB CTE names are case-insensitive)
-        seen_lower: dict[str, str] = {}
         for cte in cte_defs:
             seen_lower[cte.name.lower()] = cte.name
 
@@ -1007,7 +1083,23 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                     quoted = f'"{let_cte_name}"'
                     if quoted.lower() not in seen_lower:
                         seen_lower[quoted.lower()] = quoted
-                        cte_defs.append(CTEDefinition(name=quoted, query=_fixed_body))
+                        # CSE union-chain CTEs MUST be MATERIALIZED: their
+                        # bodies carry aggregate folds (WITH RECURSIVE) and
+                        # are consumed via correlated lookups
+                        # `(SELECT value FROM cte AS _lv WHERE ...)`.
+                        # DuckDB inlines plain CTEs into those lookup
+                        # subqueries, and an inlined recursive fold breaks
+                        # the lookup's scope binding (Binder Error
+                        # "Referenced table _lv not found, candidates: _pt";
+                        # CMS136 — verified: stubbing the cse body OR
+                        # forcing MATERIALIZED resolves it). AUTO counting
+                        # also under-counts these refs (lookups live in
+                        # sibling let-CTE bodies, not the final select).
+                        cte_defs.append(CTEDefinition(
+                            name=quoted,
+                            query=_fixed_body,
+                            materialized=True if let_cte_name.startswith("_cse_") else None,
+                        ))
             cte_name = self._unique_cte_name(name, seen_lower)
             quoted_name = f'"{cte_name}"'
             cte_defs.append(CTEDefinition(name=quoted_name, query=cte_ast))
@@ -1078,7 +1170,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         if os.environ.get("FHIR4DS_CQL_LATERAL_DEDUP", "1") != "0":
             min_occurrences = int(os.environ.get("FHIR4DS_CQL_LATERAL_DEDUP_MIN", "2"))
             fragment.deduplicate_lateral_aliases(min_occurrences=min_occurrences)
-        sql_text = fragment.to_sql()
+        sql_text = self._substitute_fold_placeholders(fragment.to_sql())
         if self._context.column_registry:
             sql_text = optimize_rendered_property_access(
                 sql_text, self._context.column_registry
@@ -1279,7 +1371,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             order_by=[(SQLIdentifier(name="patient_id"), "ASC")],
         )
         fragment = SQLFragment(main_query=final, ctes=[cte])
-        return fragment.to_sql()
+        return self._substitute_fold_placeholders(fragment.to_sql())
 
     def _has_unresolved_refs(self, expr: "SQLExpression") -> bool:
         """Check if AST has obvious unresolved references (single-letter identifiers).
@@ -2466,10 +2558,14 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
     _FUNCTION_CTE_PROMOTION_THRESHOLD = 3
     _FUNCTION_CTE_SECONDARY_THRESHOLD = 2
     _FUNCTION_CTE_PROMOTION_DENYLIST = {
-        # Returns a Quantity from a retrieve-local let/sort query. Promoting it
-        # currently changes CMS0334 population results; keep it inline until the
-        # function CTE path preserves that query shape exactly.
-        "lastEstimatedGestationalAge",
+        # `lastEstimatedGestationalAge` is deliberately NOT denylisted: leaving it
+        # inline re-expands `lastTimeOfDelivery`'s entire body at every use site.
+        # CMS0334's gestational-age CTE then carries ~1,670 copies of one
+        # TimeOfDelivery extraction and costs 624 s of the measure's 640 s. The
+        # let-clause promotion bugs that motivated the denylist (per-occurrence
+        # let CTE naming) are fixed, so promotion is re-enabled and validated
+        # against the CMS0334 fixture.
+        # "lastEstimatedGestationalAge",
         # Location/ICU helpers depend on nested collection/singleton semantics
         # that are not preserved by row-keyed scalar function CTE lookups.
         "GetLocation",
@@ -3059,6 +3155,12 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         Args:
             library: The parsed CQL library.
         """
+        # STRICT PROFILE MODE: every context this translator creates (main
+        # library and included libraries) inherits the flag; the retrieve
+        # builder reads it to decide whether a profile-qualified retrieve
+        # requires the canonical in `meta.profile`.
+        self._context.strict_profiles = getattr(self, "_strict_profiles", True)
+
         # Set up code systems before value sets so ValueSet codesystems
         # overrides can be resolved into structured CodeSystem references.
         for cs in library.codesystems:

@@ -17,6 +17,37 @@ from ..paths import get_resource_path
 
 logger = logging.getLogger(__name__)
 
+
+_UNIFIED_WITH_CACHE: Optional[Dict[str, list]] = None
+
+
+def _load_unified_with() -> Dict[str, list]:
+    """Load profile URL equivalences from ``profile_equivalences.json``.
+
+    Kept as DATA rather than a Python literal: which profiles are
+    interchangeable is a clinical authoring decision, not a derived fact, and
+    every fixture that pins it is named in the file's ``_comment``.
+    """
+    global _UNIFIED_WITH_CACHE
+    if _UNIFIED_WITH_CACHE is not None:
+        return _UNIFIED_WITH_CACHE
+    table: Dict[str, list] = {}
+    try:
+        path = Path(get_resource_path("profiles", "profile_equivalences.json"))
+        if path.exists():
+            with open(path, encoding="utf-8") as handle:
+                raw = json.load(handle).get("unified_with", {})
+            if isinstance(raw, dict):
+                table = {
+                    key: list(value)
+                    for key, value in raw.items()
+                    if isinstance(value, list)
+                }
+    except (OSError, ValueError) as exc:
+        logger.warning("Could not load profile equivalences: %s", exc)
+    _UNIFIED_WITH_CACHE = table
+    return table
+
 # Default JSON config path (relative to this file's package)
 _DEFAULT_CONFIG = get_resource_path("profiles", "qicore-profiles.json")
 
@@ -52,6 +83,8 @@ class ProfileRegistry:
         self._url_to_type = url_to_type
         self._profiles_requiring_suffix = profiles_requiring_suffix
         self._property_extensions: Dict[str, dict] = property_extensions or {}
+        # Profile URL equivalences (see resources/profiles/profile_equivalences.json)
+        self._unified_with: Dict[str, list] = _load_unified_with()
         self._model_config = None  # set by from_model_config
         self._extension_paths: Optional[dict] = None
         self._raw_component_profile_keywords: Optional[list] = None
@@ -86,6 +119,39 @@ class ProfileRegistry:
         raw_prefixes = data.get("profile_name_prefixes")
         if raw_prefixes:
             registry._fallback_prefixes = tuple(raw_prefixes)
+        # Merge US Core / USQualityCore named profiles (GENERATED from the
+        # dqm-content-cms-2025 modelinfos; see the JSON's _comment). The
+        # primary config stays the authority on name collisions. Loaded from
+        # the packaged resources dir (the primary config may be a versioned
+        # qicore-profiles.json elsewhere).
+        uscore_path = Path(get_resource_path(
+            "profiles", "uscore-usqualitycore-profiles.json"
+        ))
+        if uscore_path.exists():
+            try:
+                with open(uscore_path, encoding="utf-8") as f:
+                    extra = json.load(f).get("named_profiles", {})
+                merged = dict(extra)
+                # Collision handling: the primary (QI-Core) config stays the
+                # authority, BUT the CMS 2025 US Core suite's test data
+                # carries the USQualityCore canonical URLs in meta.profile —
+                # dropping the alternate entirely made profiled retrieves
+                # (USQualityCore.ConditionEncounterDiagnosis) filter on the
+                # QI-Core URL and match ZERO resources (CMS137 IP empty for
+                # every patient). Keep the primary entry and record the
+                # alternate URLs so the meta.profile filter can OR-chain.
+                for name, primary in registry._named_profiles.items():
+                    if name in extra:
+                        alts = list(primary.get("alternate_urls") or [])
+                        alt_url = extra[name].get("url")
+                        if alt_url and alt_url != primary.get("url") and alt_url not in alts:
+                            alts.append(alt_url)
+                        primary["alternate_urls"] = alts
+
+                merged.update(registry._named_profiles)
+                registry._named_profiles = merged
+            except (OSError, ValueError) as exc:
+                logger.warning("Could not load %s: %s", uscore_path, exc)
         return registry
 
     @classmethod
@@ -166,10 +232,44 @@ class ProfileRegistry:
         info = self._named_profiles.get(profile_name)
         if info is not None:
             return (info["base_type"], info.get("url"))
+        # Some authored content retrieves profile types by their modelinfo
+        # LABEL in quoted form (e.g. ["Vital Signs Profile"] for
+        # VitalSignsProfile) — resolve through the label alias map.
+        if info is None and profile_name:
+            for candidate in self._named_profiles.values():
+                if candidate.get("label") == profile_name:
+                    return (candidate["base_type"], candidate.get("url"))
         # Fallback: strip known profile-name prefixes (configurable via JSON)
         for prefix in self._fallback_prefixes:
             if profile_name.startswith(prefix):
                 return (profile_name[len(prefix):], None)
+        return None
+
+    def resolve_qualified_profile(
+        self, model_qualifier: str, local_name: str
+    ) -> Optional[Tuple[str, Optional[str]]]:
+        """Resolve a MODEL-QUALIFIED retrieve type (e.g. USQualityCore +
+        MedicationRequest) to (base_type, profile_url).
+
+        Only considers named-profile entries whose ``namespace`` equals the
+        model qualifier (skipping plain FHIR): a profiled-model retrieve maps
+        to that model's profile URL, so e.g.
+        ``[USQualityCore.MedicationRequest]`` filters on the US Quality Core
+        medicationrequest profile and does NOT match resources profiled as
+        ``us-quality-core-medicationnotrequested`` (doNotPerform negations,
+        CMS144). Unqualified ``[MedicationRequest]`` keeps base-type
+        semantics via resolve_named_profile.
+        """
+        for _name, info in self._named_profiles.items():
+            if info.get("namespace") != model_qualifier:
+                continue
+            candidates = {_name}
+            if _name.endswith("Profile"):
+                candidates.add(_name[: -len("Profile")])
+            if _name.startswith(model_qualifier):
+                candidates.add(_name[len(model_qualifier):])
+            if local_name in candidates:
+                return (info["base_type"], info.get("url"))
         return None
 
     # --- Lookups replacing USCORE_PROFILE_TO_FHIR_TYPE ---
@@ -244,8 +344,11 @@ class ProfileRegistry:
             return explicit
 
         # Check named profiles for meta_profile_filter or negation_filter
+        # (alternate-aware: the resolved profile URL may be a registry
+        # alternate — e.g. the US Quality Core canonical preferred for
+        # USQualityCore-model libraries)
         for _name, info in self._named_profiles.items():
-            if info.get("url") == url:
+            if info.get("url") == url or url in (info.get("alternate_urls") or []):
                 if info.get("meta_profile_filter") or info.get("negation_filter"):
                     last_segment = url.rsplit("/", 1)[-1]
                     # Strip common implementation-guide prefixes for readability
@@ -269,9 +372,37 @@ class ProfileRegistry:
         if not profile_url:
             return False
         for _name, info in self._named_profiles.items():
-            if info.get("url") == profile_url:
+            if info.get("url") == profile_url or profile_url in (
+                info.get("alternate_urls") or []
+            ):
                 return bool(info.get("meta_profile_filter"))
         return False
+
+    def profile_filter_urls(self, profile_url: str) -> list:
+        """All meta.profile URLs a retrieve with this profile_url should match.
+
+        Returns the primary URL plus same-family ``alternate_urls``
+        (registry name-collision alternates — e.g. the USQualityCore
+        canonical for a QI-Core-primary name). The meta.profile filter
+        OR-chains these. Alternates from a DIFFERENT IG family are dropped
+        so QI-Core retrieves stay strict while US Quality Core retrieves
+        match their unified sibling flavor.
+        """
+        if not profile_url:
+            return []
+        for _name, info in self._named_profiles.items():
+            urls = [profile_url]
+            if info.get("url") == profile_url or profile_url in (
+                info.get("alternate_urls") or []
+            ):
+                for alt in [info.get("url")] + list(info.get("alternate_urls") or []):
+                    if alt and alt not in urls:
+                        urls.append(alt)
+                for unified in self._unified_with.get(profile_url, []):
+                    if unified not in urls:
+                        urls.append(unified)
+                return urls
+        return [profile_url]
 
     # --- Compatibility helpers ---
 

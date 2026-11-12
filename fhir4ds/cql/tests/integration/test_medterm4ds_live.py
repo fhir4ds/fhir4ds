@@ -268,7 +268,7 @@ def test_phase3_closure_table_built_and_subsumption_works(medterm4ds_url: str) -
 
 
 def test_phase4_notes_pipeline_extracts_conditions(medterm4ds_url: str) -> None:
-    """NotesPipeline.extract_conditions() derives Conditions from real clinical text.
+    """NotesPipeline.extract_resources() derives typed FHIR resources from real clinical text.
 
     medterm4ds ships an optional NER extractor (``medterm4ds.extract``).
     When the sidecar doesn't have it installed, extract_conditions()
@@ -294,37 +294,68 @@ def test_phase4_notes_pipeline_extracts_conditions(medterm4ds_url: str) -> None:
         "subject": {"reference": "Patient/test-patient"},
         "summary": note_text,
     }
-    conditions = pipeline.extract_conditions(resource)
+    conditions = pipeline.extract_resources(resource)
     if len(conditions) == 0:
         pytest.skip(
             "NotesPipeline extracted no conditions - medterm4ds sidecar may "
             "not have extraction deps installed (medterm4ds.extract)"
         )
 
-    # Derived Condition shape contract.
-    assert all(c.get("resourceType") == "Condition" for c in conditions), (
-        f"non-Condition in extracted set: {conditions[:2]!r}"
+    from fhir4ds.cql.loader.derived_resources import (
+        CODE_FIELD,
+        DERIVED_RESOURCE_TYPES,
+        STATUS_FIELDS,
+        SUBJECT_FIELD,
     )
-    assert all(
-        c.get("subject", {}).get("reference") == "Patient/test-patient"
-        for c in conditions
-    ), "subject reference not propagated from source resource"
-    assert all(
-        c.get("verificationStatus", {}).get("coding", [{}])[0].get("code")
-        == "unconfirmed"
-        for c in conditions
-    ), "verificationStatus.coding[0].code should default to 'unconfirmed'"
+
+    # Derived-resource shape contract. The RESOURCE TYPE follows the concept's
+    # result_type, so a medication becomes a MedicationStatement and a vaccine
+    # an Immunization — previously every concept became a Condition.
+    for derived in conditions:
+        rtype = derived.get("resourceType")
+        assert rtype in DERIVED_RESOURCE_TYPES, (
+            f"unexpected derived resourceType {rtype!r}: {derived!r}"
+        )
+        assert CODE_FIELD[rtype] in derived, (
+            f"{rtype} must carry its coded concept on {CODE_FIELD[rtype]!r}"
+        )
+        assert (
+            derived.get(SUBJECT_FIELD[rtype], {}).get("reference")
+            == "Patient/test-patient"
+        ), f"{rtype} did not propagate the patient reference from the source"
+        if rtype == "Condition":
+            assert (
+                derived.get("verificationStatus", {}).get("coding", [{}])[0].get("code")
+                == "unconfirmed"
+            ), "verificationStatus.coding[0].code should default to 'unconfirmed'"
+        else:
+            assert derived.get("status") == STATUS_FIELDS[rtype]["status"], (
+                f"{rtype} is missing its required status element"
+            )
+
+    # The code system does not determine the type, but a pharmacy code must
+    # never surface as a Condition (the bug this mapping fixes).
+    for derived in conditions:
+        rtype = derived["resourceType"]
+        coding = (derived.get(CODE_FIELD[rtype]) or {}).get("coding") or [{}]
+        system = (coding[0] or {}).get("system")
+        if system == "http://www.nlm.nih.gov/research/umls/rxnorm":
+            assert rtype == "MedicationStatement", (
+                f"RxNorm concept filed as {rtype}: {derived!r}"
+            )
+        if system == "http://hl7.org/fhir/sid/cvx":
+            assert rtype == "Immunization", (
+                f"CVX concept filed as {rtype}: {derived!r}"
+            )
 
     # Soft check: at least one extracted Condition should mention diabetes
     # somewhere in its display text. We accept alternate SNOMED displays
     # (e.g. "Diabetes mellitus (disorder)") so we only check the stem.
     blob = " ".join(
-        c.get("code", {}).get("text", "")
+        (c.get(CODE_FIELD[c["resourceType"]]) or {}).get("text", "")
         + " "
         + (
-            c.get("code", {}).get("coding", [{}])[0].get("display", "")
-            if c.get("code", {}).get("coding")
-            else ""
+            (c.get(CODE_FIELD[c["resourceType"]]).get("coding") or [{}])[0].get("display", "")
         )
         for c in conditions
     ).lower()

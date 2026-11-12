@@ -8,6 +8,22 @@ import re
 import sys
 from pathlib import Path
 
+from .config import (
+    CANONICAL_SUITES,
+    SUITE_QI_CORE_2025,
+    SUITE_QI_CORE_2026,
+    SUITE_US_CORE_2025,
+    normalize_suite,
+)
+
+
+def _normalize_suite_arg(value: str) -> str:
+    """argparse ``type=`` adapter accepting canonical AND legacy suite names."""
+    try:
+        return normalize_suite(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from None
+
 
 def main():
     # Deeply-nested CQL libraries (e.g. with many included fluent functions)
@@ -68,14 +84,32 @@ def main():
     )
     parser.add_argument(
         "--suite",
-        choices=["2025", "2026"],
-        default="2025",
-        help="Content suite to benchmark: '2025' (ecqm-content-qicore-2025, default) or '2026' (dqm-content-qicore-2026)",
+        type=_normalize_suite_arg,
+        choices=list(CANONICAL_SUITES),
+        default=SUITE_QI_CORE_2025,
+        metavar="{" + ",".join(CANONICAL_SUITES) + "}",
+        help=(
+            "Content suite: 'qi-core-2025' (ecqm-content-qicore-2025, "
+            "default), 'us-core-2025' (dqm-content-cms-2025 CMS US Core "
+            "measures), or 'qi-core-2026' (dqm-content-qicore-2026). Legacy "
+            "spellings '2025', 'cms2025', '2026' and the unversioned "
+            "'qi-core'/'us-core' are still accepted."
+        ),
     )
     parser.add_argument(
         "--verbose", "-v",
         action="store_true",
         help="Print verbose output",
+    )
+    parser.add_argument(
+        "--no-strict-profiles",
+        action="store_true",
+        help=(
+            "Disable STRICT PROFILE MODE (on by default). Profiled retrieves "
+            "then match the base resource type instead of requiring the profile "
+            "canonical in meta.profile — use for data that does not populate "
+            "meta.profile. Negation-profile exclusion stays active."
+        ),
     )
 
     args = parser.parse_args()
@@ -192,6 +226,7 @@ def main():
                 all_columns=args.all_columns,
                 audit=args.audit,
                 library_cache=library_cache,
+                strict_profiles=not getattr(args, "no_strict_profiles", False),
             )
 
             # Write outputs
@@ -364,11 +399,14 @@ def main():
         print(f"\nSummary written to: {summary_path}")
 
 
-def _discover_measures(suite: str = "2025"):
+def _discover_measures(suite: str = SUITE_QI_CORE_2025):
     """Auto-discover all measures from the selected content suite.
 
     Args:
-        suite: "2025" for ecqm-content-qicore-2025, "2026" for dqm-content-qicore-2026.
+        suite: canonical suite name — "qi-core-2025", "us-core-2025",
+            "qi-core-2026" (legacy "2025"/"cms2025"/"2026" and the unversioned
+            "qi-core"/"us-core" accepted),
+            or "cms2025" (dqm-content-cms-2025 US Core measures).
     """
     from .config import (
         SUPPLEMENTAL_VALUESET_DIR,
@@ -397,6 +435,12 @@ def _discover_measures(suite: str = "2025"):
             continue
 
         measure_name = entry.name
+
+        # dqm-content-cms-2025 ships its own CQL-engine unit tests
+        # (testE15*, ...) under input/tests/measure — they are not measures.
+        if measure_name.startswith("test"):
+            continue
+
         test_dir = Path(entry.path)
 
         # Find CQL file
@@ -425,14 +469,27 @@ def _discover_measures(suite: str = "2025"):
         if measure_vs_bundle.exists():
             vs_paths.append(measure_vs_bundle)
 
-        # For 2026, also include 2025 CQL dir for shared libraries
-        # (CumulativeMedicationDuration, FHIRHelpers, etc.)
+        # For qi-core-2026 and us-core, also include the qi-core CQL dir for
+        # shared libraries
+        # (CumulativeMedicationDuration, FHIRHelpers, etc.). The CMS US Core
+        # repo references hl7.fhir.uv.cql.FHIRHelpers 4.0.1 but does not ship
+        # the CQL source (IG tooling resolves it at build time).
         inc_paths = [cql_dir]
-        if suite == "2026":
+        if _normalize_suite_arg(suite) in (SUITE_QI_CORE_2026, SUITE_US_CORE_2025):
             from .config import SUITE_2025_DIR
             fallback_cql = SUITE_2025_DIR / "input" / "cql"
             if fallback_cql.exists():
                 inc_paths.append(fallback_cql)
+        if _normalize_suite_arg(suite) in (SUITE_QI_CORE_2026, SUITE_US_CORE_2025):
+            # Vendored shared libraries (FHIRCommon, USCoreCommon,
+            # USCoreElements) that the CMS repo — and the 2026 QI-Core repo
+            # since its US CQL 1.0.0 dependency update — reference but do not
+            # ship. See tests/data/cql/dqm-content-cms-2025/README.md for
+            # provenance.
+            from .config import DATA_DIR
+            supplemental_cql = DATA_DIR / "cql" / "dqm-content-cms-2025"
+            if supplemental_cql.exists():
+                inc_paths.append(supplemental_cql)
 
         measures.append(MeasureConfig(
             id=_extract_measure_id(measure_name),

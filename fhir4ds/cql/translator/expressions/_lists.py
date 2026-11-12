@@ -756,7 +756,44 @@ class ListsMixin:
             if method.lower() in {"first", "last", "singletonfrom", "count", "distinct", "where", "select"}
             else ExprUsage.SCALAR
         )
-        source = self.translate(expr.source, usage=source_usage)
+        # Fluent receiver that is a RESOURCE_ROWS definition (CMS136:
+        # `("Qualifying Numerator Encounter".isEncounterPerformed())`):
+        # CQL fluent functions apply ELEMENTWISE over list receivers, but
+        # generic SCALAR translation demotes the definition reference to a
+        # LIMIT-1 subquery projecting only `resource` — the inlined body
+        # query then builds `SELECT patient_id, resource FROM (<demotion>)`
+        # (dangling patient_id) and downstream `<query-alias>.patient_id`
+        # correlations fail (Binder Error). Build the rows SELECT directly,
+        # mirroring what retrieve receivers produce.
+        _rows_def_cte = None
+        if (
+            source_usage == ExprUsage.SCALAR
+            and isinstance(expr.source, Identifier)
+        ):
+            _rows_def_cte = self._definition_resource_cte_name(expr.source.name)
+        if _rows_def_cte is not None:
+            _outer_pid = (
+                self.context.resource_alias
+                or self.context.patient_alias
+                or "_pt"
+            )
+            source = SQLSubquery(query=SQLSelect(
+                columns=[
+                    SQLIdentifier(name="patient_id"),
+                    SQLIdentifier(name="resource"),
+                ],
+                from_clause=SQLAlias(
+                    expr=SQLIdentifier(name=_rows_def_cte, quoted=True),
+                    alias="sub",
+                ),
+                where=SQLBinaryOp(
+                    operator="=",
+                    left=SQLQualifiedIdentifier(parts=["sub", "patient_id"]),
+                    right=SQLQualifiedIdentifier(parts=[_outer_pid, "patient_id"]),
+                ),
+            ))
+        else:
+            source = self.translate(expr.source, usage=source_usage)
         args = [self.translate(arg, boolean_context=False) for arg in expr.arguments]
 
         # Element-selection methods need the LIST-returning fhirpath UDF as
@@ -998,7 +1035,7 @@ class ListsMixin:
         from ...translator.cte_manager import generate_function_cte_name
         fn_cte_name = generate_function_cte_name(func_name, cql_def_name)
         source_alias = alias_name
-        return self._make_function_cte_lookup(fn_cte_name, source_alias)
+        return self._make_function_cte_lookup(fn_cte_name, source_alias, func_name=func_name)
 
     def _translate_alias_ref(self, ref: AliasRef, boolean_context: bool = False) -> SQLExpression:
         """Translate an alias reference to SQL."""
@@ -1489,6 +1526,36 @@ class ListsMixin:
                 # NULLS LAST for ASC, NULLS FIRST for DESC
                 nulls_order = "NULLS FIRST" if item_dir == "DESC" else "NULLS LAST"
                 window_order.append((expr_sql, f"{item_dir} {nulls_order}"))
+                # Temporal-component sort keys (`date from authoredOn`,
+                # `year from X`, ...) truncate the operand's precision, so
+                # same-period rows tie. The reference engine's stable sort
+                # preserves retrieve order, which for authored fixtures is
+                # the underlying timestamp order — tie-break on the FULL
+                # operand (same effective direction) before the
+                # deterministic id tiebreaker (CMS50 First Referral: two
+                # ServiceRequests one minute apart tied at day precision
+                # and the id ASC tiebreak picked the later one).
+                from ...parser.ast_nodes import FunctionRef as _SortFnRef
+                _si = sort_expr if item.expression is not None else None
+                if (
+                    isinstance(_si, _SortFnRef)
+                    and getattr(_si, "name", "").lower() in (
+                        "date", "time", "year", "month", "day", "hour",
+                        "minute", "second", "millisecond", "timezoneoffset",
+                    )
+                    and len(getattr(_si, "arguments", []) or []) == 1
+                ):
+                    try:
+                        _full_sql = self.translate(
+                            _si.arguments[0], boolean_context=False
+                        )
+                        window_order.append((_full_sql, f"{item_dir} {nulls_order}"))
+                    except TranslationError:
+                        # A rejected static expression must not be silently
+                        # dropped from the sort key.
+                        raise
+                    except Exception:  # noqa: BLE001
+                        pass  # keep the primary key only on translation failure
 
         # Get the FROM clause from the source query
         from_clause = None
@@ -1727,10 +1794,18 @@ class ListsMixin:
         of the query source. This rewrites them as Property(source=Identifier(alias), path=name)
         so they translate correctly.
         """
-        from ...parser.ast_nodes import Identifier as CQLIdentifier, Property, MethodInvocation, UnaryExpression
+        from ...parser.ast_nodes import Identifier as CQLIdentifier, Property, MethodInvocation, UnaryExpression, FunctionRef
 
         if isinstance(expr, CQLIdentifier):
             # Bare identifier → property of the source alias
+            # NOTE (review MEDIUM-12, deliberately NOT applied): skipping
+            # qualification for names that match parameters/let-variables
+            # breaks real content — included-library sorts (CQMCommon)
+            # share the main context's let_variables, so a sort identifier
+            # named like a main-library let (CMS871 `period`) would skip
+            # qualification and dangle (verified A/B on the QI-Core gate).
+            # The hypothetical it protects (a parameter ref inside a sort
+            # expression) has no occurrence in any measure corpus.
             if not self.context.is_alias(expr.name) and not self.context.lookup_symbol(expr.name):
                 return Property(source=CQLIdentifier(name=alias), path=expr.name)
             return expr
@@ -1743,6 +1818,17 @@ class ListsMixin:
         if isinstance(expr, UnaryExpression):
             # Qualify the operand
             expr.operand = self._qualify_sort_identifiers(expr.operand, alias)
+            return expr
+
+        if isinstance(expr, FunctionRef):
+            # Component-extraction sorts parse as FunctionRefs
+            # (``sort by date from authoredOn`` -> FunctionRef('date',
+            # [Identifier('authoredOn')])). Qualify bare identifier args
+            # so they resolve against the source alias (CMS50).
+            expr.arguments = [
+                self._qualify_sort_identifiers(a, alias)
+                for a in (expr.arguments or [])
+            ]
             return expr
 
         if isinstance(expr, Property):
@@ -1761,6 +1847,24 @@ class ListsMixin:
         if not name:
             return None
         return name.split(".")[-1]
+
+    def _profile_base_resource_type(self, type_name: Optional[str]) -> Optional[str]:
+        """Resolve a profile type name to its base FHIR resource type.
+
+        Uses the profile registry's named_profiles (name -> base_type), e.g.
+        "ConditionEncounterDiagnosis" -> "Condition". Returns None when the
+        name is not a known profile (plain resource names have no registry
+        entry and are handled by the caller).
+        """
+        if not type_name:
+            return None
+        registry = getattr(self.context, "profile_registry", None)
+        if registry is None:
+            return None
+        info = getattr(registry, "_named_profiles", {}).get(type_name)
+        if isinstance(info, dict):
+            return info.get("base_type")
+        return None
 
     def _resource_type_from_cql_type(self, cql_type: Optional[str]) -> Optional[str]:
         """Extract a concrete list element/resource type from a CQL type hint."""
@@ -1967,6 +2071,25 @@ class ListsMixin:
             )
             if left_type and right_type and left_type == right_type:
                 return left_type
+            if left_type and right_type:
+                # Different profile types over the same base resource are
+                # common in 2025 US Core content (e.g. a union of
+                # ConditionProblemsHealthConcerns and ConditionEncounterDiagnosis
+                # retrieves). Resolve both sides to their profile BASE type
+                # and use it when they agree — otherwise fluent overload
+                # resolution on the union alias gets no type and falls back
+                # to a stale ambient context type, inlining the WRONG
+                # overload body (CMS144 "Has Diagnosis of Allergy..." inlined
+                # the Observation overload's `.effective` chain on a
+                # Condition union and emptied the define for every patient).
+                # Normalize each side to its profile BASE (plain resource
+                # names pass through unchanged) so nested unions — inner
+                # pair already resolved to the base, outer operand still a
+                # profile name — compare equal.
+                left_base = self._profile_base_resource_type(left_type) or left_type
+                right_base = self._profile_base_resource_type(right_type) or right_type
+                if left_base == right_base:
+                    return left_base
             return None
 
         if isinstance(expr, Query):

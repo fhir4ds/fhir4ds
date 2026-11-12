@@ -8,6 +8,10 @@ project(${TARGET_NAME})
 
 include_directories(src/include src)
 
+# Shared compile-time shims so ONE source tree builds every bundled DuckDB ABI
+# (1.5.5 / 1.5.6 / 2.0.0). See extensions/common/duckdb_compat.hpp.
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../common)
+
 set(EXTENSION_SOURCES
     src/fhirpath_extension.cpp
     src/fhirpath/lexer.cpp

@@ -694,7 +694,7 @@ class CQLParser:
                         right = self.parse_type_expression()
                         left = BinaryExpression(operator=f"after {precision} of", left=left, right=right)
                     else:
-                        right = self.parse_type_expression()
+                        right = self._parse_boundary_qualified_operand()
                         left = BinaryExpression(operator="after", left=left, right=right)
             elif self.match_and_advance(TokenType.BEFORE):
                 # Handle "before or on" = "on or before"
@@ -712,7 +712,7 @@ class CQLParser:
                         right = self.parse_type_expression()
                         left = BinaryExpression(operator=f"before {precision} of", left=left, right=right)
                     else:
-                        right = self.parse_type_expression()
+                        right = self._parse_boundary_qualified_operand()
                         left = BinaryExpression(operator="before", left=left, right=right)
             elif self.match_and_advance(TokenType.DURING):
                 right = self.parse_type_expression()
@@ -1220,6 +1220,16 @@ class CQLParser:
             operand = self.parse_unary_expression()
             # Expect 'to' keyword
             self.expect(TokenType.TO, "Expected 'to' after convert expression")
+            if self.match(TokenType.STRING):
+                # Convert-to-Quantity-unit: `convert X to 'm2'` (quoted UCUM
+                # unit target; used by the us-cql-ig shared libraries).
+                # Lowered to quantityConvert by the translator.
+                unit = self.advance().value
+                return BinaryExpression(
+                    operator="convert",
+                    left=operand,
+                    right=Literal(value=unit, type="String"),
+                )
             target_type = self.parse_type_specifier()
             return BinaryExpression(operator="convert", left=operand, right=target_type)
 
@@ -1293,6 +1303,24 @@ class CQLParser:
 
         while True:
             if self.match_and_advance(TokenType.DOT):
+                if self.match(TokenType.WHERE):
+                    # FHIRPath-style dot-where filter: X.where(criteria).
+                    # 'where' is a cql.g4 keywordIdentifier, so the reference
+                    # translator accepts this qualified-invocation form (used
+                    # by the us-cql-ig shared libraries). It lowers to a
+                    # single-source query whose where-clause sees the source
+                    # as the implicit focus (FHIRPath $this semantics): bare
+                    # property references inside the criteria resolve against
+                    # the single query source, like any CQL where clause.
+                    self.advance()
+                    self.expect(TokenType.LPAREN, "Expected '(' after '.where'")
+                    criteria = self.parse_expression()
+                    self.expect(TokenType.RPAREN, "Expected ')' after .where criteria")
+                    expr = Query(
+                        source=QuerySource(alias="$this", expression=expr),
+                        where=WhereClause(expression=criteria),
+                    )
+                    continue
                 name = self._parse_identifier_name()
 
                 # Check if this is a method call (followed by parentheses)
@@ -1928,10 +1956,19 @@ class CQLParser:
         # Parse the resource type
         resource_type = self._parse_identifier_name()
         # Handle model-qualified retrieve type: QICore.Procedure, FHIR.Claim, etc.
-        # Discard the model qualifier and keep only the local type name.
+        # Discard the model qualifier for the local type name but PRESERVE it on
+        # the AST node so profiled-model retrieves can resolve through the
+        # named-profile registry (translator-side).
+        model_qualifier = None
         if self.match(TokenType.DOT):
+            model_qualifier = resource_type
             self.advance()  # consume DOT
             resource_type = self._parse_identifier_name()
+        # Quoted model-qualified retrieves keep the prefix embedded in one
+        # identifier (["USCore.BMIProfile"]) — strip it the same way.
+        if "." in resource_type:
+            model_qualifier = model_qualifier or resource_type.split(".", 1)[0]
+            resource_type = resource_type.split(".", 1)[1]
 
         terminology = None
         terminology_property = None
@@ -1952,7 +1989,7 @@ class CQLParser:
             terminology = self.parse_expression()
 
         self.expect(TokenType.RBRACKET, "Expected ']'")
-        return Retrieve(type=resource_type, terminology=terminology, terminology_property=terminology_property, navigation_path=navigation_path)
+        return Retrieve(type=resource_type, terminology=terminology, terminology_property=terminology_property, navigation_path=navigation_path, model=model_qualifier)
 
     def parse_tuple_expression(self) -> TupleExpression:
         """Parse a tuple literal expression."""
@@ -2049,6 +2086,23 @@ class CQLParser:
         self.expect(TokenType.AND, "Expected 'and'")
         right = self.parse_implies_expression()
 
+        # Same trailing-`in`-Interval restructure as _parse_difference_between.
+        from .ast_nodes import Interval as _CqlInterval
+        if (
+            isinstance(right, BinaryExpression)
+            and right.operator == "in"
+            and isinstance(right.right, _CqlInterval)
+        ):
+            return BinaryExpression(
+                operator="in",
+                left=DurationBetween(
+                    precision=precision,
+                    operand_left=left,
+                    operand_right=right.left,
+                ),
+                right=right.right,
+            )
+
         return DurationBetween(precision=precision, operand_left=left, operand_right=right)
 
     def _parse_difference_between(self) -> DifferenceBetween:
@@ -2063,6 +2117,27 @@ class CQLParser:
         left = self.parse_equality_expression()
         self.expect(TokenType.AND, "Expected 'and'")
         right = self.parse_implies_expression()
+
+        # CMS2025 (CMS771): `difference in months between A and B in Interval[6, 12]`
+        # — the official content means (difference) in Interval; the loose
+        # right-operand parse absorbs the trailing `in` clause into B.
+        # Restructure when the right operand is exactly a membership `in`
+        # over an Interval literal.
+        from .ast_nodes import Interval as _CqlInterval
+        if (
+            isinstance(right, BinaryExpression)
+            and right.operator == "in"
+            and isinstance(right.right, _CqlInterval)
+        ):
+            return BinaryExpression(
+                operator="in",
+                left=DifferenceBetween(
+                    precision=precision,
+                    operand_left=left,
+                    operand_right=right.left,
+                ),
+                right=right.right,
+            )
 
         return DifferenceBetween(precision=precision, operand_left=left, operand_right=right)
 
@@ -2446,6 +2521,20 @@ class CQLParser:
         self.expect(TokenType.RPAREN, "Expected ')'")
         return AggregateExpression(source=source, operator=operator, initializer=initializer)
 
+    def _parse_boundary_qualified_operand(self) -> Expression:
+        """Parse a before/after right operand with an optional start/end
+        boundary qualifier: ``A before end B`` ≡ ``A before end of B``
+        (CQL 1.5 intervalOperatorPhrase allows the bare qualifier without
+        the ``of``)."""
+        if self.match(TokenType.START, TokenType.END):
+            qualifier = self.advance().value.lower()
+            if self.match_and_advance(TokenType.OF):
+                operand = self.parse_type_expression()
+            else:
+                operand = self.parse_type_expression()
+            return UnaryExpression(operator=f"{qualifier} of", operand=operand)
+        return self.parse_type_expression()
+
     def _parse_temporal_expression(self) -> Expression:
         """Parse a temporal expression."""
         token = self.advance()
@@ -2597,13 +2686,26 @@ class CQLParser:
             return distinct <expr>
         """
         self.expect(TokenType.RETURN, "Expected 'return'")
-        distinct = False
+        # CQL 1.5 §Query: `return` eliminates duplicate results; `return all`
+        # keeps them (`return distinct` is the redundant explicit form).
+        # The translator honours the flag ONLY at a definition root, where the
+        # query materialises into a CTE; applying it to nested/inlined query
+        # selects leaks DISTINCT into scalar property extractions
+        # (`intervalStart((SELECT DISTINCT …))`) and breaks CMS56's
+        # `with … such that` correlation.
+        distinct = True
+        explicit_distinct = False
         if self.match_and_advance(TokenType.DISTINCT, TokenType.DISTINCT_FN):
+            explicit_distinct = True
             distinct = True
         elif self.match_and_advance(TokenType.ALL):
             distinct = False  # explicit 'all' means no distinct
         expression = self.parse_expression()
-        return ReturnClause(expression=expression, distinct=distinct)
+        return ReturnClause(
+            expression=expression,
+            distinct=distinct,
+            explicit_distinct=explicit_distinct,
+        )
 
     def parse_sort_clause(self) -> SortClause:
         """Parse a sort clause.
@@ -2911,7 +3013,10 @@ class CQLParser:
             # `(@2024-01-01T12:00:00+02:00).timezoneOffset`.
             return self.advance().value
         elif self.match(TokenType.PATIENT, TokenType.PRACTITIONER, TokenType.ORGANIZATION,
-                        TokenType.LOCATION, TokenType.RESOURCE, TokenType.BUNDLE):
+                        TokenType.LOCATION, TokenType.RESOURCE, TokenType.BUNDLE,
+                        # 'context' is a cql.g4 keywordIdentifier (usable as a
+                        # property name: MedAdministrations.context).
+                        TokenType.CONTEXT):
             return self.advance().value
         elif self.match(TokenType.BOOLEAN, TokenType.INTEGER_TYPE, TokenType.LONG_TYPE, TokenType.DECIMAL_TYPE,
                         TokenType.STRING_TYPE, TokenType.DATE_TYPE, TokenType.DATETIME_TYPE,

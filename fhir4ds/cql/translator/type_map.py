@@ -807,6 +807,24 @@ class TypeMapBuilder:
             scope = dict(alias_sources)
             scope.update(let_aliases)
             element_type = self.type_of_scoped(rc_expr, scope)
+            # us-cql-ig singular-query semantics: a query over a SINGULAR
+            # source (e.g. Last(...) / First(...) / singleton from — element
+            # cardinality 0..1) yields a singular return, not a list. CMS
+            # 2025 content relies on this (`Last(...) X return X.value <= 6`
+            # consumed bare by `and` is Boolean, not List<Boolean>).
+            sources = self._query_sources(query)
+            if (
+                len(sources) == 1
+                and isinstance(sources[0], N.QuerySource)
+            ):
+                source_type = self.type_of(sources[0].expression)
+                # Only apply the singular rule when the source type is KNOWN
+                # and non-list. Unknown/Any-typed sources (dynamic FHIR
+                # properties, untyped aliases) may well be lists — treating
+                # them as singular silently mistypes the query (review
+                # HIGH-3).
+                if source_type.bare_name not in ("List", "Any"):
+                    return element_type
             if element_type.bare_name != "Any":
                 return CQLTypeRef("List", args=(element_type,))
             return CQLTypeRef("List", args=(ANY_TYPE,))
@@ -1538,6 +1556,23 @@ def infer_cql_type_compat(context: Any, ast_node: Any) -> str:
                 return f"List<{property_return_type}>"
             return_type = infer_cql_type_compat(context, rc_expr)
             if return_type != "Any":
+                # us-cql-ig singular-query semantics: a query over a
+                # SINGULAR source (element cardinality 0..1 — e.g.
+                # Last(...) / First(...) / singleton from) yields a
+                # singular return, not a List. CMS 2025 content relies on
+                # this (`Last(...) X return X.value <= 6` consumed bare by
+                # `and` is Boolean, not List<Boolean>).
+                _sources = ast_node.source if isinstance(ast_node.source, list) else [ast_node.source]
+                if len(_sources) == 1 and isinstance(_sources[0], QuerySource):
+                    _src_type = infer_cql_type_compat(context, _sources[0].expression)
+                    # Only apply the singular rule when the source type is
+                    # KNOWN and non-list — Any-typed sources may be lists
+                    # (review HIGH-3).
+                    if (
+                        _src_type != "Any"
+                        and not _src_type.startswith("List<")
+                    ):
+                        return return_type
                 return f"List<{return_type}>"
         # No return clause: type is same as source
         src = ast_node.source

@@ -627,6 +627,26 @@ class PropertyMixin:
                         source_sql, path, boolean_context
                     )
                 return self._make_fhirpath_call(source_sql, path, boolean_context)
+            elif isinstance(source_sql, RetrievePlaceholder):
+                # Fluent receiver bound to a bare retrieve
+                # (``([MedicationRequest: "VS"]).isMedicationOrder()`` —
+                # CMS136). The placeholder is rows-shaped and resolves to a
+                # retrieve CTE; inside a query scope the receiver is already
+                # aliased (e.g. ``AtomoxetineMed``), so navigate that alias
+                # — mirroring the SQLSelect branch above.
+                if self.context.resource_alias:
+                    resource_col = SQLQualifiedIdentifier(
+                        parts=[self.context.resource_alias, "resource"]
+                    )
+                else:
+                    from ...errors import TranslationError as _TE
+                    raise _TE(
+                        message=(
+                            f"Property '{path}' on an un-aliased retrieve-typed "
+                            f"function parameter; bind the fluent call result "
+                            f"to a query alias (e.g. '(...) X return X.{path}')"
+                        )
+                    )
             elif isinstance(source_sql, (SQLSelect, SQLSubquery, SQLUnion, SQLIntersect, SQLExcept)):
                 # The parameter resolved to a full query expression, but we
                 # are inside a query scope where the source is already aliased
@@ -1157,6 +1177,7 @@ class PropertyMixin:
         # single JSON resource value.
         source_sql = self._narrow_to_resource_column(source_sql)
 
+
         # Flatten nested fhirpath calls: fhirpath_X(fhirpath_text(res, 'a'), 'b')
         # → fhirpath_X(res, 'a.b').  fhirpath_text extracts a sub-object as text;
         # chaining another fhirpath on that text is fragile (the UDF may receive a
@@ -1172,6 +1193,32 @@ class PropertyMixin:
         # fhirpath_text cannot evaluate on non-FHIR JSON, so use
         # json_extract_string instead.
         if self._is_tuple_json_source(source_sql):
+            # List-valued tuple fields (e.g. USCoreCommon race().detailed —
+            # `detailed: (E.exts('detailed')) d return d.value as FHIR.Coding`)
+            # serialize into the tuple JSON as a JSON ARRAY. json_extract_string
+            # returns that array as one VARCHAR, so list consumers (union with a
+            # list literal — SDE `codes: { E.ombCategory } union E.detailed`)
+            # mix VARCHAR[] and VARCHAR arms and DuckDB binder-fails
+            # (CMS1154). When the serialized field value is list-shaped,
+            # parse it back to a DuckDB list.
+            if self._tuple_json_field_is_list(source_sql, path):
+                from ..types import SQLArray as _TupArr
+                return SQLFunctionCall(
+                    name="COALESCE",
+                    args=[
+                        SQLFunctionCall(
+                            name="from_json",
+                            args=[
+                                SQLFunctionCall(
+                                    name="json_extract_string",
+                                    args=[source_sql, SQLLiteral(value=f"$.{path}")],
+                                ),
+                                SQLLiteral(value='["VARCHAR"]'),
+                            ],
+                        ),
+                        _TupArr(elements=[]),
+                    ],
+                )
             return SQLFunctionCall(
                 name="json_extract_string",
                 args=[source_sql, SQLLiteral(value=f"$.{path}")],
@@ -1327,6 +1374,33 @@ class PropertyMixin:
             )
 
         return SQLFunctionCall(name="COALESCE", args=coalesce_args)
+
+    @staticmethod
+    def _tuple_json_field_is_list(sql: SQLExpression, field_name: str) -> bool:
+        """Whether a tuple-JSON expression's serialized value for *field_name*
+        is list-shaped (list_transform / Distinct / jsonConcat / list subquery).
+
+        Used to decide whether property access on the tuple field must parse
+        the extracted JSON array back into a DuckDB list.
+        """
+        from ..types import SQLFunctionCall as _FC, SQLLiteral as _Lit, SQLSubquery as _Sub, SQLSelect as _Sel
+
+        inner = None
+        if isinstance(sql, _FC) and sql.name == "json_object":
+            inner = sql
+        elif isinstance(sql, _Sub) and isinstance(sql.query, _Sel):
+            col = sql.query.columns[0] if sql.query.columns else None
+            if getattr(col, "expr", None) is not None and isinstance(col.expr, _FC) and col.expr.name == "json_object":
+                inner = col.expr
+        if inner is None:
+            return False
+        args = inner.args or []
+        for i in range(0, len(args) - 1, 2):
+            key = args[i]
+            if isinstance(key, _Lit) and key.value == field_name:
+                from ._utils import _is_list_returning_sql
+                return _is_list_returning_sql(args[i + 1])
+        return False
 
     @staticmethod
     def _is_tuple_json_source(sql: SQLExpression) -> bool:

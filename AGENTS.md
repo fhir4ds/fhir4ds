@@ -339,7 +339,7 @@ remain in effect. Post-remediation status (2026-Q2):
   `_operators.py` static guard; null/Any/dynamic operands pass through to
   runtime null semantics. Validation harness trap: probe scripts under
   `.temp/` run with sys.path[0]=script dir, so `fhir4ds` resolves from
-  site-packages — always validate with `PYTHONPATH=/mnt/d/fhir4ds`.
+  site-packages — always validate with `PYTHONPATH=~/src/fhir4ds`.
   CQL-09 SKEPTIC doctrine (2026-08-21): composite EQUALITY must preserve
   uncertainty — `{1, null} = {1, 2}` is null (null-null list elements are
   equal, one-sided null elements are uncertain), and interval equality via
@@ -1570,7 +1570,7 @@ spec-grounded against FHIRPath 2018Sep §9-§12.
 ### FHIRPath §9-§12 — FP-20 HISTORIAN launch (2026-08-18, spec-compliance campaign)
 
 **Second personality on §9–§12 (120+ fresh dual-path probe cases in
-`/mnt/d/fhir4ds/.temp/qa/fp20_historian{2,3,4}_probe.py`): 1 MEDIUM fix,
+`~/src/fhir4ds/.temp/qa/fp20_historian{2,3,4}_probe.py`): 1 MEDIUM fix,
 0 parity diffs after fix.** Spec grounding: fetched 2018Sep spec text for
 trace()/type()/logical-operator/division semantics and the official
 2018Sep `FHIRPath.g4` (compared against repo grammar).
@@ -1613,7 +1613,7 @@ trace()/type()/logical-operator/division semantics and the official
 **Third personality on §9–§12: ZERO findings; chunk CLOSED CLEAN after three
 consecutive clean launches (SKEPTIC, HISTORIAN, EXPLORER).** 131 fresh
 dual-path (native extension vs forced Python fallback) probe cases in
-`/mnt/d/fhir4ds/.temp/qa/fp20_explorer2_2026_08_19/` — 0 parity diffs,
+`~/src/fhir4ds/.temp/qa/fp20_explorer2_2026_08_19/` — 0 parity diffs,
 0 spec violations.
 
 - VERIFIED CLEAN: %context/%rootResource original-node invariant under
@@ -2146,7 +2146,7 @@ quantity abbreviated-UCUM/fractional/negative spellings.
 ### FHIRPath FP-04 SKEPTIC §5.2 filtering/projection audit (2026-08-17, spec-compliance campaign)
 
 First personality on §5.2 where/select/repeat/ofType (105 dual-path probe
-cases in `/mnt/d/fhir4ds/.temp/qa/fp04_skeptic_2026_08_17/`). where/select/
+cases in `~/src/fhir4ds/.temp/qa/fp04_skeptic_2026_08_17/`). where/select/
 repeat semantics (strict singleton-boolean criteria, select flattening,
 repeat `=`-dedup fixpoint incl. quantity-aware `1 'cm'`/`10 'mm'` → 1) are
 parity-correct and spec-correct.
@@ -2177,7 +2177,7 @@ parity-correct and spec-correct.
 ### FHIRPath FP-04 EXPLORER §5.2 audit (2026-08-17, spec-compliance campaign)
 
 Third personality on §5.2 closed the FP-04 chunk: 62 dual-path
-evaluations (probe at `/mnt/d/fhir4ds/.temp/qa/fp04_explorer3_probe.py`),
+evaluations (probe at `~/src/fhir4ds/.temp/qa/fp04_explorer3_probe.py`),
 ZERO parity diffs, ZERO spec violations, conformance 2832/2832 held, no
 code changes. Final chunk tally: SKEPTIC 1 fix + 1 LOW INTENDED,
 HISTORIAN clean, EXPLORER clean.
@@ -2214,7 +2214,7 @@ HISTORIAN clean, EXPLORER clean.
 ### FHIRPath FP-04 HISTORIAN §5.2 audit (2026-08-17, spec-compliance campaign)
 
 Second personality on §5.2 where/select/repeat/ofType (79 fresh dual-path
-probe cases in `/mnt/d/fhir4ds/.temp/qa/fp04_historian_2026_08_17/`):
+probe cases in `~/src/fhir4ds/.temp/qa/fp04_historian_2026_08_17/`):
 ZERO parity diffs, ZERO new spec violations; no code changes; conformance
 2832/2832 held. The SKEPTIC structural-type fix was re-verified
 spec-correct and regression-free on 12 edge cases.
@@ -2248,7 +2248,7 @@ spec-correct and regression-free on 12 edge cases.
 
 Fresh v1.1-campaign audit of §5.1 Existence (141 dual-path probe cases + 25-case
 blast-radius battery + 2 focused batteries in
-`/mnt/d/fhir4ds/.temp/qa/fp03_skeptic_2026_08_16/`). Verified clean: the full
+`~/src/fhir4ds/.temp/qa/fp03_skeptic_2026_08_16/`). Verified clean: the full
 allTrue/anyTrue/allFalse/anyFalse truth tables incl. non-Boolean error paths
 and all four empty-input corners; all/exists criteria singleton doctrine,
 vacuous all() on empty input, $index exposure and scope restoration;
@@ -2300,12 +2300,12 @@ conformance 2832/2832 held):
   `fhir4ds/fhirpath/duckdb/extensions/` and site-packages.
 
 ENVIRONMENT REMINDER (repeat): run dual-path probes with
-`PYTHONPATH=/mnt/d/fhir4ds` or imports resolve from stale site-packages.
+`PYTHONPATH=~/src/fhir4ds` or imports resolve from stale site-packages.
 
 ### FHIRPath FP-03 EXPLORER existence audit (2026-08-17, spec-compliance campaign)
 
 Third personality on §5.1 Existence (150 fresh dual-path probe cases in
-`/mnt/d/fhir4ds/.temp/qa/fp03_explorer_2026_08_17/`): ZERO parity diffs,
+`~/src/fhir4ds/.temp/qa/fp03_explorer_2026_08_17/`): ZERO parity diffs,
 ZERO new spec violations; no code changes; conformance 2832/2832 held.
 
 - Adversarial chaining battery: §5.1 outputs feeding `not()`, `and`/`or`
@@ -2335,7 +2335,7 @@ ZERO new spec violations; no code changes; conformance 2832/2832 held.
 ### FHIRPath FP-03 HISTORIAN existence audit (2026-08-17, spec-compliance campaign)
 
 Second personality on §5.1 Existence (141 fresh dual-path probe cases in
-`/mnt/d/fhir4ds/.temp/qa/fp03_historian_2026_08_17/`): ZERO parity diffs,
+`~/src/fhir4ds/.temp/qa/fp03_historian_2026_08_17/`): ZERO parity diffs,
 ZERO new spec violations; no code changes; conformance 2832/2832 held.
 
 - Both SKEPTIC fixes re-verified spec-correct and regression-free (8
@@ -2481,7 +2481,7 @@ mismatch), `23 = 23 '1'` → true, continuous-build-only divergences documented
 resolves `import fhir4ds` from the STALE site-packages copy (script dir is
 sys.path[0], not the cwd) while the native extension there is current —
 producing phantom "fallback lost the fix" parity failures. Always run
-dual-path probes with `PYTHONPATH=/mnt/d/fhir4ds`.
+dual-path probes with `PYTHONPATH=~/src/fhir4ds`.
 
 ### FHIRPath FP-02 EXPLORER operator audit (2026-08-16, spec-compliance campaign)
 
@@ -2570,7 +2570,7 @@ spec-mandated empty-collection semantics, multi-item needle rejection,
 and equality-based dedup/membership. No source changes, no new
 regression tests (surface already spec-compliant), no native C++
 rebuild. Full conformance 2822/2822 unchanged. Probes:
-`/mnt/d/fhir4ds/.temp/qa/fp16_skeptic_2026_06_29/probe{,2,3,4,5}.py`.
+`~/src/fhir4ds/.temp/qa/fp16_skeptic_2026_06_29/probe{,2,3,4,5}.py`.
 
 ### FHIRPath Subsetting Integer Arguments and `intersect()` Equality
 
@@ -2611,7 +2611,7 @@ masquerade as engine exceptions — re-verify flagged cases with a direct
 
 **FP-05 spec-compliance EXPLORER confirmation (2026-08-17): clean; chunk
 closed.** Third personality on §5.3/§5.4 (144 fresh dual-path adversarial
-chaining cases in `/mnt/d/fhir4ds/.temp/qa/fp05_explorer_2026_08_17/`):
+chaining cases in `~/src/fhir4ds/.temp/qa/fp05_explorer_2026_08_17/`):
 zero parity diffs, zero spec violations; conformance 2832/2832 held; no
 code changes. Doctrine pin (do not "fix"): `tail()` is ZERO-ARG (§5.3.4,
 "equivalent to skip(1)") — `tail(n)` is wrong ARITY and correctly yields
@@ -2646,7 +2646,7 @@ the spec grammar before filing.
 ### FP-06 spec-compliance SKEPTIC rerun doctrine pins (2026-08-17)
 
 Fresh §5.5.1–§5.5.3 dual-path audit (209 cases, probe
-`/mnt/d/fhir4ds/.temp/qa/fp06_skeptic_2026_08_17/`): zero parity diffs, zero
+`~/src/fhir4ds/.temp/qa/fp06_skeptic_2026_08_17/`): zero parity diffs, zero
 spec violations, conformance 2832/2832, no code changes. Two NOT A BUG pins:
 
 - `convertsToInteger('2147483648')` → **false** in BOTH engines (QA-001, LOW
@@ -2664,7 +2664,7 @@ spec violations, conformance 2832/2832, no code changes. Two NOT A BUG pins:
 ### FP-06 HISTORIAN rerun fixes (2026-08-17)
 
 Second personality on §5.5.1–§5.5.3 (123 fresh dual-path cases, probe
-`/mnt/d/fhir4ds/.temp/qa/fp06_historian_2026_08_17/`): three fallback-only
+`~/src/fhir4ds/.temp/qa/fp06_historian_2026_08_17/`): three fallback-only
 parity fixes, all Python-side (native already correct; extension NOT rebuilt).
 
 - **Python `re` `$` end-anchor matches before a single trailing newline**
@@ -2703,7 +2703,7 @@ parity fixes, all Python-side (native already correct; extension NOT rebuilt).
 ### FP-06 EXPLORER rerun fix (2026-08-17)
 
 Third personality on §5.5.1–§5.5.3 (100 dual-path adversarial chaining
-cases, probe `/mnt/d/fhir4ds/.temp/qa/fp06_explorer3_2026_08_17/`):
+cases, probe `~/src/fhir4ds/.temp/qa/fp06_explorer3_2026_08_17/`):
 
 - **Fallback `iif_macro` hid criterion-defined defineVariable variables
   (QA-001, MEDIUM, FIXED)**: the FP-06 HISTORIAN fix snapshot/restored
@@ -2734,7 +2734,7 @@ cases, probe `/mnt/d/fhir4ds/.temp/qa/fp06_explorer3_2026_08_17/`):
 ### FP-07 spec-compliance SKEPTIC audit (2026-08-17): §5.5.4/§5.5.5/§5.5.6
 
 Fresh dual-path audit of Date/DateTime/Decimal conversion (129 cases, probe
-`/mnt/d/fhir4ds/.temp/qa/fp07_skeptic_2026_08_17/probe.py`, live N1 spec +
+`~/src/fhir4ds/.temp/qa/fp07_skeptic_2026_08_17/probe.py`, live N1 spec +
 official R4 fixtures). One fix (QA-003, MEDIUM): the third `$`-anchor
 sibling `longDecimalStringRegex` (misc.py) matched `'5L\n'`, and the
 fallback `to_decimal` then raised an unhandled `decimal.ConversionSyntax`
@@ -2771,7 +2771,7 @@ shared-convention pins (LOW INTENDED, both engines agree, no fixture pins):
 ### FP-07 HISTORIAN confirmation (2026-08-17): §5.5.4–§5.5.6 clean; chunk closed
 
 Second personality on Date/DateTime/Decimal conversion (107 fresh dual-path
-cases, probe `/mnt/d/fhir4ds/.temp/qa/fp07_historian_2026_08_17/probe.py`):
+cases, probe `~/src/fhir4ds/.temp/qa/fp07_historian_2026_08_17/probe.py`):
 zero parity diffs, zero spec violations, conformance 2832/2832 held, no code
 changes. The SKEPTIC `longDecimalStringRegex` `\Z` fix re-verified
 regression-free (`'5L\n'` → empty both engines; `'-5L'`/`'+5L'` ok;
@@ -2793,7 +2793,7 @@ consistent for wrong-type fmt args and arity forms.
 ### preserve authored `Z`
 
 Third personality on §5.5.4–§5.5.6 (123 fresh dual-path cases, probe
-`/mnt/d/fhir4ds/.temp/qa/fp07_explorer3_2026_08_17/probe{,2}.py`): converted
+`~/src/fhir4ds/.temp/qa/fp07_explorer3_2026_08_17/probe{,2}.py`): converted
 temporals as ± operands (both orders), convertsTo* feeding iif/where/select,
 roundtrip precision/offset losslessness, toDecimal at the 28-sig-digit
 ROUND_HALF_EVEN boundary × FP-01 exact arithmetic (all clean —
@@ -2869,7 +2869,7 @@ indexOf expectations as `['1']`, not `[1]`.
 **FP-09 spec-compliance EXPLORER confirmation (2026-08-17): §5.6.1-§5.6.5
 clean; chunk closed.** Third personality on string search (82 fresh
 dual-path adversarial chaining checks + 10 is_valid checks in
-`/mnt/d/fhir4ds/.temp/qa/fp09_explorer3_2026_08_17/probe.py`): zero parity
+`~/src/fhir4ds/.temp/qa/fp09_explorer3_2026_08_17/probe.py`): zero parity
 diffs, zero spec violations, conformance 2832/2832 held, no code changes.
 Verified-clean seams (do not "fix"): indexOf feeding substring (incl.
 indexOf→-1 → `{}`), substring→endsWith composition, startsWith|endsWith
@@ -3419,7 +3419,7 @@ RESOLVED, extension rebuilt + redeployed, conformance 2832/2832 held):
 ### FHIRPath FP-08 HISTORIAN §5.5.7-§5.5.9 audit (2026-08-17, spec-compliance campaign)
 
 Second personality on Quantity/String/Time conversion (117 fresh
-dual-path probes, /mnt/d/fhir4ds/.temp/qa/fp08_historian_2026_08_17/).
+dual-path probes, ~/src/fhir4ds/.temp/qa/fp08_historian_2026_08_17/).
 All 3 SKEPTIC fixes re-verified spec-correct and regression-free (duration
 table incl. plurals/roundtrips, 28-sig-digit rendering on fresh variants,
 T-prefixed partial toTime forms). Two MEDIUM fixes, both Python-side
@@ -3461,7 +3461,7 @@ T-prefixed partial toTime forms). Two MEDIUM fixes, both Python-side
 ### FHIRPath FP-08 EXPLORER §5.5.7-§5.5.9 audit (2026-08-17, spec-compliance campaign)
 
 Third personality on Quantity/String/Time conversion (95 fresh dual-path
-probe cases, /mnt/d/fhir4ds/.temp/qa/fp08_explorer3_2026_08_17/probe.py).
+probe cases, ~/src/fhir4ds/.temp/qa/fp08_explorer3_2026_08_17/probe.py).
 Both fixes verified, conformance 2832/2832 held, fhirpath tree 1745 passed:
 
 - **QA-001 (HIGH, FIXED): fallback `conv_unit_to` never converted
@@ -3504,7 +3504,7 @@ Both fixes verified, conformance 2832/2832 held, fhirpath tree 1745 passed:
 ### FHIRPath FP-10 spec-compliance SKEPTIC rerun (2026-08-17): §5.6.6-§5.6.12 string transform
 
 Fresh dual-path audit (82 + 31 probe cases + helper comparisons,
-/mnt/d/fhir4ds/.temp/qa/fp10_skeptic2_2026_08_17/). Verified clean: upper/lower
+~/src/fhir4ds/.temp/qa/fp10_skeptic2_2026_08_17/). Verified clean: upper/lower
 Unicode case mapping both engines (ß→SS, ς↔Σ, ﬃ→FFI, İ lower to i+U+0307,
 CJK/Deseret/Georgian/Armenian, prior-launch native tables intact); replace()
 literal all-instances semantics incl. metachar-as-literal, ''-pattern
@@ -3554,7 +3554,7 @@ RESOLVED; extension rebuilt + redeployed to repo bundle and ~/.duckdb caches):
 ### spec-compliant on BOTH engines
 
 Second personality on §5.6.6-§5.6.12 (107 fresh dual-path cases,
-/mnt/d/fhir4ds/.temp/qa/fp10_historian2_2026_08_17/probe.py). All 5 SKEPTIC
+~/src/fhir4ds/.temp/qa/fp10_historian2_2026_08_17/probe.py). All 5 SKEPTIC
 fixes re-verified intact. Two fixes, one pin; extension rebuilt + redeployed
 (repo bundle, user site-packages, ~/.duckdb caches v1.3.0/v1.5.2);
 conformance 2832/2832, fhirpath pytest tree 1774/1774.
@@ -3601,7 +3601,7 @@ conformance 2832/2832, fhirpath pytest tree 1774/1774.
 ### non-greedy; chunk closed
 
 Third personality on §5.6.6-§5.6.12 (69 dual-path cases + is_valid checks,
-/mnt/d/fhir4ds/.temp/qa/fp10_explorer3_2026_08_17/probe.py). One fix
+~/src/fhir4ds/.temp/qa/fp10_explorer3_2026_08_17/probe.py). One fix
 (QA-001, MEDIUM, RESOLVED); everything else parity-clean: locale-sensitive
 case mapping (Turkish ı/İ, Greek ς/Σ context-free, Cyrillic, fullwidth),
 toChars/length code-point semantics on astral/ZWJ/regional-indicator/
@@ -3712,7 +3712,7 @@ and STU3 functions.json — NOT the launch brief's hints):
 ### FHIRPath FP-11 HISTORIAN §5.7 math audit (2026-08-17, spec-compliance campaign)
 
 Second personality on §5.7 (81 fresh dual-path engine cases + direct-helper
-probe, `/mnt/d/fhir4ds/.temp/qa/fp11_historian2_2026_08_17/`): engine parity
+probe, `~/src/fhir4ds/.temp/qa/fp11_historian2_2026_08_17/`): engine parity
 clean except the pinned <=1 ULP transcendental drift; all 4 SKEPTIC fixes
 re-verified on both engines (Quantity operands, resource-driven math,
 iteration chaining, log-base guards all fresh angles).
@@ -3838,7 +3838,7 @@ fhirpath tree 1822, tree-utility parity 20/20.
 ### FHIRPath FP-12 EXPLORER fixes (2026-08-17): nested-path typing parity
 
 Third personality on §5.8/§5.9 (123 fresh dual-path cases,
-`/mnt/d/fhir4ds/.temp/qa/fp12_explorer3_2026_08_17/probe{,2,3}.py`). Chunk
+`~/src/fhir4ds/.temp/qa/fp12_explorer3_2026_08_17/probe{,2,3}.py`). Chunk
 closed (SKEPTIC 2, HISTORIAN 4, EXPLORER 2 fixes). Conformance 2832/2832,
 fhirpath tree 1824.
 
@@ -3879,7 +3879,7 @@ fhirpath tree 1824.
 ### FHIRPath FP-13 spec-compliance HISTORIAN launch (2026-08-17): §6.1 Equality
 
 Second personality on §6.1 (~180 fresh dual-path cases in
-`/mnt/d/fhir4ds/.temp/qa/fp13_historian_2026_08_17/`). One MEDIUM fixed:
+`~/src/fhir4ds/.temp/qa/fp13_historian_2026_08_17/`). One MEDIUM fixed:
 
 - **Fixed: string `~` whitespace class (QA-001, MEDIUM).** §6.1.2 String
   Equivalence normalizes whitespace "as defined in the Whitespace lexical
@@ -3961,7 +3961,7 @@ Second personality on §6.1 (~180 fresh dual-path cases in
 ### FHIRPath FP-13 EXPLORER §6.1 audit (2026-08-17, spec-compliance campaign)
 
 Third personality on §6.1 Equality (133 fresh dual-path probe cases in
-`/mnt/d/fhir4ds/.temp/qa/fp13_explorer3_2026_08_17/`). Two HIGH fixes, both
+`~/src/fhir4ds/.temp/qa/fp13_explorer3_2026_08_17/`). Two HIGH fixes, both
 native-only (fallback already correct; extension rebuilt + redeployed,
 md5 bfd0ac84…):
 
@@ -4013,7 +4013,7 @@ md5 bfd0ac84…):
 Fresh dual-path audit of < <= > >= (64 adversarial cases + the FULL official
 R4 fixture batch testLessThan/testLessOrEqual/testGreaterThan/
 testGreaterOrEqual, 81/81 correct in BOTH engines; probes in
-/mnt/d/fhir4ds/.temp/qa/fp14_skeptic_2026_08_18/). The ENGINE surfaces are
+~/src/fhir4ds/.temp/qa/fp14_skeptic_2026_08_18/). The ENGINE surfaces are
 §6.2-compliant: string ordering is Unicode code-point lexicographic (emoji
 U+1F600 > U+FFFD, not UTF-16 order), temporal ordering is offset-aware
 instant semantics when both operands carry offsets (Z = +00:00 = -00:00),
@@ -5325,14 +5325,14 @@ explorer tests in test_list_part2_parity.py (47/47); master gate fresh
 ## SOF-VD-06 HISTORIAN launch note (2026-08-23)
 - forEach chunk re-confirmed CLEAN (0 fixes; 2 LOW INTENDED). New pins vs SKEPTIC: column+forEach on the SAME select is the canonical spec form (SD forEach definition references "the corresponding column structure"); forEach works inside unionAll branches AND unionAll nests under a forEach select (per-focus cross join); column.constant is NOT a v2 Column field (rejected; constants are the top-level `constant` array, singular misspelling gets a helpful error); %parent is not a builtin (FHIRPATH_BUILTIN_VARIABLES = rowIndex/context/resource/rootResource/ucum) and is correctly rejected; forEach over mixed-type primitive collections and over explicitly-empty JSON array elements behaves per FHIRPath flatten semantics.
 - INTENDED: forEach+unionAll on the same select is accepted (no SD constraint forbids; sql-expressions only forbids forEach+forEachOrNull) — semantics spec-silent, output deterministic; nested lateral joins carry NO row-order guarantee (spec imposes none; never order-assert across unnest levels).
-- QA harness pitfalls that masqueraded as bugs (all bisected to probe bugs): harness norm() json.loads numeric strings ("11111" -> int); stray resource-shaped keys (e.g. `contained`) inside the VIEW dict are silently ignored by the parser — fixtures must live in the resource; nested-select column paths are focus-relative. Probes: /mnt/d/fhir4ds/.temp/qa/sof_vd06_historian/p1-p10.
+- QA harness pitfalls that masqueraded as bugs (all bisected to probe bugs): harness norm() json.loads numeric strings ("11111" -> int); stray resource-shaped keys (e.g. `contained`) inside the VIEW dict are silently ignored by the parser — fixtures must live in the resource; nested-select column paths are focus-relative. Probes: ~/src/fhir4ds/.temp/qa/sof_vd06_historian/p1-p10.
 - Gates fresh: viewdef pytest 1185, ViewDef conformance 144/144, run_all.py 2832/2832; fhirpath.duckdb_extension md5 57d0634b6ee6eddee9fc06a1355bef5a repo==site-packages (no rebuild).
 
 ## SOF-VD-06 EXPLORER launch note (2026-08-23)
 - forEach/forEachOrNull chunk third personality, chaos pass: CLEAN (0 fixes; 2 LOW INTENDED). Chunk triangulated across SKEPTIC/HISTORIAN/EXPLORER — closed.
 - New pins (native==fallback parity on all): heavy FHIRPath forEach targets are fine — exists()-gated iteration, `where().first()` targets, iif()-driven branch targets, filtered `extension.where(url=...)`, `contained.ofType(Observation)` fast path under iteration, BackboneElement chains at depth (`identifier.type.coding`). FHIRPath JSON-null array elements `[a,null,b]` are excluded from the collection, so iteration yields no row for null and `%rowIndex` counts the FILTERED collection (both iterators). A forEach/forEachOrNull expression that ERRORS at FHIRPath evaluation (e.g. type error inside a where) degrades uniformly to tolerant-empty: forEach -> 0 rows, forEachOrNull -> 1 null-preserved row (Process(S,N) defines no error semantics; identical on both engines — do not "fix" one iterator to raise). List-valued %constants are inexpressible per SD (constant value[x] are primitive singletons) — parser rejection of `valueCode: [..]` is correct; mandate items about iterating %constant lists are out of spec. `%rowIndex` composes with arithmetic and where clauses at depth 3-5; depth-5 nesting generates exactly one flat JOIN LATERAL per level, deterministic SQL. `$this = %context` is true per iterated focus at depth 2; `%rootResource` resolves from depth. Singleton boolean/count() foci yield one row.
 - Probe-harness note: multi-item input to a singleton string function (`name.given.substring(0,3)`) errors engine-side (FHIRPath singleton doctrine) — surfaces as empty under forEach, NOT a viewdef bug; use `.select(substring(..))` or `.first().substring(..)` for mapped semantics.
-- Probes: /mnt/d/fhir4ds/.temp/qa/sof_vd06_explorer/p1-p4 (p3 = forced-Python-fallback parity via duckdb.__version__ monkeypatch). Gates fresh: viewdef pytest 1185, ViewDef 144/144, run_all.py 2832/2832 FIRST PASS; fhirpath.duckdb_extension md5 57d0634b6ee6eddee9fc06a1355bef5a repo==site-packages (no rebuild).
+- Probes: ~/src/fhir4ds/.temp/qa/sof_vd06_explorer/p1-p4 (p3 = forced-Python-fallback parity via duckdb.__version__ monkeypatch). Gates fresh: viewdef pytest 1185, ViewDef 144/144, run_all.py 2832/2832 FIRST PASS; fhirpath.duckdb_extension md5 57d0634b6ee6eddee9fc06a1355bef5a repo==site-packages (no rebuild).
 
 ## SOF-VD-07 SKEPTIC launch note (2026-08-23)
 - select.repeat chunk: all 19 official repeat.json fixtures set-equal via official-runner adaptation; %rowIndex under repeat is a 0-based per-repeated-row counter (correct); repeat+where on same select filters repeated nodes; parser rejects repeat-as-string / empty array / repeat+forEach / repeat+forEachOrNull (SD constraint). Canonical SD ground truth (main branch XML): repeat 0..* string, "recursively follow each path to any depth ... combined using a union operation"; the RELEASED ig/2.0.0 SD snapshot has NO repeat element (repeat is main-branch + fixtures only).
@@ -5373,7 +5373,7 @@ explorer tests in test_list_part2_parity.py (47/47); master gate fresh
   work; file absent at HEAD db1e4164; native long div/mod parity only).
 - Gates fresh: fhirpath+viewdef pytest 1440 passed (6 pre-existing fails
   above); ViewDef conformance 144/144; run_all.py 2832/2832. Probes:
-  /mnt/d/fhir4ds/.temp/qa/probe.py.
+  ~/src/fhir4ds/.temp/qa/probe.py.
 
 ## SOF-VD-08 SKEPTIC launch note (2026-08-23)
 - select.unionAll chunk: 1 HIGH fixed, rest conformant. FIXED QA-001: `_generate_single_resource` (fhir4ds/viewdef/generator.py) suppressed forEachOrNull null-preserved rows across UNION ALL alternatives keyed by resolved PATH — an independent SIBLING select repeating the wrapper's forEachOrNull path lost its null row in non-first alternatives (2 rows -> 1; wrapper+same-path sibling 1 -> 0). Per Process(S,N) step 3 each selection structure emits its own null row; only wrapper copies replicated by `_expand_select_unions` share one. Fix: `_union_origin_id` instance marker on wrappers (survives copy.copy), `_collect_union_wrapper_ids` replaces path tracking. Regression: tests/unit/test_union.py::TestUnionAllForEachOrNullSuppression. Official union.json fixtures never place forEachOrNull as wrapper/sibling of unionAll — this class of bug is fixture-invisible; check the suppression scope whenever touching union expansion.
@@ -5802,6 +5802,42 @@ ledger). Durable doctrines:
 - **97-define Any backlog** (Property 48, Query 44, Binary 4, Identifier 1
   on DQM-47) is the known gap frontier for future type-map work.
 
+## Translator performance — function-CTE promotion is the dedup lever (2026-11-11, PERF-01)
+
+The whole `--suite qi-core` gate runtime was ONE measure: CMS0334 spent 640 s of the
+gate's ~700 s, and 624 s of that was a single define's CTE
+(`Delivery Encounter With Estimated Gestational Age ≥ 37 Weeks`, 1.66 MB) holding
+~1,670 copies of one `fhirpath_text(TimeOfDelivery.resource, '(value).type().name')`
+extraction. Root cause: `lastEstimatedGestationalAge` sat in
+`_FUNCTION_CTE_PROMOTION_DENYLIST`, so every call inlined its body, and each
+inlined body re-inlined `lastTimeOfDelivery`'s body instead of using that
+function's promoted CTE. Promotion reduces this to one evaluation per row.
+
+Re-enabling it needed three supporting fixes (all load-bearing):
+
+1. **Profile-agnostic placeholder fallback** (`placeholder.resolve_placeholders`).
+   Promotion CTE bodies are translated outside the measure's own retrieve scan,
+   so their placeholder key carries no `profile_url` and missed the
+   `(type, valueset, profile)` entry, falling back to a URL-shaped CTE name.
+   Match on `(type, valueset)` when it is unambiguous.
+2. **Provisional retrieve-name repair.** Query sources record a provisional
+   `"<Type>: <valueset>"` CTE name on the alias symbol; references that bypass
+   the `RetrievePlaceholder` (promotion bodies) emitted that string verbatim →
+   `Catalog Error: Table with name "Observation: http://cts.nlm…" does not exist`.
+   `resolve_placeholders` now rewrites quoted identifiers matching that shape.
+3. **Declared-return-type inference** (`_is_cql_quantity_expr`). A promoted
+   Quantity-returning function resolves to an opaque row-keyed VARCHAR lookup, so
+   body-based inference failed and the comparison took the dynamic-value path
+   `TRY_CAST(<Quantity JSON> AS DOUBLE) >= 37` → NULL → every patient dropped
+   (CMS0334 fell to 57.8%). Inference now consults `FunctionInfo.return_type`
+   first, including functions in included libraries (`context.includes[*].functions`).
+
+Result: CMS0334 640 s → ~19.5 s execution (33×), SQL 2.69 MB → 0.77 MB, accuracy
+unchanged at 135/135. DOCTRINE: when a function is promoted to a CTE, its RESULT
+TYPE must travel with the lookup — an opaque lookup silently defeats unit-aware
+comparison. And keep the denylist honest: re-enable entries once their stated
+blocker is fixed, otherwise the inline blow-up returns.
+
 ## Playwright-First Doctrine (standing rule, 2026-10-17)
 
 Every identified UI/UX issue in the web surfaces gets confirmed via
@@ -5861,7 +5897,10 @@ Known fragile areas — all FIXED in iterations 1-2, keep regression-tested:
 
 - **Each ABI variant must build from its matching source state**: 1.5.5
   plain bundles ← `3e753080fbd^` (pre-port) @ v1.5.5 submodules; 1.5.6
-  bundles ← HEAD @ v1.5.6; 2.0 bundles ← `3e753080fbd` @ v2.0.0. HEAD
+  bundles ← HEAD @ v1.5.6; 2.0 bundles ← `3e753080fbd` @ v2.0.0.
+  **SUPERSEDED 2026-11-12**: extensions/common/duckdb_compat.hpp lets ONE source
+  tree build all three ABIs, so no per-ABI source pin is needed — see "Bundled
+  extension ABI slots — one source tree, three ABIs". Historic: HEAD
   source does NOT compile against v2.0.0 (member-vs-accessor API split).
 - **The build tree can silently no-op**: artifacts newer than objects make
   `make fhirpath_loadable_extension` claim success while linking nothing;
@@ -5875,3 +5914,728 @@ Known fragile areas — all FIXED in iterations 1-2, keep regression-tested:
   failures observed).
 - A 1.5.6-vs-1.5.5 LOAD failure message naming the binary's build version
   is the fast tell that a wrong-ABI binary sits in a load path.
+
+## CMS 2025 US-Core accuracy campaign — claimDiagnosis / period / negation doctrine (2026-11-10)
+
+Durable findings from the cms2025 measure campaign (branch `feat/cms2025-uscore-suite`).
+
+- **`fhirpath()` returns `VARCHAR[]`; `fhirpath_text()` returns `VARCHAR`.** A
+  list-returning FHIRPath navigation therefore CANNOT be fed back into another
+  `fhirpath`/`fhirpath_text` call (the UDF takes one JSON document). Chained
+  list navigation must be re-serialised:
+  `COALESCE('[' || array_to_string(<VARCHAR[]>, ',') || ']', '[]')`.
+  Do NOT use `concat(...)` for this: on a registered connection `concat`
+  resolves to the CQL `Concat` macro (2-arg VARCHAR) and binder-fails.
+- **List operands need the SOURCE TRAIL promoted, not just the outer call.**
+  `CQMCommon.claimDiagnosis` is
+  `encounter E let claim: (...), claimItem: (claim.item I where ...) return
+  claim.diagnosis D where D.sequence in claimItem.diagnosisSequence`, which
+  lowers to
+  `fhirpath_text(CASE WHEN ... THEN fhirpath_text(claims,'item') ELSE NULL END,
+  'diagnosisSequence')`. Promoting only the outer call still truncates to the
+  FIRST claim's first item. `_promote_source_trail` in
+  `translator/expressions/_utils.py` rewrites trail steps whose source is a
+  JSON ARRAY of resources (`'[' || string_agg(...) || ']'` subquery) into the
+  array-text form above; scalar sources keep `fhirpath_text`. Gating on the
+  array source is required — promoting scalar trails regressed QI-Core CMS145
+  (`intervalStart(VARCHAR[])`/`fhirpath(VARCHAR[], …)` binder errors) and one
+  variant segfaulted the native extension.
+- **FHIR Period → Interval bound closedness is ASYMMETRIC in
+  `collapse_intervals`** (`duckdb/udf/interval.py::_period_dict_to_interval`):
+  a Period with only `end` (missing START = unknown start) becomes an OPEN
+  low null bound so `start of` is null and `Min/Max` ignore it (CMS645
+  `eeea0041`); a Period with only `start` (missing END = ongoing) KEEPS the
+  CLOSED null high bound so `end of` yields the point-type maximum and
+  `overlaps` is determined (QI-Core CMS145 active-beta-blocker intervals).
+  One-sided Periods must never be dropped as null elements.
+- **Negation-profile exclusion must be alternate-URL aware.**
+  `cte_builder.py` excluded only a negation profile's PRIMARY url, so
+  US-QUALITY-CORE-declared negations (`us-quality-core-servicenotrequested`,
+  `...medicationnotrequested`, `...procedurenotdone`, …) leaked into POSITIVE
+  base-type retrieves (CMS645 counted a doNotPerform DEXA order as an order;
+  CMS347 statin logic — defect I-34). `_named_profiles` entries carry
+  `alternate_urls`; both the negation detection and the exclusion predicate
+  must OR over primary + alternates.
+- **Open-null interval ends are UNKNOWN, not unbounded, in `overlaps <prec>`**
+  (`_operators.py::_translate_overlaps_op`). The former "interval invariant
+  entails end >= other.start" shortcut made a resolved condition with no
+  abatement (`prevalenceInterval` → `Interval[start, null)`) overlap the
+  measurement period and produced a false Denominator Exclusion (CMS347).
+  Closed-null bounds still yield the max sentinel from `intervalEnd`, so
+  genuinely unbounded intervals keep overlapping.
+- **`GROUP BY patient_id` must not be inferred from an aggregate nested inside
+  a subquery** (`cte_manager.py::_expr_contains_aggregate`). Counting a nested
+  subquery's aggregate made the enclosing select a mixed aggregate query while
+  its value expression still correlated to the source row → DuckDB "column
+  resource must appear in the GROUP BY clause" for every
+  `Encounter.claimDiagnosis()`-shaped define. Subqueries are not entered.
+- **Query-valued subqueries must be patient-correlated**
+  (`translator/correlate_counts.py`, called from `RetrieveOptimizer.optimize`;
+  it must also be reachable from the plain-translation slot). Nested subqueries
+  whose FROM is a patient-keyed CTE and which reference no outer alias get
+  `child.patient_id = outer.patient_id`; subqueries that already reference the
+  enclosing alias (e.g. claim lookups correlated through
+  `item.encounter.references(E)`) are left untouched — Claim rows key on
+  `patient`, so a second patient_id correlation would over-restrict them.
+  NOTE (2026-11-11): this module was once untracked in git while
+  `retrieve_optimizer.py` imported it unconditionally, so every clean checkout
+  raised `ModuleNotFoundError`. It is tracked now; `tests/test_packaging.py`
+  guards the whole class by failing on any untracked `.py` under `fhir4ds/`.
+
+### Set-operation grouping (CMS1028 false-positive exclusions, 2026-11-10)
+
+SQL `UNION`, `INTERSECT` and `EXCEPT` share ONE precedence level and are
+left-associative, so a NESTED set operation in a non-first operand MUST be
+parenthesized. The row-shaped lowering emitted CQL
+`A except (B union C union D)` as `A EXCEPT B UNION C UNION D`, which DuckDB
+evaluates as `((A except B) union C) union D` — re-adding every C/D member.
+That produced false-positive Denominator/Numerator Exclusions in CMS1028
+(patients whose only evidence was a ventilation procedure were excluded via
+the union arm of the `except`'s right side). Fix in
+`types.py::_render_set_operands`: `EXCEPT` FLATTENS union operands
+(`X except (Y union Z)` → `X EXCEPT Y EXCEPT Z`, because set difference
+distributes over union: `X \ (Y ∪ Z) = (X \ Y) \ Z`), and any remaining
+nested set operation in a non-first position is parenthesized (UNION with an
+EXCEPT operand, INTERSECT with a UNION operand). Flattening is preferred over
+parenthesizing the right operand: parentheses compile but defeat DuckDB's
+set-operation planning (CMS0334 622s → 670s when parenthesized; 356s flattened,
+matching the pre-fix profile). Audit rule: any new set-operation emitter must
+go through `_render_set_operands`.
+
+Note: `collapse_intervals` / `collapse_intervals_per` are in
+`_PYTHON_PREFERRED_CPP_CONFLICTS`, so the Python UDFs above are the desktop
+authority and carry the asymmetric one-sided Period semantics. The bundled C++
+`CollapseIntervals*` (used by the no-Python/WASM path) still treats a missing
+Period side as a closed null bound; port
+`_period_dict_to_interval` there before relying on one-sided Periods in WASM.
+
+### Inlined-function parameter names shadowed by CTE columns (CMS108/CMS190, 2026-11-10)
+
+`FHIRHelpers` declares every converter with a parameter literally named
+`value` (`define function ToDateTime(value instant): value.value`). When such a
+function is inlined, the body's `value.value` must bind `value` to the ARGUMENT
+expression. On a retrieve row whose CTE also has a precomputed column named
+`value` (every Observation CTE does), the parameter binding can lose: the
+emitted SQL becomes `fhirpath_text(value, 'value')` — a reference to the
+*column*, always NULL — instead of converting the argument. Symptom: any
+`X.issued.ToDateTime()` / `X.value.ToDateTime()` inside a tuple/JSON projection
+silently yields NULL while `X.issued` (no conversion call) is fine.
+Worked around in CMS108/CMS190 CQL by dropping the conversion; the durable fix
+belongs in the inliner — parameter substitution must take precedence over
+ambient column/alias resolution.
+
+### CMS72 residual cells — claim/encounter correlation (RESOLVED 2026-11-10)
+
+`hasPrincipalDiagnosisOf()` (CQMCommon) resolves the principal diagnosis through
+`Claim.diagnosis` (`claimDiagnosis` → `Claim.item.encounter`), but the CMS 2025
+fixtures attach a Claim to only SOME episodes and carry the diagnosis on
+`Encounter.reasonReference` (patient `5a329008` has two inpatient stroke
+episodes and one claim). The claim-only test dropped whole episodes, so the
+denominator never reached its expected size and the runner's numerator gating
+forced Numerator to false. `TJCOverall."Ischemic Stroke Encounter"` now falls
+back to the encounter's own diagnosis **only when the encounter has no claim at
+all** — an encounter WITH a claim must still be judged by that claim's principal
+diagnosis (`871d38c3` has a claim whose only diagnosis is a non-principal
+sequence-2 stroke code and must stay out). Do not loosen this to "any claim of
+the patient": that re-adds exactly the over-inclusions this gate prevents.
+
+### CMS646 residual cell — `overlaps after` strictness (RESOLVED 2026-11-10)
+
+`f5c2b6b4` expected `prevalenceInterval() overlaps after day of <staging>` TRUE
+for two intervals that are BOTH exactly `[2026-04-06T08:00, 2026-04-06T08:00]`.
+CQL 1.5 Overlaps After requires the first interval to overlap and END AFTER the
+second; identical bounds are never "after". The fixture set itself pins the
+strict reading: relaxing to non-strict starts fixed this one cell but broke 11
+CMS145 cells, and non-strict ends broke 1 more. The expectation was repaired
+(exclusion 1 → 0) rather than changing the operator. Any future attempt to make
+`overlaps after` non-strict must re-run CMS145, CMS108, CMS190 and CMS133.
+
+### CMS996 residual — `.verified()` inside inlined include bodies (OPEN, root-caused 2026-11-10)
+
+30 cells (11 Initial Population + 17 Denominator Exclusion + 6 Denominator
+Exception under-fires) all trace to `Status.verified(conditions)` when the
+argument is the base `[Condition: ...]` list produced by the [I-28] workaround.
+Inside the inlined body, the unqualified code reference in
+`C.verificationStatus ~ "confirmed"` (declared in `Status.cql` itself) does NOT
+resolve to the Code declaration in the calling context, so the equivalence
+falls back to a STRING comparison of the raw CodeableConcept JSON:
+
+    fhirpath_text(resource, 'verificationStatus') IN ('confirmed', ...)
+
+which is never true (the value is `{"coding":[{"code":"unconfirmed",...}]}`).
+The same expression written inline in the calling library lowers correctly to
+`coding_matches(resource, 'verificationStatus', <system>, 'confirmed')`, so the
+defect is in code-declaration scoping for inlined include bodies, not in the
+equivalence operator. Attempted and reverted: propagating included-library
+codes/codesystems into the parent context in `include_handler._process_includes`
+(no effect — the population translation uses per-group contexts and the inlined
+body resolves before/outside that map). The durable fix is to qualify code
+references inside an included library's statements to `Alias."code"` at load
+time (or to resolve them against the owning library), then re-run CMS996 and the
+measures that use `Status.verified` (CMS108, CMS1218, CMS1244, CMS1264, CMS136).
+
+### RESOLVED (2026-11-10, second pass) — three root causes behind CMS996 / CMS347 / CMS136
+
+The CMS996 blocker was NOT code scoping. Three distinct defects, all fixed:
+
+1. **`context._match_overload` never unwrapped `List<...>`/`Interval<...>`
+   parameter types, and its "profile prefix" pass compared the parameter NAME
+   (`conditions`) instead of the parameter TYPE (`Condition`).**
+   `FHIRCommon` declares two `verified()` overloads (`List<FHIR.Condition>`
+   at :438, `List<FHIR.AllergyIntolerance>` at :633); with no type match the
+   lookup fell through to `_functions[name]` — the LAST registered overload —
+   so `.verified()` on a Condition list lowered to
+   `coding_matches(..., 'allergyintolerance-verification', 'confirmed'|
+   'unconfirmed')` and dropped every condition. Fix: `_unwrap_type_specifier`
+   + exact-match on the unwrapped name (FHIR-qualified names also match their
+   bare form) + a TYPE-prefix pass (longest bare type name wins) before the
+   legacy parameter-name prefix pass. CMS996 73.7% → 95.6%. `context.get_function`
+   still falls back to `_functions[name]` when nothing matches — audit that
+   fallback whenever a new overload family is added.
+
+2. **`Alias."code"` resolved through a GLOBAL code table.** Several libraries
+   declare `code "confirmed"` over different code systems; the last registration
+   won, so `Status."confirmed"` could resolve to the AllergyIntolerance
+   verification system. Fix: `_resolve_included_code(alias, name)` in
+   `expressions/_operators.py` resolves the qualified reference against the
+   INCLUDED library's own `codes`/`codesystems` before the global lookup.
+   Its include-time twin (rewriting bare code references inside an included
+   library's ASTs to `Alias."name"`) is CORRECT for equivalence operands but
+   MUST NOT descend into `Retrieve` terminology or `CodeSelector` nodes:
+   `[ObservationScreeningAssessment: code ~ "FACIT-Pal"]` keeps the bare name
+   (the retrieve translator resolves it against the owning library). Without
+   that guard the retrieve became unresolvable, its CTE name leaked an AST repr
+   (`Observation: QualifiedIdentifier(parts=[...])`) and every row was dropped —
+   CMS347 100% → 76.1%, CMS136 43.8% → 31.2%.
+
+3. **`_has_unresolved_refs` silently replaced included-library definitions with
+   an always-empty CTE.** `translator._fallback_cte_sql` emits
+   `SELECT _pt.patient_id, NULL AS value FROM _patients AS _pt WHERE FALSE`,
+   which downstream reads as "no patient ever qualifies".
+   `ast_helpers._collect_defined_aliases` walked a hand-maintained attribute
+   list that missed `SQLExists.subquery`, `SQLJoin.on_condition`,
+   `SQLCase.when_clauses`, etc., so a body containing
+   `EXISTS (SELECT * FROM "Condition: ..." AS C ...)` looked like it referenced
+   a dangling `C` and the definition was emptied. This silently disabled
+   `Hospice."Has Hospice Services"` and
+   `PalliativeCare."Has Palliative Care in the Measurement Period"` for every
+   patient (CMS347 denominator exceptions 76.1% → 100%, CMS136 hospice
+   exclusion). Fix: `_collect_defined_aliases` now walks every child field
+   generically (`__dict__` + lists/tuples), and the fallback logs a WARNING
+   naming the definition instead of degrading silently. Lesson: any
+   "safe fallback" that fabricates an EMPTY result must log — silence turns a
+   translator bug into a plausible-looking measure result.
+
+Also fixed for CMS996 (fixture-side, `[I-56]`): `ProcedureNotDone` /
+`MedicationAdministrationNotDone` carry their timing in the
+`us-quality-core-recorded` extension, and `performed` / `effective` are
+data-absent on those profiles (same class as `[I-18/I-55]` in CMS108/CMS190).
+`...performed during` / `...effective during` can therefore never be true.
+Use `USQualityCoreCommon.recorded() during` (what the QI-Core twin of the
+measure does). CMS996 95.6% → 99.1% (113/114).
+
+### RESOLVED — CMS996 f6c7dbc1 was TWO more independent defects (2026-11-11)
+
+The last cell (an ACTIVE + confirmed thrombolytic allergy whose `onsetPeriod` is
+`[2021-01-10, 2026-09-09]`, ED encounter 2026-10-09, expected NOT excluded) had
+two causes, and BOTH had to be fixed:
+
+1. **`prevalenceInterval()` bounds an ACTIVE AllergyIntolerance by its onset
+   period's end — and only an AllergyIntolerance.** The template's active branch
+   emitted `intervalFromBounds(onset, NULL, TRUE, TRUE)` — a CLOSED null high
+   bound, i.e. unbounded (pinned by the official CQL fixture
+   `DateTimeInNullTrue`). `f6c7dbc1`'s own test-case description says "Patient
+   has allergy to medication ingredient **starts before and ends before ED**"
+   and expects NO exclusion, while the start-only onset variants (`83e7cc74`,
+   `ef443a3d`) stay unbounded and ARE excluded — so for allergies the onset
+   period's end bounds the prevalence. `_build_prevalence_interval_ast` now
+   COALESCEs the active-branch high with `onsetPeriod.end` (then
+   `abatementPeriod.end`) WHEN the receiver is an AllergyIntolerance.
+   CONDITIONS MUST KEEP THE UNBOUNDED HIGH BOUND: `Condition.onsetPeriod` means
+   "when the condition began" (not a resolution period), and applying the bound
+   to Conditions regressed the QI-Core gate — CMS506 `5e76e39a` (cancer-pain
+   Condition whose one-day onset period sits one day before the encounter)
+   expects the denominator exclusion, which only the unbounded form produces.
+   A blanket onset-end bound drops the gate to 46/47. The two FHIRCommon
+   `prevalenceInterval` overloads are separate functions; this is their one
+   semantic difference.
+
+2. **Native `cqlBefore` treated a FHIR Period JSON as a point.**
+   `CompareTemporal` runs both operands through `ExtractTemporalOperand`, which
+   parses a leading `{` as an Interval/Period and compares its LOW bound — so the
+   arm's second disjunct (`onset before end EDwSTEMI.period`, lowered as
+   `cqlBefore(fhirpath_text(res,'onset'), period_end)`) returned a definitive
+   TRUE for a serialized Period, while the Python fallback correctly returns
+   NULL (CQL 1.5 comparison signatures are same-type; a Period is not a point).
+   Fix: `cqlBefore/cqlAfter/cqlSameOrBefore/cqlSameOrAfter/cqlDateTimeEqual` are
+   now in `_PYTHON_PREFERRED_CPP_CONFLICTS`, so the Python UDFs are the desktop
+   conformance authority (the bundled C++ keeps the WASM path). The C++ helper is
+   a trap for any future direct-SQL caller — port the Python strictness if it is
+   ever made authoritative again.
+
+CMS996 is now **114/114 (100%)**.
+
+### RESOLVED — five measures were being lost three separate ways (2026-11-11)
+
+The full-suite tally exposed CMS1056/CMS1074/CMS1206 (Catalog Error) and
+CMS124/CMS138 (set-operation binder error) as NEW failures. Root causes:
+
+1. **`ast_helpers._count_select_columns` returned "unknown" for `SELECT *`.**
+   `_union_has_column_mismatch` therefore never saw the case it exists for: a
+   resource-row branch narrowed to `(patient_id, resource)` unioned with a
+   `SELECT *` branch over a retrieve CTE that carries precomputed columns
+   (`"Absence of Cervix"`: Procedure branch narrowed, Condition branch `SELECT *`
+   → 2 vs N columns → DuckDB "Set operations can only apply to expressions with
+   the same number of result columns"). Two fixes: the column counter now
+   delegates through `SELECT * FROM (<subquery>) AS x`, and the union-wrapping
+   star expansion in `cte_manager` narrows a subquery-backed star branch to
+   `(patient_id, resource)`.
+
+2. **Include-time code qualification was scoped far too broadly.**
+   `include_handler._qualify_library_local_codes` rewrites a library's bare
+   `code` references to `Alias."code"` so they resolve when the body is inlined
+   into a caller (CMS996's `Status.verified`). Rewriting PLAIN `define` bodies is
+   harmful (the CHILD translator already resolves them; the parent copies the
+   resulting SQL, so the qualified form becomes a dangling
+   `SDE."Male (finding)"` / `AlaraCommon."Abdomen and Pelvis Low Dose"` reference
+   → "Referenced table SDE not found" / Catalog Error), and rewriting code
+   references used as FUNCTION ARGUMENTS is equally harmful. The rewrite is now
+   restricted to `FunctionDefinition` bodies AND to identifiers that are operands
+   of `~` / `!~` / `=` / `!=`. Retrieve terminology is never touched.
+
+3. **`retrieve_optimizer` iterated a `set` of retrieve keys.** Ordering of
+   `(resource_type, valueset, profile_url)` string tuples is hash-randomised, so
+   two identical runs produced different WITH-clause orders — and for
+   CMS124/CMS138 one ordering hit the binder error above while the other
+   executed. Measure scores were effectively depending on PYTHONHASHSEED.
+   `all_retrieve_keys` is now an ordered, de-duplicated list. Reproducible SQL is
+   a correctness property, not a nicety.
+
+Also fixed while verifying: `udf/interval.py::intervalProperlyIncludedIn`
+referenced `iv1`/`iv2` before parsing them, so every call raised
+`NameError: name 'iv1' is not defined` (11 official CQL interval tests across
+Integer/Decimal/Quantity/DateTime/Time). CQL conformance is 1706/1706 again.
+
+### CMS136 — RESOLVED to 63/64 (2026-11-11): aggregate sources were never patient-correlated
+
+`Initial Population 2` / `Denominator 2` were over-included for 36 of 64
+patients because every drug arm's medication-period list contained **other
+patients'** medications. Three defects stacked:
+
+1. **Inlined query sources lose the patient predicate.** A CQL query used as a
+   `define` becomes a CTE, and consumers add
+   `"<CTE>".patient_id = _pt.patient_id`. When the same query is INLINED
+   (`(<tuple query>).period` fed to `rolloutIntervals()`) there is no boundary to
+   carry that predicate, so the aggregate iterated every patient's rows.
+   `_query._correlate_inlined_aggregate_source` now correlates the inlined
+   aggregate source (walking down `from_clause` subqueries, since a list
+   projection wraps the row query one level deeper, and using
+   `context.patient_alias` — `resource_alias` is the aggregate's element alias
+   `I`, which produced `AtomoxetineMed.patient_id = I.patient_id`).
+
+2. **`.field` over a tuple query lowered to a SCALAR subquery**, silently
+   keeping one row of a multi-row query (DuckDB takes the first). Patient
+   `a46db6aa` has two atomoxetine requests (209-day and 1-day supply) but only
+   the 1-day period survived (cumulative duration 1 day instead of 210).
+   `_query._listify_tuple_projection` rewrites
+   `json_extract_string((SELECT json_object(...) FROM ...), '$.field')` to
+   `(SELECT list(json_extract_string(t.v, '$.field')) FROM (<query>) AS t)` for
+   unlimited multi-row tuple projections used as aggregate sources.
+
+3. **`undefensive` fold seed:** `unnest([NULL])` fabricated ONE element for a
+   null source, so an aggregate body ran once against NULL. The single-source
+   fold seed now emits
+   `CASE WHEN <src> IS NULL THEN CAST([] AS VARCHAR[]) ELSE [<src>] END`
+   (CQL 1.5 §19.27: an aggregate over a null/empty list does not evaluate its
+   body). Verified with a minimal repro: `(null as List<Interval<Date>>) I
+   aggregate all …` used to return `[None]`, now returns NULL.
+
+**Last cell (`fcd9a2f3`, Numerator 2) — RESOLVED by root-scoped `return` distinct.**
+The measure's own test case is "Two more encounters during C&M phase but on the
+same day" and expects Numerator FALSE: CQL `return` (without `all`) eliminates
+duplicate results, so two same-day encounters collapse to one date and
+`Count(...) >= 2` is false. `parse_return_clause` now marks plain `return` as
+`distinct=True` (`return all` keeps duplicates, `return distinct` is the
+redundant explicit form — verified: `Count(({1,1,2}) X return X)` = 2,
+`return all` = 3), BUT the translator honours the flag **only at a definition
+root** (`_translate_query`: `_root_ast is node`). That scoping is load-bearing:
+a definition-root query materialises into a CTE (`SELECT DISTINCT patient_id,
+value`), whereas a NESTED query select keeps its DISTINCT when its alias is
+inlined, and that leaks into scalar property extractions — CMS56's
+`return THAProcedure.performed.toInterval()` produced
+`intervalEnd((SELECT DISTINCT … FROM "Total Hip Arthroplasty Procedure" AS
+THAProcedure))`; DISTINCT over the 2-row set changes the scalar's shape and every
+`with … such that` correlation stops matching (CMS56 54/58, QI gate 46/47).
+Bisecting the four SELECT DISTINCT sites in that CTE confirmed exactly one site
+breaks it. Rule for future work: return-level de-duplication belongs at the
+CTE/definition boundary, never on an inner query select.
+
+**CORRECTION (2026-11-11, CMS506 regression → fixed):** root-scoping must apply
+ONLY to the IMPLICIT default of plain `return`. An EXPLICIT `return distinct`
+always de-duplicates, even inside a nested query. CMS506 counts distinct opioid
+medications inside a where clause
+(`Count("Opioid At Discharge" X where … return distinct X.medication) >= 2`);
+suppressing that because the query was not a definition root counted duplicates
+and flipped the numerator on one patient (37/38, gate 46/47).
+`ReturnClause.explicit_distinct` now records whether the keyword was spelled and
+`_query._return_distinct` is
+`explicit OR (distinct AND at_definition_root)`.
+
+CMS136 is now **64/64 (100%)**.
+
+## STRICT PROFILE MODE — `meta.profile` membership is ON by default (2026-11-11)
+
+A profile-qualified retrieve (`[USQualityCore.MedicationRequest: …]`,
+`[USCore.BodyWeightProfile: …]`, `[ConditionProblemsHealthConcerns: …]`) is a
+**membership test**, not a type hint: the generated CTE requires the profile
+canonical in the resource's `meta.profile`. That behaviour is now an explicit,
+user-facing mode rather than an implicit rule.
+
+- **Flag:** `strict_profiles: bool = True` on `CQLToSQLTranslator`,
+  `translate_library_to_sql`, `translate_cql`, `evaluate_measure`, and the DQM
+  CLI (`--no-strict-profiles`). Included-library child translators and every
+  per-library context inherit it, so a profiled retrieve inside `FHIRHelpers`
+  or `QICoreCommon` behaves exactly like one in the caller.
+- **ON (default):** profile-qualified retrieves emit
+  `list_contains(from_json(json_extract(r.resource, '$.meta.profile'),
+  '["VARCHAR"]'), '<canonical>')` OR-chained across registry alternate
+  spellings. A resource with **no** `meta.profile` yields NULL from that
+  membership test, and a NULL WHERE drops the row — so unlabelled data is
+  invisible to a profiled retrieve. That is the correct US Core / QI-Core
+  reading, and it is what US Quality Core relies on to keep its **paired**
+  Condition profiles apart.
+- **OFF:** the conjunct is omitted and the retrieve matches the base resource
+  type. Intended for data that does not populate `meta.profile`.
+- **Never gated:** the negation-profile EXCLUSION
+  (`meta.profile IS NULL OR NOT (list_contains(...))`). It only removes
+  not-done resources and already tolerates a missing `meta.profile`, so
+  disabling strict mode cannot surface a `*notrequested` / `*notdone` record as
+  positive evidence. Pinned by
+  `fhir4ds/cql/tests/integration/test_profile_strict_mode_rows.py`.
+- **Only the 65 named profiles** marked `meta_profile_filter: true` in
+  `fhir4ds/cql/resources/profiles/uscore-usqualitycore-profiles.json` are
+  membership-tested. Base profiles (plain `[Condition]`, base
+  `us-quality-core-condition`) are deliberately exempt and match every
+  resource of their type.
+
+**Non-strict is a real trade-off, and the CMS 2025 data shows the cost.** Full
+`--suite us-core` tally: strict **73/73 PERFECT**; `--no-strict-profiles`
+**67/73**, mean accuracy 99.78%. The six regressions are all over-inclusion —
+5 of them false-positive Denominator Exclusions:
+
+| measure | strict | non-strict |
+|---|---|---|
+| CMS22 | 100.0% | 93.2% |
+| CMS155 | 100.0% | 97.1% |
+| CMS832 | 100.0% | 97.3% |
+| CMS138 | 100.0% | 97.9% |
+| CMS108 | 100.0% | 99.3% |
+| CMS72 | 100.0% | 99.4% |
+
+The same relaxation costs the QI-Core suite: `--suite qi-core --no-strict-profiles`
+is 45/47, regressing the same two families (CMS72 99.4%, CMS832 97.1%).
+
+**The six regressions are the standard working, not a bug to chase.** The
+fixtures test this deliberately, in both directions. CMS22 ships an explicit
+paired matrix — same hypertension value set (`2.16.840.1.113883.3.600.263`,
+which does contain SNOMED `10725009`), differentiated ONLY by `meta.profile`:
+
+| test case | Condition profile | expected DENEX |
+|---|---|---|
+| `DENEXPass/HypertensionBeforeEnc` | `condition-problems-health-concerns` | **1** |
+| `DENEXPass/HTNOneDayBeforeEnc` | `condition-problems-health-concerns` | **1** |
+| `DENEXFail/HypertensionAfterEnc` | `condition-encounter-diagnosis` | **0** |
+| `DENEXFail/HypertensionDuringEnc` | `us-quality-core-enounter-diagnosis` (fixture typo) | **0** |
+
+Mechanisms behind the other four, all the same class and each verified by
+diffing the generated SQL/CSV between modes:
+
+- **CMS72** (`9f4bc5cc`): the tPA-prior-to-arrival retrieve
+  `[ConditionProblemsHealthConcerns: "Intravenous or Intraarterial Thrombolytic
+  tPA Therapy Prior to Arrival"]` (single-code VS, ICD-10 `Z92.82` "status post
+  administration of tPA … prior to admission") picks up a Condition tagged
+  `condition-encounter-diagnosis` → `Denominator Exclusions` `[]` →
+  `['Encounter/b82aaea4…']`.
+- **CMS108** (`23f1ece5`): a Condition tagged the **abstract base**
+  `us-quality-core-condition` (code `1001000119102`) is matched by the
+  "prior or present diagnosis of atrial fibrillation" retrieve → `Numerator`
+  `[]` → `['Encounter/daa71c31…']`.
+- **CMS832** (`fcb1c94b`): same abstract-base tag, code `100801000119107`, which
+  **is** in "Obstetrics and VTE Obstetrics". `encounterDiagnosis().code in
+  "Obstetrics…"` starts firing, so `where not (...)` drops the encounter from
+  Initial Population — the one case that moves the other way (under-inclusion;
+  a `where not` gains a match).
+- **CMS138** (`4e4e6417`): an Observation tagged base `us-quality-core-observation`
+  is matched by the `us-core-smokingstatus` retrieve → `Numerator 1` and
+  `Denominator 2` false → true.
+- **CMS155** (`055edb62`): the patient's **`us-core-bmi`** Observation (LOINC
+  `39156-5`) is also matched by the `pediatric-bmi-for-age` retrieve, because
+  sibling BMI/vital-sign profiles share the same codes → `Numerator 1` false →
+  true.
+
+A base-only-tagged Condition/Observation is not a valid instance of any
+concrete US Quality Core sub-profile, which is exactly what the strict filter
+encodes.
+
+**Do NOT "fix" these by relaxing the filter, and do not add a "category
+fallback" that guesses profile membership from `Condition.category`** — that
+re-implements the membership rule with data-dependent semantics and would break
+`meta.profile` being the single source of truth.
+
+Note: 10 measures contain resources with **no** `meta.profile` at all
+(CMS1017 42 Organizations, CMS177 17 Conditions/17 Encounters, CMS108 4
+Procedures, …) and strict mode is still 100%, so no current expectation depends
+on including an unlabelled resource in a profiled retrieve. Fixture defect worth
+reporting upstream (inert here): `DENEXFail/HypertensionDuringEnc` misspells the
+profile `us-quality-core-enounter-diagnosis` (missing `c`), which makes that
+Condition invisible to *every* Condition retrieve; the expected DENEX of 0 still
+holds, but the case is not exercising what its name claims.
+
+Verification on the strict-mode tree: `--suite us-core --skip-errors` 73/73,
+`--suite qi-core --skip-errors` 47/47, CQL conformance 1706/1706.
+
+## Bundled extension ABI slots — one source tree, three ABIs (2026-11-12)
+
+The three bundled filenames are ABI-specific and DuckDB selects one purely by
+suffix. ALL of them build from HEAD sources; there is no per-ABI source pin:
+
+| file | DuckDB ABI |
+|---|---|
+| `*.duckdb_extension` | 1.5.5 |
+| `*.duckdb156_extension` | 1.5.6 |
+| `*.duckdb2_extension` | 2.0.0 |
+
+`extensions/common/duckdb_compat.hpp` bridges the 1.5.x ↔ 2.0 API split
+(`validity()`, `data<T>()`, `bind_info()`, `const_value()`, `FHIR4DS_BIND_FN`,
+plus the `vector/list_vector.hpp` include and the `Utf8Proc::UTF8ToCodepoint`
+length argument). It detects 2.0 by `__has_include` on
+`duckdb/common/vector/flat_vector.hpp`, which exists in no 1.5.x tag. The
+`CQL_FN_IDENTIFIER` shim in cql_extension.cpp handles 1.5.5 (plain string) vs
+1.5.6+ (`Identifier`) function registration.
+
+Two packaging failures shipped before this existed, both silent:
+
+- `cql.duckdb2_extension` was stamped with a commit hash instead of the tag
+  while its fhirpath sibling was stamped `v2.0.0`; DuckDB compares that string
+  EXACTLY, so only fhirpath went native on a released 2.0.0 wheel. Cause: the
+  duckdb submodule is a shallow clone, `git describe` degrades to
+  `v2.0.0-devNNNNN`, and DuckDB then stamps the hash.
+- A rebuild wrote the 1.5.6 artifact into BOTH cql slots, so native CQL could
+  not load on 1.5.5 despite `duckdb>=1.5.5,<2` being supported.
+
+Build/verify with `scripts/build_extension_bundles.py` (`--verify`,
+`--build --abi X`, `--dry-run`); `fhir4ds/extension_bundles.json` is the shared
+slot manifest. Every build passes `OVERRIDE_GIT_DESCRIBE=v<abi>` (the tag is
+authoritative regardless of clone depth) and the script REFUSES to install a
+bundle whose embedded stamp does not match its slot.
+
+Sizes (2026-11-12, all from HEAD, release config): 1.5.5 ≈ 12.1 MB,
+1.5.6 ≈ 12.1-12.4 MB, 2.0 ≈ 14.1-14.3 MB. An earlier 1.5.6 pair shipped at
+~40 MB because those builds came from mis-configured build trees; with a clean
+configure the whole set is ~12-14 MB per binary. Do NOT strip: full `strip`
+removes DuckDB's metadata trailer (the file becomes unloadable) and
+`--strip-debug` is a no-op.
+
+## Lateral dedup needs a SCOPE CHAIN, not just the current SELECT (2026-11-11)
+
+The lateral-dedup pass hoists repeated correlated extractions out of a SELECT's
+projection/WHERE into a `CROSS JOIN LATERAL`. Two things must agree about which
+aliases that lateral may reference, and both must use a CHAIN (this select's
+FROM/JOIN aliases **plus every enclosing select's**):
+
+- `_dedup_select` / `_dedup_nested_scopes` (hoisting) — `outer_visible` is
+  threaded top-down because dedup recurses children-FIRST; by the time a nested
+  select was processed, the parent's `_current_dedup_aliases` had already been
+  restored, so a local-only view rejected every candidate that referenced an
+  ancestor.
+- `_unwrap_scope_unsafe_laterals` (the post-pass that strips unsafe laterals) —
+  with a local-only view it would strip exactly the laterals the hoisting pass
+  had just legitimately created.
+
+Position rules, because SQL correlation is not uniform: projection/WHERE
+subqueries and LATERAL join tables inherit the chain; **FROM-subqueries and
+non-lateral JOIN tables get only the ancestors** (they cannot correlate to the
+select that owns them).
+
+DuckDB measurement that justifies the chain: a lateral resolves references 2
+levels up, 3 levels up, and inside a UNION operand (all bind successfully). The
+guard added in 65f4a70c2b3 asserted the opposite ("laterals cannot correlate
+past their own SELECT") and cost CMS2 1.34 MB -> 12.95 MB by disabling dedup for
+~75 copies of one extraction. After the chain: 12.95 MB -> 1.54 MB.
+
+## Rebuilding the bundled extensions is now scripted (2026-11-11)
+
+Do not hand-run `make release` in `extensions/*` for a release — that is how two
+packaging defects shipped:
+
+- `cql.duckdb2_extension` was stamped with the commit hash `d54cbbe3df` while
+  `fhirpath.duckdb2_extension` was stamped `v2.0.0`. DuckDB compares that
+  source-id string EXACTLY, so only fhirpath went native on a released
+  `duckdb==2.0.0` wheel and cql silently fell back to Python UDFs. Cause: the
+  duckdb submodule is a shallow clone, so `git describe` degrades to
+  `v2.0.0-devNNNNN` and DuckDB then stamps the hash.
+- A rebuild once wrote the 1.5.6 artifact into BOTH cql slots, so native CQL
+  could not load on 1.5.5 despite `duckdb>=1.5.5,<2`.
+
+Use:
+
+```bash
+python3 scripts/build_extension_bundles.py --verify                  # fast, CI/release gate
+python3 scripts/build_extension_bundles.py --build --abi 2.0.0       # rebuild a slot set
+python3 scripts/build_extension_bundles.py --build --abi 1.5.5 --extension cql
+python3 scripts/build_extension_bundles.py --build --abi 2.0.0 --dry-run
+```
+
+`fhir4ds/extension_bundles.json` is the single source of truth for
+suffix → ABI → source pin, and BOTH the script and
+`fhir4ds/tests/test_extension_abi_stamp.py` read it, so they cannot disagree.
+The script always passes `OVERRIDE_GIT_DESCRIBE=v<abi>` (making the tag
+authoritative regardless of clone depth), re-reads the produced file and
+REFUSES to install it if the embedded stamp does not match the slot, and
+restores sources, submodule commit and build cache in a `finally` block.
+
+### Pinning extension sources for an ABI build — use `git restore`, never `git checkout`
+
+`git checkout <tree-ish> -- <path>` updates the WORKING TREE **and the INDEX**.
+The 2.0 build used it to pin `extensions/*/src` to the API-adapted commit, and a
+later commit that staged unrelated files swept 1060 lines of pinned
+`cql_extension.cpp` into itself — silently reverting the REV-002 interval UB
+guards and the REV-009 `.value` fix (commit 71e6baac111 restored them). The
+shipped binaries were unaffected; the tree no longer matched them.
+
+For a temporary source pin use:
+
+    git restore --source=<pin> --worktree -- extensions/<ext>/src   # worktree only
+
+and restore with `git restore --source=HEAD --worktree -- ...`. Never leave a
+pin staged, and verify afterwards: `git status --porcelain extensions/*/src`
+must be empty and the guard symbols must be present (e.g.
+`grep -c interval_open_null_uncertain extensions/cql/src/cql_extension.cpp` -> 18).
+
+## CMS2 SQL size: the +205 KB is `as Interval<T>` conversion, not a lost macro (2026-11-12, BUGFIX-018)
+
+CMS2's no-audit SQL is ~1.54 MB where the branch point was ~1.34 MB. Diagnosis,
+so nobody re-chases the wrong thing:
+
+- `cql_value_is_interval_like` calls went 510 -> 0, which looks like the Option D
+  macro refactor being undone. It is not: the emitter still exists
+  (`_query.py::_translate_is_type_check`) and still fires — a minimal
+  `C.abatement is Interval<DateTime>` repro emits the macro on both trees.
+- The real growth is **`json_extract_string` 44 -> 2,594** (+2,550), of which
+  `$.start` = 1,524 and `$.end` = 1,016. Those come from the
+  `as Interval<DateTime>` FHIRHelpers Period->Interval conversion in
+  `_operators.py` (~line 2580), which emits a `CASE` with an inline start/end
+  extraction per occurrence. There are ~1,270 such conversions in CMS2 after
+  QICoreCommon's `toInterval`/`abatementInterval` bodies are inlined.
+- Once the cast makes the point type statically known, the companion
+  `is Interval<DateTime>` checks fold away — hence 0 macros AND more bytes.
+
+So this is a behaviour change with a size cost, not a correctness defect (both
+suites stay at 100%). Optimization lead for a future perf chunk: hoist the two
+per-conversion `json_extract_string` calls the way the lateral dedup hoists
+repeated extractions (the scope-chain fix in BUGFIX-013 made that safe), or
+promote the QICoreCommon conversion functions instead of inlining them 1,270
+times. The `test_cms2_disambiguation_macros` size bound is 1.7 MB with this
+history recorded in its docstring, so it still catches the 12.95 MB class.
+
+## Capturing a native crash without root (2026-11-12, BUGFIX-019)
+
+An intermittent SIGSEGV appeared in full QI-Core runs (kernel log:
+`segfault at 0 ip 0000000000000000`, i.e. a call through a null function
+pointer; a second one faulted inside python3.10). It has NOT reproduced since
+the extensions were rebuilt (2 crashes in 9 runs before; 0 in ~15 after), and a
+3-run control with the OLD binaries restored was also clean — so the rebuild
+cannot be *proven* to be the fix. The capture recipe is recorded here because
+nothing about it is obvious and `gdb` was not installed:
+
+```bash
+# 1) gdb without root: fetch the .debs and unpack them locally
+mkdir -p /tmp/gdbdl && cd /tmp/gdbdl
+for p in gdb libbabeltrace1 libdebuginfod1 libsource-highlight4v5 libmpfr6 \
+         libipt2 libxxhash0 libexpat1 liblzma5 libzstd1 libpython3.10 \
+         libboost-regex1.74.0; do apt-get download $p; done
+for d in *.deb; do dpkg -x "$d" /tmp/gdbroot; done
+export LD_LIBRARY_PATH=/tmp/gdbroot/usr/lib/x86_64-linux-gnu:/tmp/gdbroot/lib/x86_64-linux-gnu
+/tmp/gdbroot/usr/bin/gdb --version      # 12.1, no root needed
+
+# 2) run the suite under it; a captured crash prints the signal then the stack
+gdb -batch -nx -ex "set pagination off" -ex run \
+    -ex "echo \n=== CRASH BACKTRACE ===\n" -ex "bt 40" \
+    --args python3 -u -m fhir4ds.dqm.tests.conformance.cli --suite qi-core --skip-errors
+```
+
+`bt` on a NORMAL exit prints "No stack." and gdb exits 1 — treat exit 1 as
+"no crash" and grep the log for `Program received signal`.
+
+An `LD_PRELOAD` alternative was also built (`crashtrace.c` → `crashtrace.so`):
+a SIGSEGV handler that writes the fault address and up to 40 frames resolved
+with `dladdr` (module + nearest exported symbol), avoiding gdb's overhead when
+you need to run the suite many times:
+
+```bash
+gcc -shared -fPIC -O1 -g -o crashtrace.so crashtrace.c -ldl
+LD_PRELOAD=$PWD/crashtrace.so python3 -m fhir4ds.dqm.tests.conformance.cli --suite qi-core
+```
+
+Both harnesses are in `/tmp/jm/` for this session only; re-create from these
+commands. Keep `ulimit -c 0` (WSL pipes cores to `wsl-capture-crash`, so no
+usable core file is produced) and `ulimit -s 65536`.
+
+## Conformance suite names: `qi-core` / `us-core` (2026-11-12)
+
+The DQM suites are named for WHAT they are, not for the content-package year:
+
+| canonical | content package | gate result |
+|---|---|---|
+| `qi-core-2025` | ecqm-content-qicore-2025 | 47/47 |
+| `us-core-2025` | dqm-content-cms-2025 (CMS US Core) | 73/73 |
+| `qi-core-2026` | dqm-content-qicore-2026 | not gated |
+
+Names carry the RELEASE YEAR because more content releases are expected — a bare
+`qi-core` would silently mean a different suite next year.
+
+Legacy spellings `2025`, `cms2025` and `2026` (plus the unversioned
+`qi-core`/`us-core`, which mean the 2025 release) are still accepted by `--suite`
+(`config.normalize_suite` normalises, and `fhir4ds/dqm/tests/unit/test_suite_naming.py`
+pins both directions), so existing CI jobs and older notes keep working.
+
+**Both DQM suites are part of the release gate.** `conformance/scripts/run_all.py`
+invokes `run_dqm.py` once per suite and writes a separate report for each
+(`dqm_report.json` for qi-core-2025, `us_core_dqm_report.json` for
+us-core-2025), so the
+master run is now:
+
+    ViewDefinition 144 + FHIRPath 935 + CQL 1706 + DQM qi-core-2025 47
+    + DQM us-core-2025 73 + OMOP 38 = 2943/2943
+
+`run_dqm.py` also takes `--output` if a different report path is needed.
+
+## The DQM gate must actually load the shipped extension (2026-11-12)
+
+`fhir4ds/dqm/tests/conformance/database.py` used to hand-pick
+`fhirpath.duckdb_extension` / `cql.duckdb_extension` (the **1.5.5-suffixed**
+bundle) out of the build tree or the wheel and `LOAD` them directly. Two
+defects followed, both silent:
+
+1. The ABI-suffixed slot for the RUNNING duckdb (`.duckdb156_extension` on
+   1.5.6, `.duckdb2_extension` on 2.0) was never considered, so the load always
+   failed on 1.5.6.
+2. The failure was swallowed, and `is_cpp` was latched BEFORE the authoritative
+   registration — so the gate printed "Python fallback UDFs loaded successfully
+   (C++ extension NOT loaded)" even when `fhir4ds.register()` had, in fact,
+   loaded the extension a few lines later.
+
+Net effect: the conformance gate was running the Python fallback and could not
+tell. The shipped native binaries were covered only by the pytest parity
+suites, which is the same blind spot that let the unstampable 2.0 bundle ship
+(BUGFIX-017).
+
+It now calls `fhir4ds.register(self.conn)` — the ABI-aware, staging-aware entry
+point — and derives `is_cpp` from its return value
+(`{'fhirpath_cpp', 'cql_cpp'}`). `USE_CPP_EXTENSIONS=0` still forces the
+fallback, via the documented `duckdb.__version__` spoof. Both DQM suites report
+`>>> C++ extension and Python fallback UDFs loaded successfully` and hold
+47/47 and 73/73, so fallback and native agree on this corpus.
+
+Check the banner when reading a gate log: "Python fallback … (C++ extension NOT
+loaded)" means the run did NOT exercise the shipped binaries.

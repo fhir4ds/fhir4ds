@@ -37,6 +37,105 @@ except ImportError:
     SQLList = None  # type: ignore[assignment,misc]
 
 
+def _json_array_text_from_fhirpath(node):
+    """Re-serialise a list-valued FHIRPath navigation into JSON array TEXT.
+
+    ``fhirpath()`` returns ``VARCHAR[]`` (one JSON text per node), which cannot
+    be fed back into another ``fhirpath`` call — the UDF takes a single JSON
+    document. Chained navigations therefore need the list re-serialised:
+    ``COALESCE('[' || array_to_string(<list>, ',') || ']', '[]')``.
+    """
+    from ...translator.types import SQLLiteral
+
+    # NOTE: ``concat(...)`` would resolve to the CQL ``Concat`` macro on a
+    # registered connection (2-arg VARCHAR only), so build the text with the
+    # SQL concatenation operator instead.
+    body = SQLBinaryOp(
+        operator="||",
+        left=SQLBinaryOp(
+            operator="||",
+            left=SQLLiteral(value="["),
+            right=SQLFunctionCall(
+                name="array_to_string",
+                args=[node, SQLLiteral(value=",")],
+            ),
+        ),
+        right=SQLLiteral(value="]"),
+    )
+    return SQLFunctionCall(name="COALESCE", args=[body, SQLLiteral(value="[]")])
+
+
+def _is_json_array_source(node) -> bool:
+    """True when *node* materialises a JSON ARRAY of resources.
+
+    Query-valued bindings (``let claim: ([Claim] C where ...)``) are lowered to
+    a single-column subquery that builds the array with
+    ``'[' || string_agg(<resource col>, ',') || ']'``. Only such sources hold
+    MULTIPLE resources, so only they need the trail promoted to the full node
+    list — a scalar resource column already navigates correctly with
+    ``fhirpath_text``.
+    """
+    def _has_string_agg(n) -> bool:
+        if n is None:
+            return False
+        name = getattr(n, "name", None)
+        if isinstance(name, str) and name.lower() == "string_agg":
+            return True
+        if isinstance(n, (list, tuple)):
+            return any(_has_string_agg(x) for x in n)
+        for f in getattr(n, "__dataclass_fields__", {}) or ():
+            if _has_string_agg(getattr(n, f, None)):
+                return True
+        return False
+
+    query = node.query if isinstance(node, SQLSubquery) else node
+    if not isinstance(query, SQLSelect):
+        return False
+    return _has_string_agg(query.columns)
+
+
+def _promote_source_trail(node):
+    """Promote the SOURCE TRAIL of a list operand to the list-returning UDF.
+
+    A list operand's trail is often built from scalar ``fhirpath_text``
+    navigations wrapped in a filtering CASE, e.g. CQMCommon.claimDiagnosis::
+
+        let claimItem: (claim.item I where I.encounter.references(E))
+        ...
+        claimItem.diagnosisSequence
+
+    lowers to ``fhirpath_text(CASE WHEN <encounter matches> THEN
+    fhirpath_text(claims, 'item') ELSE NULL END, 'diagnosisSequence')``.
+    ``fhirpath_text`` keeps only the FIRST node, so every claim after the first
+    (and every item/diagnosis after the first) was silently dropped — leaving
+    the claimDiagnosis POA arms FALSE for CMS1028's Numerator and CMS1017's
+    fall-POA.
+
+    The trail step is rewritten into JSON array text built from the
+    list-returning ``fhirpath`` navigation so the enclosing path sees every
+    node.
+    """
+    if (
+        isinstance(node, SQLFunctionCall)
+        and node.name == "fhirpath_text"
+        and len(node.args) == 2
+        and _is_json_array_source(node.args[0])
+    ):
+        inner = _promote_source_trail(node.args[0])
+        return _json_array_text_from_fhirpath(
+            SQLFunctionCall(name="fhirpath", args=[inner, node.args[1]])
+        )
+    if isinstance(node, SQLCase):
+        return SQLCase(
+            when_clauses=[
+                (_promote_source_trail(when), _promote_source_trail(then))
+                for when, then in node.when_clauses
+            ],
+            else_clause=_promote_source_trail(node.else_clause),
+        )
+    return node
+
+
 def _promote_fhirpath_text_list(node):
     """Rewrite a scalar 2-arg ``fhirpath_text(...)`` call to its list-valued
     projection ``from_json(fhirpath(...), '["VARCHAR"]')``.
@@ -58,7 +157,10 @@ def _promote_fhirpath_text_list(node):
         return SQLFunctionCall(
             name="from_json",
             args=[
-                SQLFunctionCall(name="fhirpath", args=list(node.args)),
+                SQLFunctionCall(
+                    name="fhirpath",
+                    args=[_promote_source_trail(node.args[0]), node.args[1]],
+                ),
                 SQLLiteral(value='["VARCHAR"]'),
             ],
         )

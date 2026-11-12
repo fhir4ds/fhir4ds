@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from ...parser.ast_nodes import (
     BinaryExpression,
+    QualifiedIdentifier,
     ChoiceTypeSpecifier,
     CodeSelector,
     DateTimeLiteral,
@@ -28,6 +29,7 @@ from ...parser.ast_nodes import (
     TupleTypeSpecifier,
     UnaryExpression,
 )
+from ...errors import TranslationError
 from ...translator.context import ExprUsage, RowShape
 from ...translator.function_inliner import ParameterPlaceholder
 from ...translator.placeholder import (
@@ -83,6 +85,204 @@ def _spec_resource_types() -> frozenset:
 if TYPE_CHECKING:
     from ...translator.context import SQLTranslationContext
     from ...translator.expressions import ExpressionTranslator
+
+
+def _demoted_rows_source_cte(sql_expr) -> "str | None":
+    """Recognize the scalar LIMIT-1 demotion of a RESOURCE_ROWS definition.
+
+    Shape (built at the definition-reference boundary, ``_core.py`` scalar
+    context):
+
+        (SELECT sub.resource FROM "<CTE>" AS sub
+         WHERE sub.patient_id = <X>.patient_id LIMIT 1)
+
+    Returns the quoted CTE name when *sql_expr* matches exactly, else None.
+    Used by the query-source assembly to rehydrate fluent-call sources over
+    RESOURCE_ROWS definitions to row iteration.
+    """
+    if not isinstance(sql_expr, SQLSubquery):
+        return None
+    q = sql_expr.query
+    if not isinstance(q, SQLSelect):
+        return None
+    if q.limit != 1 or q.joins or q.group_by or q.having or q.order_by or q.distinct:
+        return None
+    cols = q.columns or []
+    if len(cols) != 1:
+        return None
+    c0 = cols[0].expr if isinstance(cols[0], SQLAlias) else cols[0]
+    if not (
+        isinstance(c0, SQLQualifiedIdentifier)
+        and len(c0.parts) == 2
+        and c0.parts[0] == "sub"
+    ):
+        return None
+    fc = q.from_clause
+    if not (
+        isinstance(fc, SQLAlias)
+        and isinstance(fc.expr, SQLIdentifier)
+        and fc.expr.quoted
+        and fc.alias == "sub"
+    ):
+        return None
+    w = q.where
+    if not (
+        isinstance(w, SQLBinaryOp)
+        and w.operator == "="
+        and isinstance(w.left, SQLQualifiedIdentifier)
+        and list(w.left.parts) == ["sub", "patient_id"]
+        and isinstance(w.right, SQLQualifiedIdentifier)
+        and w.right.parts
+        and w.right.parts[-1] == "patient_id"
+    ):
+        return None
+    return fc.expr.name
+
+
+def _references_qualified(expr, alias: str, column: str) -> bool:
+    """True when `expr` references `<alias>.<column>` anywhere."""
+    from ...translator.types import SQLQualifiedIdentifier
+
+    stack = [expr]
+    seen = set()
+    while stack:
+        node = stack.pop()
+        if node is None or id(node) in seen:
+            continue
+        seen.add(id(node))
+        if isinstance(node, SQLQualifiedIdentifier):
+            if node.parts[:2] == [alias, column]:
+                return True
+            continue
+        if isinstance(node, (list, tuple)):
+            stack.extend(node)
+            continue
+        if hasattr(node, "__dataclass_fields__"):
+            for f in node.__dataclass_fields__:
+                stack.append(getattr(node, f, None))
+    return False
+
+
+def _listify_tuple_projection(node):
+    """Turn a SCALAR tuple-field extraction into a LIST projection.
+
+    ``(<tuple query>).field`` lowers to
+    ``json_extract_string((SELECT json_object(...) FROM ...), '$.field')`` —
+    a scalar subquery that silently keeps ONE row of a multi-row query (DuckDB
+    returns the first). For an aggregate source that loses every medication but
+    one: CMS136 `a46db6aa` has two atomoxetine requests (209-day and 1-day
+    supply) and only the 1-day period survived, so the cumulative duration was
+    1 day instead of 210.
+
+    Rewrite to ``(SELECT list(json_extract_string(t.v, '$.field')) FROM
+    (<query>) AS t)`` when the extraction wraps an unlimited multi-row tuple
+    projection.
+    """
+    from ...translator.types import (
+        SQLAlias, SQLFunctionCall, SQLQualifiedIdentifier, SQLSelect, SQLSubquery,
+    )
+
+    if not (isinstance(node, SQLFunctionCall)
+            and node.name in ("json_extract_string", "json_extract")
+            and node.args):
+        return node
+    inner = node.args[0]
+    if not (isinstance(inner, SQLSubquery) and isinstance(inner.query, SQLSelect)):
+        return node
+    sel = inner.query
+    if sel.limit is not None:
+        return node
+    cols = sel.columns or []
+    if len(cols) != 1:
+        return node
+    col = cols[0]
+    col_expr = col.expr if isinstance(col, SQLAlias) else col
+    is_tuple = (
+        isinstance(col_expr, SQLFunctionCall)
+        and col_expr.name in ("json_object", "to_json")
+    )
+    if not is_tuple:
+        return node
+    path_arg = node.args[1] if len(node.args) > 1 else None
+    if path_arg is None:
+        return node
+    aliased = SQLAlias(expr=col_expr, alias="v")
+    new_inner = SQLSelect(
+        columns=[aliased],
+        from_clause=sel.from_clause,
+        where=sel.where,
+        joins=sel.joins,
+        group_by=sel.group_by,
+        having=sel.having,
+        distinct=sel.distinct,
+    )
+    list_call = SQLFunctionCall(
+        name="list",
+        args=[SQLFunctionCall(
+            name="json_extract_string",
+            args=[
+                SQLQualifiedIdentifier(parts=["t", "v"]),
+                path_arg,
+            ],
+        )],
+    )
+    return SQLSubquery(query=SQLSelect(
+        columns=[list_call],
+        from_clause=SQLAlias(expr=SQLSubquery(query=new_inner), alias="t"),
+    ))
+
+
+def _correlate_inlined_aggregate_source(
+    node, select_has_patient_id, outer_pid: str, _depth: int = 0
+):
+    """Patient-correlate an aggregate source that is an INLINED row query.
+
+    A CQL query used as a define becomes a CTE and consumers add
+    ``"<CTE>".patient_id = _pt.patient_id``. When the same query is inlined —
+    e.g. ``(<tuple query>).period`` fed to ``rolloutIntervals()`` — there is no
+    boundary to carry that predicate, so the aggregate iterated every patient's
+    rows. CMS136: each drug arm's period list contained ALL patients'
+    medications, and the roll-out chain turned one 90-day supply into 210 days.
+
+    Walks down ``from_clause`` subqueries (a list projection wraps the row
+    query one level deeper) until it finds the row-scoped SELECT to correlate.
+    """
+    from ...translator.types import SQLAlias, SQLIdentifier, SQLSelect, SQLSubquery
+
+    if node is None or _depth > 4:
+        return node
+    target = node
+    if hasattr(target, "args") and target.args:
+        inner = target.args[0]
+        if isinstance(inner, SQLSubquery) and isinstance(inner.query, SQLSelect):
+            target = inner
+    if not (isinstance(target, SQLSubquery) and isinstance(target.query, SQLSelect)):
+        return node
+    sel = target.query
+    frm = sel.from_clause
+    if not isinstance(frm, SQLAlias) or not frm.alias:
+        return node
+    alias = frm.alias
+    inner_expr = frm.expr
+    row_scoped = False
+    if isinstance(inner_expr, SQLSubquery) and isinstance(inner_expr.query, SQLSelect):
+        row_scoped = select_has_patient_id(inner_expr.query)
+    elif isinstance(inner_expr, SQLIdentifier) and inner_expr.quoted:
+        row_scoped = True
+    if row_scoped:
+        if not _references_qualified(sel.where, alias, "patient_id"):
+            sel.where = _patient_correlated_where(sel.where, alias, outer_pid)
+        return node
+    # Not row-shaped at this level: descend into the FROM subquery (list
+    # projection over a row query) and correlate there.
+    if isinstance(inner_expr, (SQLSubquery, SQLSelect)):
+        _correlate_inlined_aggregate_source(
+            inner_expr if not isinstance(inner_expr, SQLSelect) else SQLSubquery(query=inner_expr),
+            select_has_patient_id,
+            outer_pid,
+            _depth + 1,
+        )
+    return node
 
 
 def _patient_correlated_where(existing_where, row_alias: str, outer_pid: str):
@@ -1438,9 +1638,20 @@ class QueryMixin:
         # Normalize resource type (e.g., USCoreBloodPressureProfile -> Observation)
         profile_url = None
         registry = self.context.profile_registry
-        resolved = registry.resolve_named_profile(resource_type)
+        _profile_name = resource_type
+        # Model-QUALIFIED retrieves ([USQualityCore.MedicationRequest]) resolve
+        # through the profiled model's registry entry FIRST so they carry the
+        # model's profile URL (and meta.profile filter); unqualified/plain-FHIR
+        # retrieves keep the existing bare-name/base-type semantics.
+        _model_qualifier = getattr(node, "model", None)
+        resolved = None
+        if _model_qualifier and _model_qualifier not in ("FHIR", "System"):
+            resolved = registry.resolve_qualified_profile(_model_qualifier, resource_type)
+        if resolved is None:
+            resolved = registry.resolve_named_profile(resource_type)
         if resolved is not None:
             resource_type, profile_url = resolved
+
 
         # Reject unknown resource types at translation time (BUGFIX-002/U1):
         # an unrecognized type would otherwise lower to an empty CTE
@@ -1476,6 +1687,20 @@ class QueryMixin:
             else:
                 if isinstance(terminology, Identifier):
                     valueset_name = terminology.name
+                elif isinstance(terminology, Property) and isinstance(
+                    getattr(terminology, "source", None), Identifier
+                ):
+                    # Library-qualified code/valueset reference in a
+                    # retrieve: [Task: USQualityCoreCommon."Fulfill"]. The
+                    # include handler merges included libraries' codes and
+                    # valuesets into this context BY NAME, so the qualified
+                    # form resolves through the last path segment. Without
+                    # this branch the AST node fell into str(terminology)
+                    # and fabricated a bogus valueset URL (CMS50 Numerator
+                    # [Task: ...Fulfill] retrieved zero rows).
+                    valueset_name = terminology.path
+                elif isinstance(terminology, QualifiedIdentifier) and terminology.parts:
+                    valueset_name = terminology.parts[-1]
                 elif isinstance(terminology, BinaryExpression) and terminology.operator in ('in', '~', '='):
                     # Handle: [Resource: codePath in "ValueSet Name"]
                     # Handle: [Resource: code = "Code Name"]
@@ -1751,13 +1976,28 @@ class QueryMixin:
         return cte_name, self._sql_references_column(lookup.query.where, "_row_key")
 
     def _generate_let_cte_name(self, let_name: str) -> str:
-        """Generate a deterministic let CTE name unique to the current definition."""
+        """Generate a deterministic let CTE name unique to the current definition.
+
+        A definition may inline the SAME fluent function more than once
+        (CMS156 "High Risk Medications with Average Daily Dose Criteria"
+        calls averageDailyDose for both the digoxin and doxepin branches) —
+        each inline promotes its own `timing`/`dosage`/... lets. Keying the
+        CTE name by (definition, let name) alone made the second inline's
+        promotion OVERWRITE the first's CTE body, so the first branch's
+        row-keyed lookups resolved against the WRONG branch's retrieve
+        (digoxin lookups hit doxepin rows -> per-row NULLs -> the avg-dose
+        filter silently dropped every row). Include a per-(definition, let)
+        occurrence counter so every promotion site gets its own CTE.
+        """
         import hashlib
 
         scope_name = self.context._current_definition or "__unknown__"
         safe_scope = _re.sub(r"[^A-Za-z0-9_]+", "_", scope_name).strip("_") or "scope"
         safe_let = _re.sub(r"[^A-Za-z0-9_]+", "_", let_name).strip("_") or "let"
-        name_hash = hashlib.md5(f"{scope_name}:{let_name}".encode()).hexdigest()[:6]
+        _occ_counts = self.context._let_cte_promotion_counts
+        _occ = _occ_counts.get((scope_name, let_name), 0) + 1
+        _occ_counts[(scope_name, let_name)] = _occ
+        name_hash = hashlib.md5(f"{scope_name}:{let_name}:{_occ}".encode()).hexdigest()[:6]
         return f"_let_{safe_scope[:32]}_{safe_let[:24]}_{name_hash}"
 
     def _make_let_cte_lookup(self, cte_name: str, source_alias: str,
@@ -1787,7 +2027,8 @@ class QueryMixin:
             where=where_cond,
         ))
 
-    def _make_function_cte_lookup(self, cte_name: str, source_alias: str) -> SQLExpression:
+    def _make_function_cte_lookup(self, cte_name: str, source_alias: str,
+                                   func_name: Optional[str] = None) -> SQLExpression:
         """Build (SELECT value FROM fn_cte WHERE patient_id AND _row_key = fhirpath_text(resource, 'id'))."""
         where_cond = SQLBinaryOp(
             left=SQLBinaryOp(
@@ -1808,7 +2049,7 @@ class QueryMixin:
                 ),
             ),
         )
-        return SQLSubquery(query=SQLSelect(
+        lookup = SQLSubquery(query=SQLSelect(
             columns=[SQLIdentifier(name="value")],
             from_clause=SQLAlias(
                 expr=SQLIdentifier(name=cte_name, quoted=True),
@@ -1816,6 +2057,51 @@ class QueryMixin:
             ),
             where=where_cond,
         ))
+        # List-valued promoted functions (e.g. encounterDiagnosis()) store a
+        # LIST in the CTE value column. Consumers (in_valueset's list guard,
+        # list operators) need to know the lookup is list-returning — tag the
+        # result_type so `_is_list_returning_sql` sees through the
+        # scalar-shaped subquery (CMS0334 `in_valueset(JSON[], ...)` binder
+        # error). Detection: (1) the built promotion CTE body's value
+        # expression, when already built; (2) the function's CQL body AST —
+        # set-operation bodies are list-valued — for lookups emitted BEFORE
+        # the CTE body is built.
+        from ._utils import _is_list_returning_sql
+        _is_list = False
+        for _fn_ctes in getattr(self.context, "_function_promotion_ctes", {}).values():
+            _body = _fn_ctes.get(cte_name)
+            if isinstance(_body, SQLSelect) and _body.columns:
+                _col = _body.columns[0]
+                _col_expr = _col.expr if isinstance(_col, SQLAlias) else _col
+                _is_list = _is_list_returning_sql(_col_expr)
+                break
+        if not _is_list and func_name:
+            inliner = getattr(self.context, "function_inliner", None)
+            if inliner is not None:
+                from ...parser.ast_nodes import BinaryExpression as _BinExpr, Query as _QueryAST
+                for _fdef in list(getattr(inliner, "_functions", {}).values()):
+                    _fname = getattr(_fdef, "name", None)
+                    if _fname is None or _fname.rsplit(".", 1)[-1] != func_name.rsplit(".", 1)[-1]:
+                        continue
+                    _body_ast = getattr(_fdef, "body", None)
+                    if (
+                        isinstance(_body_ast, _BinExpr)
+                        and (getattr(_body_ast, "operator", "") or "").strip().lower()
+                        in {"union", "|", "intersect", "except"}
+                    ):
+                        # Set-operation bodies are list-valued (CQL-19 union
+                        # doctrine).
+                        _is_list = True
+                        break
+                    if isinstance(_body_ast, _QueryAST):
+                        # A CQL query body makes the function list-valued
+                        # (one result element per source element; e.g.
+                        # CQMCommon.encounterDiagnosis).
+                        _is_list = True
+                        break
+        if _is_list:
+            lookup.result_type = "List<Any>"
+        return lookup
 
     def _process_let_clauses(self, let_clauses: list, node=None) -> None:
         """Translate let clauses and register them in context.let_variables.
@@ -1866,9 +2152,27 @@ class QueryMixin:
                         multiplier * dep_count
                     )
 
+        # The enclosing query's iteration alias — lets belong to THIS
+        # query's row scope, not to whatever transient resource_alias the
+        # let expression's own translation left behind (fluent-function
+        # inlining leaks internal aliases like O1 — CMS156: the let CTE
+        # body then read the RAW retrieve CTE, dropping the fluent filter,
+        # and lookups correlated to the invisible O1).
+        _q_src = getattr(node, "source", None) if node is not None else None
+        if isinstance(_q_src, list):
+            _q_src = _q_src[0] if _q_src else None
+        _q_alias = getattr(_q_src, "alias", None) if _q_src is not None else None
+
         # Phase 2: translate each let clause and decide inline vs CTE.
         for let_clause in let_clauses:
             let_name = let_clause.alias
+            # Keep the let's CQL AST around so static type inference (e.g.
+            # `_is_cql_quantity_expr`) can look THROUGH let aliases: the
+            # CMS156 averageDailyDose body binds `MedicationStrength` to
+            # `Order.getMedicationCode().medicationStrengthPerUnit()` (a
+            # Quantity); without the AST the alias fell to the scalar DOUBLE
+            # path and TRY_CAST(<Quantity JSON> AS DOUBLE) NULLed the product.
+            self.context._let_clause_asts[let_name] = let_clause.expression
             _is_coll = isinstance(let_clause.expression, (Query, Retrieve))
             if _is_coll:
                 self.context._let_clause_collection = True
@@ -1878,23 +2182,97 @@ class QueryMixin:
                 let_expr_sql = _wrap_as_json_array_agg(let_expr_sql)
 
             # Decide: promote to CTE or inline?
+            # Subquery-bearing lets are promoted even at ONE reference when
+            # they are used in the query body: correlated subqueries cannot
+            # survive inside elementwise (lambda/unnest) return expressions —
+            # DuckDB forbids correlated subqueries in lambda bodies, and the
+            # lookup's correlation alias does not exist in the lambda scope
+            # (CMS136 "ADHD Medications Taken on IPSD...": the
+            # IPSDAndContinuationMaintenancePhase let inlines `Interval["IPSD",
+            # ...]` bounds whose patient-scalar lookups correlate to the
+            # query alias, which lowered to an unnest lambda).
             if (
-                ref_counts.get(let_name, 0) >= self._LET_CTE_THRESHOLD
+                (
+                    ref_counts.get(let_name, 0) >= self._LET_CTE_THRESHOLD
+                )
                 and self.context.resource_alias
                 and not _is_coll  # collection-typed lets can't be promoted
             ):
-                self._promote_let_to_cte(let_name, let_expr_sql)
+                self._promote_let_to_cte(let_name, let_expr_sql, query_alias=_q_alias)
             else:
                 self.context.let_variables[let_name] = let_expr_sql
 
-    def _promote_let_to_cte(self, let_name: str, let_expr_sql: SQLExpression) -> None:
+    def _promote_let_to_cte(
+        self, let_name: str, let_expr_sql: SQLExpression,
+        query_alias: Optional[str] = None,
+    ) -> None:
         """Promote a let variable to a CTE and register a lookup expression."""
-        alias = self.context.resource_alias
-        # Find the source CTE name from the symbol table
-        cte_name = None
-        sym = self.context.lookup_symbol(alias)
-        if sym and sym.cte_name:
-            cte_name = sym.cte_name
+        # Prefer the enclosing query's iteration alias: the let CTE body and
+        # its lookups must correlate to the query's OWN row scope. A leaked
+        # fluent-body resource_alias (O1) points at the raw retrieve CTE —
+        # dropping the fluent filter from the let body (CMS156).
+        def _resolve_cte(cand_alias):
+            if not cand_alias:
+                return None
+            _sym = self.context.lookup_symbol(cand_alias)
+            _cte = getattr(_sym, "cte_name", None) if _sym else None
+            if not _cte or _cte == cand_alias:
+                return None
+            # The CTE must be a REAL define/retrieve CTE — barrier aliases
+            # inside fluent bodies register self-referencing cte_names that
+            # do not exist as tables (CMS156 OrderMedication2).
+            if _cte in self.context.definition_meta:
+                return _cte
+            if _sym and getattr(_sym, "table_alias", None) == cand_alias:
+                return _cte
+            return None
+
+        # Prefer the alias the LET EXPRESSION'S OWN SQL actually
+        # references: the let body was translated against whichever scope
+        # held its receiver references. A leaked fluent-body resource_alias
+        # (O1/OrderMedication1 -> raw retrieve CTE, CMS156) is NOT what the
+        # body references — the body references the ENCLOSING query's
+        # iteration alias; conversely CMS1218's lets reference the current
+        # resource_alias (EncounterWithSurgery), and correlating them to the
+        # outer query_alias (Visit) dangles at the lookup sites.
+        def _sql_uses_alias(node, alias_name: str) -> bool:
+            if not alias_name:
+                return False
+            stack = [node]
+            seen = set()
+            while stack:
+                cur = stack.pop()
+                if cur is None or id(cur) in seen:
+                    continue
+                seen.add(id(cur))
+                if isinstance(cur, SQLQualifiedIdentifier):
+                    if cur.parts and cur.parts[0] == alias_name:
+                        return True
+                    continue
+                if isinstance(cur, (list, tuple)):
+                    stack.extend(cur)
+                    continue
+                if not hasattr(cur, "__dataclass_fields__"):
+                    continue
+                for _fn in cur.__dataclass_fields__:
+                    stack.append(getattr(cur, _fn, None))
+            return False
+
+        _ra = self.context.resource_alias
+        _ra_cte = _resolve_cte(_ra)
+        _qa_cte = _resolve_cte(query_alias)
+        if _ra_cte and _sql_uses_alias(let_expr_sql, _ra):
+            cte_name = _ra_cte
+            alias = _ra
+        elif _qa_cte and _sql_uses_alias(let_expr_sql, query_alias):
+            cte_name = _qa_cte
+            alias = query_alias
+        elif _ra_cte:
+            cte_name = _ra_cte
+            alias = _ra
+        else:
+            cte_name = _qa_cte
+            alias = query_alias or _ra
 
         if not cte_name:
             # Can't determine source — fall back to inline
@@ -2014,7 +2392,7 @@ class QueryMixin:
         if not isinstance(op, str):
             return None
         op_lower = op.lower()
-        if op_lower not in ('intersect', 'union', 'except'):
+        if op_lower not in ('intersect', 'union', 'except', '|'):
             return None
 
         def _definition_has_resource_rows(name: str, visited: set[str] | None = None) -> bool:
@@ -2076,6 +2454,7 @@ class QueryMixin:
             if isinstance(expr_node, Identifier):
                 name = expr_node.name
                 if hasattr(self.context, '_definition_names') and name in self.context._definition_names:
+                    _meta = self.context.definition_meta.get(name)
                     if _definition_has_resource_rows(name):
                         return SQLSubquery(query=SQLSelect(
                             columns=[
@@ -2087,12 +2466,116 @@ class QueryMixin:
                                 alias="sub",
                             ),
                         ))
+                    # Value-column defines (e.g. First(...) date defines —
+                    # CMS137 "Treatment Initiation With ... Dates"): project
+                    # the define's VALUE column as the operand's element
+                    # column. Review MEDIUM-5: reading `.resource` on value
+                    # defines fed raw resource JSON into temporal casts.
+                    if _meta is not None:
+                        _val_col = getattr(_meta, "value_column", None) or "value"
+                        return SQLSubquery(query=SQLSelect(
+                            columns=[
+                                SQLIdentifier(name="patient_id"),
+                                SQLAlias(
+                                    expr=SQLIdentifier(name=_val_col),
+                                    alias="resource",
+                                ),
+                            ],
+                            from_clause=SQLAlias(
+                                expr=SQLIdentifier(name=name, quoted=True),
+                                alias="sub",
+                            ),
+                        ))
                     # Non-resource definitions: fall through
                     return None
+            # Bare retrieves as union operands (CMS137):
+            # ([Procedure: "VS"]) union ... — the retrieve translates to its
+            # CTE reference; project (patient_id, resource) from it.
+            if isinstance(expr_node, Retrieve):
+                _rt_sql = self.translate(expr_node, usage=ExprUsage.LIST)
+                _rt_from = _rt_sql
+                if isinstance(_rt_from, SQLSubquery):
+                    _rt_from = _rt_from.query
+                return SQLSubquery(query=SQLSelect(
+                    columns=[
+                        SQLIdentifier(name="patient_id"),
+                        SQLIdentifier(name="resource"),
+                    ],
+                    from_clause=SQLAlias(expr=_rt_from, alias="sub"),
+                ))
+            # Fluent-call operands (CMS137 ([Procedure: "VS"]).isProcedurePerformed()):
+            # translate to rows form; accept selects that already carry
+            # (patient_id, resource) columns — the fluent body is a filtered
+            # query over the retrieve.
+            if isinstance(expr_node, MethodInvocation):
+                try:
+                    _mi_sql = self.translate(expr_node, usage=ExprUsage.LIST)
+                except TranslationError:
+                    # A static CQL validation error must reach the caller; only
+                    # shape/dialect surprises fall back to the generic path.
+                    raise
+                except Exception:  # noqa: BLE001 - fall back to generic path
+                    _mi_sql = None
+                _mi_inner = _mi_sql.query if isinstance(_mi_sql, SQLSubquery) and isinstance(_mi_sql.query, SQLSelect) else _mi_sql
+                if isinstance(_mi_inner, SQLSelect) and _mi_inner.columns:
+                    _col_names = []
+                    for c in _mi_inner.columns:
+                        e = c.expr if isinstance(c, SQLAlias) else c
+                        if isinstance(e, SQLIdentifier):
+                            _col_names.append(e.name)
+                        elif isinstance(e, SQLQualifiedIdentifier):
+                            _col_names.append(e.parts[-1])
+                        else:
+                            _col_names.append(None)
+                    if _col_names == ["patient_id", "resource"]:
+                        return SQLSubquery(query=SQLSelect(
+                            columns=[
+                                SQLIdentifier(name="patient_id"),
+                                SQLIdentifier(name="resource"),
+                            ],
+                            from_clause=_mi_inner.from_clause,
+                            where=_mi_inner.where,
+                            joins=_mi_inner.joins,
+                            distinct=_mi_inner.distinct,
+                            limit=_mi_inner.limit,
+                        ))
+                    if len(_mi_inner.columns) == 1:
+                        # Single projection with patient rows — re-project
+                        # with the source alias's patient_id. A bare `*`
+                        # projection cannot be aliased (`* AS resource` is
+                        # invalid SQL) — use the FROM alias's resource
+                        # column instead.
+                        _mi_alias = None
+                        if isinstance(_mi_inner.from_clause, SQLAlias):
+                            _mi_alias = _mi_inner.from_clause.alias
+                        if _mi_alias:
+                            _first = _mi_inner.columns[0]
+                            _first_expr = _first.expr if isinstance(_first, SQLAlias) else _first
+                            if (
+                                isinstance(_first_expr, SQLIdentifier)
+                                and _first_expr.name == "*"
+                            ):
+                                _value_expr = SQLQualifiedIdentifier(
+                                    parts=[_mi_alias, "resource"]
+                                )
+                            else:
+                                _value_expr = _first_expr
+                            return SQLSubquery(query=SQLSelect(
+                                columns=[
+                                    SQLQualifiedIdentifier(parts=[_mi_alias, "patient_id"]),
+                                    SQLAlias(expr=_value_expr, alias="resource"),
+                                ],
+                                from_clause=_mi_inner.from_clause,
+                                where=_mi_inner.where,
+                                joins=_mi_inner.joins,
+                                distinct=_mi_inner.distinct,
+                                limit=_mi_inner.limit,
+                            ))
+                return None
             # For nested set operations, recurse
             if isinstance(expr_node, BinaryExpression):
                 nested_op = getattr(expr_node, 'operator', '')
-                if isinstance(nested_op, str) and nested_op.lower() in ('intersect', 'union', 'except'):
+                if isinstance(nested_op, str) and nested_op.lower() in ('intersect', 'union', 'except', '|'):
                     nested = self._try_set_op_source(expr_node, alias, node, usage)
                     if nested is not None:
                         return SQLSubquery(query=nested) if not isinstance(nested, SQLSubquery) else nested
@@ -4021,7 +4504,13 @@ class QueryMixin:
                     )
                     self.context.add_alias(alias, table_alias=alias, cte_name=cte_name)
                 else:
-                    source_expr = self.translate(_pi_expr, usage=ExprUsage.SCALAR)
+                    # LIST, not SCALAR: a FROM source iterates rows. SCALAR
+                    # lowers define references (incl. library-qualified ones
+                    # like VTE."Qualifying Encounter" Q) to a LIMIT-1
+                    # correlated subquery whose correlation alias is the
+                    # alias UNDER DEFINITION here — self-referential SQL
+                    # (CMS-DEF-01A). LIST emits SELECT * FROM "CTE".
+                    source_expr = self.translate(_pi_expr, usage=ExprUsage.LIST)
                     source_expr = self._preserve_quantity_literals_in_array(
                         source_expr,
                         _pi_expr,
@@ -4390,6 +4879,26 @@ class QueryMixin:
                     return self._translate_query_on_alias(
                         node, _pp_base, source_alias,
                     )
+                # Fluent receiver demoted to a scalar LIMIT-1 subquery over a
+                # RESOURCE_ROWS definition CTE (the receiver is translated as
+                # a scalar function argument). A fluent function applies
+                # ELEMENTWISE over a list receiver, so as a QUERY SOURCE the
+                # alias must iterate the receiver's ROWS: rehydrate to
+                # `FROM "<CTE>" AS <alias>` (CMS136 "Encounter 31 to 300
+                # Days..." — the demotion projects only `resource`, so the
+                # wrapper's `patient_id` projection and downstream
+                # `<alias>.patient_id` correlations dangled).
+                _pp_demoted = _demoted_rows_source_cte(source_expr_node.sql_expr)
+                if _pp_demoted and source_alias:
+                    source_expr = SQLSelect(
+                        from_clause=SQLAlias(
+                            expr=SQLIdentifier(name=_pp_demoted, quoted=True),
+                            alias=source_alias,
+                        ),
+                    )
+                    self.context.add_alias(source_alias, table_alias=source_alias)
+                    self.context._alias_source_asts[source_alias] = source_expr_node
+                    alias = source_alias
                 else:
                     source_expr = self.translate(source_expr_node, usage=ExprUsage.LIST)
                     source_expr = self._preserve_quantity_literals_in_array(
@@ -4415,6 +4924,14 @@ class QueryMixin:
                 if _set_op_result is not None:
                     source_expr = _set_op_result
                     alias = source_alias
+                    if alias and isinstance(source_expr, (SQLUnion, SQLIntersect, SQLExcept)):
+                        # Set-op sources become FROM aliases (`FROM (union)
+                        # AS <alias>` in the select assembly below). Register
+                        # the alias as a TABLE alias — an ast_expr registration
+                        # makes `return all X` inline the union into column
+                        # position (CMS137).
+                        self.context.add_alias(alias, table_alias=alias)
+                        self.context._alias_source_asts[alias] = source_expr_node
                 else:
                     # Check for MethodInvocation returning a list (e.g.,
                     # Alias.claimDiagnosis()) used as a query source.
@@ -4431,6 +4948,31 @@ class QueryMixin:
                         source_expr_node,
                     )
                     alias = source_alias
+                    # Fluent-call query source over a RESOURCE_ROWS
+                    # definition (CMS136: `("Qualifying Numerator
+                    # Encounter".isEncounterPerformed()) ValidNumeratorEncounter
+                    # where ... return ...`): generic translation demotes the
+                    # RECEIVER to a scalar LIMIT-1 subquery over the
+                    # definition CTE. As a QUERY SOURCE the alias must
+                    # iterate the receiver ROWS (CQL fluent functions apply
+                    # elementwise over list receivers) — rehydrate the
+                    # demotion to `FROM "<CTE>" AS <alias>` so the inlined
+                    # fluent body (already per-row in the WHERE) filters
+                    # elementwise and downstream `<alias>.patient_id`
+                    # correlations resolve (the demoted lateral projected
+                    # only `resource`, so IPSD lookups correlated to
+                    # `ValidNumeratorEncounter.patient_id` raised Binder
+                    # Error "does not have a column named patient_id").
+                    _demoted_cte = _demoted_rows_source_cte(source_expr)
+                    if _demoted_cte and alias:
+                        source_expr = SQLSelect(
+                            from_clause=SQLAlias(
+                                expr=SQLIdentifier(name=_demoted_cte, quoted=True),
+                                alias=alias,
+                            ),
+                        )
+                        self.context.add_alias(alias, table_alias=alias)
+                        self.context._alias_source_asts[alias] = source_expr_node
                     # QA-017: List literals as query source need unnesting AND
                     # proper alias binding when the query has WHERE/RETURN that
                     # reference the iteration variable.  Only wrap when the
@@ -4534,8 +5076,6 @@ class QueryMixin:
 
         # Start with the source query
         result = source_expr
-
-        # Helper function to check if an expression is or contains a CTE reference
         def _is_cte_ref(expr):
             """Check if expression is a CTE reference (SQLIdentifier with quoted name or RetrievePlaceholder)."""
             if isinstance(expr, SQLIdentifier):
@@ -4680,11 +5220,16 @@ class QueryMixin:
                         alias=alias
                     )
                 )
+                # table_alias ONLY (no ast_expr): an ast_expr registration
+                # makes `return all X` inline the whole set-op SQL into
+                # column position (2-column union as one column — CMS137).
+                # The FROM here is (patient_id, resource) rows — the same
+                # shape as a retrieve CTE — so the table_alias route
+                # (X.resource-style refs) is correct.
                 self.context.add_alias(
                     alias,
                     table_alias=alias,
                     cte_name=provisional_cte_name,
-                    ast_expr=source_expr,
                 )
             elif contains_placeholder(source_expr):
                 # Source contains unresolved placeholders. Extract the inner placeholder(s)
@@ -5276,7 +5821,8 @@ class QueryMixin:
             # previous clause's alias (transitively linked to the outer
             # patient through clause 1). Single-with queries produce the
             # same flat shape as before (no behavioral change).
-            _with_parts = []  # (exists_expr, without, alias) per clause
+            _with_parts = []  # (exists_expr, without, alias, source_sql) per clause
+            self._active_with_parts = _with_parts
             self.context.push_scope()
             try:
                 _prior_with_aliases: list[str] = []
@@ -5305,7 +5851,24 @@ class QueryMixin:
                     self.context.add_alias(wc_alias, table_alias=wc_alias, cte_name=_wc_cte_name)
                     _prior_with_aliases.append(wc_alias)
 
-                    # Set resource_alias so Patient correlation uses the with-clause alias
+                    # Track the FHIR resource type for the with-clause alias.
+                    # Without this, fluent overload resolution on the alias
+                    # (e.g. `HeartFailure.isVerified()` where HeartFailure is
+                    # a [Condition: ...] with-alias) falls back to the stale
+                    # ambient context.resource_type — an earlier Allergy-
+                    # Intolerance retrieve's type leaked across defines and
+                    # resolved the WRONG overload (allergy verification codes
+                    # applied to Conditions; CMS135/144 initial populations
+                    # emptied).
+                    wc_rt = self._infer_resource_type_from_cql_expr(wc_expr)
+                    if wc_rt:
+                        self.context._alias_resource_types[wc_alias] = wc_rt
+
+                    # Set resource_alias so Patient correlation uses the
+                    # with-clause alias. The ambient context.resource_type is
+                    # deliberately NOT set here: other machinery reads it with
+                    # different expectations, and alias registration above is
+                    # what fluent overload resolution needs.
                     old_resource_alias = self.context.resource_alias
                     self.context.resource_alias = wc_alias
                     try:
@@ -5318,7 +5881,19 @@ class QueryMixin:
                     # expression from inlined fluent functions over sub-elements
                     # like Claim.item), wrap it in a SELECT that provides
                     # resource and patient_id columns so property access works.
-                    outer_corr_alias = alias or self.context.resource_alias or "_pt"
+                    # Correlate to THIS query's own source alias when it has
+                    # one — context.resource_alias may still hold the
+                    # ENCLOSING query's alias-under-definition when this query
+                    # is being translated as a FROM source (CMS129: with-clause
+                    # inside `Last(...) LastPSATest return ...` correlated to
+                    # LastPSATest, which does not exist in the inner scope).
+                    _own_src = node.source[0] if isinstance(node.source, list) and node.source else node.source
+                    _own_alias = getattr(_own_src, 'alias', None) if _own_src is not None else None
+                    outer_corr_alias = (
+                        _own_alias or alias or "_pt"
+                        if _own_alias or alias
+                        else (self.context.resource_alias or "_pt")
+                    )
                     if not isinstance(wc_source_sql, (SQLSelect, SQLSubquery, SQLUnion, SQLIntersect, SQLExcept, SQLIdentifier, SQLQualifiedIdentifier, SQLAlias, RetrievePlaceholder)):
                         wc_source_sql = SQLSubquery(query=SQLSelect(
                             columns=[
@@ -5371,7 +5946,7 @@ class QueryMixin:
                         where=full_condition,
                     ))
                     exists_expr = SQLExists(subquery=exists_subquery) if not is_without else SQLUnaryOp(operator="NOT", operand=SQLExists(subquery=exists_subquery))
-                    _with_parts.append((exists_expr, is_without, wc_alias))
+                    _with_parts.append((exists_expr, is_without, wc_alias, wc_source_sql))
             finally:
                 self.context.pop_scope()
 
@@ -5379,7 +5954,7 @@ class QueryMixin:
             # nests inside clause i-1's EXISTS WHERE (before its patient_corr
             # is irrelevant — appended via AND; the previous alias binds).
             for _idx in range(1, len(_with_parts)):
-                _prev_exists, _prev_without, _prev_alias = _with_parts[_idx - 1]
+                _prev_exists, _prev_without, _prev_alias = _with_parts[_idx - 1][:3]
                 _this_exists = _with_parts[_idx][0]
                 _prev_sel = _prev_exists.subquery if isinstance(_prev_exists, SQLExists) else _prev_exists.operand.subquery
                 _inner_sel = _prev_sel.query
@@ -5403,6 +5978,109 @@ class QueryMixin:
                 )
 
             exists_expr = _with_parts[0][0]
+
+            # `return all <with-alias>` (CMS156): the whole-element return
+            # references the WITH-clause alias. Swap the composition: FROM =
+            # the with source (aliased as the with alias); WHERE = a FLIPPED
+            # EXISTS iterating the PRIMARY source, correlating to the outer
+            # with alias — the such-that references both aliases and both
+            # roles resolve naturally.
+            from ...parser.ast_nodes import Identifier as _WithRetIdent
+            _ret_node = getattr(node.return_clause, "expression", None) if getattr(node, "return_clause", None) else None
+            if (
+                isinstance(_ret_node, _WithRetIdent)
+                and len(_with_parts) == 1
+                and not _with_parts[0][1]
+                and isinstance(result, SQLSelect)
+                and result.from_clause is not None
+            ):
+                _w_alias = _with_parts[0][2]
+                if _ret_node.name == _w_alias:
+                    _w_src = _with_parts[0][3]
+                    # Normalize the with source to a rows FROM: bare CTE
+                    # identifiers / placeholders become
+                    # (SELECT patient_id, resource FROM <cte>).
+                    _w_from_expr = _w_src
+                    if isinstance(_w_from_expr, RetrievePlaceholder):
+                        # Resolve to a rows FROM at phase 3 (the placeholder
+                        # becomes the CTE name inside FROM).
+                        _w_from_expr = SQLSubquery(query=SQLSelect(
+                            columns=[SQLIdentifier(name="patient_id"), SQLIdentifier(name="resource")],
+                            from_clause=SQLAlias(expr=_w_src, alias="_ws"),
+                        ))
+                    elif isinstance(_w_from_expr, SQLIdentifier) and _w_from_expr.quoted:
+                        _w_from_expr = SQLSubquery(query=SQLSelect(
+                            columns=[SQLIdentifier(name="patient_id"), SQLIdentifier(name="resource")],
+                            from_clause=SQLAlias(expr=_w_src, alias="_ws"),
+                        ))
+                    elif isinstance(_w_from_expr, SQLSubquery) and isinstance(_w_from_expr.query, SQLSelect):
+                        # The with handler's scalar wrapper renders bare CTE
+                        # identifiers as COLUMN expressions
+                        # (`SELECT "CTE" AS resource, ...`) — detect and
+                        # rebuild as a proper rows FROM.
+                        _cols = _w_from_expr.query.columns or []
+                        if (
+                            len(_cols) == 2
+                            and all(isinstance(c, SQLAlias) for c in _cols)
+                            and isinstance(_cols[0].expr, SQLIdentifier)
+                            and _cols[0].expr.quoted
+                            and _cols[0].alias == "resource"
+                        ):
+                            _w_from_expr = SQLSubquery(query=SQLSelect(
+                                columns=[SQLIdentifier(name="patient_id"), SQLIdentifier(name="resource")],
+                                from_clause=SQLAlias(expr=_cols[0].expr, alias="_ws"),
+                            ))
+                    else:
+                        _w_from_expr = SQLSubquery(query=SQLSelect(
+                            columns=[
+                                SQLAlias(expr=_w_from_expr, alias="resource"),
+                                SQLAlias(
+                                    expr=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
+                                    alias="patient_id",
+                                ),
+                            ],
+                        ))
+                    # FLIPPED exists: iterate the primary source (result's
+                    # FROM + WHERE) correlating to the outer with alias.
+                    _prim_alias = None
+                    if isinstance(result.from_clause, SQLAlias):
+                        _prim_alias = result.from_clause.alias
+                    if _prim_alias:
+                        _such = _with_parts[0][0]
+                        _inner_where = None
+                        if isinstance(_such, SQLExists) and isinstance(_such.subquery, SQLSubquery):
+                            _inner_sel = _such.subquery.query
+                            _inner_where = _inner_sel.where
+                        if _inner_where is not None:
+                            _corr = SQLBinaryOp(
+                                operator="=",
+                                left=SQLQualifiedIdentifier(parts=[_prim_alias, "patient_id"]),
+                                right=SQLQualifiedIdentifier(parts=[_w_alias, "patient_id"]),
+                            )
+                            _flip_where = (
+                                SQLBinaryOp(operator="AND", left=_inner_where, right=_corr)
+                                if _inner_where else _corr
+                            )
+                            if result.where is not None:
+                                _flip_where = SQLBinaryOp(
+                                    operator="AND", left=result.where, right=_flip_where,
+                                )
+                            _swapped = SQLSelect(
+                                columns=[
+                                    SQLQualifiedIdentifier(parts=[_w_alias, "resource"]),
+                                    # Aggregate consumers correlate
+                                    # <outer>.patient_id = _pt.patient_id over
+                                    # this select — project patient_id too.
+                                    SQLQualifiedIdentifier(parts=[_w_alias, "patient_id"]),
+                                ],
+                                from_clause=SQLAlias(expr=_w_from_expr, alias=_w_alias),
+                                where=SQLExists(subquery=SQLSubquery(query=SQLSelect(
+                                    columns=[SQLLiteral(value=1)],
+                                    from_clause=result.from_clause,
+                                    where=_flip_where,
+                                ))),
+                            )
+                            return _swapped
 
             # Add to existing WHERE clause
             if isinstance(result, SQLSelect):
@@ -5441,6 +6119,12 @@ class QueryMixin:
 
         # Apply RETURN clause if present (skip when multi-source already handled it)
         if not _multi_source_done and node.return_clause:
+            # `return all <with-alias>` (CMS156): the whole-element return
+            # references a WITH-clause alias, not the primary source. The
+            # with alias's rows live inside the correlated EXISTS, so the
+            # correct shape swaps the FROM to the WITH source (aliased as
+            # the referenced alias) and keeps the EXISTS as the WHERE —
+            # the such-that's references to both aliases resolve naturally.
             # Special case: when source is a list-producing function call
             # (e.g., collapse_intervals, fhirpath_text) with an iteration alias
             # and a return clause, use list_transform to apply per-element
@@ -5530,7 +6214,33 @@ class QueryMixin:
 
             if not _did_list_transform:
                 return_expr = self.translate(node.return_clause, usage=ExprUsage.SCALAR)
-                _return_distinct = getattr(node.return_clause, 'distinct', False)
+                # Only the definition ROOT query can apply return-distinct
+                # safely: it materialises into a CTE (`SELECT DISTINCT
+                # patient_id, value`). A nested query select keeps its DISTINCT
+                # when its alias is inlined, and that leaks into scalar property
+                # extractions — `intervalStart((SELECT DISTINCT …))` over a
+                # multi-row set changes shape and breaks `with … such that`
+                # correlation (CMS56 54/58, QI gate 46/47).
+                _cur_def = getattr(self.context, "_current_definition", None)
+                _root_ast = (
+                    getattr(self.context, "_definition_cql_asts", {}).get(_cur_def)
+                    if _cur_def
+                    else None
+                )
+                _is_def_root = _root_ast is node
+                # Explicit `return distinct` ALWAYS de-duplicates, even nested
+                # (CMS506 counts distinct opioid medications inside a where
+                # clause: suppressing it counted duplicates and flipped the
+                # numerator on). The IMPLICIT default of plain `return` is only
+                # applied at a definition root, where it materialises into a CTE
+                # and cannot leak DISTINCT into scalar property extractions
+                # (CMS56 54/58 otherwise).
+                _return_distinct = bool(
+                    getattr(node.return_clause, 'explicit_distinct', False)
+                ) or (
+                    bool(getattr(node.return_clause, 'distinct', False))
+                    and _is_def_root
+                )
                 # When early_list_transform is active, result is a lambda
                 # parameter placeholder (e.g., _lt_DayNumber).  The return
                 # expression already references the parameter directly, so
@@ -5554,19 +6264,122 @@ class QueryMixin:
                             from_clause=result,
                         )
                 elif isinstance(result, SQLSelect):
-                    # Reuse the existing SQLSelect to preserve FROM clause alias visibility
                     # The alias (e.g., BPExam) in "FROM CTE AS BPExam" must remain visible
                     # to the return expression
+                    _res_from_alias = (
+                        result.from_clause.alias
+                        if isinstance(result.from_clause, SQLAlias)
+                        else None
+                    )
+                    def _sql_references_alias(node, alias_name: str) -> bool:
+                        """True when the SQL tree qualifies any reference with
+                        ``alias_name`` (e.g. ``Alias.resource``)."""
+                        stack = [node]
+                        seen = set()
+                        while stack:
+                            cur = stack.pop()
+                            if cur is None or id(cur) in seen:
+                                continue
+                            seen.add(id(cur))
+                            if isinstance(cur, SQLQualifiedIdentifier):
+                                if cur.parts and cur.parts[0] == alias_name:
+                                    return True
+                                continue
+                            if isinstance(cur, (list, tuple)):
+                                stack.extend(cur)
+                                continue
+                            if not hasattr(cur, "__dataclass_fields__"):
+                                continue
+                            for _fn in cur.__dataclass_fields__:
+                                stack.append(getattr(cur, _fn, None))
+                        return False
+
+                    if (
+                        alias
+                        and _res_from_alias
+                        and _res_from_alias != alias
+                        and not any(
+                            j.alias == alias for j in (result.joins or [])
+                        )
+                        # Only wrap when the return expression actually
+                        # references the QUERY alias — otherwise (CMS1218
+                        # EncounterWithSurgery) the return may reference the
+                        # source's OWN from-alias, which the derived-table
+                        # wrap would hide ("Referenced table X not found").
+                        and _sql_references_alias(return_expr, alias)
+                    ):
+                        # The return expression references the QUERY alias
+                        # (e.g. `AntiInfectives.resource` from a fluent-inlined
+                        # source), but the source select's FROM chain uses the
+                        # fluent's internal aliases (OrderMedication1/2...).
+                        # Reusing that FROM directly dangles the query-alias
+                        # references. Wrap the source as a derived table
+                        # aliased AS the query alias so both scopes bind
+                        # (CMS156 Sum((fluent()) X let ... return all ...)).
+                        result = SQLSelect(
+                            columns=[return_expr],
+                            from_clause=SQLAlias(
+                                expr=SQLSubquery(query=result), alias=alias
+                            ),
+                            distinct=_return_distinct,
+                        )
+                    else:
+                        result = SQLSelect(
+                            columns=[return_expr],
+                            from_clause=result.from_clause,
+                            where=result.where,
+                            joins=result.joins,
+                            group_by=result.group_by,
+                            having=result.having,
+                            order_by=result.order_by,
+                            limit=result.limit,
+                            distinct=result.distinct or _return_distinct,
+                        )
+                elif isinstance(result, (SQLUnion, SQLIntersect, SQLExcept)):
+                    # Set-operation source with a RETURN clause referencing
+                    # the iteration alias (CMS137 `(A union B) X with ...
+                    # return all X`): the alias-ref return would inline the
+                    # union into column position. Rebind the alias as a
+                    # TABLE alias over the set operation and re-translate
+                    # the return so it projects the FROM's columns.
+                    _set_alias = alias or "_set_src"
+                    self.context.add_alias(_set_alias, table_alias=_set_alias)
+                    _set_return = self.translate(node.return_clause, usage=ExprUsage.SCALAR)
+                    # The alias machinery may still inline the SOURCE UNION
+                    # object itself into the return (alias ast_expr route).
+                    # Any node identical to the set-op FROM expression is
+                    # the whole-element reference (`return all X`) — replace
+                    # with the FROM's resource column.
+                    _set_from = result
+
+                    def _replace_setop_inline(n):
+                        if n is None or n is _set_from:
+                            return (
+                                SQLQualifiedIdentifier(parts=[_set_alias, "resource"])
+                                if n is _set_from else n
+                            )
+                        if isinstance(n, (list, tuple)):
+                            items = [_replace_setop_inline(c) for c in n]
+                            return type(n)(items) if isinstance(n, tuple) else items
+                        if not hasattr(n, "__dataclass_fields__"):
+                            return n
+                        if isinstance(n, (SQLSubquery, SQLExists)):
+                            return n
+                        for f_name in n.__dataclass_fields__:
+                            v = getattr(n, f_name, None)
+                            nv = _replace_setop_inline(v)
+                            if nv is not v:
+                                try:
+                                    setattr(n, f_name, nv)
+                                except Exception:  # noqa: BLE001
+                                    pass
+                        return n
+
+                    _set_return = _replace_setop_inline(_set_return)
                     result = SQLSelect(
-                        columns=[return_expr],
-                        from_clause=result.from_clause,
-                        where=result.where,
-                        joins=result.joins,
-                        group_by=result.group_by,
-                        having=result.having,
-                        order_by=result.order_by,
-                        limit=result.limit,
-                        distinct=result.distinct or _return_distinct,
+                        columns=[_set_return],
+                        from_clause=SQLAlias(expr=result, alias=_set_alias),
+                        distinct=_return_distinct,
                     )
                 elif isinstance(result, SQLSubquery):
                     result = SQLSelect(
@@ -5677,6 +6490,98 @@ class QueryMixin:
             # routes through fhirpath (the element is a JSON string, not a
             # struct — see _translate_property's _lt_ handling).
             _agg_element_is_json = False
+
+            def _fold_marker_swap(node):
+                """Replace RetrievePlaceholder nodes with text markers.
+
+                The fold branches below serialize source expressions to raw
+                SQL strings, which cannot carry unresolved placeholders. The
+                real placeholder stays registered on the context so Phase 1/2
+                builds its retrieve CTE; the final SQL assembly substitutes
+                the marker text with the quoted CTE name (CMS136 aggregate
+                over an inlined parenthesized retrieve).
+                """
+                if isinstance(node, RetrievePlaceholder):
+                    if not hasattr(self.context, "_fold_marker_placeholders"):
+                        self.context._fold_marker_placeholders = []
+                    reg = self.context._fold_marker_placeholders
+                    for _i, _ph in enumerate(reg):
+                        if _ph.key == node.key:
+                            return SQLIdentifier(name=f"__f4ds_ph_{_i}__")
+                    reg.append(node)
+                    return SQLIdentifier(name=f"__f4ds_ph_{len(reg) - 1}__")
+                if isinstance(node, SQLFunctionCall):
+                    return SQLFunctionCall(
+                        name=node.name,
+                        args=[_fold_marker_swap(a) for a in node.args],
+                    )
+                if isinstance(node, SQLCast):
+                    return SQLCast(
+                        expression=_fold_marker_swap(node.expression),
+                        target_type=node.target_type,
+                    )
+                if isinstance(node, SQLSubquery):
+                    return SQLSubquery(query=_fold_marker_swap(node.query))
+                if isinstance(node, SQLSelect):
+                    return SQLSelect(
+                        columns=[_fold_marker_swap(c) for c in node.columns] if node.columns else node.columns,
+                        from_clause=_fold_marker_swap(node.from_clause) if node.from_clause else node.from_clause,
+                        where=_fold_marker_swap(node.where) if node.where else node.where,
+                    )
+                if isinstance(node, SQLAlias):
+                    return SQLAlias(
+                        expr=_fold_marker_swap(node.expr),
+                        alias=node.alias,
+                    )
+                return node
+
+            # Placeholder-shaped rows source (CMS136
+            # `([MedicationRequest: "Atomoxetine"]).isMedicationOrder()
+            # ...` inlined through a list-accumulator aggregate): the
+            # source list IS the unresolved RetrievePlaceholder. The fold
+            # branches below serialize `.to_sql()` eagerly, which raises on
+            # placeholders. Materialize the per-patient resource list as a
+            # subquery whose FROM keeps the placeholder as an AST node —
+            # Phase 2 discovers it there, builds the retrieve CTE, and
+            # resolve_placeholders swaps it in (QA-013 convention).
+            from ..placeholder import contains_placeholder as _contains_ph
+            if isinstance(source_list, RetrievePlaceholder):
+                _outer_pid = "_pt"
+                _row_alias = alias or "__agg_row"
+                _inner = SQLSelect(
+                    columns=[
+                        SQLFunctionCall(
+                            name="COALESCE",
+                            args=[
+                                SQLFunctionCall(
+                                    name="list_transform",
+                                    args=[
+                                        SQLFunctionCall(
+                                            name="list",
+                                            args=[SQLQualifiedIdentifier(
+                                                parts=[_row_alias, "resource"]
+                                            )],
+                                        ),
+                                        SQLLambda(
+                                            param="__agg_e",
+                                            body=SQLCast(
+                                                expression=SQLIdentifier(name="__agg_e"),
+                                                target_type="VARCHAR",
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                                SQLArray(elements=[]),
+                            ],
+                        )
+                    ],
+                    from_clause=SQLAlias(expr=source_list, alias=_row_alias),
+                )
+                _inner.where = _patient_correlated_where(
+                    _inner.where, _row_alias, _outer_pid
+                )
+                source_list = SQLSubquery(query=_inner)
+                _agg_element_is_json = True
 
             # Iteration 8 QA-013: a rows-shaped source (bare retrieve or
             # multi-column query: `[Observation] O aggregate T starting 0:
@@ -5805,6 +6710,7 @@ class QueryMixin:
                 # Build cross-join FROM clause for all sources
                 _all_from_parts = []
                 for idx, (_ms_alias, _ms_from) in enumerate(_multi_source_info):
+                    _ms_from = _fold_marker_swap(_ms_from)
                     # Extract the array expression for proper column-named unnest
                     if isinstance(_ms_from, SQLFunctionCall) and _ms_from.name == "unnest":
                         _arr_sql = _ms_from.args[0].to_sql()
@@ -5889,6 +6795,17 @@ class QueryMixin:
                 if _starting_is_typed_list and alias:
                     # ── Single-source list-accumulator aggregate: recursive CTE fold ──
                     # source_list is the array expression (SQLArray or SQLFunctionCall).
+                    source_list = _fold_marker_swap(source_list)
+                    from ...translator.ast_helpers import ASTHelpersMixin as _AHM
+                    source_list = _listify_tuple_projection(source_list)
+                    source_list = _correlate_inlined_aggregate_source(
+                        source_list,
+                        _AHM._select_has_patient_id.__get__(self, type(self)),
+                        # The aggregate body binds the element alias (e.g. "I")
+                        # as resource_alias, so correlate to the PATIENT alias,
+                        # which is the enclosing "_patients AS _pt" scope.
+                        self.context.patient_alias or "_pt",
+                    )
                     if isinstance(source_list, SQLArray):
                         _arr_sql = source_list.to_sql()
                     elif isinstance(source_list, SQLFunctionCall) and source_list.name == "unnest":
@@ -5898,7 +6815,21 @@ class QueryMixin:
                     elif _is_list_returning_sql(source_list):
                         _arr_sql = source_list.to_sql()
                     else:
-                        _arr_sql = f"[{source_list.to_sql()}]"
+                        # Scalar-shaped source: the fold iterates ONE element.
+                        # A NULL scalar must iterate ZERO times — CQL 1.5
+                        # §19.27: an aggregate over a null/empty list does not
+                        # evaluate its body, and the result is the starting
+                        # value. `unnest([NULL])` fabricates one row, so the
+                        # body ran once against NULL and produced a phantom
+                        # element (CMS136: every drug arm whose list extraction
+                        # was NULL contributed a bogus interval, and the
+                        # roll-out chain turned a 90-day supply into 210 days).
+                        _scalar_src_sql = source_list.to_sql()
+                        _arr_sql = (
+                            f"CASE WHEN {_scalar_src_sql} IS NULL "
+                            f"THEN CAST([] AS VARCHAR[]) "
+                            f"ELSE [{_scalar_src_sql}] END"
+                        )
 
                     _distinct_kw = "DISTINCT " if agg.distinct else ""
 

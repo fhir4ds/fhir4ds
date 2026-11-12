@@ -905,6 +905,12 @@ def _literal_is_null(node: object) -> bool:
     return isinstance(node, Literal) and node.value is None
 
 
+# Minimum AST node count before the list-union CSE hoist engages
+# (CMS136: operands reach ~11 MB of rendered SQL; ordinary measures'
+# union operands stay well below this).
+_CSE_HOIST_MIN_NODES = 300
+
+
 class OperatorsMixin:
     """Mixin providing binary and unary operator translations."""
 
@@ -1299,9 +1305,17 @@ class OperatorsMixin:
                             # InferenceMixin; infer primitive Property defines
                             # straight from FHIR schema metadata so Boolean
                             # elements validate (CQL-04 EXPLORER QA-003).
-                            element_type = infer_fhir_property_type_str(
-                                self.context, ast_def.source.name, ast_def.path
-                            )
+                            # Guard (CMS-DEF-06): the schema lookup needs a
+                            # NAMED source (Identifier). A Property whose
+                            # source is a QuerySource (return-clause element
+                            # over an aliased query, CMS129) has no .name —
+                            # fall through to the define's stored cql_type
+                            # instead of crashing.
+                            _src = ast_def.source
+                            if isinstance(_src, Identifier):
+                                element_type = infer_fhir_property_type_str(
+                                    self.context, _src.name, ast_def.path
+                                )
                         if element_type not in ("Any", None):
                             return element_type
                 return meta.cql_type
@@ -1693,6 +1707,25 @@ class OperatorsMixin:
             "today", "now", "timeofday",
         ):
             return True
+        # maximum/minimum DateTime|Date|Time are temporal extents
+        # (CMS1188 hasEnd: `end of period = maximum DateTime` compared with
+        # raw string equality missed timezone normalization — intervalEnd
+        # renders +00:00 while the extent literal carries Z).
+        if isinstance(node, FunctionRef) and node.name.lower() in ("maximum", "minimum"):
+            if node.arguments:
+                _ta = node.arguments[0]
+                _tn = (
+                    _ta.name
+                    if isinstance(_ta, (Identifier, NamedTypeSpecifier))
+                    else ""
+                )
+                if str(_tn).split(".")[-1].lower() in ("datetime", "date", "time"):
+                    return True
+        # end of / start of over an interval operand are temporal points
+        if isinstance(node, UnaryExpression) and str(node.operator or "").lower() in (
+            "end of", "start of",
+        ):
+            return True
         # Arithmetic on DateTime: DateTime + Quantity → DateTime
         if isinstance(node, BinaryExpression) and node.operator in ("+", "-"):
             if self._is_temporal_cql_expr(node.left, _depth + 1):
@@ -1882,6 +1915,33 @@ class OperatorsMixin:
             return True
         if isinstance(node, Quantity):
             return True
+        # Dynamic FHIR property paths typed Quantity via the FHIR schema
+        # (e.g. MedicationRequest.dispenseRequest.quantity). Without this,
+        # `Order.dispenseRequest.quantity * MedicationStrength` treated the
+        # dynamic FHIR Quantity operand as a bare scalar and lowered to
+        # TRY_CAST(fhirpath_text(<path>) AS DOUBLE) — the path resolves to
+        # the whole Quantity JSON object, so the cast is always NULL and
+        # the product silently vanished (CMS156 averageDailyDose).
+        if isinstance(node, Property):
+            parts = []
+            current = node
+            while isinstance(current, Property) and current.path:
+                parts.append(current.path)
+                current = current.source
+            parts.reverse()
+            if parts and isinstance(current, Identifier):
+                res_type = self.context._alias_resource_types.get(current.name)
+                if not res_type:
+                    res_type = self.context.resource_type
+                if res_type and self.context.fhir_schema:
+                    el_type = self.context.fhir_schema.get_element_type(
+                        res_type, ".".join(parts)
+                    )
+                    if el_type in (
+                        "Quantity", "Duration", "Age", "Count",
+                        "SimpleQuantity", "Distance",
+                    ):
+                        return True
         # CQL-03 QA-004: Ratio component accessors (.numerator/.denominator)
         # yield Quantity values and must participate in Quantity arithmetic.
         if isinstance(node, Property) and getattr(node, "path", None) in ("numerator", "denominator"):
@@ -1952,6 +2012,85 @@ class OperatorsMixin:
                 return True
             if meta and self._bare_cql_type_name(meta.cql_type) == "Quantity":
                 return True
+            # Let-clause alias: look through to the let's CQL AST (CMS156
+            # MedicationStrength -> medicationStrengthPerUnit() Quantity).
+            let_ast = self.context._let_clause_asts.get(node.name)
+            if let_ast is not None and let_ast is not node:
+                return self._is_cql_quantity_expr(let_ast, _depth + 1)
+        # Case expressions are Quantity when any branch result is Quantity
+        # (e.g. medicationStrengthPerUnit's `case Strength ~ ... then 0.25 'mg'`).
+        try:
+            from ...parser.ast_nodes import CaseExpression as _CaseExpr
+        except ImportError:
+            _CaseExpr = None
+        if _CaseExpr is not None and isinstance(node, _CaseExpr):
+            for item in (node.case_items or []):
+                if self._is_cql_quantity_expr(item.then, _depth + 1):
+                    return True
+            if node.else_expr is not None:
+                return self._is_cql_quantity_expr(node.else_expr, _depth + 1)
+            return False
+        # `X as Quantity` / `cast X as Quantity` IS a Quantity. Several CQL
+        # libraries declare a Quantity result only through a trailing cast
+        # (PCMaternal.lastEstimatedGestationalAge ends with `.value as Quantity`
+        # and has NO return-type annotation), so the body-based inference below
+        # cannot see it and the comparison falls into the numeric path.
+        if isinstance(node, BinaryExpression) and str(node.operator).lower() in ("as", "cast"):
+            _target = getattr(node.right, "name", None)
+            if _target and self._bare_cql_type_name(_target) == "Quantity":
+                return True
+
+        # Fluent method invocations (X.f()): the function body decides the
+        # type (CMS156 `Order.getMedicationCode().medicationStrengthPerUnit()`
+        # is a Quantity — without this the operand fell to the scalar DOUBLE
+        # path and TRY_CAST(<Quantity JSON> AS DOUBLE) NULLed the product).
+        try:
+            from ...parser.ast_nodes import MethodInvocation as _MethodInv
+        except ImportError:
+            _MethodInv = None
+        if _MethodInv is not None and isinstance(node, _MethodInv):
+            func_info = self.context.get_function(node.method)
+            # Declared return type wins: a promoted fluent function resolves to
+            # a row-keyed CTE lookup (opaque VARCHAR), and its body may not be
+            # recognisable as Quantity, so without this the comparison fell into
+            # the numeric-projection path — TRY_CAST(<Quantity JSON> AS DOUBLE)
+            # → NULL → every patient dropped (CMS0334 57.8% when
+            # lastEstimatedGestationalAge started being promoted).
+            # A function may declare a Quantity result while its body is not
+            # recognisable as one — and a PROMOTED function resolves to an opaque
+            # row-keyed CTE lookup where the declared type is the only evidence.
+            # Without this the comparison takes the numeric-projection path
+            # (TRY_CAST(<Quantity JSON> AS DOUBLE) → NULL; CMS0334 dropped to
+            # 57.8% once lastEstimatedGestationalAge started being promoted).
+            _candidates = [func_info]
+            _candidates += [
+                (getattr(_inc, "functions", None) or {}).get(node.method)
+                for _inc in (getattr(self.context, "includes", None) or {}).values()
+            ]
+            # Fluent functions from included libraries live in the inliner
+            # registry (keyed by bare or "Library.name").
+            _inl = getattr(self.context, "function_inliner", None)
+            _inl_fns = getattr(_inl, "_functions", None) or {}
+            _candidates.append(_inl_fns.get(node.method))
+            for _k, _v in _inl_fns.items():
+                if isinstance(_k, str) and _k.endswith("." + node.method):
+                    _candidates.append(_v)
+            for _fi in _candidates:
+                if _fi is None:
+                    continue
+                if self._bare_cql_type_name(getattr(_fi, "return_type", None)) == "Quantity":
+                    return True
+            # Most of these helpers carry NO return-type annotation — the type is
+            # expressed only by a trailing `as Quantity` in the body
+            # (PCMaternal.lastEstimatedGestationalAge), so recurse into any
+            # candidate body reachable (current library, includes, inliner).
+            for _fi in _candidates:
+                _body = getattr(_fi, "expression", None) if _fi is not None else None
+                if _body is None and _fi is not None:
+                    _body = getattr(_fi, "body", None)
+                if _body is not None and self._is_cql_quantity_expr(_body, _depth + 1):
+                    return True
+            return False
         # FunctionRef: check built-in aggregates and user-defined functions
         if isinstance(node, FunctionRef):
             if node.name.lower() == "coalesce":
@@ -2415,6 +2554,74 @@ class OperatorsMixin:
                         expression=SQLArray(elements=[]),
                         target_type=_sql_list_type_for_cql_list_specifier(expr.right),
                     ))
+                # FHIRHelpers implicit conversion: `X as Interval<DateTime>`
+                # where X carries FHIR.Period-shaped JSON ({start, end}).
+                # The reference engine converts Period → Interval via
+                # FHIRHelpers.ToInterval, so `.low/.high`/`start of/end of`
+                # see interval bounds; a raw passthrough leaves Period JSON
+                # where `boundsPeriod."high"` reads nothing (CMS128
+                # medicationRequestPeriod fell to the null branch and the
+                # overlap decomposition's 9999-12-31 sentinel made the
+                # denominator exclusion wrongly true). Interval JSON uses
+                # low/high keys, so already-interval values pass through the
+                # CASE unchanged.
+                if (
+                    (
+                        isinstance(expr.right, IntervalTypeSpecifier)
+                        or target_name.startswith("Interval<")
+                    )
+                    and isinstance(left, SQLFunctionCall)
+                    and left.name
+                    in ("fhirpath_text", "fhirpath", "fhirpath_scalar", "fhirpath_bool")
+                ):
+                    # CAST to VARCHAR: the operand may be a non-JSON
+                    # literal (typed null, INTEGER) — json_extract_string
+                    # on a non-JSON string yields NULL and the CASE falls
+                    # through to the original value unchanged.
+                    _left_json = SQLCast(expression=left, target_type="VARCHAR")
+                    start_v = SQLFunctionCall(
+                        name="json_extract_string",
+                        args=[_left_json, SQLLiteral(value="$.start")],
+                    )
+                    end_v = SQLFunctionCall(
+                        name="json_extract_string",
+                        args=[_left_json, SQLLiteral(value="$.end")],
+                    )
+                    return _strict_cast_result(SQLCase(
+                        when_clauses=[(
+                            SQLBinaryOp(
+                                operator="OR",
+                                left=SQLUnaryOp(
+                                    operator="IS NOT NULL", operand=start_v,
+                                    prefix=False,
+                                ),
+                                right=SQLUnaryOp(
+                                    operator="IS NOT NULL", operand=end_v,
+                                    prefix=False,
+                                ),
+                            ),
+                            SQLFunctionCall(
+                                name="intervalFromBounds",
+                                args=[
+                                    start_v,
+                                    end_v,
+                                    SQLCase(
+                                        when_clauses=[(
+                                            SQLUnaryOp(
+                                                operator="IS NOT NULL",
+                                                operand=start_v,
+                                                prefix=False,
+                                            ),
+                                            SQLLiteral(value=True),
+                                        )],
+                                        else_clause=SQLLiteral(value=False),
+                                    ),
+                                    SQLLiteral(value=True),
+                                ],
+                            ),
+                        )],
+                        else_clause=left,
+                    ))
                 primitive_targets = {
                     "Boolean", "boolean",
                     "Integer", "integer",
@@ -2619,6 +2826,15 @@ class OperatorsMixin:
             if source_node is not None:
                 left = self.translate(source_node, usage=ExprUsage.SCALAR)
             target_type_name = getattr(expr.right, 'name', '') if hasattr(expr, 'right') else ''
+            # Convert-to-Quantity-unit: `convert X to 'm2'` — the right
+            # operand is a quoted UCUM unit string (Literal), not a type
+            # specifier. Lower to quantityConvert over the VARCHAR transport.
+            if isinstance(expr.right, Literal) and isinstance(expr.right.value, str):
+                return SQLFunctionCall(
+                    name="quantityConvert",
+                    args=[SQLCast(expression=left, target_type="VARCHAR"),
+                          SQLLiteral(value=expr.right.value)],
+                )
             if isinstance(expr.right, NamedTypeSpecifier):
                 if self._is_cql_conversion_unit_target(expr.right.name):
                     return left
@@ -4481,13 +4697,13 @@ class OperatorsMixin:
             and right.name == "fhirpath_text"
             and len(right.args) == 2
         ):
-            all_values = SQLFunctionCall(
-                name="from_json",
-                args=[
-                    SQLFunctionCall(name="fhirpath", args=right.args),
-                    SQLLiteral(value='["VARCHAR"]'),
-                ],
-            )
+            # Route through the shared promotion so the SOURCE TRAIL is
+            # promoted too: a let-bound trail keeps scalar navigations inside
+            # the source argument (`fhirpath(CASE WHEN ... THEN
+            # fhirpath_text(claims,'item') ... END, 'diagnosisSequence')`),
+            # and those truncated every claim/item/diagnosis after the first
+            # (CQMCommon.claimDiagnosis → CMS1028 Numerator, CMS1017 POA).
+            all_values = _promote_fhirpath_text_list(right)
             return SQLFunctionCall(
                 name="list_contains", args=[all_values, left],
             )
@@ -4761,6 +4977,19 @@ class OperatorsMixin:
                 if (len(cols) >= 1 and len(cols) <= 2
                         and from_ident and from_ident.quoted
                         and not inner.joins):
+                    # Only widen PLAIN column references (bare/qualified
+                    # identifiers naming CTE columns). A computed column —
+                    # e.g. the ToDate(...) CASE from a query's RETURN
+                    # expression (`return all <let>`) — carries the query's
+                    # semantic payload; widening to SELECT * discards it and
+                    # the union arms project raw resources instead of the
+                    # returned values (CMS137 Treatment Initiation Dates).
+                    def _is_plain_col_ref(c):
+                        if isinstance(c, SQLAlias):
+                            c = c.expr
+                        return isinstance(c, (SQLIdentifier, SQLQualifiedIdentifier))
+                    if not all(_is_plain_col_ref(c) for c in cols):
+                        return expr
                     if effective_where is None:
                         return SQLSubquery(query=SQLSelect(
                             columns=[SQLIdentifier(name="*")],
@@ -4895,12 +5124,29 @@ class OperatorsMixin:
                 if self._is_static_null_case(left) and self._is_static_null_case(right):
                     return SQLArray([])
             if left_typed_empty is not None and right_typed_empty is not None:
-                left_safe = SQLFunctionCall(
-                    name="COALESCE", args=[left, left_typed_empty]
-                )
-                right_safe = SQLFunctionCall(
-                    name="COALESCE", args=[right, right_typed_empty]
-                )
+                # CSE hoist BEFORE the COALESCE embedding (2x per operand,
+                # compounding on left-nested union chains — see
+                # _hoist_list_union_operand).
+                left_h = self._hoist_list_union_operand(left)
+                right_h = self._hoist_list_union_operand(right)
+                left_typed_empty_h = self._typed_empty_array_for(left_h)
+                right_typed_empty_h = self._typed_empty_array_for(right_h)
+                if left_typed_empty_h is None or right_typed_empty_h is None:
+                    # Hoisted lookup lost the typed-array inference — keep
+                    # the original inline form rather than breaking typing.
+                    left_safe = SQLFunctionCall(
+                        name="COALESCE", args=[left, left_typed_empty]
+                    )
+                    right_safe = SQLFunctionCall(
+                        name="COALESCE", args=[right, right_typed_empty]
+                    )
+                else:
+                    left_safe = SQLFunctionCall(
+                        name="COALESCE", args=[left_h, left_typed_empty_h]
+                    )
+                    right_safe = SQLFunctionCall(
+                        name="COALESCE", args=[right_h, right_typed_empty_h]
+                    )
                 return SQLFunctionCall(
                     name='"Distinct"',
                     args=[SQLFunctionCall(name="list_concat", args=[left_safe, right_safe])],
@@ -4957,6 +5203,14 @@ class OperatorsMixin:
             and _is_list_returning_sql(left)
             and _is_list_returning_sql(right)
         ):
+            # CSE hoist BEFORE the CASE construction: the arms below embed
+            # each operand 4x, quadrupling per union level on left-nested
+            # chains. Union-result operands are ALWAYS hoisted (see
+            # _hoist_list_union_operand) even though their shared-DAG node
+            # count is small — the wrap stage rebuilds without object
+            # sharing and re-exponentiates (CMS136: 201 -> 327,775 nodes).
+            left = self._hoist_list_union_operand(left)
+            right = self._hoist_list_union_operand(right)
             left_null = SQLUnaryOp(operator="IS NULL", operand=left, prefix=False)
             right_null = SQLUnaryOp(operator="IS NULL", operand=right, prefix=False)
             result = SQLFunctionCall(
@@ -4979,6 +5233,12 @@ class OperatorsMixin:
         # values from subqueries. Wrap in order-preserving Distinct for CQL dedup.
         # CQL §20.29: For list union, null is treated as empty list — return
         # the other argument. Use COALESCE to handle runtime nulls.
+        if not left_is_rows and not right_is_rows:
+            # CSE hoist BEFORE the CASE construction: the arms below embed
+            # each operand ~4x, quadrupling per union level on left-nested
+            # chains (CMS136 measured 45 MB from one define).
+            left = self._hoist_list_union_operand(left)
+            right = self._hoist_list_union_operand(right)
         inner = SQLFunctionCall(
             name='"Distinct"',
             args=[SQLFunctionCall(name="jsonConcat", args=[left, right])],
@@ -5008,6 +5268,161 @@ class OperatorsMixin:
                 else_clause=SQLArray([]),
             )
         return inner
+
+    def _hoist_list_union_operand(self, operand: SQLExpression) -> SQLExpression:
+        """Hoist a LARGE list-union operand into a per-patient value CTE.
+
+        The jsonConcat fallback of ``_translate_union_op`` embeds each
+        operand ~4x (IS NOT NULL arms + the concat args). For the deeply
+        left-nested unions of CMS136 (``A union (B union (C ...))``, each
+        branch carrying fully inlined fluent bodies) the rendered SQL
+        quadruples per level — a single define measured 45 MB / 305,832
+        repeated sub-expressions. This helper evaluates a big operand ONCE
+        per patient in a value CTE and leaves a small correlated lookup in
+        every embedding position, making the chain linear.
+
+        Guards (all must hold):
+        - operand node count > ``_CSE_HOIST_MIN_NODES``
+        - operand is not already a ``_cse_``/``_let_`` value-CTE lookup
+        - operand is self-contained: every qualified-identifier alias root
+          is a global (``_pt``/``_patients``/``_lv``) or an alias bound
+          INSIDE the operand (FROM/JOIN aliases). Row-scoped operands stay
+          inline (hoisting would break their correlation).
+        - not inside a function-promotion CTE build (row-scoped context)
+
+        The CTE body registers in ``context._let_variable_ctes`` under the
+        current definition: the existing injection emits it adjacent to the
+        consumer CTE (after ``_patients``), and Phase 3 resolves retrieve
+        placeholders inside it like any let body.
+        """
+        from ..types import SQLAlias as _TSQLAlias, SQLIdentifier as _TSQLIdentifier
+
+        if getattr(self.context, "_building_function_promotion_cte", False):
+            return operand
+
+        # Cheap shapes stay inline
+        if isinstance(operand, (SQLLiteral, SQLNull, SQLArray, SQLIdentifier,
+                                SQLQualifiedIdentifier, SQLRaw)):
+            return operand
+
+        # Already a value-CTE lookup: (SELECT value FROM "_cse_*" AS _lv ...)
+        if (
+            isinstance(operand, SQLSubquery)
+            and isinstance(operand.query, SQLSelect)
+            and len(operand.query.columns or []) == 1
+        ):
+            col = operand.query.columns[0]
+            _c = col.expr if isinstance(col, SQLAlias) else col
+            frm = operand.query.from_clause
+            if (
+                isinstance(_c, SQLIdentifier)
+                and _c.name == "value"
+                and isinstance(frm, _TSQLAlias)
+                and isinstance(frm.expr, _TSQLIdentifier)
+                and frm.expr.quoted
+                and (frm.expr.name.startswith("_cse_") or frm.expr.name.startswith("_let_"))
+            ):
+                return operand
+
+        # Size gate + self-containment: single walk, placeholder-safe.
+        stack = [operand]
+        seen = set()
+        node_count = 0
+        bound_inside = set()
+        _globals_ok = {"_pt", "_patients", "_lv"}
+        foreign_root = None
+        _union_result_shape = False
+        while stack:
+            n = stack.pop()
+            if n is None or id(n) in seen:
+                continue
+            seen.add(id(n))
+            node_count += 1
+            if isinstance(n, SQLFunctionCall) and n.name in (
+                '"Distinct"', "list_concat", "jsonConcat",
+            ):
+                # The operand is ITSELF a list-union result. The AST is a
+                # shared DAG (the union lowering embeds each operand ~4x by
+                # object reference), so unique-node counts stay tiny even
+                # though the rendered tree is exponential — a left-nested
+                # N-level union renders 4^N copies once the wrap rebuilds
+                # without sharing (CMS136 measured 201 resolved nodes ->
+                # 327,775 wrapped). Always hoist union-result operands to
+                # flatten the chain into flat CTE references.
+                _union_result_shape = True
+            if isinstance(n, SQLQualifiedIdentifier):
+                root = n.parts[0]
+                if not (root in _globals_ok or root.startswith("_lt_")
+                        or root.lower() in bound_inside):
+                    foreign_root = root
+                    break
+                continue
+            if isinstance(n, SQLAlias):
+                bound_inside.add(n.alias.lower())
+            if hasattr(n, "__dataclass_fields__"):
+                for f in n.__dataclass_fields__:
+                    stack.append(getattr(n, f, None))
+            elif isinstance(n, (list, tuple)):
+                stack.extend(n)
+
+        if node_count <= _CSE_HOIST_MIN_NODES and not _union_result_shape:
+            return operand
+        if foreign_root is not None:
+            return operand  # row-scoped operand: hoisting would break correlation
+
+        # Register the value CTE under the current definition
+        scope_name = self.context._current_definition or "__unknown__"
+        if scope_name not in self.context._let_variable_ctes:
+            self.context._let_variable_ctes[scope_name] = {}
+        existing = self.context._let_variable_ctes[scope_name]
+        _cse_counters = getattr(self.context, "_cse_cte_counters", None)
+        if _cse_counters is None:
+            _cse_counters = {}
+            self.context._cse_cte_counters = _cse_counters
+        _cse_counters[scope_name] = _cse_counters.get(scope_name, 0) + 1
+        import re as _re
+        safe_scope = _re.sub(r"[^A-Za-z0-9_]+", "_", scope_name).strip("_") or "scope"
+        cte_name = f"_cse_{safe_scope[:32]}_{_cse_counters[scope_name]}"
+        while cte_name in existing:
+            _cse_counters[scope_name] += 1
+            cte_name = f"_cse_{safe_scope[:32]}_{_cse_counters[scope_name]}"
+
+        # The body MUST project patient_id alongside value: the correlated
+        # lookup does `_lv.patient_id = <X>.patient_id`, and a missing
+        # column makes DuckDB fail the whole alias binding with a
+        # misleading "Referenced table _lv not found" Binder Error
+        # (CMS136 — misdiagnosed for several rounds as a scope/recursive
+        # interaction; minimal repro: any CTE without patient_id
+        # referenced via `_lv.patient_id`).
+        body = SQLSelect(
+            columns=[
+                SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
+                SQLAlias(expr=operand, alias="value"),
+            ],
+            from_clause=SQLAlias(
+                expr=SQLIdentifier(name="_patients", quoted=True),
+                alias="_pt",
+            ),
+        )
+        existing[cte_name] = body
+
+        lookup = SQLSubquery(query=SQLSelect(
+            columns=[SQLIdentifier(name="value")],
+            from_clause=SQLAlias(
+                expr=SQLIdentifier(name=cte_name, quoted=True),
+                alias="_lv",
+            ),
+            where=SQLBinaryOp(
+                operator="=",
+                left=SQLQualifiedIdentifier(parts=["_lv", "patient_id"]),
+                right=SQLQualifiedIdentifier(parts=[
+                    self.context.resource_alias or "_pt", "patient_id",
+                ]),
+            ),
+        ))
+        # Preserve list typing so population wrapping does not nest lists
+        lookup.result_type = getattr(operand, "result_type", None) or "List<Any>"
+        return lookup
 
     def _promote_list_setop_scalar_operands(self, left, right, expr):
         """CQL-18 EXPLORER QA-001 residual: CQL 1.5 App B List Operators note
@@ -5291,30 +5706,66 @@ class OperatorsMixin:
             # are handled above so dynamic/resource intervals keep measure
             # behavior stable.
             left_start = self._ensure_date_cast(self._truncate_to_precision(left_start_raw, precision))
-            left_end_raw = self._ensure_date_cast(self._truncate_to_precision(left_end_raw_bound, precision))
-            left_end = SQLFunctionCall(
-                name="COALESCE",
-                args=[left_end_raw, SQLCast(expression=SQLLiteral(value="9999-12-31"), target_type="DATE")],
-            )
+            # NOTE: no COALESCE-to-sentinel on the END bounds. intervalEnd
+            # already implements the CQL §9.14/§9.15 doctrine: a CLOSED
+            # null high bound returns the max sentinel (9999-12-31, truly
+            # unbounded) while an OPEN null high bound returns NULL
+            # (unknown). Coalescing NULL to the sentinel here defeated the
+            # open-bound case — a resolved condition with no abatement
+            # (prevalenceInterval `Interval[start, null)`) evaluated as
+            # unbounded and overlapped the measurement period (CMS129
+            # false-positive Initial Population). Let the unknown NULL
+            # propagate through the comparison (NULL >= x → NULL → row
+            # excluded), per CQL uncertainty semantics.
+            left_end = self._ensure_date_cast(self._truncate_to_precision(left_end_raw_bound, precision))
             right_start = self._ensure_date_cast(self._truncate_to_precision(right_start_raw, precision))
-            right_end_raw = self._ensure_date_cast(self._truncate_to_precision(right_end_raw_bound, precision))
-            right_end = SQLFunctionCall(
-                name="COALESCE",
-                args=[right_end_raw, SQLCast(expression=SQLLiteral(value="9999-12-31"), target_type="DATE")],
-            )
+            right_end = self._ensure_date_cast(self._truncate_to_precision(right_end_raw_bound, precision))
+            # Interval-invariant-aware unknown ends (CQL §9 overlaps over
+            # open-null-high bounds, e.g. prevalenceInterval of an
+            # inactive/resolved condition without abatement →
+            # Interval[start, null)). intervalEnd returns NULL for the OPEN
+            # null bound (unknown) and the max sentinel for the CLOSED one
+            # (unbounded). For an unknown end, the interval invariant
+            # end >= start still entails `end >= other.start` whenever
+            # start >= other.start is known TRUE — so the overlap is TRUE
+            # (not null) when the KNOWN start already lies at/after the
+            # other interval's start. When it doesn't, the comparison stays
+            # NULL and the row is excluded (uncertain). This satisfies both
+            # fixture families: CMS1154 (onset inside the look-back →
+            # exclusion fires) and CMS129 (onset years before the
+            # measurement period → unknown → excluded).
+            # Interval-invariant-aware unknown ends (CQL §9 overlaps over
+            # open-null-high bounds, e.g. prevalenceInterval of an
+            # inactive/resolved condition without abatement →
+            # Interval[start, null)). intervalEnd returns NULL for the OPEN
+            # null bound (unknown) and the max sentinel for the CLOSED one
+            # (unbounded).
+            #
+            # DOCTRINE (CMS347 695b64d8): an OPEN null high bound is UNKNOWN,
+            # never "unbounded", so the comparison must stay NULL and the row
+            # is excluded. Earlier code ENTITLED the unknown end to the other
+            # interval's start whenever the known start already lay at/after
+            # it (CMS1154 look-back family); that made a resolved condition
+            # with no abatement (`Interval[onset, null)`) overlap the
+            # measurement period and reported a false Denominator Exclusion
+            # (CMS347). Closed-null bounds still yield the max sentinel from
+            # intervalEnd, so genuinely unbounded intervals keep overlapping
+            # (CMS1154/CMS129 stay green).
+            left_end_entailed = left_end
+            right_end_entailed = right_end
             overlaps_result = SQLBinaryOp(
                 operator="AND",
-                left=SQLBinaryOp(operator="<=", left=left_start, right=right_end),
-                right=SQLBinaryOp(operator=">=", left=left_end, right=right_start),
+                left=SQLBinaryOp(operator="<=", left=left_start, right=right_end_entailed),
+                right=SQLBinaryOp(operator=">=", left=left_end_entailed, right=right_start),
             )
             precision_guard = self._temporal_precision_guard_for_intervals(
                 precision,
                 left,
                 interval_expr,
                 left_start,
-                left_end_raw,
+                left_end,
                 right_start,
-                right_end_raw,
+                right_end,
             )
             if precision_guard is not None:
                 overlaps_result = SQLCase(
@@ -5494,20 +5945,15 @@ class OperatorsMixin:
             right_start = self._ensure_date_cast(self._truncate_to_precision(right_start_raw, precision))
             left_end_raw = self._ensure_date_cast(self._truncate_to_precision(left_end_raw_bound, precision))
             right_end_raw = self._ensure_date_cast(self._truncate_to_precision(right_end_raw_bound, precision))
-            left_end = SQLFunctionCall(
-                name="COALESCE",
-                args=[
-                    left_end_raw,
-                    SQLCast(expression=SQLLiteral(value="9999-12-31"), target_type="DATE"),
-                ],
-            )
-            right_end = SQLFunctionCall(
-                name="COALESCE",
-                args=[
-                    right_end_raw,
-                    SQLCast(expression=SQLLiteral(value="9999-12-31"), target_type="DATE"),
-                ],
-            )
+            # NOTE: no sentinel COALESCE on intervalEnd-derived bounds —
+            # intervalEnd returns the point-type maximum for CLOSED null
+            # bounds (definitely unbounded) and NULL for OPEN null bounds
+            # (UNKNOWN, CQL §9.14/§9.15). Coalescing here converted unknown
+            # into definitely-unbounded (CMS133: prevalenceInterval
+            # [recordedDate, null) overlaps before surgery excluded patients
+            # the reference leaves in).
+            left_end = left_end_raw
+            right_end = right_end_raw
             overlap_check = SQLBinaryOp(
                 operator="AND",
                 left=SQLBinaryOp(operator="<=", left=left_start, right=right_end),
@@ -5567,20 +6013,15 @@ class OperatorsMixin:
             right_start = self._ensure_date_cast(self._truncate_to_precision(right_start_raw, precision))
             left_end_raw = self._ensure_date_cast(self._truncate_to_precision(left_end_raw_bound, precision))
             right_end_raw = self._ensure_date_cast(self._truncate_to_precision(right_end_raw_bound, precision))
-            left_end = SQLFunctionCall(
-                name="COALESCE",
-                args=[
-                    left_end_raw,
-                    SQLCast(expression=SQLLiteral(value="9999-12-31"), target_type="DATE"),
-                ],
-            )
-            right_end = SQLFunctionCall(
-                name="COALESCE",
-                args=[
-                    right_end_raw,
-                    SQLCast(expression=SQLLiteral(value="9999-12-31"), target_type="DATE"),
-                ],
-            )
+            # NOTE: no sentinel COALESCE on intervalEnd-derived bounds —
+            # intervalEnd returns the point-type maximum for CLOSED null
+            # bounds (definitely unbounded) and NULL for OPEN null bounds
+            # (UNKNOWN, CQL §9.14/§9.15). Coalescing here converted unknown
+            # into definitely-unbounded (CMS133: prevalenceInterval
+            # [recordedDate, null) overlaps before surgery excluded patients
+            # the reference leaves in).
+            left_end = left_end_raw
+            right_end = right_end_raw
             overlap_check = SQLBinaryOp(
                 operator="AND",
                 left=SQLBinaryOp(operator="<=", left=left_start, right=right_end),
@@ -6722,6 +7163,70 @@ class OperatorsMixin:
             result = SQLUnaryOp(operator="NOT", operand=result)
         return result
 
+    def _resolve_included_code(self, lib_alias: str, code_name: str) -> Optional[dict]:
+        """Resolve `Alias."code"` against the INCLUDED library's declarations."""
+        includes = getattr(self.context, "includes", None) or {}
+        try:
+            inc = includes.get(lib_alias)
+        except AttributeError:
+            inc = None
+        library = getattr(inc, "library_ast", None) if inc is not None else None
+        if library is None:
+            return None
+        cs_map = {cs.name: cs.id for cs in (getattr(library, "codesystems", None) or [])}
+        for code in (getattr(library, "codes", None) or []):
+            if getattr(code, "name", None) != code_name:
+                continue
+            info = {
+                "code": code.code,
+                "codesystem": cs_map.get(code.codesystem, code.codesystem),
+                "display": getattr(code, "display", None),
+            }
+            version = getattr(code, "version", None)
+            if version is not None:
+                info["version"] = version
+            return info
+        return None
+
+    def _resolve_included_concept(self, lib_alias: str, concept_name: str) -> Optional[dict]:
+        """Resolve `Alias."concept"` against the INCLUDED library's declarations."""
+        includes = getattr(self.context, "includes", None) or {}
+        try:
+            inc = includes.get(lib_alias)
+        except AttributeError:
+            inc = None
+        library = getattr(inc, "library_ast", None) if inc is not None else None
+        if library is None:
+            return None
+        cs_map = {cs.name: cs.id for cs in (getattr(library, "codesystems", None) or [])}
+        code_map = {
+            c.name: c for c in (getattr(library, "codes", None) or [])
+            if getattr(c, "name", None)
+        }
+        for concept in (getattr(library, "concepts", None) or []):
+            if getattr(concept, "name", None) != concept_name:
+                continue
+            members = []
+            for ref in (getattr(concept, "codes", None) or []):
+                ref_name = ref if isinstance(ref, str) else getattr(ref, "name", None)
+                declared = code_map.get(ref_name)
+                if declared is None:
+                    continue
+                member = {
+                    "code": declared.code,
+                    "system": cs_map.get(declared.codesystem, declared.codesystem),
+                }
+                display = getattr(declared, "display", None)
+                if display:
+                    member["display"] = display
+                members.append(member)
+            info: dict = {"codes": members}
+            display = getattr(concept, "display", None)
+            if display:
+                info["display"] = display
+            return info
+        return None
+
     def _resolve_code_ref_inline(self, operand_ast) -> Optional[dict]:
         """Phase 3 inline code-ref resolver used by ``_translate_code_is_op``.
 
@@ -6898,7 +7403,17 @@ class OperatorsMixin:
                             }
                 return None
             if isinstance(operand_ast, QualifiedIdentifier) and len(operand_ast.parts) >= 2:
-                # Library-qualified code ref: QICoreCommon."confirmed" → look up "confirmed"
+                # Library-qualified code ref: resolve it against THAT library's
+                # own code/codesystem declarations first. A global name lookup
+                # returns whichever library registered the name last, so
+                # Status."confirmed" could resolve to the AllergyIntolerance
+                # verification code system instead of condition-ver-status —
+                # every verification predicate then matched nothing (CMS996).
+                scoped = self._resolve_included_code(
+                    operand_ast.parts[0], operand_ast.parts[-1]
+                )
+                if scoped is not None:
+                    return scoped
                 code_name = operand_ast.parts[-1]
                 return self.context.get_code(code_name)
             if isinstance(operand_ast, Property) and isinstance(operand_ast.source, Identifier):
@@ -7191,6 +7706,44 @@ class OperatorsMixin:
             if isinstance(resource_expr, SQLFunctionCall) and resource_expr.name in ("fhirpath_text", "fhirpath_date", "fhirpath_bool"):
                 # Use the first arg (the resource reference)
                 resource_ref = resource_expr.args[0]
+            elif isinstance(resource_expr, SQLCase):
+                # Choice-cast `X.value as FHIR.CodeableConcept` lowers to a
+                # type-check CASE whose arms extract the value. coding_matches
+                # wants the RESOURCE (its path resolves FHIR choice fields
+                # natively); passing the extracted concept JSON makes the
+                # path dangle (CMS1056 ctScanQualifies: concept match always
+                # False -> Numerator false for all three CT measures).
+                _inner_ref = None
+                _stack = [resource_expr.else_clause] + [w[1] for w in (resource_expr.when_clauses or [])]
+                while _stack:
+                    _n = _stack.pop()
+                    if _n is None:
+                        continue
+                    if (
+                        isinstance(_n, SQLFunctionCall)
+                        and _n.name in ("fhirpath_text", "fhirpath_date", "fhirpath_bool")
+                        and _n.args
+                    ):
+                        _inner_path = _n.args[1].value if (
+                            len(_n.args) > 1
+                            and isinstance(_n.args[1], SQLLiteral)
+                            and isinstance(_n.args[1].value, str)
+                        ) else None
+                        # Only re-anchor when the CASE extracts the SAME path
+                        # the coding-exists expression navigates (the choice-
+                        # cast `X.value as FHIR.CodeableConcept` shape). When
+                        # the CASE extracts a DEEPER path (component codings
+                        # etc.), the concept-JSON argument with the short
+                        # path is the correct form (CMS156 strength match).
+                        if _inner_path == base_path:
+                            _inner_ref = _n.args[0]
+                        break
+                    if hasattr(_n, "__dataclass_fields__"):
+                        for _f2 in _n.__dataclass_fields__:
+                            _stack.append(getattr(_n, _f2, None))
+                    elif isinstance(_n, (list, tuple)):
+                        _stack.extend(_n)
+                resource_ref = _inner_ref if _inner_ref is not None else resource_expr
             elif isinstance(resource_expr, SQLQualifiedIdentifier) and len(resource_expr.parts) >= 2:
                 # E.type → E.resource (replace last part with "resource")
                 resource_ref = SQLQualifiedIdentifier(parts=resource_expr.parts[:-1] + ["resource"])

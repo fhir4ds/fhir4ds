@@ -223,6 +223,7 @@ def optimize_property_access(
         After (if onset_date is precomputed in the CTE):
             t1.onset_date
     """
+    _FHIRPATH_OPT_MEMO.clear()
     # Extract alias-to-CTE mapping from the AST if not provided
     if alias_to_cte is None:
         alias_to_cte = _extract_alias_to_cte_mapping(ast)
@@ -254,6 +255,10 @@ def propagate_resource_column_lineage(
         cte_name = _normalize_cte_name(cte.name)
         if isinstance(query, SQLSelect):
             updated_query, inherited = _propagate_select_resource_columns(query, registry)
+            if not inherited:
+                # SELECT ... FROM (<union>) AS a — lineage stops at the
+                # union; propagate into the operands instead (CMS-DEF-01B).
+                updated_query, inherited = _propagate_select_over_union(query, registry)
         elif isinstance(query, SQLUnion):
             updated_query, inherited = _propagate_union_resource_columns(query, registry)
         else:
@@ -273,6 +278,13 @@ def propagate_resource_column_lineage(
             propagated.append(cte)
 
     return propagated
+
+
+# Sentinel alias→CTE value for derived-table aliases (FROM (SELECT/UNION...)
+# AS x). These bind no CTE: optimizers must never substitute precomputed
+# columns against them, and their assignment shadows inherited same-named
+# mappings (CMS145 ValidEncounter.period over a union alias).
+_DERIVED_TABLE = "\x00__derived_table__"
 
 
 def _extract_alias_to_cte_mapping(ast: SQLExpression) -> Dict[str, str]:
@@ -325,6 +337,16 @@ def _extract_alias_from_table_ref(
         table_ref: The table reference (SQLIdentifier, SQLAlias, SQLQualifiedIdentifier)
         alias_map: Dict to update with mappings
         explicit_alias: Optional explicit alias from JOIN
+
+    Derived-table aliases (``FROM (SELECT/UNION/...) AS x``) are recorded as
+    ``_DERIVED_TABLE`` sentinels: they bind NO CTE, and the assignment SHADOWS
+    any same-named mapping inherited from a sibling query in the global map.
+    Without the sentinel, a sibling define that legitimately binds the same
+    CQL alias name to a real CTE leaks into this scope and the fhirpath
+    optimizer substitutes that CTE's precomputed columns onto the derived
+    alias — the union only exposes (patient_id, resource), producing
+    ``Values list "X" does not have a column named "period"`` binder errors
+    (CMS145 ValidEncounter.period).
     """
     if isinstance(table_ref, SQLAlias):
         # Pattern: SQLAlias(expr=SQLIdentifier("CTE Name"), alias="t1")
@@ -333,6 +355,11 @@ def _extract_alias_from_table_ref(
             cte_name = table_ref.expr.name
         elif isinstance(table_ref.expr, SQLQualifiedIdentifier) and len(table_ref.expr.parts) == 1:
             cte_name = table_ref.expr.parts[0]
+        elif isinstance(table_ref.expr, (SQLSubquery, SQLUnion, SQLIntersect, SQLExcept)):
+            # Derived table: binds no CTE; shadow any inherited mapping so a
+            # same-named alias from a sibling query cannot leak in.
+            alias_map[table_ref.alias] = _DERIVED_TABLE
+            return
 
         if cte_name:
             alias_map[table_ref.alias] = cte_name
@@ -549,6 +576,50 @@ def _materialize_select_inherited_columns(
                 distinct_on=select.distinct_on,
         ),
         inherited_available,
+    )
+
+
+def _propagate_select_over_union(
+    select: SQLSelect,
+    registry: ColumnRegistry,
+) -> Tuple[SQLSelect, Dict[str, ColumnInfo]]:
+    """Propagate precomputed columns through ``SELECT ... FROM (<union>) AS a``.
+
+    The pattern (CMS-DEF-01B): a define CTE whose FROM is an alias over a
+    UNION of resource CTE subqueries. The operands only project
+    (patient_id, resource) while downstream where-clauses reference
+    precomputed columns (``a.period``, ``a.status``). Materialize the
+    common lineage columns into the UNION operands, then report them as
+    inherited so the CTE gets registered and the alias references resolve.
+    """
+    from_clause = select.from_clause
+    union = None
+    if isinstance(from_clause, SQLAlias):
+        inner = from_clause.expr
+        if isinstance(inner, SQLSubquery) and isinstance(inner.query, SQLUnion):
+            union = inner.query
+        elif isinstance(inner, SQLUnion):
+            union = inner
+    if union is None:
+        return select, {}
+    if select.group_by or select.having or select.joins:
+        return select, {}
+
+    updated_union, common = _propagate_union_resource_columns(union, registry)
+    if not common:
+        return select, {}
+    return (
+        SQLSelect(
+            columns=select.columns,
+            from_clause=SQLAlias(expr=updated_union, alias=from_clause.alias),
+            where=select.where,
+            joins=select.joins,
+            order_by=select.order_by,
+            distinct=select.distinct,
+            distinct_on=select.distinct_on,
+            limit=select.limit,
+        ),
+        common,
     )
 
 
@@ -813,6 +884,12 @@ _RAW_CTE_ALIAS_RE = re.compile(
     r'\b(?:FROM|JOIN)\s+"((?:[^"]|"")*)"\s+AS\s+([A-Za-z_][A-Za-z0-9_]*)',
     re.IGNORECASE,
 )
+# Derived-table aliases: `...) AS x` — binds no CTE (CMS145 doctrine).
+_RAW_DERIVED_ALIAS_RE = re.compile(
+    r"\)\s+AS\s+([A-Za-z_][A-Za-z0-9_]*)",
+    re.IGNORECASE,
+)
+
 _RAW_UNQUOTED_ALIAS_RE = re.compile(
     r"\b(?:FROM|JOIN)\s+(?!\")([A-Za-z_][A-Za-z0-9_.]*)"
     r"(?:\s+AS)?\s+([A-Za-z_][A-Za-z0-9_]*)",
@@ -844,6 +921,18 @@ def _merge_raw_alias_mapping(
     """
     merged = dict(alias_to_cte)
     conflicts: Set[str] = set()
+
+    # Derived-table aliases: `...) AS x` (FROM (SELECT/UNION...) AS x).
+    # These bind no CTE; if the same alias name is ALSO bound to a real CTE
+    # elsewhere in the fragment (a sibling query reusing the CQL alias name),
+    # the derived binding must win for the whole fragment — substituting the
+    # sibling CTE's columns onto the derived alias produces binder errors
+    # (CMS145 ValidEncounter.period over an inlined union). Conservative by
+    # design: skipping an optimization is always safe.
+    for alias in _RAW_DERIVED_ALIAS_RE.findall(raw_sql):
+        merged.pop(alias, None)
+        conflicts.discard(alias)
+        merged[alias] = _DERIVED_TABLE
 
     for raw_cte_name, alias in _RAW_CTE_ALIAS_RE.findall(raw_sql):
         cte_name = raw_cte_name.replace('""', '"')
@@ -891,7 +980,7 @@ def _optimize_raw_fhirpath_resource_calls(
         alias = match.group(2)
         path = match.group(3).replace("''", "'")
         cte_name = raw_alias_to_cte.get(alias)
-        if not cte_name:
+        if not cte_name or cte_name == _DERIVED_TABLE:
             return match.group(0)
         column_info = None
         for info in registry.get_columns(cte_name).values():
@@ -926,7 +1015,34 @@ def optimize_rendered_property_access(
     return _optimize_raw_fhirpath_resource_calls(sql_text, registry, alias_to_cte or {})
 
 
+# Identity memo for _optimize_fhirpath_calls. Inlined fluent bodies share
+# AST subtrees by reference, so the rebuild-per-parent optimizer expands a
+# shared DAG into an exponential tree (CMS136). Entries store the ORIGINAL
+# node object alongside the result: the node stays referenced (its id()
+# cannot be recycled) and identity is re-validated on every hit.
+_FHIRPATH_OPT_MEMO: dict = {}
+
+
 def _optimize_fhirpath_calls(
+    ast: SQLExpression,
+    registry: ColumnRegistry,
+    alias_to_cte: Dict[str, str]
+) -> SQLExpression:
+    """
+    Memoized entry point — see _optimize_fhirpath_calls_uncached.
+    """
+    if ast is None or isinstance(ast, SQLSelect):
+        return _optimize_fhirpath_calls_uncached(ast, registry, alias_to_cte)
+    memo_key = (id(ast), id(alias_to_cte))
+    entry = _FHIRPATH_OPT_MEMO.get(memo_key)
+    if entry is not None and entry[0] is ast:
+        return entry[1]
+    result = _optimize_fhirpath_calls_uncached(ast, registry, alias_to_cte)
+    _FHIRPATH_OPT_MEMO[memo_key] = (ast, result)
+    return result
+
+
+def _optimize_fhirpath_calls_uncached(
     ast: SQLExpression,
     registry: ColumnRegistry,
     alias_to_cte: Dict[str, str]
@@ -1048,7 +1164,10 @@ def _try_optimize_fhirpath_call(
 
     # Look up the CTE name for this alias
     cte_name = alias_to_cte.get(alias)
-    if not cte_name:
+    if not cte_name or cte_name == _DERIVED_TABLE:
+        # Derived-table (union/subquery) aliases bind no CTE: substituting a
+        # same-named sibling CTE's columns onto them produces binder errors
+        # (CMS145). Keep the fhirpath_* call form, which navigates .resource.
         return None
 
     # Look up the column in the registry
@@ -1188,10 +1307,18 @@ def _try_optimize_interval_bound_call(
         cte_name, alias, column_name = selected
         bound_col_name = f"{column_name}_{suffix}"
         if registry.has_column(cte_name, bound_col_name):
+            optimized_col: SQLExpression = SQLQualifiedIdentifier(parts=[alias, bound_col_name])
+            # Closed-null sentinel doctrine — see the qualified-identifier
+            # branch below for the full rationale (CMS996 ongoing periods).
+            sentinel = "9999-12-31" if call.name == "intervalEnd" else "0001-01-01"
+            optimized_col = SQLFunctionCall(
+                name="COALESCE",
+                args=[optimized_col, SQLLiteral(value=sentinel)],
+            )
             return SQLSubquery(
                 query=_replace_select_columns(
                     arg.query,
-                    [SQLQualifiedIdentifier(parts=[alias, bound_col_name])],
+                    [optimized_col],
                 )
             )
         return None
@@ -1201,11 +1328,30 @@ def _try_optimize_interval_bound_call(
     alias = arg.parts[-2]
     column_name = arg.parts[-1]
     cte_name = alias_to_cte.get(alias)
-    if not cte_name:
+    if not cte_name or cte_name == _DERIVED_TABLE:
         return None
     bound_col_name = f"{column_name}_{suffix}"
     if registry.has_column(cte_name, bound_col_name):
-        return SQLQualifiedIdentifier(parts=[alias, bound_col_name])
+        optimized: SQLExpression = SQLQualifiedIdentifier(parts=[alias, bound_col_name])
+        # FHIR Periods are CLOSED intervals; a missing bound means
+        # unbounded (ongoing), and the intervalStart/intervalEnd UDFs
+        # implement that via min/max sentinels. Replacing the call with
+        # the RAW precomputed column loses the sentinel substitution:
+        # intervalEnd(period) over an ongoing Encounter (period_end NULL)
+        # returned NULL instead of 9999-12-31, failing
+        # `period overlaps day of X` exclusions (CMS996 hospice
+        # discharge-disposition). Restore the closed-null sentinel here.
+        if call.name == "intervalEnd":
+            optimized = SQLFunctionCall(
+                name="COALESCE",
+                args=[optimized, SQLLiteral(value="9999-12-31")],
+            )
+        else:
+            optimized = SQLFunctionCall(
+                name="COALESCE",
+                args=[optimized, SQLLiteral(value="0001-01-01")],
+            )
+        return optimized
     return None
 
 
@@ -1595,10 +1741,22 @@ def run_optimization_phases(
     # resource+valueset).  We must MERGE properties across all keys that map to
     # the same CTE before building, otherwise a key with empty properties will
     # overwrite an earlier build that had precomputed columns.
-    all_retrieve_keys = set()
+    # ORDERED, unique retrieve keys. This must be a list, not a set: iterating a
+    # set of (resource_type, valueset, profile_url) STRING tuples is ordered by
+    # hash randomisation, so the WITH-clause emission order changed between
+    # processes. That produced byte-different SQL for identical input — and for
+    # CMS124/CMS138 one of the orderings hits a DuckDB binder error ("Set
+    # operations can only apply to expressions with the same number of result
+    # columns") while the other executes, i.e. the measure result depended on
+    # PYTHONHASHSEED. Deterministic order = reproducible SQL and reproducible
+    # measure scores.
+    all_retrieve_keys: List[Tuple] = []
+    _seen_retrieve_keys = set()
     code_property_map: Dict[Tuple, Optional[str]] = {}
     for placeholder in phase1_result.placeholders:
-        all_retrieve_keys.add(placeholder.key)
+        if placeholder.key not in _seen_retrieve_keys:
+            _seen_retrieve_keys.add(placeholder.key)
+            all_retrieve_keys.append(placeholder.key)
         if placeholder.code_property:
             code_property_map[placeholder.key] = placeholder.code_property
 
@@ -1618,7 +1776,7 @@ def run_optimization_phases(
         merged_properties = set()
         merged_code_property = code_property_map.get(key)
         merged_profile_urls = []
-        for other_key in all_retrieve_keys:
+        for other_key in all_retrieve_keys:  # ordered (see above)
             o_rt, o_vs, o_profile = other_key
             if o_rt == resource_type and o_vs == valueset:
                 merged_properties.update(phase1_result.property_usage.get(other_key, set()))
@@ -1675,6 +1833,10 @@ def run_optimization_phases(
             phase2_result.column_registry
         )
 
+        from .derived_alias_refs import fix_derived_alias_column_refs
+        optimized_ast = fix_derived_alias_column_refs(optimized_ast, phase2_result.column_registry)
+        from .correlate_counts import correlate_count_subqueries
+        optimized_ast = correlate_count_subqueries(optimized_ast)
         resolved_asts[def_name] = optimized_ast
 
         # Also resolve placeholders in let-variable CTE bodies for this definition
@@ -1700,7 +1862,9 @@ def run_optimization_phases(
     # Resolve placeholders in function promotion CTE bodies
     for fn_key, fn_ctes in context._function_promotion_ctes.items():
         for fn_cte_name, fn_cte_body in list(fn_ctes.items()):
-            resolved_body = resolve_placeholders(fn_cte_body, phase2_result.cte_name_map)
+            resolved_body = resolve_placeholders(
+                fn_cte_body, phase2_result.cte_name_map, promotion_body=True
+            )
             optimized_body = optimize_property_access(
                 resolved_body,
                 phase2_result.column_registry

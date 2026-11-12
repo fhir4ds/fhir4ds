@@ -60,6 +60,20 @@ _PYTHON_PREFERRED_CPP_CONFLICTS = {
     "intervalIncludedInPrecise",
     "intervalBeforePrecise",
     "intervalAfterPrecise",
+    # Point temporal predicates. The C++ `CompareTemporal` runs its operands
+    # through `ExtractTemporalOperand`, which parses a leading `{` as an
+    # Interval/Period JSON and compares its LOW bound — so a FHIR Period reaching
+    # `before` (e.g. `AllergyIntolerance.onset` on a period-valued onset) compared
+    # as a point and produced a definitive TRUE. The Python implementations parse
+    # the operand as a temporal literal and return NULL for a JSON document,
+    # which is the CQL 1.5 same-type signature behaviour (a Period is not a
+    # point). Verified divergence: native cqlBefore('{"start":"2021-01-10",...}',
+    # '2026-10-10') = TRUE, Python = NULL (CMS996 f6c7dbc1 allergy arm).
+    "cqlBefore",
+    "cqlAfter",
+    "cqlSameOrBefore",
+    "cqlSameOrAfter",
+    "cqlDateTimeEqual",
     "intervalOverlapsBeforePrecise",
     "intervalOverlapsAfterPrecise",
     "intervalFromBounds",

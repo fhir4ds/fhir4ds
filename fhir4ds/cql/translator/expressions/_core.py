@@ -474,6 +474,42 @@ class CoreMixin:
         """
         return self._clinical_code_literal(cs.code, cs.system, cs.display)
 
+
+    def _outer_pid_alias_for_definition_lookup(self) -> str:
+        """Correlation alias for definition-reference lookups.
+
+        ``resource_alias`` may name a query alias bound to an ELEMENT-VALUE
+        source (ast_expr registration — unnest/lambda iteration over a list).
+        Such aliases have no table binding: no rows in scope carry
+        ``<alias>.patient_id``. Correlating to them dangles inside the
+        elementwise expression (CMS136 "ADHD Medications Taken on IPSD...":
+        IPSD lookups inside ``return all X intersect ...`` correlated to
+        ``ADHDMedication.patient_id`` — Binder Error "Referenced table
+        ADHDMedication not found, candidates: _lt_unnest"). Fall back to the
+        patient-table alias, which the enclosing patient-scoped select
+        always binds.
+        """
+        ra = self.context.resource_alias
+        if ra and ra not in ("_pt", "_patients"):
+            sym = None
+            try:
+                sym = self.context.lookup_symbol(ra)
+            except Exception:
+                sym = None
+            has_table = bool(
+                sym is not None
+                and (
+                    getattr(sym, "table_alias", None)
+                    or (
+                        getattr(sym, "cte_name", None)
+                        and getattr(sym, "cte_name", None) != ra
+                    )
+                )
+            )
+            if not has_table:
+                return self.context.patient_alias or "_pt"
+        return ra or self.context.patient_alias or "_pt"
+
     def _build_promoted_definition_lookup(self, name: str, usage: ExprUsage) -> SQLExpression:
         """Build a correlated subquery lookup for a promoted global definition.
 
@@ -489,7 +525,7 @@ class CoreMixin:
         if strategy.kind == _RefKind.EXISTS:
             return self._build_correlated_exists(name)
 
-        _outer_pid_alias = self.context.resource_alias or self.context.patient_alias or "_pt"
+        _outer_pid_alias = self._outer_pid_alias_for_definition_lookup()
         select = SQLSelect(
             columns=[SQLQualifiedIdentifier(parts=["sub", strategy.column])],
             from_clause=SQLAlias(
@@ -778,7 +814,7 @@ class CoreMixin:
                             suggestion="Use First() or Last() for explicit single-value selection"
                         )
                     # SCALAR always wants a single value: emit a LIMIT-1 subquery.
-                    _outer_pid_alias = self.context.resource_alias or self.context.patient_alias or "_pt"
+                    _outer_pid_alias = self._outer_pid_alias_for_definition_lookup()
                     subq = SQLSubquery(query=SQLSelect(
                         columns=[SQLQualifiedIdentifier(parts=["sub", strategy.column])],
                         from_clause=SQLAlias(
@@ -1201,6 +1237,28 @@ class CoreMixin:
             # e.g., FHIRHelpers.ToDateTime or AIFrailLTCF."Some Definition"
             if len(parts) >= 2:
                 full_name = ".".join(parts)
+                # A qualified reference may name one of the INCLUDED library's own
+                # `code` / `concept` declarations rather than a definition. Codes
+                # and definitions live in separate CQL namespaces, so resolve the
+                # code first: falling through to definition handling emitted a
+                # reference to a non-existent CTE
+                # (`AlaraCommon."Abdomen and Pelvis Low Dose"` — CMS1056/1074/1206
+                # Catalog Error; CMS124/138 set-operation column mismatch).
+                _inc_code = None
+                if hasattr(self, "_resolve_included_code"):
+                    _inc_code = self._resolve_included_code(first, parts[-1])
+                if _inc_code is not None:
+                    return self._clinical_code_literal(
+                        _inc_code.get("code"),
+                        _inc_code.get("codesystem"),
+                        _inc_code.get("display"),
+                        _inc_code.get("version"),
+                    )
+                _inc_concept = None
+                if hasattr(self, "_resolve_included_concept"):
+                    _inc_concept = self._resolve_included_concept(first, parts[-1])
+                if _inc_concept is not None:
+                    return self._clinical_concept_literal(_inc_concept)
                 # Check if this definition was successfully loaded
                 if hasattr(self.context, 'has_included_definition') and not self.context.has_included_definition(full_name):
                     # Definition wasn't loaded (library failed to parse)
@@ -1244,11 +1302,7 @@ class CoreMixin:
                     strategy = self._classify_definition_ref(full_name, usage, meta)
                     if strategy.kind == _RefKind.EXISTS:
                         return self._build_correlated_exists(full_name)
-                    _outer_pid_alias = (
-                        self.context.resource_alias
-                        or self.context.patient_alias
-                        or "_pt"
-                    )
+                    _outer_pid_alias = self._outer_pid_alias_for_definition_lookup()
                     subquery = SQLSubquery(query=SQLSelect(
                         columns=[SQLQualifiedIdentifier(parts=["sub", strategy.column])],
                         from_clause=SQLAlias(
@@ -1338,4 +1392,4 @@ class CoreMixin:
             else self.context.resource_alias or "E"
         )
 
-        return self._make_function_cte_lookup(fn_cte_name, source_alias)
+        return self._make_function_cte_lookup(fn_cte_name, source_alias, func_name=func_name)

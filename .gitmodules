@@ -20,3 +20,6 @@
 	path = extensions/cql/extension-ci-tools
 	url = https://github.com/duckdb/extension-ci-tools
 	branch = main
+[submodule "tests/data/dqm-content-cms-2025"]
+	path = tests/data/dqm-content-cms-2025
+	url = https://github.com/fhir4ds/dqm-content-cms-2025.git

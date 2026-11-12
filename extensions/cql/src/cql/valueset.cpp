@@ -485,6 +485,32 @@ static void extract_codes_from_val(yyjson_val *val, std::vector<CodeValue> &code
 				extract_codes_from_val(elem, codes);
 			}
 		}
+
+		// CQL Concept JSON shape (ToConcept output): { codes: [ { system,
+		// code, ... }, ... ] } — Concept ~ Code/Concept equivalence lowers
+		// through coding_matches with the Concept value as the element
+		// (CMS156 medication strength matching). Mirrors the Python
+		// _extract_codes_from_element 'codes' branch.
+		yyjson_val *concept_codes = yyjson_obj_get(val, "codes");
+		if (concept_codes && yyjson_is_arr(concept_codes)) {
+			size_t idx, max;
+			yyjson_val *elem;
+			yyjson_arr_foreach(concept_codes, idx, max, elem) {
+				if (!yyjson_is_obj(elem)) {
+					continue;
+				}
+				yyjson_val *c_code = yyjson_obj_get(elem, "code");
+				if (!c_code || !yyjson_is_str(c_code) || yyjson_get_str(c_code)[0] == '\0') {
+					continue;
+				}
+				std::string c_system = "";
+				yyjson_val *c_sys = yyjson_obj_get(elem, "system");
+				if (c_sys && yyjson_is_str(c_sys)) {
+					c_system = yyjson_get_str(c_sys);
+				}
+				codes.push_back({c_system, yyjson_get_str(c_code)});
+			}
+		}
 	} else if (yyjson_is_arr(val)) {
 		size_t idx, max;
 		yyjson_val *elem;
@@ -550,6 +576,15 @@ std::vector<CodeValue> extract_codes(const std::string &resource_json, const std
 	yyjson_val *val = resolve_path(root, path);
 
 	extract_codes_from_val(val, codes);
+	// Mirror the Python `_extract_codes_for_match` path=="code" fallback:
+	// when arg1 is an already-extracted CodeableConcept/Coding/Concept JSON
+	// (let-CTE promoted values navigate 'code' over the extracted element),
+	// there is no 'code' key — the codes live under 'coding'/'codes'/inline
+	// system+code. extract_codes_from_val handles all those shapes on the
+	// root object (CMS104 Denominator Exclusion let-promoted DischDisp).
+	if (codes.empty() && path == "code") {
+		extract_codes_from_val(root, codes);
+	}
 
 	yyjson_doc_free(doc);
 	return codes;
@@ -567,6 +602,11 @@ CodeExtractionResult extract_codes_with_not_done_valueset(const std::string &res
 	yyjson_val *root = yyjson_doc_get_root(doc);
 	yyjson_val *val = resolve_path(root, path);
 	extract_codes_from_val(val, result.codes);
+	// Path=="code" fallback over the root element — see the mirror comment
+	// in extract_codes (let-CTE promoted CodeableConcept values).
+	if (result.codes.empty() && path == "code") {
+		extract_codes_from_val(root, result.codes);
+	}
 	if (result.codes.empty()) {
 		result.has_not_done_valueset = has_not_done_valueset_value(val, valueset_url);
 	}
