@@ -6587,20 +6587,25 @@ The DQM suites are named for WHAT they are, not for the content-package year:
 
 | canonical | content package | gate result |
 |---|---|---|
-| `qi-core` | ecqm-content-qicore-2025 | 47/47 |
-| `us-core` | dqm-content-cms-2025 (CMS US Core) | 73/73 |
+| `qi-core-2025` | ecqm-content-qicore-2025 | 47/47 |
+| `us-core-2025` | dqm-content-cms-2025 (CMS US Core) | 73/73 |
 | `qi-core-2026` | dqm-content-qicore-2026 | not gated |
 
-Legacy spellings `2025`, `cms2025` and `2026` are still accepted by `--suite`
+Names carry the RELEASE YEAR because more content releases are expected — a bare
+`qi-core` would silently mean a different suite next year.
+
+Legacy spellings `2025`, `cms2025` and `2026` (plus the unversioned
+`qi-core`/`us-core`, which mean the 2025 release) are still accepted by `--suite`
 (`config.normalize_suite` normalises, and `fhir4ds/dqm/tests/unit/test_suite_naming.py`
 pins both directions), so existing CI jobs and older notes keep working.
 
 **Both DQM suites are part of the release gate.** `conformance/scripts/run_all.py`
 invokes `run_dqm.py` once per suite and writes a separate report for each
-(`dqm_report.json` for qi-core, `us_core_dqm_report.json` for us-core), so the
+(`dqm_report.json` for qi-core-2025, `us_core_dqm_report.json` for
+us-core-2025), so the
 master run is now:
 
-    ViewDefinition 144 + FHIRPath 935 + CQL 1706 + DQM qi-core 47
-    + DQM us-core 73 + OMOP 38 = 2943/2943
+    ViewDefinition 144 + FHIRPath 935 + CQL 1706 + DQM qi-core-2025 47
+    + DQM us-core-2025 73 + OMOP 38 = 2943/2943
 
 `run_dqm.py` also takes `--output` if a different report path is needed.

@@ -10,9 +10,9 @@ from pathlib import Path
 
 from .config import (
     CANONICAL_SUITES,
-    SUITE_QI_CORE,
+    SUITE_QI_CORE_2025,
     SUITE_QI_CORE_2026,
-    SUITE_US_CORE,
+    SUITE_US_CORE_2025,
     normalize_suite,
 )
 
@@ -86,13 +86,14 @@ def main():
         "--suite",
         type=_normalize_suite_arg,
         choices=list(CANONICAL_SUITES),
-        default=SUITE_QI_CORE,
+        default=SUITE_QI_CORE_2025,
         metavar="{" + ",".join(CANONICAL_SUITES) + "}",
         help=(
-            "Content suite: 'qi-core' (ecqm-content-qicore-2025, default), "
-            "'us-core' (dqm-content-cms-2025 CMS US Core measures), or "
-            "'qi-core-2026' (dqm-content-qicore-2026). Legacy spellings "
-            "'2025', 'cms2025' and '2026' are still accepted."
+            "Content suite: 'qi-core-2025' (ecqm-content-qicore-2025, "
+            "default), 'us-core-2025' (dqm-content-cms-2025 CMS US Core "
+            "measures), or 'qi-core-2026' (dqm-content-qicore-2026). Legacy "
+            "spellings '2025', 'cms2025', '2026' and the unversioned "
+            "'qi-core'/'us-core' are still accepted."
         ),
     )
     parser.add_argument(
@@ -398,12 +399,13 @@ def main():
         print(f"\nSummary written to: {summary_path}")
 
 
-def _discover_measures(suite: str = SUITE_QI_CORE):
+def _discover_measures(suite: str = SUITE_QI_CORE_2025):
     """Auto-discover all measures from the selected content suite.
 
     Args:
-        suite: canonical suite name — "qi-core", "us-core", "qi-core-2026"
-            (legacy "2025"/"cms2025"/"2026" accepted),
+        suite: canonical suite name — "qi-core-2025", "us-core-2025",
+            "qi-core-2026" (legacy "2025"/"cms2025"/"2026" and the unversioned
+            "qi-core"/"us-core" accepted),
             or "cms2025" (dqm-content-cms-2025 US Core measures).
     """
     from .config import (
@@ -473,12 +475,12 @@ def _discover_measures(suite: str = SUITE_QI_CORE):
         # repo references hl7.fhir.uv.cql.FHIRHelpers 4.0.1 but does not ship
         # the CQL source (IG tooling resolves it at build time).
         inc_paths = [cql_dir]
-        if _normalize_suite_arg(suite) in (SUITE_QI_CORE_2026, SUITE_US_CORE):
+        if _normalize_suite_arg(suite) in (SUITE_QI_CORE_2026, SUITE_US_CORE_2025):
             from .config import SUITE_2025_DIR
             fallback_cql = SUITE_2025_DIR / "input" / "cql"
             if fallback_cql.exists():
                 inc_paths.append(fallback_cql)
-        if _normalize_suite_arg(suite) in (SUITE_QI_CORE_2026, SUITE_US_CORE):
+        if _normalize_suite_arg(suite) in (SUITE_QI_CORE_2026, SUITE_US_CORE_2025):
             # Vendored shared libraries (FHIRCommon, USCoreCommon,
             # USCoreElements) that the CMS repo — and the 2026 QI-Core repo
             # since its US CQL 1.0.0 dependency update — reference but do not

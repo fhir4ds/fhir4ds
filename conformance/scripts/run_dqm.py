@@ -23,7 +23,7 @@ from fhir4ds.dqm.tests.conformance.cli import _discover_measures  # noqa: E402
 from fhir4ds.dqm.tests.conformance.config import (  # noqa: E402
     CANONICAL_SUITES,
     SKIP_ON_FAILURE,
-    SUITE_QI_CORE,
+    SUITE_QI_CORE_2025,
     normalize_suite,
 )
 from fhir4ds.dqm.tests.conformance.database import BenchmarkDatabase  # noqa: E402
@@ -33,18 +33,18 @@ from fhir4ds.dqm.tests.conformance.runner import run_measure  # noqa: E402
 # Suppress UserWarnings (like unresolved CQL definition fallbacks) to prevent I/O spam
 warnings.simplefilter("ignore", UserWarning)
 
-# One report per content suite. The qi-core path is unchanged so existing CI
-# artifacts and docs keep resolving; us-core gets its own file.
+# One report per content suite. The qi-core-2025 path is unchanged so existing
+# CI artifacts and docs keep resolving; us-core-2025 gets its own file.
 DEFAULT_REPORTS = {
-    "qi-core": Path("conformance/reports/dqm_report.json"),
-    "us-core": Path("conformance/reports/us_core_dqm_report.json"),
+    "qi-core-2025": Path("conformance/reports/dqm_report.json"),
+    "us-core-2025": Path("conformance/reports/us_core_dqm_report.json"),
     "qi-core-2026": Path("conformance/reports/dqm_2026_report.json"),
 }
 
 # Human labels used in the conformance log / console output.
 SUITE_LABELS = {
-    "qi-core": "DQM (QI-Core 2025)",
-    "us-core": "DQM (US-Core 2025)",
+    "qi-core-2025": "DQM (QI-Core 2025)",
+    "us-core-2025": "DQM (US-Core 2025)",
     "qi-core-2026": "DQM (QI-Core 2026)",
 }
 
@@ -101,13 +101,13 @@ def main():
         "--suite",
         type=normalize_suite,
         choices=list(CANONICAL_SUITES),
-        default=SUITE_QI_CORE,
+        default=SUITE_QI_CORE_2025,
         metavar="{" + ",".join(CANONICAL_SUITES) + "}",
         help=(
-            "Content suite to run: 'qi-core' (ecqm-content-qicore-2025, default) "
-            "or 'us-core' (dqm-content-cms-2025 CMS US Core measures) or "
-            "'qi-core-2026'. Legacy spellings '2025', 'cms2025' and '2026' are "
-            "still accepted."
+            "Content suite to run: 'qi-core-2025' (ecqm-content-qicore-2025, "
+            "default), 'us-core-2025' (dqm-content-cms-2025 CMS US Core "
+            "measures) or 'qi-core-2026'. Legacy spellings '2025', 'cms2025', "
+            "'2026' and the unversioned 'qi-core'/'us-core' are still accepted."
         ),
     )
     parser.add_argument(

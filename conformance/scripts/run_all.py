@@ -21,14 +21,14 @@ from conformance_log import _collect_stats  # noqa: E402
 # Configuration: (name, script, report, extra script args).
 # Every entry here is part of the release gate. The DQM runner is invoked once
 # per content suite so BOTH measure suites are covered:
-#   qi-core  = ecqm-content-qicore-2025   (the historical 47-measure gate)
-#   us-core  = dqm-content-cms-2025       (the CMS US Core 73-measure suite)
+#   qi-core-2025 = ecqm-content-qicore-2025 (the historical 47-measure gate)
+#   us-core-2025 = dqm-content-cms-2025     (the CMS US Core 73-measure suite)
 SCRIPTS = [
     ("ViewDefinition", "conformance/scripts/run_viewdef.py", "conformance/reports/viewdef_report.json", ()),
     ("FHIRPath (R4)", "conformance/scripts/run_fhirpath_r4.py", "conformance/reports/fhirpath_report.json", ()),
     ("CQL", "conformance/scripts/run_cql.py", "conformance/reports/cql_report.json", ()),
-    ("DQM (QI-Core 2025)", "conformance/scripts/run_dqm.py", "conformance/reports/dqm_report.json", ("--suite", "qi-core")),
-    ("DQM (US-Core 2025)", "conformance/scripts/run_dqm.py", "conformance/reports/us_core_dqm_report.json", ("--suite", "us-core")),
+    ("DQM (QI-Core 2025)", "conformance/scripts/run_dqm.py", "conformance/reports/dqm_report.json", ("--suite", "qi-core-2025")),
+    ("DQM (US-Core 2025)", "conformance/scripts/run_dqm.py", "conformance/reports/us_core_dqm_report.json", ("--suite", "us-core-2025")),
     ("OMOP Mapping", "conformance/scripts/run_omop.py", "conformance/reports/omop_report.json", ()),
 ]
 
