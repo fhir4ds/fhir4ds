@@ -6483,3 +6483,21 @@ accessors, `ListVector` moved to `vector/list_vector.hpp`, const-correct
 `FlatVector`). That pin predates the campaign's native features, so the 2.0
 bundles lack the open-null interval guards and `.value` unwrapping — porting
 current sources onto the 2.0 API is a separate chunk.
+
+### Pinning extension sources for an ABI build — use `git restore`, never `git checkout`
+
+`git checkout <tree-ish> -- <path>` updates the WORKING TREE **and the INDEX**.
+The 2.0 build used it to pin `extensions/*/src` to the API-adapted commit, and a
+later commit that staged unrelated files swept 1060 lines of pinned
+`cql_extension.cpp` into itself — silently reverting the REV-002 interval UB
+guards and the REV-009 `.value` fix (commit 71e6baac111 restored them). The
+shipped binaries were unaffected; the tree no longer matched them.
+
+For a temporary source pin use:
+
+    git restore --source=<pin> --worktree -- extensions/<ext>/src   # worktree only
+
+and restore with `git restore --source=HEAD --worktree -- ...`. Never leave a
+pin staged, and verify afterwards: `git status --porcelain extensions/*/src`
+must be empty and the guard symbols must be present (e.g.
+`grep -c interval_open_null_uncertain extensions/cql/src/cql_extension.cpp` -> 18).
