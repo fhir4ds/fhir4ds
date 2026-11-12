@@ -2,6 +2,7 @@
 id: sqlquery
 title: sqlquery
 sidebar_label: sqlquery
+description: "API reference for the SQL-on-FHIR v2 analytics layer: SQLQuery and SQLView Library resources, parameter binding and materialization."
 ---
 
 # `fhir4ds.sqlquery`

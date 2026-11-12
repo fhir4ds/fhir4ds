@@ -2,6 +2,7 @@
 id: fhirpath
 title: fhirpath
 sidebar_label: fhirpath
+description: "API reference for the FHIRPath R4 engine: the pure-Python evaluator and the DuckDB integration that runs the same expressions natively."
 ---
 
 # `fhir4ds.fhirpath`

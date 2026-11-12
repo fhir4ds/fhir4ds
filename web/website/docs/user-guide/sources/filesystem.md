@@ -2,6 +2,7 @@
 id: filesystem
 title: Querying Files & Data Lakes
 sidebar_label: Local & Cloud Files
+description: "Query directories of FHIR resources in Parquet, NDJSON or Iceberg form, locally or on S3, Azure Blob and GCS, without a loading step."
 ---
 
 # Querying Files & Data Lakes

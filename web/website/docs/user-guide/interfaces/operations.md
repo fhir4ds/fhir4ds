@@ -2,6 +2,7 @@
 id: operations
 title: Operations Layer
 sidebar_label: Operations Layer
+description: "The operations layer defines every user-facing capability once with typed, versioned envelopes shared by the Python API, CLI, MCP and HTTP."
 ---
 
 # Operations Layer

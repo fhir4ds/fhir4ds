@@ -2,6 +2,7 @@
 id: hapi-fhir
 title: HAPI FHIR Server Event-Driven Materialization
 sidebar_label: Event-Driven Materialization
+description: "Keep patient-level DQM results materialized from a HAPI FHIR JPA Server PostgreSQL backend, with event-driven or scheduled refresh."
 ---
 
 # HAPI FHIR Server Event-Driven Materialization

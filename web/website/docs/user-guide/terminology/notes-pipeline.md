@@ -2,6 +2,7 @@
 id: notes-pipeline
 title: Clinical Notes NER Pipeline
 sidebar_label: Notes Pipeline
+description: "Derive typed FHIR resources from free-text clinical notes with the NER pipeline: conditions, medications, immunizations and more, with provenance."
 ---
 
 # Clinical Notes NER Pipeline

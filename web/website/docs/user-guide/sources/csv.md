@@ -2,6 +2,7 @@
 id: csv
 title: Using CSV Files
 sidebar_label: CSV Files
+description: "Use flat CSV files as a FHIR data source by mapping your columns to the FHIR4DS schema contract with a SQL projection."
 ---
 
 # Using CSV Files

@@ -2,6 +2,7 @@
 id: mcp
 title: MCP Server
 sidebar_label: MCP Server
+description: "Run the fhir4ds MCP stdio server so Claude and other MCP clients can call FHIR4DS capabilities as typed tools."
 ---
 
 # MCP Server (`fhir4ds-mcp`)

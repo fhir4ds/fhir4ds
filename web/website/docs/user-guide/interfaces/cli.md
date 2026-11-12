@@ -2,6 +2,7 @@
 id: cli
 title: Command Line Interface
 sidebar_label: CLI
+description: "The fhir4ds command-line interface for production workflows: run measures, translate libraries and script repeatable jobs from a shell or CI."
 ---
 
 # Command Line Interface

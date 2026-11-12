@@ -2,6 +2,7 @@
 id: existing
 title: Using Pre-Loaded Data
 sidebar_label: Existing Tables
+description: "Wrap data you already loaded, through FHIRDataLoader, custom ETL or anything else, in the source-adapter API and query it with CQL."
 ---
 
 # Using Pre-Loaded Data

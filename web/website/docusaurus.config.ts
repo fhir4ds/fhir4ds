@@ -59,6 +59,12 @@ const config: Config = {
           { from: '/docs/api-reference/sources/filesystem', to: '/docs/api-reference/sources/sources-filesystem' },
           { from: '/fhir/StructureDefinition/autocoding', to: '/docs/user-guide/terminology/autocoding' },
           { from: '/fhir/StructureDefinition/derived-from-text', to: '/docs/user-guide/terminology/notes-pipeline' },
+          // `integrations/cql-tests-runner-facade` is deliberately `draft: true`
+          // (07b9a6b5394: a conformance harness kept for the certification
+          // team, not public documentation), so it is not built and Google
+          // recorded both URL forms as 404. Redirect to the interface that
+          // runs it rather than publishing a page we chose to hide.
+          { from: '/docs/integrations/cql-tests-runner-facade', to: '/docs/user-guide/interfaces/cli/' },
         ],
       },
     ],
@@ -73,6 +79,34 @@ const config: Config = {
   },
 
   headTags: [
+    // Site-level structured data. Docs pages get BreadcrumbList from
+    // Docusaurus itself; these two identify the publisher and the site for
+    // every page (Knowledge-panel / entity signals, not rich snippets).
+    {
+      tagName: 'script',
+      attributes: {type: 'application/ld+json'},
+      innerHTML: JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'Organization',
+        name: 'Montavon Informatics LLC',
+        url: 'https://fhir4ds.com/',
+        logo: 'https://fhir4ds.com/img/icon.svg',
+        email: 'contact@fhir4ds.com',
+        sameAs: ['https://github.com/fhir4ds/fhir4ds'],
+      }),
+    },
+    {
+      tagName: 'script',
+      attributes: {type: 'application/ld+json'},
+      innerHTML: JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name: 'FHIR4DS',
+        alternateName: 'FHIR for Data Science',
+        url: 'https://fhir4ds.com/',
+        publisher: {'@type': 'Organization', name: 'Montavon Informatics LLC'},
+      }),
+    },
     // Suppress Monaco's benign "ResizeObserver loop" errors in CAPTURE phase,
     // before webpack-dev-server's overlay listener can see them.
     {

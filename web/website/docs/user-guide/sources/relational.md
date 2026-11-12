@@ -2,6 +2,7 @@
 id: relational
 title: Connecting to PostgreSQL
 sidebar_label: PostgreSQL
+description: "Evaluate clinical logic against FHIR resources stored as JSON in PostgreSQL, without copying the data out of the database."
 ---
 
 # Connecting to PostgreSQL

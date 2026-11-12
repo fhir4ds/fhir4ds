@@ -1,6 +1,7 @@
 ---
 id: notebooks
 title: Notebooks
+description: "Run FHIR4DS in Google Colab: ready-made notebooks covering CQL measures, FHIRPath queries, ViewDefinitions and DQM with no local install."
 ---
 
 # Interactive Notebooks

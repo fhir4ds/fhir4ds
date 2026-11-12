@@ -1,5 +1,6 @@
 ---
 hide_table_of_contents: true
+description: "A live CQL sandbox: write and execute Clinical Quality Language queries in your browser against the FHIR4DS engine, with results as you type."
 ---
 
 # CQL Playground

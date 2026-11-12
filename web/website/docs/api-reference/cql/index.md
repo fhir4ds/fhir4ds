@@ -2,6 +2,7 @@
 id: cql
 title: cql
 sidebar_label: cql
+description: "Python API reference for the fhir4ds.cql CQL-to-SQL translator: library translation, measure evaluation and typed results."
 ---
 
 # `fhir4ds.cql`

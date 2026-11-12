@@ -2,6 +2,7 @@
 id: dqm
 title: fhir4ds.dqm
 sidebar_label: dqm
+description: "API reference for fhir4ds.dqm: parse FHIR Measure resources, compile their CQL libraries and evaluate populations against DuckDB."
 ---
 
 # `fhir4ds.dqm`
