@@ -164,21 +164,12 @@ static bool same_code_unit_valid_for_compare(const std::string &unit) {
 		return is_valid_ucum_atom(core);
 	}
 	std::string component;
-	// A separator directly after a stripped annotation ('{copies}/mL' ->
-	// core "/mL") leaves an EMPTY first component — annotations are valid
-	// UCUM components, so empty components are accepted when the original
-	// unit carried an annotation (CMS314 viral-load '{copies}/mL'
-	// comparisons nulled out entirely). Mirrors the Python
-	// _same_code_unit_valid_for_compare had_annotation fix.
-	const bool had_annotation = unit.find('{') != std::string::npos ||
-	                            unit.find('[') != std::string::npos;
 	for (size_t i = 0; i <= core.size(); ++i) {
 		if (i == core.size() || seps.find(core[i]) != std::string::npos) {
 			if (component.empty()) {
-				if (!had_annotation) {
-					return false; // leading/doubled separator
-				}
-			} else if (!same_code_unit_valid_for_compare(component)) {
+				return false; // leading/doubled separator
+			}
+			if (!same_code_unit_valid_for_compare(component)) {
 				return false;
 			}
 			component.clear();

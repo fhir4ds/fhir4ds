@@ -1,0 +1,43 @@
+{
+  "_comment": "Single source of truth for the bundled native extension slots. Each slot is a filename suffix that DuckDB's loader selects by ABI, the exact DuckDB release tag that binary must be built for, and (when it differs from HEAD) the repo commit whose extension sources compile against that DuckDB API. scripts/build_extension_bundles.py builds these; fhir4ds/tests/test_extension_abi_stamp.py verifies the stamped bundles. DuckDB compares the extension's embedded source-id against the client version string EXACTLY, so a bundle stamped with a bare commit hash instead of the tag is rejected by every released client — that is how cql.duckdb2_extension shipped unloadable while its fhirpath sibling worked.",
+  "slots": [
+    {
+      "extension": "cql",
+      "abi": "1.5.5",
+      "suffix": ".duckdb_extension",
+      "source_pin": null
+    },
+    {
+      "extension": "fhirpath",
+      "abi": "1.5.5",
+      "suffix": ".duckdb_extension",
+      "source_pin": null
+    },
+    {
+      "extension": "cql",
+      "abi": "1.5.6",
+      "suffix": ".duckdb156_extension",
+      "source_pin": null
+    },
+    {
+      "extension": "fhirpath",
+      "abi": "1.5.6",
+      "suffix": ".duckdb156_extension",
+      "source_pin": null
+    },
+    {
+      "extension": "cql",
+      "abi": "2.0.0",
+      "suffix": ".duckdb2_extension",
+      "source_pin": "3e753080fbd",
+      "_note": "3e753080fbd is the commit adapted to the DuckDB 2.0 API (private bind_info/value accessors, ListVector in vector/list_vector.hpp, const-correct FlatVector). HEAD sources do not compile against v2.0.0."
+    },
+    {
+      "extension": "fhirpath",
+      "abi": "2.0.0",
+      "suffix": ".duckdb2_extension",
+      "source_pin": "3e753080fbd",
+      "_note": "Same source pin as the cql 2.0 slot."
+    }
+  ]
+}

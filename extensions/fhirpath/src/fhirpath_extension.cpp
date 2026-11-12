@@ -14,7 +14,9 @@
 #include "duckdb.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/types/value.hpp"
-#include "duckdb/common/types/vector.hpp"
+#include "duckdb/common/vector/flat_vector.hpp"
+#include "duckdb/common/vector/list_vector.hpp"
+#include "duckdb/common/vector/string_vector.hpp"
 #include "duckdb/common/vector_operations/unary_executor.hpp"
 #include "duckdb/function/scalar_function.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
@@ -370,14 +372,14 @@ struct FhirpathState {
 static FhirpathState GetFhirpathState(ExpressionState &state) {
 	EnsureGlobalState();
 	auto &func_expr = state.expr.Cast<BoundFunctionExpression>();
-	if (func_expr.bind_info) {
-		return FhirpathState(static_cast<FhirpathBindData *>(func_expr.bind_info.get()));
+	if (func_expr.BindInfo()) {
+		return FhirpathState(static_cast<FhirpathBindData *>(func_expr.BindInfo().get()));
 	}
 	return FhirpathState();
 }
 
-static unique_ptr<FunctionData> FhirpathBind(ClientContext &context, ScalarFunction &bound_function,
-                                             vector<unique_ptr<Expression>> &arguments) {
+static unique_ptr<FunctionData> FhirpathBind(BindScalarFunctionInput &input) {
+	auto &arguments = input.GetArguments();
 	auto data = make_uniq<FhirpathBindData>();
 
 	// Phase 7: Detect constant expressions at bind time
@@ -389,8 +391,8 @@ static unique_ptr<FunctionData> FhirpathBind(ClientContext &context, ScalarFunct
 			// Try to get the constant value directly from the expression
 			if (arguments[1]->GetExpressionType() == ExpressionType::VALUE_CONSTANT) {
 				auto &const_expr = arguments[1]->Cast<BoundConstantExpression>();
-				if (!const_expr.value.IsNull()) {
-					auto expr_str = const_expr.value.GetValue<string>();
+				if (!const_expr.GetValue().IsNull()) {
+					auto expr_str = const_expr.GetValue().GetValue<string>();
 					auto ast = data->parser->parse(expr_str);
 					if (ast) {
 						data->precompiled_ast = ast;
@@ -610,19 +612,6 @@ static void ResolveSegment(const std::vector<yyjson_val *> &input, const std::st
 			continue;
 		}
 		if (!yyjson_is_obj(node)) {
-			// FHIR object-model idiom over raw JSON: in the object model a
-			// FHIR primitive (FHIR.code, FHIR.string, ...) is a wrapper whose
-			// `.value` is the scalar; raw FHIR JSON flattens the primitive
-			// to the scalar itself. `.value` on a scalar node resolves to
-			// the node (identity) — inlined FHIRHelpers conversions navigate
-			// `coding.code.value` on raw Coding JSON (CMS156 medication
-			// strength matching produced empty results without this).
-			// Mirrors the Python engine branch in
-			// create_reduce_member_invocation and the evaluator branch in
-			// Evaluator::evalMemberAccess.
-			if (segment == "value") {
-				output.push_back(node);
-			}
 			continue;
 		}
 
@@ -961,8 +950,8 @@ static void FhirpathFunction(DataChunk &args, ExpressionState &state, Vector &re
 	idx_t count = args.size();
 
 	UnifiedVectorFormat resource_data, expr_data;
-	args.data[0].ToUnifiedFormat(count, resource_data);
-	args.data[1].ToUnifiedFormat(count, expr_data);
+	args.data[0].ToUnifiedFormat(resource_data);
+	args.data[1].ToUnifiedFormat(expr_data);
 
 	auto resources = UnifiedVectorFormat::GetData<string_t>(resource_data);
 	auto expressions = UnifiedVectorFormat::GetData<string_t>(expr_data);
@@ -1023,11 +1012,11 @@ static void FhirpathFunction(DataChunk &args, ExpressionState &state, Vector &re
 		total_size += fp_results.size();
 	}
 
-	auto list_entries = FlatVector::GetData<list_entry_t>(result);
+	auto list_entries = FlatVector::GetDataMutable<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		list_entries[i] = {row_offsets[i], row_counts[i]};
 		if (!row_valid[i]) {
-			FlatVector::Validity(result).SetInvalid(i);
+			FlatVector::ValidityMutable(result).SetInvalid(i);
 		}
 	}
 	ListVector::SetListSize(result, total_size);
@@ -1039,15 +1028,15 @@ static void FhirpathTextFunction(DataChunk &args, ExpressionState &state, Vector
 	idx_t count = args.size();
 
 	UnifiedVectorFormat resource_data, expr_data;
-	args.data[0].ToUnifiedFormat(count, resource_data);
-	args.data[1].ToUnifiedFormat(count, expr_data);
+	args.data[0].ToUnifiedFormat(resource_data);
+	args.data[1].ToUnifiedFormat(expr_data);
 
 	auto resources = UnifiedVectorFormat::GetData<string_t>(resource_data);
 	auto expressions = UnifiedVectorFormat::GetData<string_t>(expr_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetData<string_t>(result);
-	auto &result_mask = FlatVector::Validity(result);
+	auto result_data = FlatVector::GetDataMutable<string_t>(result);
+	auto &result_mask = FlatVector::ValidityMutable(result);
 
 	fhirpath::Evaluator str_helper;
 
@@ -1117,15 +1106,15 @@ static void FhirpathNumberFunction(DataChunk &args, ExpressionState &state, Vect
 	idx_t count = args.size();
 
 	UnifiedVectorFormat resource_data, expr_data;
-	args.data[0].ToUnifiedFormat(count, resource_data);
-	args.data[1].ToUnifiedFormat(count, expr_data);
+	args.data[0].ToUnifiedFormat(resource_data);
+	args.data[1].ToUnifiedFormat(expr_data);
 
 	auto resources = UnifiedVectorFormat::GetData<string_t>(resource_data);
 	auto expressions = UnifiedVectorFormat::GetData<string_t>(expr_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetData<double>(result);
-	auto &result_mask = FlatVector::Validity(result);
+	auto result_data = FlatVector::GetDataMutable<double>(result);
+	auto &result_mask = FlatVector::ValidityMutable(result);
 
 	fhirpath::Evaluator str_helper;
 
@@ -1227,15 +1216,15 @@ static void FhirpathDateFunction(DataChunk &args, ExpressionState &state, Vector
 	idx_t count = args.size();
 
 	UnifiedVectorFormat resource_data, expr_data;
-	args.data[0].ToUnifiedFormat(count, resource_data);
-	args.data[1].ToUnifiedFormat(count, expr_data);
+	args.data[0].ToUnifiedFormat(resource_data);
+	args.data[1].ToUnifiedFormat(expr_data);
 
 	auto resources = UnifiedVectorFormat::GetData<string_t>(resource_data);
 	auto expressions = UnifiedVectorFormat::GetData<string_t>(expr_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetData<string_t>(result);
-	auto &result_mask = FlatVector::Validity(result);
+	auto result_data = FlatVector::GetDataMutable<string_t>(result);
+	auto &result_mask = FlatVector::ValidityMutable(result);
 
 	fhirpath::Evaluator str_helper;
 
@@ -1331,15 +1320,15 @@ static void FhirpathBoolFunction(DataChunk &args, ExpressionState &state, Vector
 	idx_t count = args.size();
 
 	UnifiedVectorFormat resource_data, expr_data;
-	args.data[0].ToUnifiedFormat(count, resource_data);
-	args.data[1].ToUnifiedFormat(count, expr_data);
+	args.data[0].ToUnifiedFormat(resource_data);
+	args.data[1].ToUnifiedFormat(expr_data);
 
 	auto resources = UnifiedVectorFormat::GetData<string_t>(resource_data);
 	auto expressions = UnifiedVectorFormat::GetData<string_t>(expr_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetData<bool>(result);
-	auto &result_mask = FlatVector::Validity(result);
+	auto result_data = FlatVector::GetDataMutable<bool>(result);
+	auto &result_mask = FlatVector::ValidityMutable(result);
 
 	fhirpath::Evaluator str_helper;
 
@@ -1443,15 +1432,15 @@ static void FhirpathJsonFunction(DataChunk &args, ExpressionState &state, Vector
 	idx_t count = args.size();
 
 	UnifiedVectorFormat resource_data, expr_data;
-	args.data[0].ToUnifiedFormat(count, resource_data);
-	args.data[1].ToUnifiedFormat(count, expr_data);
+	args.data[0].ToUnifiedFormat(resource_data);
+	args.data[1].ToUnifiedFormat(expr_data);
 
 	auto resources = UnifiedVectorFormat::GetData<string_t>(resource_data);
 	auto expressions = UnifiedVectorFormat::GetData<string_t>(expr_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetData<string_t>(result);
-	auto &result_mask = FlatVector::Validity(result);
+	auto result_data = FlatVector::GetDataMutable<string_t>(result);
+	auto &result_mask = FlatVector::ValidityMutable(result);
 
 	fhirpath::Evaluator str_helper;
 
@@ -1779,15 +1768,15 @@ static void FhirpathTimestampFunction(DataChunk &args, ExpressionState &state, V
 	idx_t count = args.size();
 
 	UnifiedVectorFormat resource_data, expr_data;
-	args.data[0].ToUnifiedFormat(count, resource_data);
-	args.data[1].ToUnifiedFormat(count, expr_data);
+	args.data[0].ToUnifiedFormat(resource_data);
+	args.data[1].ToUnifiedFormat(expr_data);
 
 	auto resources = UnifiedVectorFormat::GetData<string_t>(resource_data);
 	auto expressions = UnifiedVectorFormat::GetData<string_t>(expr_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetData<string_t>(result);
-	auto &result_mask = FlatVector::Validity(result);
+	auto result_data = FlatVector::GetDataMutable<string_t>(result);
+	auto &result_mask = FlatVector::ValidityMutable(result);
 
 	fhirpath::Evaluator str_helper;
 
@@ -1821,15 +1810,15 @@ static void FhirpathQuantityFunction(DataChunk &args, ExpressionState &state, Ve
 	idx_t count = args.size();
 
 	UnifiedVectorFormat resource_data, expr_data;
-	args.data[0].ToUnifiedFormat(count, resource_data);
-	args.data[1].ToUnifiedFormat(count, expr_data);
+	args.data[0].ToUnifiedFormat(resource_data);
+	args.data[1].ToUnifiedFormat(expr_data);
 
 	auto resources = UnifiedVectorFormat::GetData<string_t>(resource_data);
 	auto expressions = UnifiedVectorFormat::GetData<string_t>(expr_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetData<string_t>(result);
-	auto &result_mask = FlatVector::Validity(result);
+	auto result_data = FlatVector::GetDataMutable<string_t>(result);
+	auto &result_mask = FlatVector::ValidityMutable(result);
 
 	fhirpath::Evaluator str_helper;
 
@@ -1862,11 +1851,11 @@ static void FhirpathIsValidFunction(DataChunk &args, ExpressionState &state, Vec
 	idx_t count = args.size();
 
 	UnifiedVectorFormat expr_data;
-	args.data[0].ToUnifiedFormat(count, expr_data);
+	args.data[0].ToUnifiedFormat(expr_data);
 	auto expressions = UnifiedVectorFormat::GetData<string_t>(expr_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = FlatVector::GetData<bool>(result);
+	auto result_data = FlatVector::GetDataMutable<bool>(result);
 
 	// Use thread_local parser — Parser has mutable state and is NOT thread-safe
 	static thread_local fhirpath::Parser tls_parser;
@@ -1975,8 +1964,8 @@ static void FhirpathPredicateFunction(DataChunk &args, ExpressionState &state, V
 	idx_t count = args.size();
 
 	UnifiedVectorFormat resource_data, expr_data;
-	args.data[0].ToUnifiedFormat(count, resource_data);
-	args.data[1].ToUnifiedFormat(count, expr_data);
+	args.data[0].ToUnifiedFormat(resource_data);
+	args.data[1].ToUnifiedFormat(expr_data);
 
 	auto resources = UnifiedVectorFormat::GetData<string_t>(resource_data);
 	auto expressions = UnifiedVectorFormat::GetData<string_t>(expr_data);
@@ -2010,11 +1999,11 @@ static void FhirpathPredicateFunction(DataChunk &args, ExpressionState &state, V
 		total_size += 1;
 	}
 
-	auto list_entries = FlatVector::GetData<list_entry_t>(result);
+	auto list_entries = FlatVector::GetDataMutable<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		list_entries[i] = {row_offsets[i], row_counts[i]};
 		if (!row_valid[i]) {
-			FlatVector::Validity(result).SetInvalid(i);
+			FlatVector::ValidityMutable(result).SetInvalid(i);
 		}
 	}
 	ListVector::SetListSize(result, total_size);
@@ -2132,8 +2121,8 @@ static void FhirpathRepeatFunction(DataChunk &args, ExpressionState &state, Vect
 	idx_t count = args.size();
 
 	UnifiedVectorFormat resource_data, paths_data;
-	args.data[0].ToUnifiedFormat(count, resource_data);
-	args.data[1].ToUnifiedFormat(count, paths_data);
+	args.data[0].ToUnifiedFormat(resource_data);
+	args.data[1].ToUnifiedFormat(paths_data);
 
 	auto resources = UnifiedVectorFormat::GetData<string_t>(resource_data);
 	auto paths = UnifiedVectorFormat::GetData<string_t>(paths_data);
@@ -2162,7 +2151,7 @@ static void FhirpathRepeatFunction(DataChunk &args, ExpressionState &state, Vect
 		}
 	}
 
-	auto list_entries = FlatVector::GetData<list_entry_t>(result);
+	auto list_entries = FlatVector::GetDataMutable<list_entry_t>(result);
 	for (idx_t i = 0; i < count; i++) {
 		list_entries[i] = {row_offsets[i], row_counts[i]};
 	}

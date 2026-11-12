@@ -6445,3 +6445,41 @@ levels up, 3 levels up, and inside a UNION operand (all bind successfully). The
 guard added in 65f4a70c2b3 asserted the opposite ("laterals cannot correlate
 past their own SELECT") and cost CMS2 1.34 MB -> 12.95 MB by disabling dedup for
 ~75 copies of one extraction. After the chain: 12.95 MB -> 1.54 MB.
+
+## Rebuilding the bundled extensions is now scripted (2026-11-11)
+
+Do not hand-run `make release` in `extensions/*` for a release — that is how two
+packaging defects shipped:
+
+- `cql.duckdb2_extension` was stamped with the commit hash `d54cbbe3df` while
+  `fhirpath.duckdb2_extension` was stamped `v2.0.0`. DuckDB compares that
+  source-id string EXACTLY, so only fhirpath went native on a released
+  `duckdb==2.0.0` wheel and cql silently fell back to Python UDFs. Cause: the
+  duckdb submodule is a shallow clone, so `git describe` degrades to
+  `v2.0.0-devNNNNN` and DuckDB then stamps the hash.
+- A rebuild once wrote the 1.5.6 artifact into BOTH cql slots, so native CQL
+  could not load on 1.5.5 despite `duckdb>=1.5.5,<2`.
+
+Use:
+
+```bash
+python3 scripts/build_extension_bundles.py --verify                  # fast, CI/release gate
+python3 scripts/build_extension_bundles.py --build --abi 2.0.0       # rebuild a slot set
+python3 scripts/build_extension_bundles.py --build --abi 1.5.5 --extension cql
+python3 scripts/build_extension_bundles.py --build --abi 2.0.0 --dry-run
+```
+
+`fhir4ds/extension_bundles.json` is the single source of truth for
+suffix → ABI → source pin, and BOTH the script and
+`fhir4ds/tests/test_extension_abi_stamp.py` read it, so they cannot disagree.
+The script always passes `OVERRIDE_GIT_DESCRIBE=v<abi>` (making the tag
+authoritative regardless of clone depth), re-reads the produced file and
+REFUSES to install it if the embedded stamp does not match the slot, and
+restores sources, submodule commit and build cache in a `finally` block.
+
+Known slot-specific rule: the 2.0 slots pin `source_pin: 3e753080fbd` because
+HEAD sources do not compile against v2.0.0 (private `bind_info`/`value`
+accessors, `ListVector` moved to `vector/list_vector.hpp`, const-correct
+`FlatVector`). That pin predates the campaign's native features, so the 2.0
+bundles lack the open-null interval guards and `.value` unwrapping — porting
+current sources onto the 2.0 API is a separate chunk.
