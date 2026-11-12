@@ -6609,3 +6609,33 @@ master run is now:
     + DQM us-core-2025 73 + OMOP 38 = 2943/2943
 
 `run_dqm.py` also takes `--output` if a different report path is needed.
+
+## The DQM gate must actually load the shipped extension (2026-11-12)
+
+`fhir4ds/dqm/tests/conformance/database.py` used to hand-pick
+`fhirpath.duckdb_extension` / `cql.duckdb_extension` (the **1.5.5-suffixed**
+bundle) out of the build tree or the wheel and `LOAD` them directly. Two
+defects followed, both silent:
+
+1. The ABI-suffixed slot for the RUNNING duckdb (`.duckdb156_extension` on
+   1.5.6, `.duckdb2_extension` on 2.0) was never considered, so the load always
+   failed on 1.5.6.
+2. The failure was swallowed, and `is_cpp` was latched BEFORE the authoritative
+   registration — so the gate printed "Python fallback UDFs loaded successfully
+   (C++ extension NOT loaded)" even when `fhir4ds.register()` had, in fact,
+   loaded the extension a few lines later.
+
+Net effect: the conformance gate was running the Python fallback and could not
+tell. The shipped native binaries were covered only by the pytest parity
+suites, which is the same blind spot that let the unstampable 2.0 bundle ship
+(BUGFIX-017).
+
+It now calls `fhir4ds.register(self.conn)` — the ABI-aware, staging-aware entry
+point — and derives `is_cpp` from its return value
+(`{'fhirpath_cpp', 'cql_cpp'}`). `USE_CPP_EXTENSIONS=0` still forces the
+fallback, via the documented `duckdb.__version__` spoof. Both DQM suites report
+`>>> C++ extension and Python fallback UDFs loaded successfully` and hold
+47/47 and 73/73, so fallback and native agree on this corpus.
+
+Check the banner when reading a gate log: "Python fallback … (C++ extension NOT
+loaded)" means the run did NOT exercise the shipped binaries.

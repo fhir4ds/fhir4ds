@@ -73,79 +73,44 @@ class BenchmarkDatabase:
         # may legitimately return multiple rows in certain patterns
         self.conn.execute("SET scalar_subquery_error_on_multiple_rows=false")
 
-        # Paths to C++ extensions — walk upward to find the project root
-        # (the directory containing extensions/ and fhir4ds/)
-        workspace_root = Path(__file__).resolve().parent
-        while not (workspace_root / "extensions").exists() and workspace_root != workspace_root.parent:
-            workspace_root = workspace_root.parent
-
-        # Try both build directory and bundled package locations
-        fhirpath_cpp_candidates = [
-            workspace_root / "extensions" / "fhirpath" / "build" / "release" / "extension" / "fhirpath" / "fhirpath.duckdb_extension",
-            workspace_root / "fhir4ds" / "fhirpath" / "duckdb" / "extensions" / "fhirpath.duckdb_extension",
-        ]
-        cql_cpp_candidates = [
-            workspace_root / "extensions" / "cql" / "build" / "release" / "extension" / "cql" / "cql.duckdb_extension",
-            workspace_root / "fhir4ds" / "cql" / "duckdb" / "extensions" / "cql.duckdb_extension",
-        ]
-
-        fhirpath_cpp = next((p for p in fhirpath_cpp_candidates if p.exists()), None)
-        cql_cpp = next((p for p in cql_cpp_candidates if p.exists()), None)
+        # Register all FHIR4DS UDFs through the package's own entry point.
+        #
+        # This used to hand-pick `fhirpath.duckdb_extension` /
+        # `cql.duckdb_extension` (the 1.5.5-suffixed bundle) out of the build
+        # tree or the wheel and LOAD them directly. Two things went wrong with
+        # that: the ABI-suffixed slot for the RUNNING duckdb (`.duckdb156_extension`
+        # on 1.5.6, `.duckdb2_extension` on 2.0) was never considered, so the
+        # load always failed on 1.5.6; and the failure was swallowed, so
+        # `is_cpp` reported the Python fallback even when `fhir4ds.register()`
+        # went on to load the extension successfully. The gate therefore could
+        # not tell whether it had exercised the shipped binaries at all.
+        #
+        # `fhir4ds.register()` performs the ABI-aware selection, stages the
+        # bundle into a loadable path and returns which engines went native.
+        import fhir4ds
 
         use_cpp = os.environ.get("USE_CPP_EXTENSIONS", "1").lower() in ("1", "true", "yes")
         loaded_cpp = False
+        try:
+            if use_cpp:
+                status = fhir4ds.register(self.conn) or {}
+                loaded_cpp = bool(status.get("fhirpath_cpp")) and bool(status.get("cql_cpp"))
+            else:
+                # Honour the explicit opt-out. Bundle selection keys off
+                # duckdb.__version__, so spoofing it is the documented way to
+                # force the Python fallback without unloading anything.
+                import duckdb as _duckdb
 
-        if use_cpp and fhirpath_cpp and cql_cpp:
-            try:
-                # On WSL2, loading .duckdb_extension binaries directly from the Windows
-                # NTFS filesystem (/mnt/d/) is unreliable (non-deterministic results due
-                # to memory-mapped I/O over the plan 9 filesystem driver). Copy to the
-                # Linux tmpfs first for stable loading.
-                import shutil
-                import tempfile
-                _ext_tmp = Path(tempfile.gettempdir()) / "duckdb_cpp_ext"
-                _ext_tmp.mkdir(exist_ok=True)
-                fhirpath_load = _ext_tmp / "fhirpath.duckdb_extension"
-                cql_load = _ext_tmp / "cql.duckdb_extension"
-                # Only copy if source is newer (avoids redundant copies on repeated runs)
-                if not fhirpath_load.exists() or fhirpath_cpp.stat().st_mtime > fhirpath_load.stat().st_mtime:
-                    shutil.copy2(str(fhirpath_cpp), str(fhirpath_load))
-                if not cql_load.exists() or cql_cpp.stat().st_mtime > cql_load.stat().st_mtime:
-                    shutil.copy2(str(cql_cpp), str(cql_load))
-                self.conn.execute(f"LOAD '{fhirpath_load}'")
-                self.conn.execute(f"LOAD '{cql_load}'")
-                # Add aliases for compatibility with Python-style naming if needed
+                saved_version = _duckdb.__version__
+                _duckdb.__version__ = "0.0.0-forced-python-fallback"
                 try:
-                    self.conn.execute("CREATE OR REPLACE MACRO fhirpath_udf(res, expr) AS fhirpath(res, expr)")
-                except Exception as e:
-                    print(f"  Warning: Failed to create fhirpath_udf macro: {e}")
-
-                # We need to make sure 'fhirpath' used by Python UDFs (like in_valueset)
-                # resolves to the one we want. When C++ is loaded, 'fhirpath' is native.
-                loaded_cpp = True
-                # print("  Loaded C++ native extensions (fhirpath, cql)")
-            except Exception:
-                # print(f"  Warning: Failed to load C++ extensions: {e}")
-                pass
+                    fhir4ds.register(self.conn)
+                finally:
+                    _duckdb.__version__ = saved_version
+        except Exception as exc:  # noqa: BLE001 - report, do not hide
+            print(f"  Warning: UDF registration failed: {exc}")
 
         self.is_cpp = loaded_cpp
-
-        # Always try to register unified fhir4ds UDFs (they handle fallback correctly)
-        try:
-            import fhir4ds
-            fhir4ds.register(self.conn)
-        except ImportError:
-            if not loaded_cpp:
-                # Try to register UDFs if available via legacy internal paths
-                try:
-                    from fhir4ds.cql.duckdb import register as register_cql_udfs
-                    register_cql_udfs(self.conn)
-                except ImportError:
-                    try:
-                        from fhir4ds.fhirpath.duckdb import register_fhirpath
-                        register_fhirpath(self.conn)
-                    except ImportError:
-                        pass
 
         # Audit macros must always be registered regardless of whether the C++ extension
         # or Python UDFs provide fhirpath. The C++ CQL extension doesn't include them.
