@@ -186,12 +186,10 @@ def build_one(slot: Slot, dry_run: bool) -> bool:
                 print(f"    failed to pin sources: {checkout.stderr.strip()[:200]}")
                 return False
 
-        checkout = _run(["-C", str(submodule), "checkout", "-q", f"v{slot.abi}"])
+        checkout = _run(["git", "-C", str(submodule), "checkout", "-q", f"v{slot.abi}"])
         if checkout.returncode != 0:
-            checkout = _run(["git", "-C", str(submodule), "checkout", "-q", f"v{slot.abi}"])
-            if checkout.returncode != 0:
-                print(f"    no v{slot.abi} tag in the duckdb submodule: {checkout.stderr.strip()[:200]}")
-                return False
+            print(f"    no v{slot.abi} tag in the duckdb submodule: {checkout.stderr.strip()[:200]}")
+            return False
 
         if build_dir.exists():
             if parked.exists():
