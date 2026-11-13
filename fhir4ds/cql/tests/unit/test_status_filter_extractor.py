@@ -344,3 +344,66 @@ class TestExternalReviewB11DefinitionDependencies:
         assert inst._extract_definition_dependencies(
             qi, {"P1", "Other"}, {}, _current_name="Other"
         ) == {"P1"}
+
+
+class TestExternalReviewB12CrossLibraryCodes:
+    """HIGH-03 (external review): two included libraries declaring the same
+    CODE name with different values — the bare-name terminology copy made the
+    LAST-processed include win globally, so qualified `A."shared"` resolved to
+    library B's code value (and cross-library equivalence folded TRUE)."""
+
+    LIB_A = """
+library LibA
+using FHIR version '4.0.1'
+codesystem "CS": 'http://example.org/x'
+code "shared": 'AAA' from "CS"
+"""
+
+    LIB_B = """
+library LibB
+using FHIR version '4.0.1'
+codesystem "CS": 'http://example.org/x'
+code "shared": 'BBB' from "CS"
+"""
+
+    def _translate(self, body_defines):
+        import duckdb
+        from ...parser.parser import parse_cql
+        from ...duckdb import register as reg
+        from ...translator.translator import CQLToSQLTranslator
+        from pathlib import Path
+        cql = f"""
+library Probe
+using FHIR version '4.0.1'
+include FHIRHelpers version '4.0.1' called FHIRHelpers
+include LibA called A
+include LibB called B
+context Patient
+{body_defines}
+"""
+        lib = parse_cql(cql)
+        con = duckdb.connect()
+        reg(con)
+        base = Path(__file__).resolve().parents[4] / "fhir4ds" / "cql" / "resources" / "cql"
+
+        def loader(alias, version=None):
+            if alias == "LibA":
+                return parse_cql(self.LIB_A)
+            if alias == "LibB":
+                return parse_cql(self.LIB_B)
+            f = base / f"{alias}.cql"
+            return parse_cql(f.read_text()) if f.exists() else None
+
+        t = CQLToSQLTranslator(con, library_loader=loader)
+        return str(t.translate_library_to_sql(lib))
+
+    def test_qualified_code_refs_resolve_per_library(self):
+        sql = self._translate('define CodeA: A."shared"\ndefine CodeB: B."shared"')
+        assert "SELECT 'AAA'" in sql, sql[:200]  # A."shared" is LibA's code
+        assert "SELECT 'BBB'" in sql, sql[:200]  # B."shared" is LibB's code
+
+    def test_cross_library_equivalence_not_clobbered(self):
+        sql = self._translate('define Eq: A."shared" ~ B."shared"\ndefine EqSelf: A."shared" ~ A."shared"')
+        # Different code values -> equivalence FALSE; same-library ref -> TRUE.
+        assert "SELECT FALSE" in sql, sql[:200]
+        assert "SELECT TRUE" in sql, sql[:200]

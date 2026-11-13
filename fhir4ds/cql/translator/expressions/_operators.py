@@ -3921,7 +3921,9 @@ class OperatorsMixin:
             if info.get("code"):
                 return self._normalize_static_clinical_code(info)
         if isinstance(node, QualifiedIdentifier) and node.parts:
-            info = self.context.get_code(node.parts[-1])
+            info = self._resolve_included_code(node.parts[0], node.parts[-1])
+            if info is None:
+                info = self.context.get_code(node.parts[-1])
             if info is None:
                 # CQL-02 EXPLORER QA-001/QA-002 fix (QualifiedIdentifier path):
                 # resolve library-qualified define references whose body is a
@@ -4109,7 +4111,12 @@ class OperatorsMixin:
                     }
             return None
         if isinstance(ast, QualifiedIdentifier) and len(ast.parts) >= 2:
-            info = self.context.get_code(ast.parts[-1])
+            # Scoped-first: a qualified ref targets the OWNING library's code
+            # (the global bare-name table may hold a sibling library's
+            # same-named declaration).
+            info = self._resolve_included_code(ast.parts[0], ast.parts[-1])
+            if info is None:
+                info = self.context.get_code(ast.parts[-1])
             if info is not None and not info.get("is_concept"):
                 return info
         return None
@@ -4187,7 +4194,9 @@ class OperatorsMixin:
                     ]
                 return [dict(info)] if info.get("code") else None
             if isinstance(node, QualifiedIdentifier) and node.parts:
-                info = self.context.get_code(node.parts[-1])
+                info = self._resolve_included_code(node.parts[0], node.parts[-1])
+                if info is None:
+                    info = self.context.get_code(node.parts[-1])
                 if info is None:
                     return None
                 if info.get("is_concept") or isinstance(info.get("codes"), list):
@@ -7438,8 +7447,17 @@ class OperatorsMixin:
                 return self.context.get_code(code_name)
             if isinstance(operand_ast, Property) and isinstance(operand_ast.source, Identifier):
                 # Property(source=Identifier('QICoreCommon'), path='confirmed')
-                # This is a library-qualified code reference from function inlining
+                # This is a library-qualified code reference from function inlining.
+                # Resolve against the OWNING library's declarations first (same
+                # scoped-first doctrine as the QualifiedIdentifier branch above):
+                # the global bare-name table holds whichever same-named code
+                # registered first when multiple included libraries declare it.
                 if operand_ast.source.name in self.context.includes:
+                    scoped_prop = self._resolve_included_code(
+                        operand_ast.source.name, operand_ast.path
+                    )
+                    if scoped_prop is not None:
+                        return scoped_prop
                     return self.context.get_code(operand_ast.path)
             if isinstance(operand_ast, ParameterPlaceholder):
                 # Inlined function parameter carrying a pre-translated SQL literal
