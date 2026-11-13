@@ -34,7 +34,7 @@ from urllib.parse import urlparse
 
 from ..duckdb.udf.system_resolver import SystemResolver
 from .system_mappings import category_to_system_param
-from .vsac_adapter import TerminologyEndpointError
+from .errors import TerminologyCapabilityError
 from .types import CodeRef, SearchResult
 
 _logger = logging.getLogger(__name__)
@@ -439,7 +439,7 @@ class HTTPTerminologyEndpoint:
                 # unexplained 400 into silently-empty membership — a message
                 # naming the cause is what makes that degradation diagnosable.
                 if response.status_code in (400, 422):
-                    raise TerminologyEndpointError(
+                    raise TerminologyCapabilityError(
                         f"endpoint refused ValueSet expansion for "
                         f"{valueset_url!r} (HTTP {response.status_code})"
                         f"{self._diagnostics_suffix(response)}. "

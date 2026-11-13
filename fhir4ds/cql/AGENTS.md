@@ -7044,3 +7044,32 @@ adapter's tolerant both-shape handling must stay. Terminology suite: 379 passed
 / 3 failed, the 3 being the pre-existing order-dependent
 `test_in_process_adapter` mock-pollution flake (they pass in isolation, and fail
 identically on 0.0.10) — not a 0.0.12 regression.
+
+## Capability mismatches escalate; transient endpoint failures degrade (AMUX-115, 2026-11-12)
+
+Owner ruling: a terminology backend that **cannot serve the request at all** must
+fail loudly to the measure author; only **transient** faults may keep the
+graceful-degradation path.
+
+Implemented by splitting the error hierarchy in
+`fhir4ds/cql/terminology/errors.py` and branching on TYPE, never on message text:
+
+- `TerminologyCapabilityError` (subclass of `TerminologyEndpointError`) — the
+  endpoint refused the *form* of the request. `HTTPTerminologyEndpoint.expand()`
+  raises it for HTTP 400/422, with the server's OperationOutcome diagnostics,
+  the reason (medterm4ds resolves only a POSTed body, a `fhir_vs` implicit URL,
+  or a filter — no stored-ValueSet registry), and the remedies.
+  `DependencyResolver.resolve_valueset()` RE-RAISES it.
+- `TerminologyEndpointError` (base) — transient failure; the resolver keeps its
+  INV-8 contract (WARNING + `None`).
+
+Lesson that produced it: `ValueSet/$expand?url=<canonical>` is the FHIR R4
+standard and works on full servers (verified against HL7 `tx.fhir.org`), so this
+is a backend capability gap, not a client defect. The unit test
+`test_expand_invokes_get_with_canonical_url` mocks the client and asserts we SEND
+`url=`, so it can never detect server-side rejection — keep a server-contract
+test (mocked 400) alongside it.
+
+When adding a new adapter or endpoint operation, decide explicitly which class a
+refusal raises; a new "permanent gap" path that returns `[]` + WARNING recreates
+the silent-under-match bug this ruling exists to prevent.

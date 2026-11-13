@@ -81,6 +81,43 @@ def test_resolve_valueset(tmp_path):
     assert vs.codes[0]["system"] == "http://loinc.org"
 
 
+def test_resolve_valueset_escalates_capability_mismatch(tmp_path):
+    """A backend that cannot serve the request must fail loudly (AMUX-115).
+
+    Owner ruling 2026-11-12: capability mismatches must never be silently
+    degraded to "no codes", because that turns a misconfiguration into criteria
+    that quietly under-match. Transient faults keep the old degrade path.
+    """
+    from fhir4ds.cql.terminology import TerminologyCapabilityError
+
+    class _CapabilityEndpoint:
+        def expand(self, url):  # noqa: ANN001
+            raise TerminologyCapabilityError(
+                f"endpoint refused to expand {url} (capability)"
+            )
+
+    resolver = DependencyResolver(
+        [str(tmp_path)], terminology_endpoint=_CapabilityEndpoint()
+    )
+
+    with pytest.raises(TerminologyCapabilityError):
+        resolver.resolve_valueset("http://example.org/ValueSet/NotLocal")
+
+
+def test_resolve_valueset_degrades_transient_failure(tmp_path):
+    """Transient faults keep degrading to None + WARNING (INV-8 unchanged)."""
+
+    class _FlakyEndpoint:
+        def expand(self, url):  # noqa: ANN001
+            raise TimeoutError("read timed out")
+
+    resolver = DependencyResolver(
+        [str(tmp_path)], terminology_endpoint=_FlakyEndpoint()
+    )
+
+    assert resolver.resolve_valueset("http://example.org/ValueSet/NotLocal") is None
+
+
 def test_resolve_valueset_from_compose(tmp_path):
     """Test resolving a ValueSet from compose.include instead of expansion."""
     vs_file = tmp_path / "ComposeValueSet.json"

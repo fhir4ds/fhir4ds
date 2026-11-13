@@ -27,6 +27,7 @@ from .types import (
 )
 from .errors import ResolutionError
 from .cache import DependencyCache
+from ..terminology.errors import TerminologyCapabilityError
 
 
 class DependencyResolver:
@@ -359,10 +360,17 @@ class DependencyResolver:
                ``source_path=None``.
 
         Failure-mode scoping (INV-8):
-            Any exception from the endpoint is caught and degraded to a
-            WARNING log + ``None`` return. This graceful-degradation
-            contract applies ONLY to this fallback path. Direct callers
-            of ``endpoint.expand()`` should let exceptions propagate.
+            TRANSIENT endpoint failures (timeouts, 5xx, connection errors) are
+            caught and degraded to a WARNING log + ``None`` return. This
+            graceful-degradation contract applies ONLY to this fallback path;
+            direct callers of ``endpoint.expand()`` should let exceptions
+            propagate.
+
+            CAPABILITY mismatches (:class:`TerminologyCapabilityError`) are
+            deliberately NOT degraded — owner ruling 2026-11-12 (AMUX-115 item
+            3): a backend that cannot serve the request at all must fail loudly
+            to the measure author. Degrading it silently turns a
+            misconfiguration into criteria that quietly under-match.
         """
         vs = self._valuesets.get(url)
         if vs is not None:
@@ -373,7 +381,10 @@ class DependencyResolver:
 
         try:
             codes = self._terminology_endpoint.expand(url)
-        except Exception as e:  # INV-8: degrade to None + WARNING.
+        except TerminologyCapabilityError:
+            # Capability mismatch, not a fault: propagate (AMUX-115 ruling).
+            raise
+        except Exception as e:  # INV-8: transient -> degrade to None + WARNING.
             _logger.warning(
                 "terminology endpoint expand failed for %s: %s", url, e
             )

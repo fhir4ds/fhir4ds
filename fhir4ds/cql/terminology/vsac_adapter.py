@@ -59,14 +59,9 @@ LARGE_SET_PAGE_THRESHOLD = 10  # >10 pages -> WARNING (observability)
 _VERSION_IN_CANONICAL_RE = re.compile(r"^(?P<base>.+?)\|(?P<version>\d{8,})$")
 
 
-class TerminologyEndpointError(RuntimeError):
-    """Raised when a terminology endpoint cannot satisfy a request.
-
-    Shared by every adapter (VSAC, generic FHIR HTTP, ...) so callers can catch
-    one type. Message content policy: includes the HTTP status and an
-    OperationOutcome diagnostics excerpt when available, but NEVER API keys,
-    credentials, or raw Authorization headers.
-    """
+# The error hierarchy lives in .errors so adapters and callers share one
+# definition; re-exported here for import compatibility.
+from .errors import TerminologyCapabilityError, TerminologyEndpointError  # noqa: F401
 
 
 class VCACTerminologyEndpoint:

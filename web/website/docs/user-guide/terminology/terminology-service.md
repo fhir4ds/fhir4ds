@@ -118,12 +118,19 @@ stored-ValueSet lookup by canonical URL**. It resolves three forms only:
 - a text **`filter`**
 
 So asking a medterm4ds backend to expand a canonical URL answers HTTP 400. Since
-0.0.23 the adapter raises a `TerminologyEndpointError` that names the cause and
-the remedies, instead of surfacing a bare "400 Bad Request" — which matters
-because `DependencyResolver.resolve_valueset()` deliberately degrades endpoint
-failures to `None` plus a WARNING (its INV-8 contract), so that message is the
-only diagnosis you will see. Load the ValueSet locally, POST its definition via
+0.0.23 that surfaces as a `TerminologyCapabilityError` naming the cause and the
+remedies, and **it is not swallowed**: `DependencyResolver.resolve_valueset()`
+escalates capability mismatches so the failure reaches whoever is running the
+measure. Load the ValueSet locally, POST its definition via
 `expand_intensional()`, or point the endpoint at a full terminology server.
+
+Transient faults — timeouts, 5xx, connection errors — keep the older
+graceful-degradation contract (INV-8): one WARNING, then no codes. The split is
+by exception type: `TerminologyCapabilityError` (a subclass of
+`TerminologyEndpointError`) for "this backend cannot do this", the base class for
+"it failed this time". The reasoning is that a retry fixes a transient fault,
+while a capability mismatch silently turns a misconfiguration into criteria that
+quietly under-match.
 
 ## 6. Circuit breaker
 

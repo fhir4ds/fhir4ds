@@ -12,7 +12,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from fhir4ds.cql.terminology import CodeRef, SearchResult, TerminologyEndpointError
+from fhir4ds.cql.terminology import (
+    CodeRef,
+    SearchResult,
+    TerminologyCapabilityError,
+    TerminologyEndpointError,
+)
 from fhir4ds.cql.terminology.http_adapter import HTTPTerminologyEndpoint
 
 
@@ -202,7 +207,7 @@ def test_expand_refused_by_backend_raises_actionable_typed_error():
     response = _MockResponse(payload, status_code=400)
     adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir", timeout_seconds=5.0)
     with patch.object(adapter, "_client", return_value=_MockClient(response, [])):
-        with pytest.raises(TerminologyEndpointError) as excinfo:
+        with pytest.raises(TerminologyCapabilityError) as excinfo:
             adapter.expand("http://example.org/ValueSet/Foo")
 
     message = str(excinfo.value)
