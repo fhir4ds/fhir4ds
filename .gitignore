@@ -17,6 +17,12 @@ dist/
 .temp/
 .opencode/goals/
 
+# Local secrets — never commit. `.env` holds CERNER/EPIC sandbox credentials,
+# the HF token, UMLS/Google API keys and the Space admin/write keys.
+.env
+.env.*
+!.env.example
+
 # fhir4ds serve: default local publish directory (phase 3)
 fhir4ds-publish/
 fhir4ds-private/
