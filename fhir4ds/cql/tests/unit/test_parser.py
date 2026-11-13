@@ -1137,3 +1137,38 @@ class TestExternalReviewB4GrammarGaps:
         assert '"code":"x"' in sql1 and '"system":"http://loinc.org"' in sql1
         sql2 = res["C2"].to_sql() if hasattr(res["C2"], "to_sql") else str(res["C2"])
         assert '"display":"Disp"' in sql2 and sql2.count('"code"') == 2
+
+
+class TestExternalReviewB4bLibraryGrammar:
+    """Regression coverage for the 2026-11-13 external parser review, batch
+    B4 remainder (TRIAGE_cql_review_20261113.md, PAR-008): qualified library
+    name, access modifiers on defines, and library-qualified Code selectors."""
+
+    def test_qualified_library_name(self):
+        lib = parse_cql("library a.b.C version '1.0.0'\ncontext Patient\ndefine X: 1")
+        assert lib.identifier == "a.b.C"
+
+    def test_access_modifiers_on_defines(self):
+        for mod in ("private", "public"):
+            lib = parse_cql(
+                f"library L\ncontext Patient\ndefine {mod} X: 1"
+            )
+            d = [s for s in lib.statements if hasattr(s, "expression")][0]
+            assert d.access_level == mod
+            assert d.name == "X"
+
+    def test_define_named_private_without_modifier(self):
+        # `define "private": 1` — quoted name, not an access modifier. And an
+        # unquoted `define private: 1` treats 'private' as the NAME (no
+        # identifier follows it).
+        lib = parse_cql('library L\ncontext Patient\ndefine "private": 1')
+        d = [s for s in lib.statements if hasattr(s, "expression")][0]
+        assert d.name == "private" and d.access_level is None
+        lib2 = parse_cql("library L\ncontext Patient\ndefine private: 1")
+        d2 = [s for s in lib2.statements if hasattr(s, "expression")][0]
+        assert d2.name == "private" and d2.access_level is None
+
+    def test_code_selector_accepts_qualified_codesystem(self):
+        e = parse_expression("Code 'c' from Lib.CS")
+        assert type(e).__name__ == "CodeSelector"
+        assert e.system == "Lib.CS"

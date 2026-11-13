@@ -216,6 +216,10 @@ class CQLParser:
         # Parse library declaration
         self.expect(TokenType.LIBRARY, "Expected 'library' declaration")
         identifier = self._parse_identifier_name()
+        # PAR-008: the grammar's libraryIdentifier is a qualifiedIdentifier —
+        # `library a.b.C` is valid. Join dotted parts.
+        while self.match_and_advance(TokenType.DOT):
+            identifier += "." + self._parse_identifier_name()
         version = None
 
         # Optional version
@@ -343,11 +347,22 @@ class CQLParser:
         if self.match_and_advance(TokenType.FUNCTION):
             return self._parse_function_definition(fluent=is_fluent)
 
+        # PAR-008: accessModifier — `define private X: ...` / `define public
+        # X: ...`. 'private'/'public' are not lexer keywords; treat an
+        # IDENTIFIER with exactly that spelling as the modifier.
+        access_level = None
+        if (
+            self.match(TokenType.IDENTIFIER)
+            and self.current().value in ("private", "public")
+            and self.peek(1).type in (TokenType.IDENTIFIER, TokenType.QUOTED_IDENTIFIER)
+        ):
+            access_level = self.advance().value
+
         name = self._parse_identifier_name()
         self.expect(TokenType.COLON, "Expected ':' after definition name")
 
         expression = self.parse_expression()
-        return Definition(name=name, expression=expression)
+        return Definition(name=name, expression=expression, access_level=access_level)
 
     def _parse_function_definition(self, fluent: bool = False) -> FunctionDefinition:
         """Parse a function definition.
@@ -1911,7 +1926,11 @@ class CQLParser:
         code_value = code_token.value
 
         self.expect(TokenType.FROM, "Expected 'from' after code value")
+        # PAR-008: codesystemIdentifier allows a library-qualified reference
+        # (`Code 'x' from Lib.CS`). Join dotted parts into the system name.
         system_name = self._parse_identifier_name()
+        while self.match_and_advance(TokenType.DOT):
+            system_name += "." + self._parse_identifier_name()
 
         display = None
         if self.match_and_advance(TokenType.DISPLAY):
