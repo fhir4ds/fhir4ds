@@ -342,10 +342,13 @@ class ListsMixin:
                     when_clauses=[(condition, operand)],
                     else_clause=SQLNull(),
                 ))
-            # Handle else_expr by adding it as another COALESCE arg
+            # Handle else_expr by adding it as another COALESCE arg.
+            # EXP1-008: `IS NOT TRUE` so a FALSE **or NULL** condition takes
+            # the else branch (`IS NULL` alone missed false; `NOT` alone
+            # missed null).
             if else_expr is not None and not isinstance(else_expr, SQLNull):
                 coalesce_args.append(SQLCase(
-                    when_clauses=[(SQLUnaryOp(operator="IS NULL", operand=condition, prefix=False), else_expr)],
+                    when_clauses=[(SQLUnaryOp(operator="IS NOT TRUE", operand=condition, prefix=False), else_expr)],
                     else_clause=SQLNull(),
                 ))
             return SQLFunctionCall(name="COALESCE", args=coalesce_args)
@@ -402,8 +405,13 @@ class ListsMixin:
                 else_clause=SQLNull(),
             ))
 
-        # Handle ELSE expression (when condition is FALSE / NOT condition)
-        _not_condition = SQLUnaryOp(operator="NOT", operand=condition)
+        # Handle ELSE expression (when condition is FALSE / NOT condition).
+        # EXP1-008: a NULL condition must take the ELSE branch (CQL treats a
+        # null condition as false for conditionals), but `NOT NULL` is NULL —
+        # `condition IS NOT TRUE` covers both false and null.
+        _not_condition = SQLUnaryOp(
+            operator="IS NOT TRUE", operand=condition, prefix=False
+        )
         if isinstance(else_expr, SQLUnion):
             # For UNION in else, add operands directly (selected when condition is false)
             for operand in else_expr.operands:
@@ -822,6 +830,15 @@ class ListsMixin:
                         SQLFunctionCall(name="fhirpath", args=list(source.args[0].args))
                     ] + list(source.args[1:]),
                 )
+
+        # EXP1-009: the method form must enforce the same List<T> signature
+        # as the function form — a statically String receiver silently
+        # character-indexed ('abc'.first() -> 'a').
+        if _method_lower in {"first", "last", "singletonfrom"}:
+            self._reject_scalar_string_list_function_arg(
+                [source],
+                {"first": "First", "last": "Last"}.get(_method_lower, "SingletonFrom"),
+            )
 
         # Handle common method invocations
         if method.lower() == "first":
@@ -1251,6 +1268,10 @@ class ListsMixin:
 
         # For non-Query sources, use list_extract (pre-sorted list)
         source = self.translate(node.source, boolean_context=False)
+        # EXP1-009: the method form (X.first()) must enforce the same
+        # List<T> signature as the function form — a statically String
+        # source silently character-indexed ('abc'.first() -> 'a').
+        self._reject_scalar_string_list_function_arg([source], "First")
         return SQLFunctionCall(name="LIST_EXTRACT", args=[source, SQLLiteral(value=1)])
 
     def _translate_last_expression(self, node: LastExpression, boolean_context: bool = False) -> SQLExpression:
@@ -1267,6 +1288,8 @@ class ListsMixin:
 
         # For non-Query sources, use list_extract (pre-sorted list)
         source = self.translate(node.source, boolean_context=False)
+        # EXP1-009: same List<T> signature enforcement as First (above).
+        self._reject_scalar_string_list_function_arg([source], "Last")
         return SQLFunctionCall(name="LIST_EXTRACT", args=[source, SQLLiteral(value=-1)])
 
     def _translate_distinct_expression(self, node: DistinctExpression) -> SQLExpression:

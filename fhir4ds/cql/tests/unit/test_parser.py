@@ -1221,3 +1221,61 @@ class TestExternalReviewB8QueryClauses:
     def test_single_sort_key_unchanged(self):
         sql = self._sql("define S: [Patient] P sort by P.birthDate desc return P.id")
         assert "ORDER BY" in sql.upper() and "DESC" in sql.upper()
+
+
+class TestExternalReviewB14ConditionalsAndFirstLast:
+    """EXP1-008 (null-condition 3VL) + EXP1-009 (method-form First/Last)."""
+
+    def test_if_null_condition_takes_else_branch(self):
+        # CQL conditionals treat a null condition as false: the ELSE branch
+        # must fire for union-bearing THEN branches too (the COALESCE-of-CASES
+        # path previously emitted `NOT cond` which is NULL for a null cond,
+        # dropping the else entirely).
+        from fhir4ds.cql import translate_cql
+        import duckdb
+        from fhir4ds.cql.duckdb import register
+
+        con = duckdb.connect()
+        register(con)
+
+        def _run(expr: str, defs: str = ""):
+            res = translate_cql(
+                f"library L\ncontext Unfiltered\n{defs}\ndefine T: {expr}"
+            )
+            v = res["T"]  # multiple defines when defs are supplied
+            sql = v.to_sql() if hasattr(v, "to_sql") else str(v)
+            return con.execute(f"SELECT ({sql})").fetchone()[0]
+
+        assert _run("if null then 1 else 2") == 2
+        assert _run("if true then 1 else 2") == 1
+        assert _run("if false then 1 else 2") == 2
+        _defs = "define A: {1, 2}\ndefine B: {2, 3}\n"
+        assert _run("if null then (A union B) else {9}", _defs) == [9]
+        assert _run("if true then (A union B) else {9}", _defs) == [1, 2, 3]
+        assert _run("if false then (A union B) else {9}", _defs) == [9]
+
+    def test_method_form_first_last_rejects_string_receiver(self):
+        # 'abc'.first() previously character-indexed the string ('a'); the
+        # method form must enforce the same List<T> signature as First(...).
+        import pytest
+        from fhir4ds.cql import translate_cql
+        from fhir4ds.cql.errors import TranslationError
+
+        for expr in ("'abc'.first()", "'abc'.last()"):
+            with pytest.raises(TranslationError, match="requires a list argument"):
+                translate_cql(
+                    f"library L\ncontext Unfiltered\ndefine T: {expr}"
+                )
+
+        # List receivers keep working in both spellings.
+        res = translate_cql(
+            "library L\ncontext Unfiltered\ndefine T: {3, 1, 2}.last()"
+        )
+        v = next(iter(res.values()))
+        sql = v.to_sql() if hasattr(v, "to_sql") else str(v)
+        import duckdb
+        from fhir4ds.cql.duckdb import register
+
+        con = duckdb.connect()
+        register(con)
+        assert con.execute(f"SELECT ({sql})").fetchone()[0] == 2

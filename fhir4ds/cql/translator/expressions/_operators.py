@@ -780,19 +780,20 @@ def _is_quantity_expression(expr: SQLExpression) -> bool:
         # Inline quantity list-aggregates (Min/Max/Sum/Avg over Quantity lists)
         # lower to list_reduce/list_transform/list_filter carrying quantity
         # elements or quantity lambdas — the result IS a Quantity even though
-        # the outer function name is generic. NOTE: heuristic — a BARE
-        # list_filter/list_transform over quantity elements returns a LIST,
-        # not a scalar Quantity; no current lowering feeds that shape to a
-        # scalar Quantity consumer (list-valued consumers wrap in
-        # len/Distinct first), but new consumers must not rely on this
-        # classification for bare list ops.
+        # the outer function name is generic. The aggregate's source ARRAY is
+        # only quantity-classified INSIDE this list-op context: a bare
+        # SQLArray of quantities is a LIST value (e.g. `{ 1 'g' } = { 1000 'mg' }`
+        # list equality), NOT a scalar Quantity, and must not be routed to
+        # quantity_compare/parse_quantity.
         if expr.name in ("list_reduce", "list_transform", "list_apply", "list_filter"):
-            return any(_is_quantity_expression(a) for a in expr.args)
+            for a in expr.args:
+                if isinstance(a, SQLArray):
+                    if any(_is_quantity_expression(e) for e in a.elements):
+                        return True
+                elif _is_quantity_expression(a):
+                    return True
     if isinstance(expr, (SQLLambda, SQLLambda2)):
         return _is_quantity_expression(expr.body)
-    if isinstance(expr, SQLArray):
-        # Non-empty arrays of quantity values (the aggregate source list).
-        return any(_is_quantity_expression(e) for e in expr.elements)
     if isinstance(expr, SQLCase):
         for _, result in expr.when_clauses:
             if _is_quantity_expression(result):
