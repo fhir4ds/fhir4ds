@@ -445,10 +445,19 @@ class TypeMapBuilder:
                 return CQLTypeRef.parse(str(hint))
         return ANY_TYPE
 
-    def _function_type(self, node: Any) -> CQLTypeRef:
+    def _function_type(self, node: Any, scope: Optional[Dict[str, Any]] = None) -> CQLTypeRef:
         from ..parser import ast_nodes as N
 
         func_name = str(getattr(node, "name", "") or "").lower()
+
+        def _arg_type(arg: Any) -> CQLTypeRef:
+            # CORE-016: function ARGUMENT typing must honor the enclosing
+            # scope (query aliases, lets, function params) — previously
+            # arguments were typed with the unscoped type_of, so a scoped
+            # binding inside e.g. First(O) resolved to Any.
+            if scope:
+                return self.type_of_scoped(arg, scope)
+            return self.type_of(arg)
 
         if func_name in _UNCERTAIN_RESULT_FUNCTIONS:
             # Runtime integer-or-interval JSON VARCHAR -> defer.
@@ -469,17 +478,17 @@ class TypeMapBuilder:
 
         if func_name in ("first", "last"):
             if node.arguments:
-                return self._unwrap_list(self.type_of(node.arguments[0]))
+                return self._unwrap_list(_arg_type(node.arguments[0]))
             return ANY_TYPE
 
         if func_name == "distinct":
             if node.arguments:
-                return self.type_of(node.arguments[0])
+                return _arg_type(node.arguments[0])
             return CQLTypeRef("List", args=(ANY_TYPE,))
 
         if func_name == "flatten":
             if node.arguments:
-                source = self.type_of(node.arguments[0])
+                source = _arg_type(node.arguments[0])
                 if source.bare_name == "List" and source.args:
                     inner = source.args[0]
                     if inner.bare_name == "List" and inner.args:
@@ -498,7 +507,7 @@ class TypeMapBuilder:
         if func_name == "message":
             # Message returns its SOURCE unchanged (CQL §13.1).
             if node.arguments:
-                return self.type_of(node.arguments[0])
+                return _arg_type(node.arguments[0])
             return ANY_TYPE
 
         if func_name in ("children", "descendants"):
@@ -507,7 +516,7 @@ class TypeMapBuilder:
         # Numeric aggregates (mirrors InferenceMixin._infer_cql_type).
         if func_name in ("sum", "product", "min", "max"):
             if node.arguments:
-                source = self.type_of(node.arguments[0])
+                source = _arg_type(node.arguments[0])
                 if source.canonical() == "List<Long>":
                     return _shared_simple("Long")
                 if source.canonical() == "List<Quantity>" and func_name in ("sum", "product"):
@@ -521,13 +530,13 @@ class TypeMapBuilder:
 
         if func_name == "abs":
             if node.arguments:
-                arg_type = self.type_of(node.arguments[0])
+                arg_type = _arg_type(node.arguments[0])
                 if arg_type.bare_name in ("Integer", "Long", "Decimal", "Quantity"):
                     return arg_type
             return ANY_TYPE
 
         if func_name == "power":
-            arg_types = [self.type_of(arg) for arg in node.arguments]
+            arg_types = [_arg_type(arg) for arg in node.arguments]
             if arg_types and all(t.bare_name in ("Integer", "Long") for t in arg_types):
                 exponent = node.arguments[1] if len(node.arguments) > 1 else None
                 if self._static_numeric_value(exponent) is not None and self._static_numeric_value(exponent) < 0:
@@ -541,7 +550,7 @@ class TypeMapBuilder:
             # CQL §Coalesce: common type of the arguments — first
             # statically-known non-Any argument's type.
             for arg in node.arguments:
-                arg_type = self.type_of(arg)
+                arg_type = _arg_type(arg)
                 if arg_type.bare_name != "Any":
                     return arg_type
             return ANY_TYPE
@@ -568,7 +577,22 @@ class TypeMapBuilder:
 
     def _specifier_ref(self, spec: Any) -> CQLTypeRef:
         """Convert a TypeSpecifier AST node (or name string) to a ref."""
-        name = getattr(spec, "name", None) or str(spec)
+        # CORE-016: structured specifiers must be converted structurally.
+        # The previous `str(spec)` fallback stringified ListTypeSpecifier
+        # nodes (name is None on them), producing a garbage CQLTypeRef whose
+        # name was the node's repr — so List<Observation> function params
+        # typed as that garbage instead of a list type.
+        spec_name = getattr(spec, "name", None)
+        if spec_name is None and hasattr(spec, "element_type"):
+            # ListTypeSpecifier
+            return CQLTypeRef("List", args=(self._specifier_ref(spec.element_type),))
+        if spec_name is None and hasattr(spec, "point_type"):
+            # IntervalTypeSpecifier
+            return CQLTypeRef("Interval", args=(self._specifier_ref(spec.point_type),))
+        if spec_name is None and hasattr(spec, "choices"):
+            # ChoiceTypeSpecifier (field is `choices`) — no single CQL type.
+            return ANY_TYPE
+        name = spec_name or str(spec)
         if not name:
             return ANY_TYPE
         text = str(name).replace("System.", "")
@@ -771,7 +795,7 @@ class TypeMapBuilder:
     # Query typing (source 9): scoped-symbol walker
     # ------------------------------------------------------------------
 
-    def _query_type(self, query: Any) -> CQLTypeRef:
+    def _query_type(self, query: Any, outer_scope: Optional[Dict[str, Any]] = None) -> CQLTypeRef:
         from ..parser import ast_nodes as N
 
         alias_sources: Dict[str, Any] = {}
@@ -789,12 +813,15 @@ class TypeMapBuilder:
             for w in (getattr(query, "with_clauses", []) or [])
             if getattr(w, "alias", None)
         }
+        # CORE-016: outer (function-param / let) bindings are visible inside
+        # the query body and must participate in every scoped typing below.
+        merged_outer: Dict[str, Any] = dict(outer_scope) if outer_scope else {}
 
         # Aggregate clause: single scalar per patient.
         aggregate = getattr(query, "aggregate", None)
         if aggregate is not None:
             # Accumulator type = the body's type under (acc, element) scope.
-            scope = dict(alias_sources)
+            scope = {**merged_outer, **alias_sources}
             scope[getattr(aggregate, "identifier", "_acc")] = None
             return self.type_of_scoped(aggregate.expression, scope)
 
@@ -804,7 +831,10 @@ class TypeMapBuilder:
             if isinstance(rc_expr, N.Identifier) and rc_expr.name in alias_sources:
                 source_type = self.type_of(alias_sources[rc_expr.name])
                 return source_type  # already List<T> for retrieves
-            scope = dict(alias_sources)
+            if isinstance(rc_expr, N.Identifier) and rc_expr.name in merged_outer:
+                source_type = self.type_of_scoped(rc_expr, merged_outer)
+                return source_type  # outer-bound source (function param / let)
+            scope = {**merged_outer, **alias_sources}
             scope.update(let_aliases)
             element_type = self.type_of_scoped(rc_expr, scope)
             # us-cql-ig singular-query semantics: a query over a SINGULAR
@@ -817,7 +847,7 @@ class TypeMapBuilder:
                 len(sources) == 1
                 and isinstance(sources[0], N.QuerySource)
             ):
-                source_type = self.type_of(sources[0].expression)
+                source_type = self.type_of_scoped(sources[0].expression, merged_outer)
                 # Only apply the singular rule when the source type is KNOWN
                 # and non-list. Unknown/Any-typed sources (dynamic FHIR
                 # properties, untyped aliases) may well be lists — treating
@@ -832,7 +862,10 @@ class TypeMapBuilder:
         # No return clause: type mirrors the (single) source.
         sources = self._query_sources(query)
         if len(sources) == 1 and isinstance(sources[0], N.QuerySource):
-            return self.type_of(sources[0].expression)
+            source_expr = sources[0].expression
+            if isinstance(source_expr, N.Identifier) and source_expr.name in merged_outer:
+                return self.type_of_scoped(source_expr, merged_outer)
+            return self.type_of(source_expr)
         return ANY_TYPE
 
     @staticmethod
@@ -868,7 +901,10 @@ class TypeMapBuilder:
                     return fhir_type
                 return ANY_TYPE
             if source_expr is not None:
-                source_ref = self.type_of(source_expr)
+                # CORE-016: resolve the aliased source WITH the scope (an
+                # Identifier aliasing a function param / let binding types
+                # as Any unscoped — same fix as _scoped_property_from_alias).
+                source_ref = self.type_of_scoped(source_expr, scope)
                 ref = self._navigate(self._unwrap_list(source_ref), str(node.path or ""))
                 if ref.bare_name != "Any":
                     return ref
@@ -886,11 +922,11 @@ class TypeMapBuilder:
         if isinstance(node, N.UnaryExpression):
             return self.type_of_scoped(node.operand, scope)
         if isinstance(node, N.FunctionRef):
-            scoped_fn = N.FunctionRef(
-                name=node.name,
-                arguments=[self._rescope_if_needed(a, scope) for a in node.arguments],
-            )
-            return self._function_type(scoped_fn)
+            # CORE-016: thread the scope into function typing so arguments
+            # see scoped bindings. The previous _rescope_if_needed wrapper
+            # returned every node unchanged (a no-op stub) and _function_type
+            # typed arguments unscoped.
+            return self._function_type(node, scope)
         if isinstance(node, N.Query):
             return self._query_type_scoped(node, scope)
         if isinstance(node, N.ConditionalExpression):
@@ -900,19 +936,6 @@ class TypeMapBuilder:
                 return then_t
             return ANY_TYPE
         return self.type_of(node)
-
-    def _rescope_if_needed(self, node: Any, scope: Dict[str, Any]) -> Any:
-        """Substitute scope-resolved identifiers inside function arguments.
-
-        Only Identifiers bound in scope are replaced by a marker the
-        function-argument typing understands (literal-like refs); for
-        anything else the node passes through unchanged.
-        """
-        from ..parser import ast_nodes as N
-
-        if isinstance(node, N.Identifier) and node.name in scope:
-            return node  # _function_type re-types via type_of; keep node
-        return node
 
     def _binary_type_from_refs(self, node: Any, left: CQLTypeRef, right: CQLTypeRef) -> CQLTypeRef:
         """Binary typing from pre-computed operand refs (scope-threaded)."""
@@ -948,19 +971,16 @@ class TypeMapBuilder:
         return ANY_TYPE
 
     def _query_type_scoped(self, query: Any, outer_scope: Dict[str, Any]) -> CQLTypeRef:
-        """Query typing with an outer (function-param/let) scope visible."""
-        rc = getattr(query, "return_clause", None)
-        if rc is not None:
-            rc_expr = rc.expression if hasattr(rc, "expression") else rc
-            merged = dict(outer_scope)
-            for source in self._query_sources(query):
-                if type(source).__name__ == "QuerySource" and getattr(source, "alias", None):
-                    merged[source.alias] = source.expression
-            for let in getattr(query, "let_clauses", []) or []:
-                if getattr(let, "alias", None):
-                    merged[let.alias] = getattr(let, "expression", None)
-            return self.type_of_scoped(rc_expr, merged)
-        return self._query_type(query)
+        """Query typing with an outer (function-param/let) scope visible.
+
+        CORE-016: delegates to _query_type with the outer scope merged so
+        scoped queries get the SAME typing as top-level queries — List<T>
+        wrap, singular-source rule, aggregate typing, and no-return-clause
+        source mirroring included. Previously this method returned the
+        return-clause expression's type bare, so a query inside a fluent
+        function body typed as T instead of List<T>.
+        """
+        return self._query_type(query, outer_scope)
 
     def _scoped_property_from_alias(self, node: Any, scope: Dict[str, Any]) -> Optional[CQLTypeRef]:
         # CORE-002: `N` was referenced without the local import the sibling
@@ -975,7 +995,13 @@ class TypeMapBuilder:
             fhir_type = self._fhir_property_cql_type(resource_type, str(node.path or ""))
             return fhir_type if fhir_type else ANY_TYPE
         if source_expr is not None:
-            source_ref = self.type_of(source_expr)
+            # CORE-016: resolve the aliased source expression WITH the scope.
+            # A query inside a fluent-function body binds its source alias to
+            # an Identifier naming a function parameter (e.g. O -> Obs in
+            # `(Obs O return O.status)`); typing that Identifier unscoped
+            # loses the parameter's declared type and the property types as
+            # Any.
+            source_ref = self.type_of_scoped(source_expr, scope)
             ref = self._navigate(self._unwrap_list(source_ref), str(node.path or ""))
             if ref.bare_name != "Any":
                 return ref

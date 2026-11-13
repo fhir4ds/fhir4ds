@@ -266,6 +266,11 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         # Storage for included library CTEs (P1.2: External Library CTE Generation)
         # Maps CTE name -> (cte_ast, column_info) for retrieve CTEs from included libraries
         self._included_retrieve_ctes: Dict[str, Tuple["SQLSelect", Dict]] = {}
+        # CORE-014: retrieve CTE ASTs from the last translate_library()
+        # optimization run (phase-2 output), consumed by
+        # translate_library_to_sql so definition-only SQL carries the
+        # retrieve CTEs definitions reference by name.
+        self._phase2_retrieve_ctes: Dict[str, "SQLSelect"] = {}
 
         # SQLRetrieveCTE tracking for optimized CTE generation
         self._retrieve_ctes: List[SQLRetrieveCTE] = []
@@ -479,6 +484,12 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             library, self._context, self
         )
         self._phase2_cte_name_map = phase2_result.cte_name_map
+        # CORE-014: stash the phase-2 retrieve CTE ASTs so definition-only SQL
+        # builders (translate_library_to_sql) can emit them. Definitions
+        # reference these CTEs by name after placeholder resolution; without
+        # them the emitted SQL contains dangling CTE references (e.g.
+        # WITH "Obs" AS (SELECT "Observation")).
+        self._phase2_retrieve_ctes = dict(phase2_result.ctes)
 
         # Copy column registry from phase2_result to context for property access optimization
         # This enables property access in expressions.py to use precomputed columns
@@ -557,14 +568,49 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         # Get definition names in dependency order (topological sort)
         ordered_names = self._topological_sort_definitions(library, definitions)
 
-        # Build CTE definitions as AST nodes
-        cte_defs = []
+        # Build CTE definitions as AST nodes.
+        # CORE-014: definitions reference the phase-2 retrieve CTEs by name
+        # after placeholder resolution, so those CTEs MUST be emitted here
+        # too — previously only the definition CTEs were emitted, producing
+        # dangling references such as WITH "Obs" AS (SELECT "Observation").
+        cte_defs: List[CTEDefinition] = []
+        seen_cte_names: set = set()
+
+        # 1. Retrieve CTEs from optimization phase 2 (before definitions —
+        #    definitions reference them). Included-library retrieve CTEs join
+        #    the same block; on a name collision the first registration wins,
+        #    mirroring translate_library_to_population_sql's ordering.
+        retrieve_ctes: Dict[str, Any] = dict(getattr(self, "_phase2_retrieve_ctes", None) or {})
+        for cte_name, (cte_ast, _col_info) in getattr(self, "_included_retrieve_ctes", {}).items():
+            retrieve_ctes.setdefault(cte_name, cte_ast)
+        for cte_name, cte_ast in retrieve_ctes.items():
+            quoted = f'"{cte_name}"'
+            if quoted not in seen_cte_names:
+                cte_defs.append(CTEDefinition(name=quoted, query=cte_ast))
+                seen_cte_names.add(quoted)
+
+        # 2. Context-registered CTEs (let-variable CTEs and any other
+        #    translation-time CTEs definitions reference by name)
+        for cte in self._context.get_ctes():
+            if cte.name not in seen_cte_names:
+                cte_defs.append(cte)
+                seen_cte_names.add(cte.name)
+
+        # 3. Definition CTEs in dependency order
         seen_lower: dict[str, str] = {}  # lower(name) -> original name
         for name in ordered_names:
             expr = definitions[name]
             cte_name = self._unique_cte_name(name, seen_lower)
             # Wrap bare expressions in SELECT so they form valid CTE bodies
-            if not isinstance(expr, (SQLSelect, SQLSubquery)):
+            if isinstance(expr, (SQLIdentifier, SQLQualifiedIdentifier)) and (
+                expr.to_sql() in seen_cte_names
+            ):
+                # CORE-014: retrieve-alias defines resolve to a bare
+                # reference to the retrieve CTE — as a table, not a column.
+                # SELECT "Observation" binder-errors; the definition's value
+                # is the CTE's rows: SELECT * FROM "Observation".
+                expr = SQLSelect(from_clause=expr)
+            elif not isinstance(expr, (SQLSelect, SQLSubquery)):
                 expr = SQLSelect(columns=[expr])
             elif isinstance(expr, SQLSubquery):
                 expr = expr.query
@@ -586,10 +632,31 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         if not final_name:
             return "SELECT NULL"
 
-        # Build the complete SQL with CTEs using AST nodes
-        final_select_ast = SQLSelect(
-            from_clause=SQLIdentifier(name=final_name, quoted=True),
-        )
+        # CORE-014: per-patient correlated lowering references `_pt.patient_id`.
+        # SQL CTEs cannot be correlated, so when the FINAL definition's SQL
+        # references _pt we bind it in the final SELECT (`FROM _patients AS
+        # _pt`) and evaluate the final expression inline instead of through a
+        # CTE. Non-final definitions referencing _pt are not supported by
+        # this definition-only path (use translate_library_to_population_sql).
+        final_expr = definitions[final_name]
+        final_inline = "_pt." in final_expr.to_sql()
+        if final_inline:
+            patients_query = self._build_patients_cte(
+                None,
+                patient_scope="literal",
+                include_patient_demographics=False,
+            )
+            cte_defs.append(CTEDefinition(name="_patients", query=patients_query))
+            final_select_ast = SQLSelect(
+                from_clause=SQLAlias(
+                    expr=SQLIdentifier(name="_patients"), alias="_pt"
+                ),
+                columns=[final_expr],
+            )
+        else:
+            final_select_ast = SQLSelect(
+                from_clause=SQLIdentifier(name=final_name, quoted=True),
+            )
         fragment = SQLFragment(main_query=final_select_ast, ctes=cte_defs)
         return self._substitute_fold_placeholders(fragment.to_sql())
 
@@ -2154,12 +2221,18 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             # Build final SQL with any accumulated CTEs
             if self._context.get_ctes():
                 cte_sql = self._build_sql({definition.name: result})
-                return SQLExpression(
-                    sql=cte_sql,
-                    sql_type=result.sql_type,
-                    nullable=result.nullable,
-                    cte_refs=[cte.name for cte in self._context.get_ctes()],
-                )
+                # CORE-014: the base SQLExpression dataclass has no sql /
+                # sql_type / nullable / cte_refs fields — the previous
+                # SQLExpression(sql=..., ...) construction raised TypeError
+                # on every call. Return the fully-assembled SQL text as a
+                # SQLRaw node (an SQLExpression subclass) so the method still
+                # honors its "complete SQL with accumulated CTEs" contract.
+                # Pipeline consumers (retrieve-optimizer phase 1) never reach
+                # this branch — context CTEs are empty during phase-1
+                # translation.
+                raw = SQLRaw(raw_sql=cte_sql)
+                raw.result_type = getattr(result, "result_type", None)
+                return raw
 
             return result
         finally:

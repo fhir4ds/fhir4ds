@@ -1570,3 +1570,107 @@ class TestExternalReviewB18ContextStateLeaks:
                 "return X.id return C.name.given)\n"
             ))
         assert len(tr.context.scopes) == scope_before
+
+
+class TestExternalReviewB21PublicApisAndTypeMap:
+    """CORE-014 / CORE-016 regression coverage (external review B21)."""
+
+    def _conn(self):
+        import duckdb
+        from fhir4ds.cql.duckdb import register
+        con = duckdb.connect(config={"allow_unsigned_extensions": True})
+        register(con)
+        from fhir4ds.cql.loader import FHIRDataLoader
+        ld = FHIRDataLoader(con)
+        ld.load_resource({"resourceType": "Patient", "id": "p1"})
+        ld.load_resource({"resourceType": "Observation", "id": "o1",
+                          "status": "final", "subject": {"reference": "Patient/p1"}})
+        ld.load_resource({"resourceType": "Observation", "id": "o2",
+                          "status": "preliminary", "subject": {"reference": "Patient/p1"}})
+        return con
+
+    def test_translate_library_to_sql_emits_retrieve_ctes_and_executes(self):
+        """CORE-014: definition-only SQL must carry the retrieve CTEs it
+        references; previously the retrieve define lowered to a bare
+        `SELECT "Observation"` column reference with no FROM."""
+        from fhir4ds.cql import parse_cql
+        from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+        con = self._conn()
+        lib = parse_cql(
+            "library L\nusing FHIR version '4.0.1'\ncontext Patient\n"
+            "define Obs: [Observation]"
+        )
+        sql = CQLToSQLTranslator(con).translate_library_to_sql(lib, final_definition="Obs")
+        assert 'resourceType = \'Observation\'' in sql
+        rows = con.execute(sql).fetchall()
+        assert len(rows) == 2  # both observations, patient-correlated columns
+
+    def test_translate_library_to_sql_scalar_over_retrieve_executes(self):
+        """CORE-014: final definitions with per-patient correlation (`_pt`)
+        are inlined against the patients CTE instead of dangling."""
+        from fhir4ds.cql import parse_cql
+        from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+        con = self._conn()
+        for cql, final, expected in [
+            ("define Obs: [Observation]\ndefine S: First(Obs).status", "S",
+             {"final", "preliminary"}),  # First over an unordered retrieve
+            ("define N: Count([Observation])", "N", {2}),
+        ]:
+            lib = parse_cql(
+                "library L\nusing FHIR version '4.0.1'\ncontext Patient\n" + cql
+            )
+            sql = CQLToSQLTranslator(con).translate_library_to_sql(lib, final_definition=final)
+            rows = con.execute(sql).fetchall()
+            # Membership, not equality: retrieve row order is nondeterministic
+            # (established doctrine), so First(...) may return either element.
+            # The scalar's transport shape is also unstable across runs
+            # (VARCHAR vs single-element list), so unwrap before comparing.
+            value = rows[0][0]
+            if isinstance(value, list):
+                assert len(value) == 1, f"{final}: {rows!r}"
+                value = value[0]
+            if isinstance(expected, set):
+                assert value in expected, f"{final}: {rows!r}"
+            else:
+                assert value == expected, f"{final}: {rows!r}"
+
+    def test_translate_definition_with_context_ctes_returns_valid_node(self):
+        """CORE-014 part 2: the accumulated-CTEs branch previously built
+        `SQLExpression(sql=...)` — the base dataclass has no such fields, so
+        the branch raised TypeError on every call."""
+        from fhir4ds.cql import parse_cql
+        from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+        from fhir4ds.cql.translator.types import CTEDefinition, SQLExpression, SQLSelect
+        con = self._conn()
+        lib = parse_cql(
+            "library L\nusing FHIR version '4.0.1'\ncontext Patient\ndefine X: 1 + 2"
+        )
+        t = CQLToSQLTranslator(con)
+        t._setup_context(lib)
+        t._context.add_cte(CTEDefinition(name='"dummy_cte"', query=SQLSelect(columns=[])))
+        stmt = [s for s in lib.statements if getattr(s, "name", None) == "X"][0]
+        result = t.translate_definition(stmt)  # raised TypeError pre-fix
+        assert isinstance(result, SQLExpression)
+        assert "WITH" in result.to_sql()
+
+    def test_function_param_list_query_types_as_list(self):
+        """CORE-016: a query inside a fluent-function body must type the
+        same as the identical top-level query (List<String>), not the bare
+        element type / Any. Also covers _specifier_ref on
+        ListTypeSpecifier."""
+        from fhir4ds.cql import parse_cql
+        from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+        con = self._conn()
+        lib = parse_cql(
+            "library L\nusing FHIR version '4.0.1'\ncontext Patient\n"
+            "define function F(Obs List<Observation>):\n"
+            "  (Obs O return O.status)\n"
+            "define TopLevel: ([Observation] O return O.status)\n"
+            "define CallF: F([Observation])"
+        )
+        t = CQLToSQLTranslator(con)
+        t.translate_library(lib)  # runs TypeMapBuilder.attach()
+        meta = t._context.definition_meta
+        assert str(meta["CallF"].cql_type_ref) == str(meta["TopLevel"].cql_type_ref)
+        assert meta["TopLevel"].cql_type_ref.bare_name == "List"
+        assert meta["TopLevel"].cql_type_ref.args[0].bare_name == "String"
