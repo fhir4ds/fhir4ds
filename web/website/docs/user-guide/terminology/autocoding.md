@@ -48,15 +48,14 @@ coder.augment_resource(resource)
 #     "display": "Type 2 diabetes mellitus (disorder)",
 #     "userSelected": False,
 #     "extension": [{
-#       "url": "https://fhir4ds.com/fhir/StructureDefinition/autocoding",
+#       "url": "http://fhir4ds.org/fhir/StructureDefinition/autocoding",
 #       "extension": [
 #         {"url": "engine", "valueString": "medterm4ds"},
-#         {"url": "engine-version", "valueString": "0.0.1"},
+#         {"url": "engine-version", "valueString": "0.0.12"},
 #         {"url": "index-version", "valueString": "2024-01"},
-#         {"url": "match-grade", "valueString": "certain"},
-#         {"url": "search-mode", "valueString": "hybrid"},
-#         {"url": "search-score", "valueDecimal": 0.92},
-#         {"url": "result-text-hash", "valueString": "<sha256>"}
+#         {"url": "match-grade", "valueCode": "certain"},
+#         {"url": "search-mode", "valueCode": "hybrid"},
+#         {"url": "score", "valueDecimal": 0.92},
 #       ]
 #     }]
 #   }
@@ -123,7 +122,7 @@ config = AutoCoderConfig(
     search_mode="hybrid",          # "lexical" / "semantic" / "hybrid"
     min_match_grade="certain",     # "certain" / "probable" / "ambiguous" / "no-match"
     top_k=3,                       # max Codings per CodeableConcept
-    engine_version="0.0.1",        # written into the autocoding extension
+    engine_version=None,           # None = report the installed medterm4ds version
     category_overrides={"Observation": "vital"},
 )
 
@@ -138,15 +137,14 @@ For large loads, `AutoCoder.augment_resources(resources)` batches the terminolog
 
 ## 8. Audit extension
 
-Every derived Coding carries a structured [autocoding extension](https://fhir4ds.com/fhir/StructureDefinition/autocoding) recording:
+Every derived Coding carries a structured [autocoding extension](http://fhir4ds.org/fhir/StructureDefinition/autocoding) recording:
 
 - `engine` — `"medterm4ds"`
 - `engine-version` — the medterm4ds release that produced the Coding
 - `index-version` — the terminology index version (pinned at first call)
 - `match-grade` — `certain` / `probable` / `ambiguous` / `no-match`
 - `search-mode` — `lexical` / `semantic` / `hybrid`
-- `search-score` — the raw score from the search call
-- `result-text-hash` — sha256 of the normalized input text
+- `score` — the raw score from the search call
 
 This is the audit trail: downstream consumers can filter, re-rank, or strip auto-coded entries by `engine`, `match-grade`, or `index-version` without re-running the pipeline.
 

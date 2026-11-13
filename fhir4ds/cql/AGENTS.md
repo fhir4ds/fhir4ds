@@ -7012,3 +7012,36 @@ ARTEFACT — a 1-key mock dict produced "not enough values to unpack". The live
 call returns 748 codes on the ORIGINAL code path. A mock is an assumption: call
 the real partner function and print its runtime type before filing a
 cross-package defect.
+
+## AutoCoding provenance must name the medterm4ds release actually running (2026-11-12, medterm4ds 0.0.12)
+
+`AutoCoderConfig.engine_version` defaulted to the literal `"0.0.1"` under a
+"bump per release" instruction that was never carried out, so every autocoded
+Coding claimed provenance from medterm4ds 0.0.1 regardless of which release was
+installed — which defeats the Phase 5 staleness sweep the field exists for
+(you cannot tell a 0.0.1 Coding from a 0.0.12 one). It now defaults to `None`
+and resolves from `medterm4ds.__version__` at `AutoCoder` construction, falling
+back to `"unknown"`; an explicit string still pins it, and an empty string is
+rejected at construction. `notes_pipeline.py` already detected the version —
+`AutoCoder` was the outlier.
+
+Docs had drifted from the emitted extension shape and were corrected in the same
+pass: the URL is `http://fhir4ds.org/fhir/StructureDefinition/autocoding` (not
+`fhir4ds.com`), the field is `score` (not `search-score`),
+`search-mode`/`match-grade` are `valueCode` (not `valueString`), and there is no
+`result-text-hash` field. `AUTOCODING_EXTENSION_URL` plus the six sub-url
+constants in `loader/autocoding_extension.py` are the single source of truth
+when documenting this extension.
+
+medterm4ds 0.0.12 verification (adapter contract + behavior): all five symbols
+the adapter binds to still exist with compatible signatures
+(`LocalDuckDBEngine`, both import paths, `apps.fhir_api.expand_url_pattern`,
+`expand_intensional_value_set`, `services.discovery.search_names`); the
+`extraction` extra still exists (so the `ner` pin resolves); in-process
+`connect()` + intensional expansion + `search_text` + `search_batch` + AutoCoder
+all work. The documented runtime-shape quirk persists: `expand_intensional_value_set`
+annotates `-> list[dict]` but returns a 2-tuple `(codes, depth_cap_hit)`, so the
+adapter's tolerant both-shape handling must stay. Terminology suite: 379 passed
+/ 3 failed, the 3 being the pre-existing order-dependent
+`test_in_process_adapter` mock-pollution flake (they pass in isolation, and fail
+identically on 0.0.10) — not a 0.0.12 regression.

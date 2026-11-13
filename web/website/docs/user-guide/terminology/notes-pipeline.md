@@ -91,11 +91,11 @@ Each derived Condition looks like:
       "display": "Diabetes mellitus (disorder)",
       "userSelected": false,
       "extension": [{
-        "url": "https://fhir4ds.com/fhir/StructureDefinition/autocoding",
+        "url": "http://fhir4ds.org/fhir/StructureDefinition/autocoding",
         "extension": [
           {"url": "engine", "valueString": "medterm4ds-ner"},
-          {"url": "engine-version", "valueString": "0.0.1"},
-          {"url": "match-grade", "valueString": "certain"},
+          {"url": "engine-version", "valueString": "0.0.12"},
+          {"url": "match-grade", "valueCode": "certain"},
           ...
         ]
       }]
@@ -109,7 +109,7 @@ Each derived Condition looks like:
     "coding": [{"system": "http://terminology.hl7.org/CodeSystem/condition-clinical", "code": "active"}]
   },
   "extension": [{
-    "url": "https://fhir4ds.com/fhir/StructureDefinition/derived-from-text",
+    "url": "http://fhir4ds.org/fhir/StructureDefinition/derived-from-text",
     "extension": [
       {"url": "source-ref", "valueString": "ClinicalImpression/ci-001"},
       {"url": "source-path", "valueString": "summary"},
