@@ -1803,12 +1803,13 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 sub_meta = self._context.definition_meta.get(cte_name)
                 if sub_meta and getattr(sub_meta, 'has_resource', False):
                     quoted = f'"{cte_name}"'
+                    _threshold_lit = cte_name.replace("'", "''")
                     parts.append(
                         f"COALESCE((SELECT LIST(struct_pack("
                         f"target := json_extract_string({quoted}.resource, '$.resourceType') || '/' || "
                         f"json_extract_string({quoted}.resource, '$.id'), "
                         f"attribute := CAST(NULL AS VARCHAR), value := CAST(NULL AS VARCHAR), "
-                        f"operator := 'exists', threshold := '{cte_name}', "
+                        f"operator := 'exists', threshold := '{_threshold_lit}', "
                         f"trace := CAST([] AS VARCHAR[]))) "
                         f"FROM {quoted} WHERE {quoted}.patient_id = _pt.patient_id "
                         f"AND {quoted}.resource IS NOT NULL), [])"
@@ -2900,7 +2901,12 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                     sql_str = None
                     combined_refs |= self._find_definition_references(cte_body, _all_def_names)
                 if sql_str is not None:
-                    from_refs = set(re.findall(r'FROM\s+"([^"]+)"', sql_str, re.IGNORECASE))
+                    # Both FROM and JOIN references impose an ordering
+                    # constraint on the CTE chain — a JOIN-only dependency
+                    # produced out-of-order CTEs and a Catalog Error.
+                    from_refs = set(
+                        re.findall(r'(?:FROM|JOIN)\s+"([^"]+)"', sql_str, re.IGNORECASE)
+                    )
                     combined_refs |= (from_refs & _all_def_names)
             other_defs = combined_refs - {source_cte_name}
             if other_defs:

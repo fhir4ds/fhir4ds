@@ -1018,8 +1018,9 @@ def optimize_rendered_property_access(
 # Identity memo for _optimize_fhirpath_calls. Inlined fluent bodies share
 # AST subtrees by reference, so the rebuild-per-parent optimizer expands a
 # shared DAG into an exponential tree (CMS136). Entries store the ORIGINAL
-# node object alongside the result: the node stays referenced (its id()
-# cannot be recycled) and identity is re-validated on every hit.
+# node AND the original alias_to_cte dict alongside the result: both stay
+# referenced (their id()s cannot be recycled) and identity is re-validated
+# on every hit.
 _FHIRPATH_OPT_MEMO: dict = {}
 
 
@@ -1035,10 +1036,18 @@ def _optimize_fhirpath_calls(
         return _optimize_fhirpath_calls_uncached(ast, registry, alias_to_cte)
     memo_key = (id(ast), id(alias_to_cte))
     entry = _FHIRPATH_OPT_MEMO.get(memo_key)
-    if entry is not None and entry[0] is ast:
-        return entry[1]
+    if (
+        entry is not None
+        and entry[0] is ast
+        and entry[1] is alias_to_cte
+    ):
+        return entry[2]
     result = _optimize_fhirpath_calls_uncached(ast, registry, alias_to_cte)
-    _FHIRPATH_OPT_MEMO[memo_key] = (ast, result)
+    # Store BOTH keyed objects so neither id() can be recycled while the
+    # entry lives: a freed alias_to_cte dict's address can be reused by a
+    # sibling select's dict, and a hit validated only on the ast would then
+    # return a rewrite computed against the WRONG alias map.
+    _FHIRPATH_OPT_MEMO[memo_key] = (ast, alias_to_cte, result)
     return result
 
 

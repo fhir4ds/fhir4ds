@@ -399,10 +399,12 @@ class SQLQualifiedIdentifier(SQLExpression):
                 return part  # already quoted
             needs_quoting = (
                 ' ' in part or ':' in part or '-' in part or
-                '(' in part or ')' in part
+                '(' in part or ')' in part or '"' in part or '.' in part
             )
             if needs_quoting:
-                return f'"{part}"'
+                # Escape embedded double quotes per SQL identifier rules so
+                # a quote can never terminate the identifier early.
+                return '"' + part.replace('"', '""') + '"'
             return part
         return ".".join(_quote_part(p) for p in self.parts)
 
@@ -2245,7 +2247,7 @@ class SQLParameterRef(SQLExpression):
         # - Convert to lowercase
         # - Use getvariable() for session variables
         # - CAST to VARCHAR since getvariable returns a string literal type
-        normalized_name = self.name.replace(" ", "_").lower()
+        normalized_name = self.name.replace(" ", "_").lower().replace("'", "''")
         return f"CAST(getvariable('{normalized_name}') AS VARCHAR)"
 
 
