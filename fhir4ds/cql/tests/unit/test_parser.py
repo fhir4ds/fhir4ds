@@ -1057,3 +1057,83 @@ class TestExternalReviewB3LexerLiterals:
         assert type(e).__name__ == "MethodInvocation"
         e2 = parse_expression("@T14:30:22.5")
         assert e2.value == "T14:30:22.5"
+
+
+class TestExternalReviewB4GrammarGaps:
+    """Regression coverage for the 2026-11-13 external parser review, batch B4
+    (TRIAGE_cql_review_20261113.md): PAR-007 (bare `flatten X` misparse,
+    `1 foo` over-acceptance) and PAR-008 subset (typed list selector
+    `List<T>{...}`, concept selector `Concept { Code ... }`)."""
+
+    def test_bare_flatten_prefix_parses_as_function(self):
+        # PAR-007: `flatten X` misparsed as Query(source=Identifier('flatten'),
+        # alias=X). Grammar: `('distinct'|'flatten') expression`.
+        e = parse_expression("flatten {1, 2}")
+        assert type(e).__name__ == "FunctionRef" and e.name == "flatten"
+        e2 = parse_expression("flatten X")
+        assert type(e2).__name__ == "FunctionRef" and e2.name == "flatten"
+
+    def test_bare_literal_alias_is_rejected(self):
+        # PAR-007: `1 foo` is invalid grammar — querySource is a retrieve,
+        # identifier, or parenthesized expression.
+        from ...errors import ParseError
+
+        for src in ["1 foo", "'x' bar", "true foo"]:
+            with pytest.raises(ParseError):
+                parse_expression(src)
+
+    def test_parenthesized_literal_alias_still_accepted(self):
+        # Grammar querySource admits '(' expression ')' — parens are valid.
+        e = parse_expression("(1) X return X")
+        assert type(e).__name__ == "Query"
+
+    def test_typed_list_selector(self):
+        # PAR-008: `List<Code>{ }` misparsed as chained </> comparisons.
+        e = parse_expression("List<Code>{ }")
+        from ...parser.ast_nodes import BinaryExpression, ListExpression, ListTypeSpecifier
+        assert isinstance(e, BinaryExpression) and e.operator == "as"
+        assert isinstance(e.left, ListExpression) and not e.left.elements
+        assert isinstance(e.right, ListTypeSpecifier)
+
+    def test_untyped_list_selector_and_typed_elements(self):
+        assert type(parse_expression("List{1, 2}")).__name__ == "ListExpression"
+        e = parse_expression("List<Integer>{1, 2, 3}")
+        assert e.operator == "as" and len(e.left.elements) == 3
+
+    def test_concept_selector_with_inline_codes(self):
+        # PAR-008: `Concept { Code 'x' from "CS" }` was a ParseError.
+        e = parse_expression('Concept { Code \'x\' from "CS" }')
+        from ...parser.ast_nodes import InstanceExpression, ListExpression
+        assert isinstance(e, InstanceExpression) and e.type == "Concept"
+        assert e.elements[0].name == "codes"
+        assert isinstance(e.elements[0].type, ListExpression)
+
+    def test_concept_named_field_instance_still_supported(self):
+        # The named-field form `Concept { codes: {...} }` predates the selector
+        # and must keep its generic instance parse.
+        e = parse_expression('Concept { codes: { Code \'x\' from "CS" } }')
+        assert type(e).__name__ == "InstanceExpression" and e.type == "Concept"
+        assert e.elements[0].name == "codes"
+
+    def test_concept_selector_named_code_and_display_translate(self):
+        # Review finding (B4): named-code members must emit quoted Identifiers
+        # (the fold-resolvable shape), never bare str, and the grammar's
+        # whole-selector display clause must parse. Verified end-to-end.
+        cql = (
+            "library L\n"
+            'codesystem "CS": \'http://loinc.org\'\n'
+            'code "N": \'x\' from "CS"\n'
+            "context Unfiltered\n"
+            'define C1: Concept { "N" }\n'
+            'define C2: Concept { "N", Code \'y\' from "CS" } display \'Disp\'\n'
+        )
+        lib = parse_cql(cql)  # parse-only smoke
+        assert len(lib.statements) >= 2
+
+        from fhir4ds.cql import translate_cql
+
+        res = translate_cql(cql)
+        sql1 = res["C1"].to_sql() if hasattr(res["C1"], "to_sql") else str(res["C1"])
+        assert '"code":"x"' in sql1 and '"system":"http://loinc.org"' in sql1
+        sql2 = res["C2"].to_sql() if hasattr(res["C2"], "to_sql") else str(res["C2"])
+        assert '"display":"Disp"' in sql2 and sql2.count('"code"') == 2

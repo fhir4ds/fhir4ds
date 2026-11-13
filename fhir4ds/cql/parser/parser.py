@@ -1255,6 +1255,14 @@ class CQLParser:
             operand = self.parse_unary_expression()
             return DistinctExpression(source=operand)
 
+        # PAR-007: bare `flatten X` (grammar: `('distinct'|'flatten') expression`
+        # aggregateExpressionTerm). Without this branch the FLATTEN token
+        # degraded to a plain Identifier and `flatten X` misparsed as a Query
+        # with source=Identifier('flatten') and alias=X.
+        if self.match_and_advance(TokenType.FLATTEN):
+            operand = self.parse_unary_expression()
+            return FunctionRef(name="flatten", arguments=[operand])
+
         # Interval operators: start of, end of, point from
         if self.match(TokenType.START):
             if self.peek().type == TokenType.OF:
@@ -1387,6 +1395,21 @@ class CQLParser:
                                        TokenType.EOF, TokenType.DEFINE, TokenType.RPAREN,
                                        TokenType.AGGREGATE, TokenType.COMMA, TokenType.RBRACKET, TokenType.RBRACE,
                                        TokenType.UNION, TokenType.INTERSECT, TokenType.EXCEPT):
+                    if isinstance(expr, Literal) and not getattr(
+                        expr, "_parenthesized", False
+                    ):
+                        # PAR-007: `1 foo` is INVALID grammar — a query source
+                        # is a retrieve, a (qualified) identifier, or a
+                        # parenthesized expression; a bare literal followed by
+                        # an identifier is a trailing-token error, not a Query
+                        # with a literal source and an alias.
+                        _tok = self.current()
+                        raise ParseError(
+                            "Invalid query source: a bare literal cannot be "
+                            "aliased (expected a retrieve, identifier, or "
+                            "parenthesized expression)",
+                            position=(_tok.line, _tok.column),
+                        )
                     # This is a query with an alias
                     alias = self._parse_identifier_name()
                     source = QuerySource(alias=alias, expression=expr)
@@ -1513,6 +1536,19 @@ class CQLParser:
             next_type = self.peek().type
             if next_type == TokenType.STRING:
                 return self.parse_code_selector()
+
+        # Concept selector: Concept { Code 'x' from "CS", ... } or
+        # Concept { "NamedCode", ... }   (grammar conceptSelector)
+        if self.match(TokenType.CONCEPT_TYPE) and self.peek().type == TokenType.LBRACE:
+            return self._parse_concept_selector()
+
+        # Typed list selector: List<T>{ ... } or List{ ... }
+        # (grammar: `('List' ('<' typeSpecifier '>')?)? '{' ... '}'`)
+        if self.match(TokenType.LIST_TYPE) and self.peek().type in (
+            TokenType.LESS_THAN,
+            TokenType.LBRACE,
+        ):
+            return self._parse_typed_list_selector()
 
         # Interval literal: only if followed by a bracket/paren delimiter
         if self.match(TokenType.INTERVAL):
@@ -1884,6 +1920,105 @@ class CQLParser:
 
         return CodeSelector(code=code_value, system=system_name, display=display)
 
+    def _parse_concept_selector(self) -> "InstanceExpression":
+        """Parse a Concept selector: ``Concept { <code>, ... }``.
+
+        Grammar (CQL 1.5 conceptSelector): members are either inline Code
+        selectors (``Code 'x' from "CS"``) or references to named codes
+        declared in the library header. Lowered to an InstanceExpression of
+        Concept with a ``codes`` list, the same shape the generic instance
+        path produces for ``Concept { codes: { ... } }`` (which the
+        translator folds via _fold_static_concept_instance).
+        """
+        self.expect(TokenType.CONCEPT_TYPE, "Expected 'Concept'")
+        self.expect(TokenType.LBRACE, "Expected '{' after 'Concept'")
+
+        # Named-field instance form (`Concept { codes: { ... }, display: ... }`)
+        # is NOT a concept selector — delegate to the generic type-constructor
+        # parser by rewinding to before the 'Concept' token.
+        if self.match(
+            TokenType.IDENTIFIER, TokenType.QUOTED_IDENTIFIER
+        ) and self.peek().type == TokenType.COLON:
+            self.pos -= 2  # back before LBRACE and 'Concept'
+            return self._parse_type_constructor()
+
+        codes = []
+        while not self.match(TokenType.RBRACE):
+            if self.match(TokenType.CODE_TYPE):
+                code_token = self.peek(1)
+                if code_token.type != TokenType.STRING:
+                    _tok = self.current()
+                    raise ParseError(
+                        "Expected a code string in Concept selector",
+                        position=(_tok.line, _tok.column),
+                    )
+                codes.append(self.parse_code_selector())
+            else:
+                # Reference to a named code declared in the library header.
+                # Emit a quoted Identifier — the same element shape the
+                # named-field form `Concept { codes: { "N" } }` produces,
+                # which the translator's concept folding resolves against
+                # the library code table.
+                codes.append(
+                    Identifier(name=self._parse_identifier_name(), quoted=True)
+                )
+            if not self.match_and_advance(TokenType.COMMA):
+                break
+
+        self.expect(TokenType.RBRACE, "Expected '}' to close Concept selector")
+
+        # Grammar conceptSelector carries an optional whole-selector display
+        # clause after the closing brace.
+        display = None
+        if self.match_and_advance(TokenType.DISPLAY):
+            display_token = self.expect(
+                TokenType.STRING, "Expected display string after 'display'"
+            )
+            display = display_token.value
+
+        from .ast_nodes import InstanceExpression, TupleElement, ListExpression
+
+        codes_list = ListExpression(elements=codes)
+        elements = [TupleElement(name="codes", type=codes_list)]
+        if display is not None:
+            elements.append(
+                TupleElement(name="display", type=Literal(value=display, type="String"))
+            )
+        return InstanceExpression(type="Concept", elements=elements)
+
+    def _parse_typed_list_selector(self) -> "BinaryExpression":
+        """Parse a typed list selector: ``List<T>{ ... }`` or ``List{ ... }``.
+
+        Grammar: ``('List' ('<' typeSpecifier '>')?)? '{' (query|expression)? '}'``.
+        Lowered to ``<list literal> as List<T>`` — the established typed-list
+        mechanism (typed empty arrays, Case 6a union eligibility, etc.), so
+        ``List<Integer>{}`` behaves like ``{} as List<Integer>``.
+        """
+        self.expect(TokenType.LIST_TYPE, "Expected 'List'")
+        element_type = None
+        if self.match_and_advance(TokenType.LESS_THAN):
+            element_type = self.parse_type_specifier()
+            self.expect(TokenType.GREATER_THAN, "Expected '>' to close List type")
+
+        if not self.match(TokenType.LBRACE):
+            _tok = self.current()
+            raise ParseError(
+                "Expected '{' after List type specifier",
+                position=(_tok.line, _tok.column),
+            )
+        list_expr = self._parse_brace_expression()
+
+        if element_type is None:
+            return list_expr
+
+        from .ast_nodes import ListTypeSpecifier
+
+        return BinaryExpression(
+            operator="as",
+            left=list_expr,
+            right=ListTypeSpecifier(element_type=element_type),
+        )
+
     def parse_interval(self) -> Interval:
         """Parse an interval expression."""
         self.expect(TokenType.INTERVAL, "Expected 'Interval'")
@@ -2124,6 +2259,14 @@ class CQLParser:
             return ListExpression(elements=elements)
 
         self.expect(TokenType.RPAREN, "Expected ')'")
+        # Grammar querySource admits '(' expression ')' — a parenthesized
+        # bare literal IS a valid query source, so mark it to exempt it from
+        # the bare-literal alias rejection in parse_postfix_expression.
+        if isinstance(expr, Literal):
+            try:
+                setattr(expr, "_parenthesized", True)
+            except Exception:  # pragma: no cover - frozen/slots variants
+                pass
         return expr
 
     def _parse_duration_between(self) -> DurationBetween:
