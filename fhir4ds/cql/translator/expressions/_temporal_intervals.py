@@ -191,11 +191,15 @@ class IntervalMixin:
         left_end_coalesced = _bound_sentinel_coalesce(left_end, "9999-12-31")
         right_end_coalesced = _bound_sentinel_coalesce(right_end, "9999-12-31")
 
-        # For [a, b) overlaps [c, d):
-        # a < d (since d is exclusive) AND b >= c
-        # If bounds are closed, adjust operators
-        left_op = "<=" if right_high_closed else "<"
-        right_op = ">=" if left_high_closed else ">"
+        # For [a, b] overlaps [c, d]:
+        #   a <= d AND b >= c
+        # Each comparison is inclusive ONLY when the shared endpoint is
+        # included in BOTH intervals (EXP1-007: the old form keyed each
+        # operator off one side's high-closedness only, ignoring the other
+        # side's low-closedness — `Interval(@a, b] overlaps [c, @a]` wrongly
+        # returned true for a shared open endpoint).
+        left_op = "<=" if (left_low_closed and right_high_closed) else "<"
+        right_op = ">=" if (right_low_closed and left_high_closed) else ">"
 
         # Build the comparison: left_start < right_end
         # All bounds are VARCHAR — lexicographic comparison of ISO 8601 strings

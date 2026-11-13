@@ -1068,3 +1068,75 @@ def test_cql_interval_equivalent_is_two_valued_for_open_null_bounds_rev004() -> 
                 )
         finally:
             con.close()
+
+
+class TestExternalReviewB5IntervalSemantics:
+    """Regression coverage for the 2026-11-13 external translator review,
+    batch B5 (TRIAGE_cql_review_20261113.md): EXP1-007 (overlaps
+    decomposition ignored low-closedness), EXP2-005 (ends timing phrases
+    compared against raw interval JSON), REV-004 refined (interval
+    equivalence treated open-null and closed-null bounds as equal)."""
+
+    def _exec(self, expression: str):
+        from fhir4ds.cql import translate_cql
+        import duckdb
+        from fhir4ds.cql.duckdb import register
+
+        con = duckdb.connect()
+        register(con)
+        res = translate_cql(
+            f"library L\ncontext Unfiltered\ndefine T: {expression}"
+        )
+        v = next(iter(res.values()))
+        sql = v.to_sql() if hasattr(v, "to_sql") else str(v)
+        return con.execute(f"SELECT ({sql})").fetchone()[0]
+
+    def test_overlaps_respects_low_closedness(self):
+        # EXP1-007: shared endpoint with an OPEN low bound on either side is
+        # NOT an overlap (the shared point is excluded from that interval).
+        assert self._exec(
+            "Interval(@2020-01-05, @2020-01-10] overlaps Interval[@2020-01-01, @2020-01-05]"
+        ) is False
+        assert self._exec(
+            "Interval[@2020-01-05, @2020-01-10] overlaps Interval[@2020-01-01, @2020-01-05]"
+        ) is True
+        assert self._exec(
+            "Interval[@2020-01-01, @2020-01-05) overlaps Interval[@2020-01-05, @2020-01-10]"
+        ) is False
+        assert self._exec(
+            "Interval(@2020-01-01, @2020-01-04] overlaps Interval[@2020-01-05, @2020-01-10]"
+        ) is False
+
+    def test_ends_timing_phrases_extract_interval_operand_bounds(self):
+        # EXP2-005: an interval right operand must reduce to its bound — the
+        # old form compared end(left) against the raw interval JSON text,
+        # making '2099-12-31' <= '{"low":...' lexicographically true.
+        assert self._exec(
+            "Interval[@2025-01-01, @2099-12-31] ends on or before Interval[@2020-01-01, @2020-06-01]"
+        ) is False
+        # ends on or before B := end(A) <= start(B) → identical intervals False
+        assert self._exec(
+            "Interval[@2020-01-01, @2020-06-01] ends on or before Interval[@2020-01-01, @2020-06-01]"
+        ) is False
+        assert self._exec(
+            "Interval[@2019-01-01, @2019-06-01] ends on or before Interval[@2020-01-01, @2020-06-01]"
+        ) is True
+        assert self._exec(
+            "Interval[@2021-01-01, @2021-06-01] ends on or after Interval[@2020-01-01, @2020-06-01]"
+        ) is True
+        assert self._exec(
+            "Interval[@2019-01-01, @2019-06-01] ends before Interval[@2020-01-01, @2020-06-01]"
+        ) is True
+        assert self._exec(
+            "Interval[@2021-01-01, @2021-06-01] ends after Interval[@2020-01-01, @2020-06-01]"
+        ) is True
+
+    def test_interval_equivalence_null_bound_closedness_matters(self):
+        # REV-004 refined: an OPEN null bound is UNKNOWN, a CLOSED null bound
+        # is the point-type extremum — not equivalent. Same-closedness
+        # null-null bounds remain equivalent (fixture-pinned True).
+        assert self._exec("Interval[1, null] ~ Interval[1, null]") is True
+        assert self._exec("Interval[1, null) ~ Interval[1, null)") is True
+        assert self._exec("Interval[1, null) ~ Interval[1, null]") is False
+        assert self._exec("Interval[1, null] !~ Interval[1, null)") is True
+        assert self._exec("Interval(null, 5] ~ Interval[1, 5]") is False

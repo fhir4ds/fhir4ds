@@ -6613,6 +6613,13 @@ class OperatorsMixin:
                         ],
                     )
                 right_inner = self._ensure_date_cast(self.translate(cleaned_operand))
+                # EXP2-005: an INTERVAL right operand must reduce to its START
+                # bound (§ timing phrases: `A ends on or before B` compares
+                # end(A) with start(B)) — comparing against the raw interval
+                # JSON made `'2099-12-31' <= '{"low":...'` a lexicographic
+                # true.
+                if self._is_fhir_interval_expression(right_inner) or isinstance(right_inner, SQLInterval):
+                    right_inner = SQLFunctionCall(name="intervalStart", args=[right_inner])
                 # Gap 18: Use < for exclusive boundary
                 op = "<" if getattr(right_inner, 'is_exclusive_boundary', False) else "<="
                 interval_end = SQLFunctionCall(name="intervalEnd", args=[left])
@@ -6650,6 +6657,11 @@ class OperatorsMixin:
                         ],
                     )
                 right_inner = self._ensure_date_cast(self.translate(cleaned_operand))
+                # EXP2-005: interval right operand reduces to its END bound
+                # (§ timing phrases: `A ends on or after B` compares end(A)
+                # with end(B)).
+                if self._is_fhir_interval_expression(right_inner) or isinstance(right_inner, SQLInterval):
+                    right_inner = SQLFunctionCall(name="intervalEnd", args=[right_inner])
                 interval_end = SQLFunctionCall(name="intervalEnd", args=[left])
                 # Symmetric DATE truncation on BOTH sides (CQL §18.2).
                 result = SQLBinaryOp(
@@ -6667,6 +6679,9 @@ class OperatorsMixin:
                 cleaned_operand, extra_cond_ast = self._strip_and_conditions(expr.right.operand)
                 # Use TIMESTAMP to preserve sub-day precision for dateTime values
                 right_inner = self._ensure_date_cast(self.translate(cleaned_operand), "TIMESTAMP")
+                # EXP2-005: interval right operand reduces to its START bound.
+                if self._is_fhir_interval_expression(right_inner) or isinstance(right_inner, SQLInterval):
+                    right_inner = SQLFunctionCall(name="intervalStart", args=[right_inner])
                 interval_end = SQLFunctionCall(name="intervalEnd", args=[left])
                 result = SQLBinaryOp(
                     operator="<",
@@ -6683,6 +6698,9 @@ class OperatorsMixin:
                 cleaned_operand, extra_cond_ast = self._strip_and_conditions(expr.right.operand)
                 # Use TIMESTAMP to preserve sub-day precision for dateTime values
                 right_inner = self._ensure_date_cast(self.translate(cleaned_operand), "TIMESTAMP")
+                # EXP2-005: interval right operand reduces to its END bound.
+                if self._is_fhir_interval_expression(right_inner) or isinstance(right_inner, SQLInterval):
+                    right_inner = SQLFunctionCall(name="intervalEnd", args=[right_inner])
                 interval_end = SQLFunctionCall(name="intervalEnd", args=[left])
                 result = SQLBinaryOp(
                     operator=">",
