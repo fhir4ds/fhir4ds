@@ -1186,3 +1186,38 @@ class TestExternalReviewB4bLibraryGrammar:
         )
         g = [s for s in lib2.statements if hasattr(s, "parameters")][0]
         assert g.access_level == "public" and g.fluent is True
+
+
+class TestExternalReviewB8QueryClauses:
+    """Regression coverage for the 2026-11-13 external translator review,
+    batch B8 (TRIAGE_cql_review_20261113.md): EXP2-001 (literal FALSE
+    conditions dropped from with/such-that and multi-source where),
+    EXP2-007 (secondary sort keys dropped)."""
+
+    def _sql(self, cql_def):
+        from ... import translate_cql
+
+        res = translate_cql(f"library L\ncontext Patient\n{cql_def}")
+        v = next(iter(res.values()))
+        return str(v.to_sql() if hasattr(v, "to_sql") else v)
+
+    def test_such_that_false_is_not_dropped(self):
+        sql = self._sql(
+            "define Q: [Patient] P with [Encounter] E such that false return P.id"
+        )
+        assert "FALSE" in sql.upper(), sql
+
+    def test_where_false_literal_still_filters(self):
+        sql = self._sql("define Q: [Patient] P where false return P.id")
+        assert "FALSE" in sql.upper(), sql
+
+    def test_secondary_sort_keys_preserved(self):
+        sql = self._sql(
+            "define S: [Patient] P sort by P.gender, P.birthDate asc return P.id"
+        )
+        assert "gender" in sql and "birthDate" in sql, sql
+        assert sql.upper().count("ORDER BY") == 1
+
+    def test_single_sort_key_unchanged(self):
+        sql = self._sql("define S: [Patient] P sort by P.birthDate desc return P.id")
+        assert "ORDER BY" in sql.upper() and "DESC" in sql.upper()

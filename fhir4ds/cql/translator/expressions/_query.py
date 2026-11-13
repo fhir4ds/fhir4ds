@@ -4643,7 +4643,9 @@ class QueryMixin:
                         isinstance(info[3], _ListExpr) for info in _sec_infos
                     )
                     _conds: list = []
-                    if _sec_where_sql and not isinstance(_sec_where_sql, SQLLiteral):
+                    if _sec_where_sql and not (
+                        isinstance(_sec_where_sql, SQLLiteral) and _sec_where_sql.value is True
+                    ):
                         _conds.append(_sec_where_sql)
                     if not _all_list_sources:
                         for _sa, _, _, _ast_expr in _sec_infos:
@@ -5917,7 +5919,9 @@ class QueryMixin:
                         operator="=",
                         right=SQLQualifiedIdentifier(parts=[corr_target, "patient_id"]),
                     )
-                    if condition_sql and not isinstance(condition_sql, SQLLiteral):
+                    if condition_sql and not (
+                        isinstance(condition_sql, SQLLiteral) and condition_sql.value is True
+                    ):
                         # QA-016 fix: when the such_that condition contains an
                         # audit_leaf wrapping a complex argument (EXISTS subquery
                         # or non-trivial function call), DuckDB's binder fails
@@ -6421,57 +6425,66 @@ class QueryMixin:
 
         # Apply SORT clause if present (CQL §19.29)
         if node.sort and node.sort.by:
-            sort_item = node.sort.by[0]
-            direction = (getattr(sort_item, 'direction', None) or 'asc').upper()
-            sort_order = 'ASC' if direction in ('ASC', 'ASCENDING') else 'DESC'
-            nulls = 'NULLS LAST' if sort_order == 'ASC' else 'NULLS FIRST'
+            # EXP2-007: ALL sort keys matter — the old form consumed only
+            # by[0], silently dropping secondary keys.
+            def _resolve_sort_expr(sort_item):
+                """Resolve one sort key to a SQL expression (or None)."""
+                if not sort_item.expression:
+                    if isinstance(result, SQLSelect) and result.columns:
+                        col = result.columns[0]
+                        return SQLIdentifier(name=col.alias) if isinstance(col, SQLAlias) else col
+                    return None
+                _sort_ident_name = (
+                    getattr(sort_item.expression, 'name', None)
+                    if isinstance(sort_item.expression, Identifier) else None
+                )
+                _col_aliases = (
+                    {c.alias for c in result.columns if isinstance(c, SQLAlias)}
+                    if isinstance(result, SQLSelect) and result.columns else set()
+                )
+                if _sort_ident_name and _sort_ident_name in _col_aliases:
+                    return SQLIdentifier(name=_sort_ident_name)
+                if _sort_ident_name and _sort_ident_name in self.context.let_variables:
+                    return self.context.let_variables[_sort_ident_name]
+                if not _sort_ident_name:
+                    return self.translate(sort_item.expression, usage=ExprUsage.SCALAR)
+                return None  # simple identifier not in columns or let variables
+
+            _order_items = []
+            for sort_item in node.sort.by:
+                direction = (getattr(sort_item, 'direction', None) or 'asc').upper()
+                sort_order = 'ASC' if direction in ('ASC', 'ASCENDING') else 'DESC'
+                nulls = 'NULLS LAST' if sort_order == 'ASC' else 'NULLS FIRST'
+                sort_by = _resolve_sort_expr(sort_item)
+                if sort_by is not None:
+                    _order_items.append((sort_by, f"{sort_order} {nulls}"))
 
             if isinstance(result, SQLSelect):
-                # Row-producing query: add ORDER BY
-                if sort_item.expression:
-                    # If the sort expression is a simple identifier matching an
-                    # output column alias, reference the column directly instead
-                    # of re-translating (which may resolve let-bindings that
-                    # reference out-of-scope query aliases).
-                    _sort_ident_name = getattr(sort_item.expression, 'name', None) if isinstance(sort_item.expression, Identifier) else None
-                    _col_aliases = {c.alias for c in result.columns if isinstance(c, SQLAlias)} if result.columns else set()
-                    sort_by = None
-                    if _sort_ident_name and _sort_ident_name in _col_aliases:
-                        sort_by = SQLIdentifier(name=_sort_ident_name)
-                    elif _sort_ident_name and _sort_ident_name in self.context.let_variables:
-                        # Let-binding identifier (e.g. CrLabTime from a let clause) —
-                        # use the already-translated SQL expression directly.
-                        sort_by = self.context.let_variables[_sort_ident_name]
-                    elif not _sort_ident_name:
-                        # Complex expression (e.g. effective.earliest()) — translate
-                        sort_by = self.translate(sort_item.expression, usage=ExprUsage.SCALAR)
-                    # else: simple identifier not in columns or let variables — skip sort
-                    if sort_by is not None:
-                        result = SQLSelect(
-                            columns=result.columns,
-                            from_clause=result.from_clause,
-                            where=result.where,
-                            order_by=[(sort_by, f"{sort_order} {nulls}")],
-                        )
-                else:
-                    # Sort by first/only column
-                    if result.columns:
-                        col = result.columns[0]
-                        if isinstance(col, SQLAlias):
-                            sort_col = SQLIdentifier(name=col.alias)
-                        else:
-                            sort_col = col
-                        result = SQLSelect(
-                            columns=result.columns,
-                            from_clause=result.from_clause,
-                            where=result.where,
-                            order_by=[(sort_col, f"{sort_order} {nulls}")],
-                        )
+                # Row-producing query: add ORDER BY. EXP2-007: preserve the
+                # full clause set (joins/group_by/having/limit/distinct) —
+                # the old reconstruction dropped them.
+                if _order_items:
+                    result = SQLSelect(
+                        columns=result.columns,
+                        from_clause=result.from_clause,
+                        where=result.where,
+                        joins=result.joins,
+                        group_by=result.group_by,
+                        having=result.having,
+                        order_by=_order_items,
+                        limit=result.limit,
+                        distinct=result.distinct,
+                    )
             elif isinstance(result, SQLArray):
-                # Literal array: use DuckDB list_sort directly
+                # Literal array: use DuckDB list_sort directly. Direction comes
+                # from the first sort ITEM (identifier keys do not resolve to
+                # column expressions on the array path).
+                _dir0 = (getattr(node.sort.by[0], 'direction', None) or 'asc').upper()
+                _so0 = 'ASC' if _dir0 in ('ASC', 'ASCENDING') else 'DESC'
+                _nulls0 = 'NULLS LAST' if _so0 == 'ASC' else 'NULLS FIRST'
                 result = SQLFunctionCall(
                     name="list_sort",
-                    args=[result, SQLLiteral(value=sort_order), SQLLiteral(value=nulls)],
+                    args=[result, SQLLiteral(value=_so0), SQLLiteral(value=_nulls0)],
                 )
             # else: non-array, non-SELECT expression — sort not applicable
             # (DQM queries produce VARCHAR results from FHIRPath; sorting is
