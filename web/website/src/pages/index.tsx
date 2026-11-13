@@ -358,12 +358,9 @@ function Hero() {
           <Link className="button button--secondary button--lg" to="/docs/examples/cql-playground/">
             🌐 Live Demo
           </Link>
-          <span className={styles.clinicButton}>
-            <Link className="button button--secondary button--lg" to="/docs/examples/cql-clinic/">
-              🎓 Learn CQL
-            </Link>
-            <span className={styles.newBadge}>New</span>
-          </span>
+          <Link className="button button--secondary button--lg" to="/docs/examples/cql-clinic/">
+            🎓 Learn CQL
+          </Link>
         </div>
       </div>
     </header>
