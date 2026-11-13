@@ -60,6 +60,20 @@ _PYTHON_PREFERRED_CPP_CONFLICTS = {
     "intervalIncludedInPrecise",
     "intervalBeforePrecise",
     "intervalAfterPrecise",
+    # Point temporal predicates. The C++ `CompareTemporal` runs its operands
+    # through `ExtractTemporalOperand`, which parses a leading `{` as an
+    # Interval/Period JSON and compares its LOW bound — so a FHIR Period reaching
+    # `before` (e.g. `AllergyIntolerance.onset` on a period-valued onset) compared
+    # as a point and produced a definitive TRUE. The Python implementations parse
+    # the operand as a temporal literal and return NULL for a JSON document,
+    # which is the CQL 1.5 same-type signature behaviour (a Period is not a
+    # point). Verified divergence: native cqlBefore('{"start":"2021-01-10",...}',
+    # '2026-10-10') = TRUE, Python = NULL (CMS996 f6c7dbc1 allergy arm).
+    "cqlBefore",
+    "cqlAfter",
+    "cqlSameOrBefore",
+    "cqlSameOrAfter",
+    "cqlDateTimeEqual",
     "intervalOverlapsBeforePrecise",
     "intervalOverlapsAfterPrecise",
     "intervalFromBounds",
@@ -184,11 +198,21 @@ def _try_load_bundled_cpp_extension(con: "duckdb.DuckDBPyConnection") -> bool:
     _duckdb_version = duckdb.__version__
     filename = _bundled_extension_filename()
     if filename is None:
-        _logger.info(
-            "duckdb_cql_py: no bundled C++ extension for DuckDB %s "
-            "(supported build lines: 1.5, 2.0). Falling back to Python UDFs.",
-            _duckdb_version,
-        )
+        msg = (
+            "fhir4ds C++ extension unavailable for DuckDB %s: this build "
+            "bundles binaries for the 1.5.x and 2.0.x lines only, so the "
+            "Python UDF fallback will be used. Install a fhir4ds build "
+            "matching your DuckDB line (extras: fhir4ds-v2[duckdb1] for "
+            "1.5.x, fhir4ds-v2[duckdb2] for 2.0.x on Python >= 3.11) or run "
+            "a supported DuckDB version."
+        ) % _duckdb_version
+        # Strict mode covers BOTH failure shapes: an unsupported DuckDB line
+        # and a missing/mismatched bundle file. Previously only the mismatch
+        # path honoured it, so `FHIR4DS_REQUIRE_CPP=1` silently degraded to
+        # the Python fallback on an unsupported line.
+        if os.environ.get("FHIR4DS_REQUIRE_CPP") == "1":
+            raise RuntimeError(msg)
+        _logger.info("duckdb_cql_py: %s", msg)
         return False
 
     ext_path = Path(__file__).parent / "extensions" / filename

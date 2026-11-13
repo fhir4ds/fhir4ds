@@ -479,9 +479,19 @@ class InProcessTerminologyEndpoint:
 
         if expand_intensional_value_set is not None:
             try:
-                expanded, _depth_cap_hit = expand_intensional_value_set(
+                result = expand_intensional_value_set(
                     self._engine, value_set, 1000, include_retired=True
                 )
+                # medterm4ds 0.0.10 returns the code list directly. Later
+                # builds return ``(codes, depth_cap_hit)``. Accept BOTH: a
+                # strict 2-tuple unpack raised "not enough values to unpack"
+                # against 0.0.10 for every intensional ValueSet, and the
+                # exception was swallowed by the degrade path below — so
+                # expand_intensional() silently returned [] for every call.
+                if isinstance(result, tuple) and len(result) == 2:
+                    expanded, _depth_cap_hit = result
+                else:
+                    expanded, _depth_cap_hit = result, False
             except Exception as e:  # pragma: no cover - medterm4ds drift guard
                 _logger.warning(
                     "in_process expand_intensional failed for %s: %s",

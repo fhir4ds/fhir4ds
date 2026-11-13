@@ -1,0 +1,230 @@
+---
+title: "Where Clinical Measure Time Actually Goes: eCQM Scaling to 5,000 Patients"
+description: "We ran three CMS quality measures over 100, 1,000 and 5,000 synthetic patients and profiled every query. The profile blamed repeated full-table scans — and re-measuring after the fix shows corpus re-reads down from 41.5x to 8.9x and CMS130 execution time cut by half."
+authors: joel
+tags: [fhir, cql, analytics, performance]
+date: 2026-11-12T14:00:00Z
+slug: /ecqm-scaling-5000-patients
+# UNPUBLISHED pending a full re-run on the current engine.
+# The 100/1,000/5,000 ladder and the 42x amplification profile were measured
+# before materialized retrieve scans landed (2026-10-29 18:17), so the first
+# half of this post describes an engine that no longer exists. Only the rung-100
+# before/after comparison is current. Re-run benchmarks/scaling at 1,000 and
+# 5,000 on 0.0.23 (and on both DuckDB 1.5.5 and 2.0.0), regenerate SCALING.md,
+# then delete this flag to publish.
+draft: true
+---
+
+A clinical quality measure is a good stress test for a query engine. You take an
+HL7 CQL library — hundreds of definitions, value sets, temporal intervals,
+polymorphic FHIR fields — compile it to one population query, and run it over an
+entire patient cohort at once. Nothing is cached between measures, and nothing is
+pre-flattened: the engine reads raw FHIR JSON.
+
+We wanted a number for "how does this behave as the cohort grows", and more
+importantly *where the time goes*. So we built a ladder — the same measures at
+100, 1,000 and 5,000 patients — with a query profile captured at every rung.
+
+The profile pointed at something specific. We fixed it. This post is the
+diagnosis, the fix, and the re-measurement.
+
+{/* truncate */}
+
+## Method, and one thing we deliberately did not count
+
+The headline metric is **execution time only**. CQL parsing, library translation,
+population-SQL generation and result conversion are measured and reported — but
+separately, as compile diagnostics. They never enter a speedup or a
+milliseconds-per-patient figure. Those phases are one-time per library version;
+a production deployment pays them at deploy, not at query.
+
+- **Engine:** FHIR4DS compiles each measure's CQL into a single population SQL
+  query over an in-memory DuckDB table of FHIR resources.
+- **Timing:** median of repeated executions of the *same pre-compiled* SQL.
+  DuckDB re-plans on every execution, so planning is inside the number;
+  compilation is not.
+- **Cohorts:** nested deterministic prefixes of one Synthea generation (100 /
+  1,000 / 5,000 patients), measurement period 2026 calendar year, one fresh
+  process per rung, corpus loaded from disk once per rung.
+- **Baseline:** the clinical-reasoning engine (Java, HAPI-based) evaluated per
+  patient, **linearly extrapolated** from its per-patient cost. We did not run it
+  at these sizes. That matters, and it is the first caveat below.
+
+## The ladder
+
+| Patients | Resources | Load | Peak RSS |
+|---|---|---|---|
+| 100 | 115,509 | 12 s | 2.2 GB |
+| 1,000 | 1,223,154 | 126 s | 13.6 GB |
+| 5,000 | 6,275,114 | 836 s | 43.9 GB |
+
+Three measures spanning the complexity range: **CMS68** (documentation of
+current medications, a handful of retrieves), **CMS130** (colorectal cancer
+screening, many retrieves), **CMS2** (depression screening, the largest CQL
+library of the three).
+
+| Measure | 100 patients | 1,000 patients | 5,000 patients |
+|---|---|---|---|
+| CMS68 | 90 ms | 601 ms | 5,200 ms |
+| CMS130 | 4,618 ms | 49,826 ms | 255,467 ms |
+| CMS2 | 1,972 ms | 4,140 ms | 14,595 ms |
+
+Per patient at the largest rung: ~1 ms (CMS68), ~51 ms (CMS130), ~3 ms (CMS2).
+Against the extrapolated Java baseline that is 691x, 13x and 41x.
+
+**Note the shape, not just the size.** CMS130 got *more* expensive per patient as
+the cohort grew (46 → 51 ms), while CMS2 got *cheaper* (19.7 → 2.9 ms). A
+columnar engine amortizes fixed costs over more rows — but only when the work is
+proportional to rows that survive. When it is proportional to rows *scanned*,
+more data just means more scanning. That divergence was the first clue.
+
+## What the profile found: the corpus read 42 times
+
+Static analysis of the SQL ranks the measures correctly but badly understates the
+gap. A structural score (scan sites, `SELECT DISTINCT`, `json_extract`, date
+casts, joins, derived tables) gave 31 / 238 / 88 for CMS68 / CMS130 / CMS2. Order
+correct. Magnitude wrong: CMS130 scored 2.7x CMS2 but measured 17.5x its cost.
+
+The missing term is *how many rows each predicate runs over*. Multiply scan sites
+by the cohort's row count per resource type and you get "rows evaluated" —
+1.6M / 29.5M / 8.2M, a 3.6x ratio. Closer; still not 17.5x. The remainder is
+per-row predicate cost, which only a profile shows.
+
+So we profiled with `EXPLAIN ANALYZE`. At the 5,000-patient rung:
+
+| Measure | Scans | Rows scanned | Amplification | Scan share of time |
+|---|---|---|---|---|
+| CMS68 | 7 | 43,913,510 | 7.0x | 63.8% |
+| CMS130 | 42 | 263,491,300 | 42.0x | 99.5% |
+| CMS2 | 18 | 112,929,524 | 18.0x | 86.1% |
+
+The corpus held 6,275,114 rows and CMS130's query read 263 million of them. And
+the ratio was **rung-invariant** — 41.5x at 100 patients, 42.0x at 5,000, with an
+identical scan count. That is the cleanest statement of the model: cost was
+`O(scan sites x corpus)` with a fixed multiplier. Adding patients did not change
+the multiplier, it just multiplied.
+
+Critically, the work was in the *scans*, not in deduplication. Every retrieve CTE
+deduplicates on the full JSON payload, and that dedup accounted for 0.2% of
+operator time in CMS130, 4.1% in CMS2 and 13.0% in CMS68.
+
+## Two hypotheses the profile killed
+
+Worth recording, because both were intuitive and both were wrong.
+
+**"The value-set and interval calls are the expensive part."** CMS2 contained far
+more value-set membership, coding-match and interval calls than CMS130 (8,013
+versus 749 secondary counters; 1,178 versus 207 interval calls). It was also
+three times cheaper per resource. The calls are not the cost — *where they run*
+is. In CMS2 they sat behind selective filters over small candidate sets. In
+CMS130 the same kind of predicate was pushed into a scan filter over 2.6 million
+Observations and ran there, per row, several times, returning nothing.
+
+**"Deduplicating the full JSON payload is a major win."** See above: 0.2-13% of
+operator time. Real, but nowhere near the top of the list.
+
+## Memory is a cliff, not a slope
+
+At 5,000 patients the measure corpus needed more than 33 GB. At a 32 GB DuckDB
+`memory_limit` it spilled; at 48 GB it did not:
+
+| Limit | CMS68 | CMS130 | CMS2 | Peak RSS |
+|---|---|---|---|---|
+| 32 GB | 9,311 ms | 306,481 ms | 20,118 ms | 33.8 GB |
+| 48 GB | 5,200 ms | 255,467 ms | 14,595 ms | 43.9 GB |
+
+CMS68 improved 44%, CMS130 17%, CMS2 28% just from not spilling. One operational
+detail that cost us time: an in-memory DuckDB database still needs
+`temp_directory` set, or exceeding the memory limit fails instead of spilling.
+
+## Then we fixed the scans — and re-measured
+
+The profile named the top item precisely: the same retrieve, over the same
+resource type, re-executed as its own scan. So retrieves of one resource type now
+share a **materialized per-resource-type base scan** (`_rt_Observation`,
+`_rt_Encounter`, …), and every value-set CTE filters that materialization
+instead of re-reading the table. In CMS130's current SQL there are **10
+`FROM resources` sites** feeding **34 value-set retrieve CTEs** — where the
+profile had seen 42 independent scans.
+
+Re-running the identical rung-100 cohort on the current engine:
+
+| Measure | Execution | Rows scanned | Amplification |
+|---|---|---|---|
+| CMS68 | 90 → **50 ms** (−44%) | 796,275 → **340,383** (−57%) | 6.9x → **2.9x** |
+| CMS130 | 4,618 → **2,237 ms** (−52%) | 4,787,890 → **1,027,293** (−79%) | 41.5x → **8.9x** |
+| CMS2 | 1,972 → **2,015 ms** (±0%) | 2,056,634 → **1,029,341** (−50%) | 17.8x → **8.9x** |
+
+Two things worth reading off that table. First, CMS130 — the measure that was
+41.5x — halved its wall time and cut rows scanned by 79%, which is what the
+diagnosis predicted would happen. Second, **CMS2 barely moved in time despite
+halving its rows scanned**. Removing scans does not automatically buy speed: once
+the scan count drops, whatever per-row predicate work remains becomes the
+dominant term. That is the next problem, and it is the one the profile can no
+longer tell us about for free.
+
+Amplification is now flat at ~8.9x across all three measures — the signature of a
+fixed set of base scans rather than a per-retrieve multiplier.
+
+## What is actually left
+
+The original report ended with a ranked list of candidates. Reading it against
+the current engine, the list has partly been overtaken:
+
+1. **Per-retrieve shared scan — DONE**, as per-resource-type materialized base
+   scans rather than a per-(type, filter) cache. Corpus re-reads are down 4.7x
+   on CMS130.
+2. **Stop re-serializing JSON to text at UDF call sites — DONE.** Current SQL
+   calls `fhirpath_text(r.resource, ...)` and `in_valueset(r.resource, ...)`
+   directly on the JSON column; there are zero `fhirpath_text(CAST(... AS
+   VARCHAR))` sites left.
+3. **Move heavy predicates out of full-type scan filters — PARTIAL.** Derived
+   temporal columns *are* precomputed in the retrieve CTEs (`effective_start`,
+   `effective_end`, `period_start`, `period_end`, `birth_date`). Whether the
+   expensive interval and precision-aware comparisons still run inside the scan
+   filter needs a fresh profile now that the scan structure changed.
+4. **The `_patients` CTE still reads the whole table to produce a few thousand
+   patient ids — OPEN.** It is `FROM resources AS p WHERE p.resourceType =
+   'Patient'`, and it was ~27% of operator time in CMS68's profile.
+5. **Dedupe on identity rather than payload — OPEN, and still not a priority.**
+   Retrieve CTEs still `SELECT DISTINCT patient_id, resource, <derived columns>`.
+
+Two follow-ups that are now more valuable than items 4-5: refresh the whole
+ladder on the current engine (the numbers in this post's first half are from the
+engine as it stood when the diagnosis was made), and do it on both supported
+DuckDB lines, since materialization changes the memory profile and the 5,000
+rung is where spilling starts.
+
+## Read these numbers with four caveats
+
+We would rather publish the caveats than have someone discover them.
+
+1. **The ladder numbers are a snapshot of one engine revision.** The 100 /
+   1,000 / 5,000 table and the 42x profile above were measured before materialized
+   retrieve scans landed. The before/after table is a direct comparison at one
+   rung; the larger rungs have not been re-run on the current engine.
+2. **The Java baseline is extrapolated, not measured.** It is the reference
+   engine's per-patient cost multiplied by cohort size. Per-patient evaluation
+   does scale roughly linearly, but this is an extrapolation and is labelled as
+   one in the source data.
+3. **Population counts in this benchmark are raw per-definition truth values**,
+   with no CQM attribution masking applied. On synthetic data the numerator can
+   exceed the denominator. They are sanity signals that the query ran, not
+   reported measure rates — accuracy is validated separately against the official
+   HL7 test bundles (47/47 QI-Core 2025 and 73/73 US-Core 2025).
+4. **Operator shares under parallelism are not wall-clock seconds.** Per-operator
+   timings are summed across worker threads; the shares show relative cost
+   distribution. Wall time is the measured execution figure.
+
+The full report — every rung, every operator bucket, the structural scoring
+method and the compile diagnostics — is in
+[`benchmarks/scaling/SCALING.md`](https://github.com/fhir4ds/fhir4ds/blob/dev/benchmarks/scaling/SCALING.md)
+in the repository, regenerated by `benchmarks/scaling/make_report.py` from the
+raw run data.
+
+The short version for anyone building on a SQL-native clinical engine: the
+standards are not what makes a measure expensive. Access patterns are. A measure
+that reads its corpus 42 times costs 42 corpora' worth of time no matter how
+elegant the CQL is — and you will only find that out by profiling the operators,
+not by reading the SQL. Then, once you have fixed it, profile again: the first fix
+moves the bottleneck, it does not remove it.

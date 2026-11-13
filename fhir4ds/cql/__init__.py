@@ -79,7 +79,7 @@ if TYPE_CHECKING:
 
 _logger = logging.getLogger(__name__)
 
-__version__ = "0.0.22"
+__version__ = "0.0.23"
 
 
 def parse_cql(cql_text: str):
@@ -301,6 +301,7 @@ def evaluate_measure(
     audit_mode: str = "none",
     terminology_endpoint: Optional["TerminologyEndpoint"] = None,
     closure_loaded: bool = False,
+    strict_profiles: bool = True,
 ) -> Any:
     """
     Evaluate a CQL measure against all patients in a single query.
@@ -326,6 +327,13 @@ def evaluate_measure(
                       Used to resolve include statements in the main library.
         audit_mode: Controls audit granularity: "none" (default), "population",
                    or "full".
+        strict_profiles: STRICT PROFILE MODE (default True). When True a
+                   profile-qualified retrieve requires the profile canonical in
+                   the resource's ``meta.profile`` (US Core / QI-Core
+                   membership). Set False for data that does not populate
+                   ``meta.profile``: the profile filter is then omitted and the
+                   retrieve matches the base resource type. The negation-profile
+                   exclusion stays active either way.
         terminology_endpoint: Optional Phase 1 medterm4ds terminology endpoint
                    (a ``TerminologyEndpoint`` Protocol implementation such as
                    ``HTTPTerminologyEndpoint``). When supplied, ValueSet
@@ -464,6 +472,7 @@ def evaluate_measure(
         audit_expressions=audit_mode == "full",
         closure_loaded=closure_loaded,
         terminology_endpoint=terminology_endpoint,
+        strict_profiles=strict_profiles,
     )
 
     # Set up library loader if include_paths provided
@@ -542,6 +551,7 @@ def evaluate_measure_legacy(
     verbose: bool = False,
     terminology_endpoint: Optional["TerminologyEndpoint"] = None,
     closure_loaded: bool = False,
+    strict_profiles: bool = True,
 ) -> "pandas.DataFrame":
     """
     Legacy high-level API: Evaluate a CQL measure against FHIR data.
@@ -641,6 +651,7 @@ def evaluate_measure_legacy(
         connection=connection,
         closure_loaded=closure_loaded,
         terminology_endpoint=terminology_endpoint,
+        strict_profiles=strict_profiles,
     )
     sql = translator.translate_library_to_population_sql(
         library=library,

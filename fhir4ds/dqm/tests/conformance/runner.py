@@ -56,6 +56,7 @@ def run_measure(
     all_columns: bool = True,
     audit: bool = False,
     library_cache: dict | None = None,
+    strict_profiles: bool = True,
 ) -> MeasureResult:
     """
     Execute a single measure and collect results.
@@ -68,12 +69,27 @@ def run_measure(
         all_columns: If True, output all definitions; if False, only population definitions
         audit: If True, run with audit_mode=True to capture evidence structs.
                Falls back to non-audit mode if audit translation or execution fails.
+        strict_profiles: STRICT PROFILE MODE (default True). When True a
+               profile-qualified retrieve requires the profile canonical in the
+               resource's ``meta.profile``; when False that filter is omitted and
+               the retrieve matches the base resource type (for data that does
+               not populate ``meta.profile``).
         library_cache: Optional in-process cache for included-library translation
                results. Scope this to one conformance run so it refreshes naturally
                on the next process invocation.
     """
     _clear_runtime_state(conn)
     timings = {}
+
+    # Generated measure SQL (deeply nested fluent-inlined CASE chains, e.g.
+    # CMS156 averageDailyDose) can exceed DuckDB's default 1000-node
+    # expression-depth cap at bind time — on BOTH the audit and non-audit
+    # execution paths. Raise it once up front (same knob the audit path
+    # and MeasureEvaluator._execute_compiled_group already use).
+    try:
+        conn.execute("SET max_expression_depth TO 10000")
+    except Exception:
+        pass
 
     # Parse CQL (shared across audit and non-audit attempts)
     start = time.perf_counter()
@@ -129,6 +145,7 @@ def run_measure(
     noaudit_sql, noaudit_gen_ms, noaudit_lib_ms = _translate_measure(
         conn, library, measure_config, output_columns, mp_params,
         measure_patient_ids, audit_mode=False, library_cache=library_cache,
+        strict_profiles=strict_profiles,
     )
     timings["library_translation_ms"] = noaudit_lib_ms
 
@@ -146,7 +163,7 @@ def run_measure(
                     sql, gen_ms, lib_ms = _translate_measure(
                         conn, library, measure_config, output_columns, mp_params,
                         measure_patient_ids, audit_mode=True, audit_expressions=True,
-                        library_cache=library_cache,
+                        library_cache=library_cache, strict_profiles=strict_profiles,
                     )
                     timings["library_translation_ms"] = lib_ms
                     timings["sql_generation_ms"] = gen_ms
@@ -218,6 +235,7 @@ def run_measure(
                     sql, gen_ms, lib_ms = _translate_measure(
                         conn, library, measure_config, output_columns, mp_params,
                         measure_patient_ids, audit_mode=True,
+                        strict_profiles=strict_profiles,
                         audit_expressions=False,
                         library_cache=library_cache,
                     )
@@ -354,6 +372,7 @@ def _translate_measure(
     audit_mode: bool,
     audit_expressions: bool = True,
     library_cache: dict | None = None,
+    strict_profiles: bool = True,
 ) -> tuple:
     """Translate a CQL library to population SQL.
 
@@ -375,6 +394,7 @@ def _translate_measure(
         _library_cache=library_cache,
         audit_mode=audit_mode,
         audit_expressions=audit_expressions,
+        strict_profiles=strict_profiles,
     )
     start = time.perf_counter()
     translator.translate_library(library)

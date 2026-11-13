@@ -244,7 +244,7 @@ See `docs/architecture/AUDIT_REPORT.md` §7 for full details.
     compliant ways to reference env vars with hyphens; both work
     correctly in both backends.
 
-  Probes: `/mnt/d/fhir4ds/.temp/qa/fp20_historian_2026_06_30/probe.py`
+  Probes: `~/src/fhir4ds/.temp/qa/fp20_historian_2026_06_30/probe.py`
   (125 cases / 19 spec-rule groups), `probe2.py` (26 cases / bug-class
   confirmation), `probe3.py` (12 cases parser-AST diagnostic),
   `probe4.py` (73 cases / 9 deeper §10-§12 edge groups).
@@ -388,7 +388,7 @@ See `docs/architecture/AUDIT_REPORT.md` §7 for full details.
   `test_quantity_scalar_mult_preserves_decimal_authored_form_fp18_skeptic_architect`
   (7 cases). Post-fix: FHIRPath integration 410/410 (was 379, +31
   new); full conformance 2822/2822 unchanged. Probes:
-  `/mnt/d/fhir4ds/.temp/qa/fp18_skeptic_2026_06_30/probe{,2,3}.py`,
+  `~/src/fhir4ds/.temp/qa/fp18_skeptic_2026_06_30/probe{,2,3}.py`,
   `architect_probe.py`.
 
   **Architecture Drift Log (FP-18 SKEPTIC additions):**
@@ -436,7 +436,7 @@ See `docs/architecture/AUDIT_REPORT.md` §7 for full details.
   tests (surface already has comprehensive coverage in 11 named tests
   in `test_collection_operator_parity.py` covering 100+ parametrized
   cases). Full conformance 2822/2822 unchanged. Probes:
-  `/mnt/d/fhir4ds/.temp/qa/fp16_historian_2026_06_29/probe.py`
+  `~/src/fhir4ds/.temp/qa/fp16_historian_2026_06_29/probe.py`
   (79 cases), `probe2.py` (57 deep edges), `probe3.py` (30 eval +
   30 validity), `probe_spec.py` (15 anchors + 25 validity pairs),
   `probe_singleton.py` (11 validity + 45 eval singleton cells).
@@ -508,7 +508,7 @@ See `docs/architecture/AUDIT_REPORT.md` §7 for full details.
   returns all numeric-value extraction sites; each arithmetic use of
   getNumericValue on operands that may have integer-valued source_text
   is a candidate for the tryIntegerArithmeticText fast-path. Probe
-  artifacts: `/mnt/d/fhir4ds/.temp/qa/fp14_explorer_2026_06_29/probe.py`
+  artifacts: `~/src/fhir4ds/.temp/qa/fp14_explorer_2026_06_29/probe.py`
   (152 cases / 15 groups), `probe_round2.py` (53 cases / 7 groups),
   `probe_round3.py` (56 cases / 7 groups), `diag_power_arith.py`
   (root-cause diagnostic).
@@ -595,7 +595,7 @@ See `docs/architecture/AUDIT_REPORT.md` §7 for full details.
   (was 113/127); FHIRPath pytest 1490/1490 (+4 new tests); full
   conformance 2822/2822 unchanged. Same binary64-drift bug class as
   prior FP-07/FP-08/FP-11 SKEPTIC/HISTORIAN. Probe artifact:
-  `/mnt/d/fhir4ds/.temp/qa/fp11_explorer_2026_06_29/probe.py`.
+  `~/src/fhir4ds/.temp/qa/fp11_explorer_2026_06_29/probe.py`.
 
 - **FHIRPath FP-11 HISTORIAN iteration 1 §5.7.3/§5.7.5/§5.7.6/§5.7.9
   Math text-rendering parity (2026-06-28):** **RESOLVED:** Native C++
@@ -654,7 +654,7 @@ See `docs/architecture/AUDIT_REPORT.md` §7 for full details.
   Post-fix: 8/8 string-search parity tests pass (was 6/6), 1480/1480
   FHIRPath pytest pass (was 1478), full conformance 2822/2822 unchanged.
   Reproducer:
-  `/mnt/d/fhir4ds/.temp/qa/fp09_explorer_iter1_2026_06_28/post_fix_verify.py`.
+  `~/src/fhir4ds/.temp/qa/fp09_explorer_iter1_2026_06_28/post_fix_verify.py`.
 
 - **FHIRPath FP-08 SKEPTIC iteration 1 fresh rerun §5.5.7
   toQuantity(unit) binary64 noise propagation (2026-06-28):**

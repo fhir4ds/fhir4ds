@@ -718,6 +718,35 @@ class FunctionsMixin:
             _fc = inner_query.from_clause
             if isinstance(_fc, SQLAlias):
                 _src_alias = _fc.alias
+            # Guard against STALE resource_alias values: fluent-function
+            # inlining and with-clause handling restore resource_alias to
+            # enclosing-scope aliases (e.g. the fluent body's `O1`) that are
+            # NOT visible at this aggregate's scope — correlating to them
+            # produces `Referenced table O1 not found` (CMS156). Only use
+            # resource_alias when it differs from every alias defined INSIDE
+            # the source query (those are internal scopes).
+            if _outer_pid != "_pt" and _src_alias:
+                _internal_aliases = set()
+
+                def _collect_inner_aliases(n):
+                    stack = [n]
+                    seen = set()
+                    while stack:
+                        cur = stack.pop()
+                        if cur is None or id(cur) in seen:
+                            continue
+                        seen.add(id(cur))
+                        if isinstance(cur, SQLAlias):
+                            _internal_aliases.add(cur.alias)
+                        if isinstance(cur, (list, tuple)):
+                            stack.extend(cur)
+                            continue
+                        for f_name in getattr(cur, "__dataclass_fields__", {}):
+                            stack.append(getattr(cur, f_name, None))
+
+                _collect_inner_aliases(_fc)
+                if _outer_pid in _internal_aliases:
+                    _outer_pid = self.context.patient_alias or "_pt"
             if _src_alias and _is_cte_backed(_fc):
                 _corr = SQLBinaryOp(
                     operator="=",
@@ -729,8 +758,136 @@ class FunctionsMixin:
                     SQLBinaryOp(operator="AND", left=_existing_where, right=_corr)
                     if _existing_where else _corr
                 )
+                _new_cols = inner_query.columns
+                # Reconcile dangling projection aliases: the composition
+                # machinery (with-swap / set-op / fluent inlining) can leave
+                # the projection referencing an alias that is NOT in this
+                # select's FROM chain (e.g. `AntiInfectives.resource` while
+                # the FROM is the OrderMedication1/2 rows chain) — the rows
+                # are the same underlying resources, so rewrite dangling
+                # TOP-LEVEL first-parts to the FROM's primary alias (CMS156).
+                _primary = (
+                    inner_query.from_clause.alias
+                    if isinstance(inner_query.from_clause, SQLAlias)
+                    else None
+                )
+                if _primary:
+                    _from_aliases = {_primary, "_pt", _outer_pid}
+                    for _jn in inner_query.joins or []:
+                        if isinstance(_jn, SQLJoin) and _jn.alias:
+                            _from_aliases.add(_jn.alias)
+
+                    def _fix_dangling(n, depth_limit=40):
+                        if n is None or depth_limit <= 0:
+                            return n
+                        if isinstance(n, (SQLSubquery, SQLExists)):
+                            return n  # inner scopes keep their own bindings
+                        if isinstance(n, SQLQualifiedIdentifier) and n.parts:
+                            if n.parts[0] not in _from_aliases:
+                                return SQLQualifiedIdentifier(
+                                    parts=[_primary] + list(n.parts[1:])
+                                )
+                            return n
+                        if isinstance(n, (list, tuple)):
+                            items = [_fix_dangling(c, depth_limit) for c in n]
+                            return type(n)(items) if isinstance(n, tuple) else items
+                        if not hasattr(n, "__dataclass_fields__"):
+                            return n
+                        for _fn3 in n.__dataclass_fields__:
+                            _v3 = getattr(n, _fn3, None)
+                            _nv3 = _fix_dangling(_v3, depth_limit - 1)
+                            if _nv3 is not _v3:
+                                try:
+                                    setattr(n, _fn3, _nv3)
+                                except Exception:  # noqa: BLE001
+                                    pass
+                        return n
+
+                    _new_cols = [_fix_dangling(c) for c in _new_cols]
+
+                    # DuckDB FLATTENS derived tables whose projection is a
+                    # single bare alias passthrough (`SELECT O1.resource FROM
+                    # (...) AS O1`) — the outer alias then dangles and the
+                    # injected <alias>.patient_id correlation fails
+                    # ("Referenced table X not found"; minimal repro
+                    # verified on duckdb 1.5.x). Widen such derived tables
+                    # in our FROM chain to also project patient_id.
+                    def _widen_passthrough_dt(fc):
+                        if not (
+                            isinstance(fc, SQLAlias)
+                            and isinstance(fc.expr, SQLSubquery)
+                            and isinstance(fc.expr.query, SQLSelect)
+                        ):
+                            return fc
+                        _dt_sel = fc.expr.query
+                        _dt_cols = _dt_sel.columns or []
+                        if len(_dt_cols) != 1:
+                            return fc
+                        _c0 = _dt_cols[0]
+                        _c0e = _c0.expr if isinstance(_c0, SQLAlias) else _c0
+                        if not isinstance(_c0e, SQLQualifiedIdentifier):
+                            return fc
+                        _src_a = _c0e.parts[0]
+                        _dt_fr = _dt_sel.from_clause
+                        _dt_fr_alias = (
+                            _dt_fr.alias if isinstance(_dt_fr, SQLAlias) else None
+                        )
+                        if _dt_fr_alias != _src_a:
+                            return fc
+                        return SQLAlias(
+                            expr=SQLSubquery(query=SQLSelect(
+                                columns=[
+                                    _c0,
+                                    SQLQualifiedIdentifier(
+                                        parts=[_src_a, "patient_id"]
+                                    ),
+                                ],
+                                from_clause=_dt_sel.from_clause,
+                                where=_dt_sel.where,
+                                joins=_dt_sel.joins,
+                                distinct=_dt_sel.distinct,
+                                limit=_dt_sel.limit,
+                            )),
+                            alias=fc.alias,
+                        )
+
+                    _new_from = _widen_passthrough_dt(inner_query.from_clause)
+                    if _new_from is not inner_query.from_clause:
+                        inner_query = SQLSelect(
+                            columns=_new_cols,
+                            from_clause=_new_from,
+                            where=_new_where,
+                            joins=inner_query.joins,
+                            group_by=inner_query.group_by,
+                            having=inner_query.having,
+                            order_by=inner_query.order_by,
+                            limit=inner_query.limit,
+                            distinct=inner_query.distinct,
+                        )
+                        _new_cols = inner_query.columns
+                if inner_query.columns and not any(
+                    (
+                        isinstance(c, SQLAlias) and c.alias == "patient_id"
+                    ) or (
+                        isinstance(c, SQLIdentifier) and c.name == "patient_id"
+                    ) or (
+                        isinstance(c, SQLQualifiedIdentifier) and c.parts[-1] == "patient_id"
+                    )
+                    for c in inner_query.columns
+                ):
+                    # DuckDB flattens derived tables whose projection is a
+                    # bare alias passthrough (SELECT O1.resource ...) — the
+                    # outer alias then dangles and the injected
+                    # <alias>.patient_id correlation fails with "Referenced
+                    # table not found" (CMS156). Project patient_id
+                    # explicitly alongside the value so the alias binds.
+                    _new_cols = list(inner_query.columns) + [
+                        SQLQualifiedIdentifier(
+                            parts=[_src_alias, "patient_id"]
+                        )
+                    ]
                 inner_query = SQLSelect(
-                    columns=inner_query.columns,
+                    columns=_new_cols,
                     from_clause=inner_query.from_clause,
                     where=_new_where,
                     joins=inner_query.joins,
@@ -1458,6 +1615,21 @@ class FunctionsMixin:
 
         # Inject patient correlation.
         _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
+        # Scope guard: the correlation target must be a table actually IN the
+        # built select's FROM/JOIN chain (or _pt). context.resource_alias can
+        # hold the ENCLOSING query's alias-under-definition when this query is
+        # translated as a FROM source (CMS129: subquery aliased LastPSATest
+        # correlated to itself) — fall back to _pt there.
+        if _outer_pid != "_pt":
+            _scope_aliases = set()
+            for _ref in [prop_select.from_clause] + list(prop_select.joins or []):
+                _r = _ref.table if isinstance(_ref, SQLJoin) else _ref
+                if isinstance(_r, SQLAlias):
+                    _scope_aliases.add(_r.alias)
+                elif isinstance(_r, SQLIdentifier):
+                    _scope_aliases.add(_r.name)
+            if _outer_pid not in _scope_aliases:
+                _outer_pid = "_pt"
         if _src_alias:
             _corr = SQLBinaryOp(
                 operator="=",
@@ -2695,37 +2867,75 @@ class FunctionsMixin:
         # Retrieves (so heterogeneous CTE columns do not collide), then
         # count the union rows in a patient-correlated subquery — the same
         # shape as the single-Retrieve branch above.
+        from ...parser.ast_nodes import Retrieve as _UnionRetrieve, Query as _UnionQuery
+
+        def _collect_union_leaves(node, out: list) -> bool:
+            # Collect union operand leaves: plain retrieves and QUERY
+            # leaves (with-clauses + returns — CMS137) are kept whole;
+            # resource-define identifiers resolve to their ASTs.
+            if isinstance(node, (_UnionRetrieve, _UnionQuery)):
+                out.append(node)
+                return True
+            if isinstance(node, BinaryExpression) and (getattr(node, "operator", "") or "").strip().lower() in {"union", "|"}:
+                return _collect_union_leaves(node.left, out) and _collect_union_leaves(node.right, out)
+            if isinstance(node, Identifier):
+                meta = self.context.definition_meta.get(node.name)
+                if meta is not None and getattr(meta, "has_resource", False):
+                    definition_ast = self._definition_ast_for_identifier(node)
+                    if definition_ast is not None:
+                        return _collect_union_leaves(definition_ast, out)
+            return False
+
+        def _resolve_union_leaf(node):
+            if isinstance(node, _UnionRetrieve):
+                return node
+            if isinstance(node, BinaryExpression) and (getattr(node, "operator", "") or "").strip().lower() in {"union", "|"}:
+                left = _resolve_union_leaf(node.left)
+                right = _resolve_union_leaf(node.right)
+                if left is None or right is None:
+                    return None
+                return BinaryExpression(
+                    operator=node.operator, left=left, right=right,
+                    strict=getattr(node, "strict", False),
+                )
+            if isinstance(node, Identifier):
+                meta = self.context.definition_meta.get(node.name)
+                if meta is not None and getattr(meta, "has_resource", False):
+                    definition_ast = self._definition_ast_for_identifier(node)
+                    if definition_ast is not None:
+                        _resolved = _resolve_union_leaf(definition_ast)
+                        if _resolved is not None:
+                            return _resolved
+                    # Resource-backed define whose AST is not itself a
+                    # retrieve/union — keep the CTE identifier as the union
+                    # operand; the union translation projects
+                    # (patient_id, resource) from its CTE.
+                    return node
+                if meta is not None:
+                    # Scalar/value CTE defines: keep the identifier as the
+                    # union operand too — the union translation projects
+                    # their (patient_id, value/resource) columns. Needed for
+                    # CMS137 `Min("First(...) Dates" union "First(...) Dates")`
+                    # where the defines are scalar but union-able.
+                    return node
+            return None
+
+
         if (
             agg_func == "COUNT"
             and isinstance(arg, BinaryExpression)
             and (getattr(arg, "operator", "") or "").strip().lower() in {"union", "|"}
         ):
-            from ...parser.ast_nodes import Retrieve as _UnionRetrieve
-
-            def _resolve_union_leaf(node):
-                if isinstance(node, _UnionRetrieve):
-                    return node
-                if isinstance(node, BinaryExpression) and (getattr(node, "operator", "") or "").strip().lower() in {"union", "|"}:
-                    left = _resolve_union_leaf(node.left)
-                    right = _resolve_union_leaf(node.right)
-                    if left is None or right is None:
-                        return None
-                    return BinaryExpression(
-                        operator=node.operator, left=left, right=right,
-                        strict=getattr(node, "strict", False),
-                    )
-                if isinstance(node, Identifier):
-                    meta = self.context.definition_meta.get(node.name)
-                    if meta is not None and getattr(meta, "has_resource", False):
-                        definition_ast = self._definition_ast_for_identifier(node)
-                        return _resolve_union_leaf(definition_ast) if definition_ast is not None else None
-                return None
-
             resolved = _resolve_union_leaf(arg)
             if resolved is not None:
                 union_sql = self.translate(resolved, usage=ExprUsage.LIST)
                 if isinstance(union_sql, SQLUnion):
-                    _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
+                    # Correlate to the PATIENT context: this aggregate can be
+                    # a with-clause SOURCE (`with (Count(...) ...) X`) where
+                    # resource_alias points at the alias being defined —
+                    # self-correlation (mirrors the Min/Max-union branch;
+                    # review MEDIUM-4).
+                    _outer_pid = self.context.patient_alias or "_pt"
                     correlated = SQLSubquery(query=SQLSelect(
                         columns=[SQLFunctionCall(name="COUNT", args=[SQLIdentifier(name="*")])],
                         from_clause=SQLAlias(expr=union_sql, alias="_agg_src"),
@@ -2736,6 +2946,185 @@ class FunctionsMixin:
                         ),
                     ))
                     return _maybe_negate(correlated)
+
+        # Min/Max over a union (CMS137 `with (Min("A" union "B"))`):
+        # the generic scalar path embeds the 2-column union in column
+        # position (LEAST(((SELECT ...) UNION (...))) — binder error).
+        # Derived table over the rows union + correlated aggregate.
+        if (
+            agg_func in ("MIN", "MAX")
+            and isinstance(arg, BinaryExpression)
+            and (getattr(arg, "operator", "") or "").strip().lower() in {"union", "|"}
+        ):
+            _mm_resolved = _resolve_union_leaf(arg)
+            _mm_union = None
+            if _mm_resolved is not None:
+                _mm_union = self.translate(_mm_resolved, usage=ExprUsage.LIST)
+                if isinstance(_mm_union, SQLSubquery) and isinstance(_mm_union.query, SQLUnion):
+                    _mm_union = _mm_union.query
+                if isinstance(_mm_union, SQLUnion):
+                    # Value-column define operands arrive as bare quoted CTE
+                    # identifiers; the render-time set-operand normalizer
+                    # projects `resource` blindly — for VALUE defines
+                    # (First(...) date defines) that feeds raw resource JSON
+                    # into the aggregate (CMS137 CAST-AS-TIMESTAMP
+                    # conversion error). Replace identifier operands whose
+                    # define meta says value-column with subqueries that
+                    # project the VALUE column.
+                    _new_ops = []
+                    for _op in _mm_union.operands:
+                        _cand = _op
+                        if isinstance(_cand, SQLSubquery) and isinstance(_cand.query, SQLSelect):
+                            _cand = _cand.query
+                        _cte_name = None
+                        if isinstance(_cand, SQLIdentifier) and _cand.quoted:
+                            _cte_name = _cand.name
+                        elif (
+                            isinstance(_cand, SQLSelect)
+                            and isinstance(_cand.from_clause, SQLAlias)
+                            and isinstance(_cand.from_clause.expr, SQLIdentifier)
+                            and _cand.from_clause.expr.quoted
+                        ):
+                            _cte_name = _cand.from_clause.expr.name
+                        elif (
+                            isinstance(_cand, SQLSelect)
+                            and isinstance(_cand.from_clause, SQLIdentifier)
+                            and _cand.from_clause.quoted
+                        ):
+                            _cte_name = _cand.from_clause.name
+                        if _cte_name is not None:
+                            _m = self.context.definition_meta.get(_cte_name)
+                            if _m is not None and not getattr(_m, "has_resource", False):
+                                _vc = getattr(_m, "value_column", None) or "value"
+                                _op = SQLSubquery(query=SQLSelect(
+                                    columns=[
+                                        SQLIdentifier(name="patient_id"),
+                                        SQLAlias(
+                                            expr=SQLIdentifier(name=_vc),
+                                            alias="resource",
+                                        ),
+                                    ],
+                                    from_clause=SQLAlias(
+                                        expr=SQLIdentifier(name=_cte_name, quoted=True),
+                                        alias="sub",
+                                    ),
+                                ))
+                        _new_ops.append(_op)
+                    _mm_union.operands = _new_ops
+                if isinstance(_mm_union, SQLUnion):
+                    # Correlate to the PATIENT context: this aggregate is
+                    # commonly a with-clause SOURCE (`with (Min("A" union
+                    # "B")) X`) where resource_alias may already point at
+                    # the alias being defined — self-correlation. The union
+                    # CTEs are patient-keyed (_pt doctrine).
+                    _outer_pid = self.context.patient_alias or "_pt"
+                    correlated = SQLSubquery(query=SQLSelect(
+                        columns=[
+                            SQLAlias(
+                                expr=SQLFunctionCall(
+                                    name=agg_func,
+                                    args=[SQLQualifiedIdentifier(parts=["_agg_src", "resource"])],
+                                ),
+                                # Alias the aggregate column: DuckDB fails to
+                                # bind the derived table's alias downstream when
+                                # the aggregate column is unaliased (misleading
+                                # "Referenced table X not found"; verified on
+                                # duckdb 1.5.x with a minimal repro).
+                                alias="resource",
+                            ),
+                            # Project patient_id (GROUP BY shape): the with-
+                            # clause consumer correlates
+                            # <alias>.patient_id = <outer>.patient_id, and the
+                            # aggregate-only projection has no patient_id
+                            # column (CMS137).
+                            SQLAlias(
+                                expr=SQLQualifiedIdentifier(parts=["_agg_src", "patient_id"]),
+                                alias="patient_id",
+                            ),
+                        ],
+                        from_clause=SQLAlias(expr=_mm_union, alias="_agg_src"),
+                        where=SQLBinaryOp(
+                            operator="=",
+                            left=SQLQualifiedIdentifier(parts=["_agg_src", "patient_id"]),
+                            right=SQLQualifiedIdentifier(parts=[_outer_pid, "patient_id"]),
+                        ),
+                        group_by=[SQLQualifiedIdentifier(parts=["_agg_src", "patient_id"])],
+                    ))
+                    return _maybe_negate(correlated)
+
+        # CMS137: unions whose leaves are QUERIES (with-clauses +
+        # returns) cannot use the rows-union fast path — the generic
+        # union translation embeds operands in column position.
+        # Translate each leaf to its per-patient element list, unnest
+        # into rows selects, UNION them, then the correlated COUNT(*).
+        _leaves: list = []
+        if (
+            agg_func == "COUNT"
+            and _collect_union_leaves(arg, _leaves)
+            and any(isinstance(_leaf, _UnionQuery) for _leaf in _leaves)
+        ):
+            from ..types import SQLUnion as _SQLUnionU
+            from ._utils import _coerce_query_rows_to_list as _cql_rows
+            _unnest_selects = []
+            _ok = True
+            for _leaf in _leaves:
+                try:
+                    _leaf_sql = self.translate(_leaf, usage=ExprUsage.LIST)
+                except TranslationError:
+                    # Static validation errors are not "fall back" material.
+                    raise
+                except Exception:  # noqa: BLE001 - fall back to generic path
+                    _ok = False
+                    break
+                # Patient-correlate the leaf BEFORE coercion: the rows
+                # select spans ALL patients; without the correlation every
+                # patient counts every row (QI-Core gate over-count on
+                # CMS74/CMS149/CMS506).
+                _ls_inner = (
+                    _leaf_sql.query if isinstance(_leaf_sql, SQLSubquery)
+                    and isinstance(_leaf_sql.query, SQLSelect) else _leaf_sql
+                )
+                if isinstance(_ls_inner, SQLSelect) and isinstance(
+                    _ls_inner.from_clause, SQLAlias
+                ) and _ls_inner.from_clause.alias:
+                    from ._query import _patient_correlated_where
+                    _ls_inner.where = _patient_correlated_where(
+                        _ls_inner.where,
+                        _ls_inner.from_clause.alias,
+                        "_pt",
+                    )
+                _coerced = _cql_rows(_leaf_sql)
+                if _coerced is not _leaf_sql:
+                    _leaf_sql = _coerced
+                if not _is_list_returning_sql(_leaf_sql):
+                    _ok = False
+                    break
+                # SQLSubquery so union operands and the final FROM render
+                # parenthesized (bare SQLSelect in FROM produces
+                # `FROM SELECT ...` — parser error, caught by the QI-Core
+                # gate on CMS149).
+                _unnest_selects.append(SQLSubquery(query=SQLSelect(
+                    columns=[SQLAlias(
+                        expr=SQLFunctionCall(name="unnest", args=[_leaf_sql]),
+                        alias="_elem",
+                    )],
+                )))
+            if _ok and _unnest_selects:
+                _union_body = _unnest_selects[0]
+                for _extra in _unnest_selects[1:]:
+                    _union_body = _SQLUnionU(
+                        operands=[_union_body, _extra], distinct=True,
+                    )
+                correlated = SQLSubquery(query=SQLSelect(
+                    # COUNT(<col>) not COUNT(*): CQL Count counts non-null
+                    # elements only (the pre-existing lowering counted
+                    # COUNT(_val) over DISTINCT values — COUNT(*) admitted
+                    # NULL elements and over-counted; QI-Core gate
+                    # CMS74/CMS149/CMS506).
+                    columns=[SQLFunctionCall(name="COUNT", args=[SQLIdentifier(name="_elem")])],
+                    from_clause=SQLAlias(expr=_union_body, alias="_agg_src"),
+                ))
+                return _maybe_negate(correlated)
 
         # Aggregate on distinct(query) — e.g., Count(distinct(query)) (CMS117).
         # Translate the inner query and wrap with COUNT(DISTINCT col) instead of
@@ -3820,6 +4209,14 @@ class FunctionsMixin:
         element). List consumers (First/Last/Count) must operate on the full
         element list, so swap in the list-returning ``fhirpath`` UDF with the
         same arguments.
+
+        Also handles the subquery-wrapped shape
+        ``(SELECT fhirpath_text(r.resource, p) FROM <rows CTE> ...)``
+        (property access over a multi-value definition): swap the inner UDF
+        AND aggregate with list() — the source CTE has one row per element,
+        and without the aggregation LIST_EXTRACT string-slices the scalar
+        VARCHAR (CMS136 "First ADHD Medication Prescribed...": date
+        '2026-...' -> '2').
         """
         if (
             isinstance(expr, SQLFunctionCall)
@@ -3827,6 +4224,47 @@ class FunctionsMixin:
             and expr.args
         ):
             return SQLFunctionCall(name="fhirpath", args=list(expr.args))
+        if (
+            isinstance(expr, SQLSubquery)
+            and isinstance(expr.query, SQLSelect)
+            and len(expr.query.columns or []) == 1
+            and not expr.query.group_by
+        ):
+            _c0 = expr.query.columns[0]
+            _c0e = _c0.expr if isinstance(_c0, SQLAlias) else _c0
+            if (
+                isinstance(_c0e, SQLFunctionCall)
+                and _c0e.name in ("fhirpath_text", "fhirpath_scalar")
+                and _c0e.args
+            ):
+                # `fhirpath` returns a LIST per row; the list() AGGREGATE
+                # would collect those into a list-of-lists (LIST_EXTRACT
+                # then returned the first row's LIST, not a scalar — CMS136
+                # IPSD became ['2026-01-01'] and downstream temporal parses
+                # failed on '[2026-01-01]'). Flatten: First/Last select from
+                # the per-patient element list.
+                _agg = SQLFunctionCall(
+                    name="flatten",
+                    args=[SQLFunctionCall(
+                        name="list",
+                        args=[SQLFunctionCall(name="fhirpath", args=list(_c0e.args))],
+                    )],
+                )
+                from ..types import SQLSelect as _Sel, SQLAlias as _Al
+                _new_col = (
+                    SQLAlias(expr=_agg, alias=_c0.alias)
+                    if isinstance(_c0, SQLAlias)
+                    else _agg
+                )
+                return SQLSubquery(query=_Sel(
+                    columns=[_new_col],
+                    from_clause=expr.query.from_clause,
+                    where=expr.query.where,
+                    joins=expr.query.joins,
+                    order_by=expr.query.order_by,
+                    limit=expr.query.limit,
+                    distinct=expr.query.distinct,
+                ))
         return expr
 
     @staticmethod
@@ -4438,8 +4876,63 @@ class FunctionsMixin:
             # to the per grid and corrupted results (QA-002) — route to the
             # dedicated collapse_intervals_per UDF instead.
             if isinstance(arg, SQLSubquery):
-                # Subqueries produce a json_group_array VARCHAR scalar.
-                pass
+                # Subqueries produce a json_group_array VARCHAR scalar —
+                # EXCEPT list-typed sources, which return a DuckDB list and
+                # must serialize via to_json before the JSON-array-string
+                # UDF: (a) CSE union-chain value-CTE lookups carry
+                # result_type List<Any>; (b) definition-reference lookups
+                # `SELECT sub.value FROM "<Define>" ...` whose define is
+                # List-typed (meta.cql_type) — CMS136 rolloutIntervals over
+                # "ADHD Medications Taken on IPSD...".
+                _rt = getattr(arg, "result_type", None)
+                if _rt and str(_rt).startswith("List"):
+                    arg = SQLFunctionCall(name="to_json", args=[arg])
+                else:
+                    # Bare definition-value lookups (`SELECT sub.value FROM
+                    # "<CTE>" ...`): the value column's physical type is not
+                    # statically known here (definition_meta/symbol may be
+                    # out of scope — CMS136). Rewrite the projection with a
+                    # runtime typeof discriminator: DuckDB lists serialize
+                    # via to_json; VARCHAR JSON-array strings pass through.
+                    _q = arg.query
+                    if (
+                        isinstance(_q, SQLSelect)
+                        and len(_q.columns or []) == 1
+                        and isinstance(_q.from_clause, SQLAlias)
+                        and isinstance(_q.from_clause.expr, SQLIdentifier)
+                        and _q.from_clause.expr.quoted
+                        and not _q.joins
+                        and not _q.group_by
+                    ):
+                        _c0 = _q.columns[0]
+                        _c0e = _c0.expr if isinstance(_c0, SQLAlias) else _c0
+                        if (
+                            isinstance(_c0e, SQLQualifiedIdentifier)
+                            and len(_c0e.parts) == 2
+                            and _c0e.parts[0] == _q.from_clause.alias
+                            and _c0e.parts[1] == "value"
+                        ):
+                            from ..types import SQLCase as _SQLCase2
+                            _val = SQLQualifiedIdentifier(parts=[_c0e.parts[0], "value"])
+                            arg = SQLSubquery(query=SQLSelect(
+                                columns=[_SQLCase2(
+                                    when_clauses=[(
+                                        SQLBinaryOp(
+                                            left=SQLFunctionCall(name="ends_with", args=[
+                                                SQLFunctionCall(name="typeof", args=[_val]),
+                                                SQLLiteral(value="[]"),
+                                            ]),
+                                            operator="=",
+                                            right=SQLLiteral(value=True),
+                                        ),
+                                        SQLFunctionCall(name="to_json", args=[_val]),
+                                    )],
+                                    else_clause=_val,
+                                )],
+                                from_clause=_q.from_clause,
+                                where=_q.where,
+                                limit=_q.limit,
+                            ))
             elif _is_list_returning_sql(arg):
                 arg = SQLFunctionCall(name="to_json", args=[arg])
             elif isinstance(arg, SQLArray):

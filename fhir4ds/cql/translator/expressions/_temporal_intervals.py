@@ -164,40 +164,32 @@ class IntervalMixin:
         # Handle unbounded starts/ends.  The interval UDFs treat NULL low/high
         # bounds as unbounded; keep the optimized temporal SQL equivalent.
         # Use VARCHAR consistently to avoid type mismatches.
-        left_start_coalesced = SQLFunctionCall(
-            name="COALESCE",
-            args=[
-                (left_start if left_start and not isinstance(left_start, SQLNull) else SQLNull()),
-                SQLLiteral(value="0001-01-01"),
-            ]
-        )
-        right_start_coalesced = SQLFunctionCall(
-            name="COALESCE",
-            args=[
-                (right_start if right_start and not isinstance(right_start, SQLNull) else SQLNull()),
-                SQLLiteral(value="0001-01-01"),
-            ]
-        )
-        # Always COALESCE left_end because prevalenceInterval().end can be NULL
-        # for active conditions (no abatement date), and NULL >= X is NULL (false).
-        left_end_coalesced = SQLFunctionCall(
-            name="COALESCE",
-            args=[
-                (left_end if left_end and not isinstance(left_end, SQLNull) else SQLNull()),
-                SQLLiteral(value="9999-12-31"),
-            ]
-        )
-        # Also COALESCE right_end — if the right interval is open-ended
-        # (e.g. active condition with no abatement), right_end is NULL and
-        # left_start < NULL evaluates to NULL (falsy), incorrectly returning
-        # no overlap.  Treat NULL as far-future so any left_start < far-future.
-        right_end_coalesced = SQLFunctionCall(
-            name="COALESCE",
-            args=[
-                (right_end if right_end and not isinstance(right_end, SQLNull) else SQLNull()),
-                SQLLiteral(value="9999-12-31"),
-            ]
-        )
+        def _bound_sentinel_coalesce(bound_expr, sentinel):
+            # When the bound is extracted via intervalStart/intervalEnd, the
+            # closedness information is preserved INSIDE the interval JSON:
+            # closed-null bounds already return the point-type sentinel, and
+            # OPEN-null bounds return NULL meaning UNKNOWN — coalescing here
+            # would convert unknown into definitely-unbounded (CMS133:
+            # prevalenceInterval [recordedDate, null) vs surgery excluded
+            # patients the reference leaves in). Only coalesce RAW bounds
+            # (precomputed period_start/period_end columns lose closedness —
+            # 0.0.7 Domain 3 doctrine).
+            if (
+                isinstance(bound_expr, SQLFunctionCall)
+                and bound_expr.name in ("intervalStart", "intervalEnd")
+            ):
+                return bound_expr if bound_expr and not isinstance(bound_expr, SQLNull) else SQLNull()
+            return SQLFunctionCall(
+                name="COALESCE",
+                args=[
+                    (bound_expr if bound_expr and not isinstance(bound_expr, SQLNull) else SQLNull()),
+                    SQLLiteral(value=sentinel),
+                ]
+            )
+        left_start_coalesced = _bound_sentinel_coalesce(left_start, "0001-01-01")
+        right_start_coalesced = _bound_sentinel_coalesce(right_start, "0001-01-01")
+        left_end_coalesced = _bound_sentinel_coalesce(left_end, "9999-12-31")
+        right_end_coalesced = _bound_sentinel_coalesce(right_end, "9999-12-31")
 
         # For [a, b) overlaps [c, d):
         # a < d (since d is exclusive) AND b >= c

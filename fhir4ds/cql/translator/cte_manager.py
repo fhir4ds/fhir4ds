@@ -149,6 +149,47 @@ def generate_function_cte_name(func_name: str, cql_def_name: str) -> str:
 
 
 
+
+_AGGREGATE_FUNCTION_NAMES = frozenset({
+    "list", "count", "sum", "min", "max", "avg", "string_agg",
+    "bool_and", "bool_or", "array_agg", "json_group_array",
+})
+
+
+def _expr_contains_aggregate(node) -> bool:
+    """True when the SQL subtree contains a bare aggregate function call.
+
+    Used to decide GROUP BY when patient_id is prepended to a select whose
+    value columns aggregate over the source rows.
+
+    Subqueries are NOT entered: an aggregate inside a nested SELECT belongs to
+    that subquery, not to the enclosing select. Counting it made the enclosing
+    select look like an aggregate query, so ``GROUP BY patient_id`` was added
+    while the value expression still correlated to the source row — DuckDB
+    then rejected the correlated column ("column \\"resource\\" must appear in
+    the GROUP BY clause"), which is how every ``Encounter.claimDiagnosis()``
+    define (CQL 1.5 let-bound claim + nested subquery over Claim) failed
+    (CMS1017).
+    """
+    stack = [node]
+    seen = set()
+    while stack:
+        cur = stack.pop()
+        if cur is None or id(cur) in seen:
+            continue
+        seen.add(id(cur))
+        name = getattr(cur, "name", None)
+        if isinstance(name, str) and name.lower() in _AGGREGATE_FUNCTION_NAMES:
+            return True
+        if isinstance(cur, (list, tuple)):
+            stack.extend(cur)
+            continue
+        if cur is not node and type(cur).__name__ == "SQLSelect":
+            continue
+        for f in getattr(cur, "__dataclass_fields__", {}):
+            stack.append(getattr(cur, f, None))
+    return False
+
 class CTEManagerMixin:
     """Mixin providing CTE management methods for CQLToSQLTranslator."""
 
@@ -492,6 +533,109 @@ class CTEManagerMixin:
 
         from ..translator.types import SQLAlias as _SQLAliasCol
         return _contains_agg(cols[0].expr if isinstance(cols[0], _SQLAliasCol) else cols[0])
+
+    def _fix_stale_pt_references(self, sql_ast: "SQLExpression", from_alias: str) -> "SQLExpression":
+        """Re-anchor stale top-level ``_pt`` references for a CTE whose FROM
+        is a table/subquery alias (no ``_pt`` in scope).
+
+        Two behaviors (CMS129):
+        - Nested scopes inside the FROM subquery keep their ``_pt`` refs —
+          those bind to the patient context. If any exist, give them a real
+          ``_pt`` by joining the patients table laterally
+          (``FROM _patients _pt CROSS JOIN LATERAL (<subq>) AS <alias>``).
+          Rewriting them to the FROM alias instead breaks inner correlations
+          (the inner scope cannot see its own wrapper alias —
+          ``PSATest.patient_id = LastPSATest.patient_id`` binder error).
+        - Otherwise rewrite ONLY the top-level ``_pt.X`` refs (columns,
+          WHERE, ORDER BY, HAVING) to ``<from_alias>.X``; nested subquery
+          scopes are left untouched.
+        """
+        from ..translator.types import (
+            SQLSelect, SQLAlias, SQLIdentifier, SQLJoin,
+            SQLSubquery, SQLExists, SQLBinaryOp, SQLUnaryOp,
+            SQLFunctionCall, SQLCase, SQLQualifiedIdentifier,
+        )
+
+        def _has_nested_pt_ref(node) -> bool:
+            stack = [node]
+            seen = set()
+            while stack:
+                cur = stack.pop()
+                if cur is None or id(cur) in seen:
+                    continue
+                seen.add(id(cur))
+                if isinstance(cur, SQLQualifiedIdentifier) and cur.parts and cur.parts[0] == "_pt":
+                    return True
+                if isinstance(cur, (list, tuple)):
+                    stack.extend(cur)
+                    continue
+                for f in getattr(cur, "__dataclass_fields__", {}):
+                    stack.append(getattr(cur, f, None))
+            return False
+
+        if not isinstance(sql_ast, SQLSelect):
+            # Union-style operands arrive as subqueries: unwrap, fix, re-wrap.
+            if isinstance(sql_ast, SQLSubquery) and isinstance(sql_ast.query, SQLSelect):
+                return SQLSubquery(query=self._fix_stale_pt_references(sql_ast.query, from_alias))
+            return sql_ast
+
+        fc = sql_ast.from_clause
+        # Split by FROM shape:
+        # - FROM <subquery> AS a: `_pt` refs INSIDE the subquery keep their
+        #   patient-context meaning — re-anchor by joining _patients laterally
+        #   (rewriting them to `a` breaks them: the inner scope cannot see
+        #   its own wrapper alias — CMS129).
+        # - Otherwise (bare CTE reference, or subquery without internal _pt
+        #   refs): deep-rewrite `_pt` -> `a`. The CTE/subquery rows are
+        #   patient-keyed, so nested patient references resolve correctly
+        #   through `a.patient_id` (NHSNGlycemic relies on this).
+        from ..translator.types import SQLSubquery as _SubQ, SQLSelect as _SelQ
+        if (
+            isinstance(fc, SQLAlias)
+            and isinstance(fc.expr, (_SubQ, _SelQ))
+            and _has_nested_pt_ref(fc.expr)
+        ):
+            # The lateral now exposes its own patient_id (e.g. a rehydrated
+            # rows source `SELECT patient_id, resource FROM "<CTE>" AS sub`);
+            # bare top-level `patient_id` column projections would be
+            # AMBIGUOUS between `_pt` and the lateral alias — qualify them
+            # to `_pt.patient_id` (CMS136 "Encounter During Initiation
+            # Phase" Binder Error).
+            from ..translator.ast_utils import replace_qualified_alias as _rqa_nop
+            _fixed_cols = []
+            for _c in (sql_ast.columns or []):
+                _ce = _c.expr if isinstance(_c, SQLAlias) else _c
+                if isinstance(_ce, SQLIdentifier) and _ce.name == "patient_id" and not _ce.quoted:
+                    if isinstance(_c, SQLAlias):
+                        _fixed_cols.append(SQLAlias(
+                            expr=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
+                            alias=_c.alias,
+                        ))
+                    else:
+                        _fixed_cols.append(SQLQualifiedIdentifier(parts=["_pt", "patient_id"]))
+                else:
+                    _fixed_cols.append(_c)
+            return SQLSelect(
+                columns=_fixed_cols,
+                from_clause=SQLAlias(expr=SQLIdentifier(name="_patients"), alias="_pt"),
+                joins=list(sql_ast.joins or []) + [
+                    SQLJoin(join_type="CROSS JOIN LATERAL", table=fc.expr, alias=fc.alias)
+                ],
+                where=sql_ast.where,
+                group_by=sql_ast.group_by,
+                having=sql_ast.having,
+                order_by=sql_ast.order_by,
+                distinct=sql_ast.distinct,
+                distinct_on=sql_ast.distinct_on,
+                limit=sql_ast.limit,
+            )
+
+        # Patient-keyed FROM: deep-rewrite every `_pt.X` (nested scopes
+        # included) to `<from_alias>.X` — the rows carry patient_id, so
+        # nested patient references are correct through the alias.
+        from ..translator.ast_utils import replace_qualified_alias as _rqa_deep
+        return _rqa_deep(sql_ast, "_pt", from_alias)
+
 
     def _wrap_definition_cte(
         self,
@@ -993,7 +1137,6 @@ class CTEManagerMixin:
                 sql_ast = sql_ast.query
 
             # Fix stale "_pt" alias references (same issue as RESOURCE_ROWS).
-            from ..translator.ast_utils import replace_qualified_alias as _rqa_mv
             if isinstance(sql_ast, SQLSelect):
                 _from_alias = None
                 if isinstance(sql_ast.from_clause, SQLAlias):
@@ -1001,7 +1144,7 @@ class CTEManagerMixin:
                 elif isinstance(sql_ast.from_clause, SQLIdentifier) and sql_ast.from_clause.quoted:
                     _from_alias = sql_ast.from_clause.name
                 if _from_alias and _from_alias != "_pt":
-                    sql_ast = _rqa_mv(sql_ast, "_pt", _from_alias)
+                    sql_ast = self._fix_stale_pt_references(sql_ast, _from_alias)
             elif isinstance(sql_ast, (SQLUnion, SQLIntersect, SQLExcept)):
                 _fixed_ops = []
                 for _op in sql_ast.operands:
@@ -1013,7 +1156,7 @@ class CTEManagerMixin:
                         elif isinstance(_inner.from_clause, SQLIdentifier) and _inner.from_clause.quoted:
                             _op_alias = _inner.from_clause.name
                     if _op_alias and _op_alias != "_pt":
-                        _fixed_ops.append(_rqa_mv(_op, "_pt", _op_alias))
+                        _fixed_ops.append(self._fix_stale_pt_references(_op, _op_alias))
                     else:
                         _fixed_ops.append(_op)
                 _cls = type(sql_ast)
@@ -1181,6 +1324,24 @@ class CTEManagerMixin:
                         else:
                             value_columns.append((col, "value"))
                     new_columns = [patient_id_col] + value_columns
+                    # If a value column contains an aggregate (e.g. the
+                    # elementwise-return lowering's `list(...)` over the
+                    # source rows), prepending the bare patient_id column
+                    # makes the select a mixed aggregate query — DuckDB
+                    # requires GROUP BY patient_id (CMS136 "ADHD Medications
+                    # Taken on IPSD...": SELECT _pt.patient_id, list(...)).
+                    _needs_group = sql_ast.group_by is None and any(
+                        _expr_contains_aggregate(col) for col in value_columns
+                    )
+                    _group_by = (
+                        [patient_id_col] if _needs_group else sql_ast.group_by
+                    )
+                    # Preserve the select's OWN joins (e.g. the
+                    # _fix_stale_pt_references lateral re-anchor attaches
+                    # the original FROM subquery as a CROSS JOIN LATERAL
+                    # join — dropping it here orphans every alias reference
+                    # in the value columns; CMS129).
+                    _existing_joins = list(sql_ast.joins) if sql_ast.joins else []
                     if joins:
                         # Fix JOIN conditions: replace "_pt" alias with actual FROM alias
                         from ..translator.types import SQLAlias as SQLAlias3, SQLQualifiedIdentifier as SQLQI3
@@ -1206,7 +1367,7 @@ class CTEManagerMixin:
                             from_clause=sql_ast.from_clause,
                             joins=existing + joins,
                             where=sql_ast.where,
-                            group_by=sql_ast.group_by,
+                            group_by=_group_by,
                             having=sql_ast.having,
                             order_by=sql_ast.order_by,
                             distinct=sql_ast.distinct,
@@ -1215,8 +1376,9 @@ class CTEManagerMixin:
                     return SQLSelect(
                         columns=new_columns,
                         from_clause=sql_ast.from_clause,
+                        joins=_existing_joins or None,
                         where=sql_ast.where,
-                        group_by=sql_ast.group_by,
+                        group_by=_group_by,
                         having=sql_ast.having,
                         order_by=sql_ast.order_by,
                         distinct=sql_ast.distinct,
@@ -1272,8 +1434,7 @@ class CTEManagerMixin:
                     from_alias = sql_ast.from_clause.name
                     from_cte_name = sql_ast.from_clause.name
                 if from_alias and from_alias != "_pt":
-                    sql_ast = replace_qualified_alias(sql_ast, "_pt", from_alias)
-
+                    sql_ast = self._fix_stale_pt_references(sql_ast, from_alias)
                 # In audit mode, pass _audit_item through BEFORE _ensure_resource_column
                 # so that the subquery wrapping can propagate it to the outer SELECT.
                 if self._context.audit_mode and from_cte_name and isinstance(sql_ast, SQLSelect):
@@ -1398,6 +1559,27 @@ class CTEManagerMixin:
                                         distinct=inner.distinct,
                                         limit=inner.limit,
                                     )
+                            else:
+                                # SELECT * FROM (<subquery>) AS alias: the star hides an
+                                # arbitrary column list (a retrieve CTE's precomputed
+                                # columns). Narrow to the resource-row shape so the
+                                # branch matches its siblings — otherwise the union
+                                # mixes 2-column and N-column operands and DuckDB
+                                # rejects the statement ("Set operations can only apply
+                                # to expressions with the same number of result
+                                # columns" — CMS124 "Absence of Cervix", CMS138).
+                                inner = SQLSelect(
+                                    columns=[
+                                        SQLIdentifier(name="patient_id"),
+                                        SQLIdentifier(name="resource"),
+                                    ],
+                                    from_clause=inner.from_clause,
+                                    where=inner.where,
+                                    joins=inner.joins,
+                                    order_by=inner.order_by,
+                                    distinct=inner.distinct,
+                                    limit=inner.limit,
+                                )
                     if was_subquery:
                         inner = SQLSubquery(query=inner)
                     expanded_operands.append(inner)
@@ -1635,16 +1817,13 @@ class CTEManagerMixin:
         provisional = fc.expr.name
         actual = prov_to_actual.get(provisional, provisional)
         if actual != provisional:
+            import dataclasses as _dc
             new_ident = SQLIdentifier(name=actual, quoted=True)
             new_from = SQLAlias(expr=new_ident, alias=fc.alias)
-            return SQLSelect(
-                columns=cte_body.columns,
-                from_clause=new_from,
-                where=cte_body.where,
-                group_by=cte_body.group_by,
-                order_by=cte_body.order_by,
-                limit=cte_body.limit,
-            )
+            # dataclasses.replace preserves ALL clauses (joins, having,
+            # distinct, distinct_on) — the hand-built reconstruction silently
+            # dropped them (review MEDIUM-10).
+            return _dc.replace(cte_body, from_clause=new_from)
         return cte_body
 
     @staticmethod
@@ -1924,7 +2103,7 @@ class CTEManagerMixin:
             )
         else:
             # Build: SELECT _pt.patient_id, <expr> AS value FROM _patients AS p
-            return SQLSelect(
+            _select = SQLSelect(
                 columns=[
                     SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                     (expr, "value"),  # Tuple for aliased column
@@ -1932,6 +2111,7 @@ class CTEManagerMixin:
                 from_clause=patients_from,
                 joins=[],  # JOINs will be added by _build_cte_from_ast
             )
+            return _select
 
     def _build_cte_from_ast(
         self,

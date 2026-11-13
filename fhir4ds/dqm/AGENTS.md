@@ -153,3 +153,74 @@ size:
 Silent fallback to non-audit SQL happens at runner.py:292-293
 (`audit_fallback = True`). This is the mechanism that masks QA-016 from
 the release gate.
+
+## Iteration 13 / Domain 9 SKEPTIC — attribution truth table (measured, not asserted)
+
+`MeasureEvaluator.summary_report()` was verified against a PROSE-derived oracle
+on the complete 2^6 space of the six CQM populations (64 synthetic patients) and
+on the inert-population edge cases. Result: exact match, no source change.
+
+Rules the oracle encodes (use them when writing attribution tests):
+
+- every population is gated by the initial population;
+- `denominator_exclusion` is evaluated BEFORE the numerator and short-circuits
+  it: an all-True patient ends with `numerator`=0 and `numerator_exclusion`=**0**
+  (numerator exclusion applies only INSIDE a numerator). A fixture that sets all
+  six flags true therefore cannot exercise numerator exclusion;
+- `denominator_exception` applies only to denominator members that are not
+  excluded and did NOT meet the numerator; when withheld, the patient stays in
+  `denominator_final` AND counts in `numerator_final`;
+- numerator outside the denominator, exclusions outside their scope, and
+  everything outside the initial population are all inert;
+- audit cells shaped `{"result": bool, "evidence": [...]}` are read via
+  `.result`; the same short-circuit applies, so an all-True audit frame is a
+  denominator exclusion, not a numerator — a shape test must use a realistic
+  cell (IP + denominator + numerator true, exclusions false);
+- `to_measure_report()` without a prior `evaluate()` raises
+  `DQMError("No evaluation has been run yet. Call evaluate() first.")`;
+- multi-group summaries equal each group's own slice and their IPs sum to the
+  overall total.
+
+## Iteration 14 / Domain 9 HISTORIAN — evidence/narrative contract (pinned)
+
+- `AuditEngine.prune_evidence(row, population_code, persona)` is ROW-oriented:
+  the cell must be wrapped as `{column: cell}` with `column` =
+  `population_code.replace("-", "_")`. Passing the raw cell silently returns
+  `[]` (evidence dropped, no error) — the documented trap. Every caller must
+  wrap.
+- Persona relevance: `EXCLUSION` keeps evidence only when the criterion is
+  satisfied ("only_when_excluded"); `INCLUSION`/`NUMERATOR` always keep it.
+  Empty evidence and scalar (non-struct) cells return `[]`.
+- Compaction groups by `(trace, attribute, operator, threshold)`; same-key
+  findings merge into one group (narrative renders `(+1 more)`). A trace-less
+  item is its OWN bucket — counting groups as "items - merges" undercounts
+  because of it. Hostile thresholds (`{"value": 1}`, `[1, 2]`) must stay
+  hashable in the group key, non-dict items are skipped, and output stays
+  JSON-serialisable.
+- `NarrativeGenerator.generate()` wording states are contractual: not-met with
+  no evidence → "no detailed evidence available"; not-met with
+  `evidence_captured=False` → "evidence not captured in this audit mode";
+  met with no evidence → "criteria met"; unknown population code → generic
+  `Evidence:` header.
+
+## Iteration 15 / Domain 9 EXPLORER — audit mode verified on real measures
+
+Ran CMS165 and CMS122 twice each (audit off/on) on the shipped qi-core-2025
+fixtures. Pinned results:
+
+- Enabling audit does NOT change population results (68/56 patients identical).
+- The one-row-per-patient contract holds with evidence attached (68 rows/68
+  patients; 56/56) — the historical evidence-JOIN fan-out stays fixed.
+- Every evidence `target` resolves to a real resource id: 152/152 (CMS165) and
+  116/116 (CMS122) cited ids exist in the `resources` table. Use this check
+  (cite → resolve → compare counts) whenever audit evidence changes.
+- Population/criteria (Boolean) columns are `{result, evidence}` structs; with
+  `all_columns=True` non-Boolean definitions stay plain (`list`/`float`/`None`).
+  The invariant is per-COLUMN ("no column mixes struct and scalar"), not
+  "every cell is a dict".
+- Two consecutive audit runs are identical (deterministic).
+
+API TRAP: `fhir4ds.dqm.tests.conformance.runner.run_measure()` returns its own
+`MeasureResult` with `.results` (list of per-patient dicts), NOT `.dataframe`
+— that attribute belongs to `fhir4ds.dqm`'s `MeasureResult`. Probes must use
+`.results`.

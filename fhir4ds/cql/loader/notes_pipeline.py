@@ -1,12 +1,14 @@
-"""Notes-pipeline orchestrator: free-text → derived FHIR Conditions.
+"""Notes-pipeline orchestrator: free-text → typed derived FHIR resources.
 
 Phase 4 of the medterm4ds integration. The pipeline extracts text from
 configured note paths on a FHIR resource, calls
 ``medterm4ds.extract(text, format="codes", ...)`` for each fragment, and
-wraps every affirmed concept in a synthetic Condition resource carrying:
+wraps every affirmed concept in the FHIR resource its ``result_type`` implies
+(Condition / MedicationStatement / Immunization / Procedure / Observation —
+see :mod:`.derived_resources`), carrying:
 
 * Phase 2's autocoding extension (engine="medterm4ds-ner") on the Coding.
-* Phase 4's derived-from-text extension on the Condition (source-ref,
+* Phase 4's derived-from-text extension on the resource (source-ref,
   source-path, span offsets, matched-text) for audit/debug.
 
 Reference: FDD §3 (SCOPE REDUCTION block) at the top of
@@ -20,10 +22,10 @@ Invariants (FDD §7):
 * INV-3 (loader safety): :meth:`extract_conditions` NEVER raises —
   every exception is caught, logged WARNING, and an empty list is
   returned. A single bad resource cannot break the batch load.
-* INV-4 (no Condition-on-Condition derivation): when the source
-  resource_type is ``"Condition"`` the pipeline returns ``[]`` so
-  batch loads cannot enter an infinite loop.
-* INV-6 (deterministic ids): the derived Condition id is a sha256 hash
+* INV-4 (no derivation from a derived resource): a source that already
+  carries the derived-from-text marker — or any ``Condition`` — returns
+  ``[]`` so batch loads cannot enter an infinite loop.
+* INV-6 (deterministic ids): the derived resource id is a sha256 hash
   of ``(source_ref, span_start, span_end, system, code)`` truncated to
   32 chars, so re-running the pipeline on the same source yields
   byte-identical Conditions. ``system`` is the post-normalization FHIR
@@ -49,7 +51,17 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from .autocoding_extension import build_autocoding_extension
-from .derived_from_text_extension import build_derived_from_text_extension
+from .derived_from_text_extension import (
+    DERIVED_FROM_TEXT_EXTENSION_URL,
+    build_derived_from_text_extension,
+)
+from .derived_resources import (
+    DERIVED_RESOURCE_TYPES,
+    code_field_for,
+    resource_type_for,
+    status_fields_for,
+    subject_field_for,
+)
 from .notes_text_extractor import DEFAULT_NOTE_PATHS, NoteText, extract_note_texts
 
 __all__ = [
@@ -70,8 +82,8 @@ _ENGINE_NAME = "medterm4ds-ner"
 #: out of the same hash space as any future fhir4ds synthesizer.
 _ID_SALT = "fhir4ds-phase4-derived-condition"
 
-#: Type alias for the per-resource return shape: one derived Condition
-#: per dict, a list of them per source resource.
+#: Type alias for the per-resource return shape: one derived RESOURCE per dict
+#: (type chosen by ``result_type``), a list of them per source resource.
 DerivedConditions = list[dict]
 
 #: Empirical per-worker memory budget for medspaCy + SapBERT
@@ -136,6 +148,16 @@ class NotesPipelineConfig:
             on derived Conditions. Default ``"unconfirmed"``.
         clinical_status: Default ``clinicalStatus.coding[0].code`` on
             derived Conditions. Default ``"active"``.
+        resource_types: Optional allowlist of DERIVED FHIR resource types.
+            ``None`` (default) derives whatever the concept's ``result_type``
+            maps to (Condition / MedicationStatement / Immunization /
+            Procedure / Observation). Pass e.g. ``("Condition",)`` to derive
+            problem-list content only, or
+            ``("Condition", "MedicationStatement")`` for a medication-focused
+            load. Concepts that map to an excluded type are skipped, not
+            coerced into an allowed one — a vaccine filtered out of an
+            Immunization-less load does NOT become a Condition. Unknown names
+            raise ``ValueError`` at construction.
         batch_size: Number of resources processed per call to
             :meth:`extract_conditions_batch`. Default ``1`` preserves
             today's per-resource code path byte-for-byte. Larger values
@@ -174,6 +196,7 @@ class NotesPipelineConfig:
     include_family: bool = False
     verification_status: str = "unconfirmed"
     clinical_status: str = "active"
+    resource_types: Optional[tuple[str, ...]] = None
     batch_size: int = 1
     workers: int = 1
     parallel_threshold: int = 200
@@ -199,6 +222,37 @@ class NotesPipelineConfig:
                 f"NotesPipelineConfig.batch_size must be a positive int (>=1), "
                 f"got {self.batch_size!r}"
             )
+        if self.resource_types is not None:
+            if isinstance(self.resource_types, str):
+                # A bare string is almost certainly a mistake: iterating it
+                # would silently allowlist single letters.
+                raise ValueError(
+                    "NotesPipelineConfig.resource_types must be a sequence of "
+                    f"resource types, not a string ({self.resource_types!r}); "
+                    'use ("Condition",) instead.'
+                )
+            try:
+                requested = tuple(self.resource_types)
+            except TypeError:
+                raise ValueError(
+                    "NotesPipelineConfig.resource_types must be a sequence of "
+                    f"resource types, got {self.resource_types!r}"
+                ) from None
+            if not requested:
+                raise ValueError(
+                    "NotesPipelineConfig.resource_types is empty; pass None to "
+                    "derive every type, or name at least one of "
+                    f"{sorted(DERIVED_RESOURCE_TYPES)}"
+                )
+            unknown = [r for r in requested if r not in DERIVED_RESOURCE_TYPES]
+            if unknown:
+                raise ValueError(
+                    f"NotesPipelineConfig.resource_types has unknown type(s) "
+                    f"{unknown}; valid types are {sorted(DERIVED_RESOURCE_TYPES)}"
+                )
+            # frozen dataclass: normalise in place
+            object.__setattr__(self, "resource_types", requested)
+
         if not isinstance(self.parallel_threshold, int) or self.parallel_threshold < 0:
             raise ValueError(
                 f"NotesPipelineConfig.parallel_threshold must be a non-negative int, "
@@ -252,7 +306,7 @@ class NotesPipeline:
         if self._config.extraction_endpoint:
             # Remote extraction (AMUX-60 Gap 2): the terminology sidecar's
             # CodeSystem/$extract runs the same NER cascade; map its Bundle
-            # onto the concept shape _build_condition consumes.
+            # onto the concept shape _build_derived_resource consumes.
             self._extract_fn = self._remote_extract
             self._index_version = "unknown"
             return
@@ -294,8 +348,13 @@ class NotesPipeline:
     # Public API
     # ------------------------------------------------------------------
 
-    def extract_conditions(self, resource: dict) -> list[dict]:
-        """Extract Conditions from a single FHIR resource's note text.
+    def extract_resources(self, resource: dict) -> list[dict]:
+        """Derive FHIR resources from one resource's note text.
+
+        The RESOURCE TYPE follows each concept's ``result_type`` (see
+        :mod:`.derived_resources`): Condition, MedicationStatement,
+        Immunization, Procedure or Observation. Previously every concept became
+        a Condition.
 
         NEVER raises. All exceptions are caught, logged at WARNING, and
         an empty list is returned (INV-3).
@@ -315,10 +374,12 @@ class NotesPipeline:
                 )
                 return []
 
-            # INV-4: never derive Conditions from Conditions. Prevents
-            # infinite loops in batch loads where derived resources get
-            # re-fed into the pipeline.
-            if resource.get("resourceType") == "Condition":
+            # INV-4: never derive from a resource we produced. Condition was
+            # the only derived type historically; now that a concept can map to
+            # Immunization / MedicationStatement / Procedure / Observation, the
+            # precise test is "carries our derived-from-text marker", which also
+            # covers re-fed batches.
+            if _is_derived_resource(resource):
                 return []
 
             try:
@@ -350,7 +411,7 @@ class NotesPipeline:
                     continue
                 for concept in concepts:
                     try:
-                        cond = self._build_condition(concept, fragment, resource)
+                        cond = self._build_derived_resource(concept, fragment, resource)
                     except Exception as exc:  # pragma: no cover - defensive
                         _logger.warning(
                             "Failed to build derived Condition from %s path=%s code=%r: %s",
@@ -371,11 +432,27 @@ class NotesPipeline:
             )
             return []
 
+    def extract_conditions(self, resource: dict) -> list[dict]:
+        """Deprecated alias for :meth:`extract_resources`.
+
+        Kept because the method name is public and "conditions" was the only
+        output type before the resource-type mapping existed. The returned list
+        may now contain Immunization / MedicationStatement / Procedure /
+        Observation resources too.
+        """
+        return self.extract_resources(resource)
+
     def extract_conditions_batch(
         self, resources: list[dict]
     ) -> list[DerivedConditions]:
-        """Batch-aware extraction. Returns one list of derived Conditions
-        per input resource, preserving input order.
+        """Deprecated alias for :meth:`extract_resources_batch`."""
+        return self.extract_resources_batch(resources)
+
+    def extract_resources_batch(
+        self, resources: list[dict]
+    ) -> list[DerivedConditions]:
+        """Batch-aware extraction. Returns one list of derived resources per
+        input resource, preserving input order.
 
         Execution strategy is governed by ``self._config.batch_size``,
         ``self._config.workers``, and ``self._config.parallel_threshold``:
@@ -428,7 +505,7 @@ class NotesPipeline:
             for i in range(0, len(resources), batch_size):
                 chunk = resources[i : i + batch_size]
                 for resource in chunk:
-                    results.append(self.extract_conditions(resource))
+                    results.append(self.extract_resources(resource))
             return results
         # Parallel path
         try:
@@ -512,8 +589,8 @@ class NotesPipeline:
             if not isinstance(resource, dict):
                 payloads.append((resource, []))
                 continue
-            # INV-4 mirrored: never derive Conditions from Conditions.
-            if resource.get("resourceType") == "Condition":
+            # INV-4 mirrored: never derive from a resource we produced.
+            if _is_derived_resource(resource):
                 payloads.append((resource, []))
                 continue
             try:
@@ -545,7 +622,7 @@ class NotesPipeline:
             )
 
         # Build derived Conditions in the PARENT process. This keeps
-        # ``_build_condition`` (which reads ``self._config``) on the
+        # ``_build_derived_resource`` (which reads ``self._config``) on the
         # right side of the process boundary — workers never reference
         # ``self``. The deterministic id (INV-6) is computed in the
         # parent so the hash is identical to the sync path.
@@ -557,7 +634,7 @@ class NotesPipeline:
             # is safe because workers preserve outer length.
             for fragment, concepts in zip(fragments, fragment_concepts):
                 for concept in concepts or []:
-                    cond = self._build_condition(concept, fragment, resource)
+                    cond = self._build_derived_resource(concept, fragment, resource)
                     if cond is not None:
                         conditions.append(cond)
             results.append(conditions)
@@ -582,7 +659,7 @@ class NotesPipeline:
     def _remote_extract(self, text: str, **kwargs: Any) -> list[Any]:
         """Run ``CodeSystem/$extract`` on the configured sidecar.
 
-        Returns concepts in the attribute-access shape ``_build_condition``
+        Returns concepts in the attribute-access shape ``_build_derived_resource``
         expects (same contract as local ``medterm4ds.extract``). Keyword
         filters (``mode``/``min_grade``/``include_negated``/
         ``include_uncertain``/``include_historical``/``include_family``) are FORWARDED as the
@@ -646,13 +723,19 @@ class NotesPipeline:
             concepts.append(concept)
         return concepts
 
-    def _build_condition(
+    def _build_derived_resource(
         self,
         concept: Any,
         fragment: NoteText,
         source_resource: dict,
     ) -> Optional[dict]:
-        """Wrap a single medterm4ds concept into a FHIR Condition dict.
+        """Wrap a medterm4ds concept into the FHIR resource its type implies.
+
+        ``result_type`` decides the target (see :mod:`.derived_resources`): a
+        vaccine becomes an Immunization, a medication a MedicationStatement, a
+        lab/vital an Observation, a procedure a Procedure, and condition/symptom
+        a Condition. Everything used to become a Condition, which filed vaccines
+        as diagnoses and medications as problems.
 
         Returns ``None`` when the concept's status is filtered out by
         the pipeline config (negated/uncertain/historical exclusion).
@@ -733,29 +816,48 @@ class NotesPipeline:
         digest = hashlib.sha256(digest_input.encode("utf-8")).hexdigest()
         condition_id = digest[:32]
 
+        resource_type = resource_type_for(
+            _safe_getattr(concept, "result_type"),
+            code=_safe_getattr(concept, "code"),
+            source=_safe_getattr(concept, "source"),
+        )
+
+        # Configurable type allowlist. Excluded types are SKIPPED, never
+        # coerced into an allowed one (a filtered-out vaccine must not become
+        # a Condition).
+        allowed_types = self._config.resource_types
+        if allowed_types is not None and resource_type not in allowed_types:
+            return None
+
         condition: dict[str, Any] = {
-            "resourceType": "Condition",
+            "resourceType": resource_type,
             "id": condition_id,
             "extension": [derived_ext],
-            "code": codeable_concept,
-            "verificationStatus": {
+            code_field_for(resource_type): codeable_concept,
+        }
+
+        if resource_type == "Condition":
+            condition["verificationStatus"] = {
                 "coding": [{
                     "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
                     "code": self._config.verification_status,
                 }]
-            },
-            "clinicalStatus": {
+            }
+            condition["clinicalStatus"] = {
                 "coding": [{
                     "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
                     "code": self._config.clinical_status,
                 }]
-            },
-        }
+            }
+        else:
+            # Every other mapped type has a REQUIRED status element.
+            condition.update(status_fields_for(resource_type))
 
-        # Subject provenance: copy from source resource if present.
+        # Subject provenance: copy from source resource if present. The element
+        # name differs per type (Immunization uses `patient`).
         subject = source_resource.get("subject") if isinstance(source_resource, dict) else None
         if isinstance(subject, dict) and subject.get("reference"):
-            condition["subject"] = {"reference": subject["reference"]}
+            condition[subject_field_for(resource_type)] = {"reference": subject["reference"]}
 
         # Evidence: point back at the source resource.
         if fragment.source_ref:
@@ -770,6 +872,16 @@ class NotesPipeline:
 # ----------------------------------------------------------------------
 # Module-private helpers
 # ----------------------------------------------------------------------
+
+
+def _is_derived_resource(resource: dict) -> bool:
+    """True when this resource already carries the derived-from-text marker."""
+    if not isinstance(resource, dict):
+        return False
+    for ext in resource.get("extension") or []:
+        if isinstance(ext, dict) and ext.get("url") == DERIVED_FROM_TEXT_EXTENSION_URL:
+            return True
+    return False
 
 
 def _safe_getattr(obj: Any, name: str) -> Any:

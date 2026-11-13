@@ -321,7 +321,7 @@ _CANONICAL_RE = re.compile(r"^[^|# ]+$")
 
 # §E-1 joins serialization gate (default OFF). When True,
 # ``ViewDefinition.to_dict()`` would refuse to emit ``joins`` unless
-# ``meta.profile`` declares ``https://fhir4ds.org/StructureDefinition/JoinExtension``.
+# ``meta.profile`` declares ``https://fhir4ds.com/StructureDefinition/JoinExtension``.
 # The gate is currently OFF — current behavior preserves ``joins`` in
 # roundtrip output. A future feature may flip this if downstream consumers
 # that roundtrip ViewDefinitions through other SQL-on-FHIR v2 runners
@@ -1004,7 +1004,7 @@ class Join:
     cross-resource joins should use the spec's SQLQuery Library profile
     (``fhir4ds/sqlquery/``) instead, where joins are expressed as raw SQL
     ``JOIN`` keywords inside ``content[].data``. The canonical profile URL
-    ``https://fhir4ds.org/StructureDefinition/JoinExtension`` is reserved
+    ``https://fhir4ds.com/StructureDefinition/JoinExtension`` is reserved
     for opt-in declaration.
 
     Within fhir4ds, joins allow linking resources OR VIEW OUTPUTS based on

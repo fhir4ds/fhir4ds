@@ -1009,3 +1009,62 @@ def test_cql_interval_part2_native_effective_bounds_and_cross_numeric_parity() -
     finally:
         py.close()
         cpp.close()
+
+
+def test_cql_interval_equivalent_is_two_valued_for_open_null_bounds_rev004() -> None:
+    """CQL §9.7 equivalence is two-valued: `~` on intervals never returns NULL.
+
+    An open null bound means UNBOUNDED, which is perfectly comparable —
+    ``Interval[1, null)`` is equivalent to itself and not to ``Interval[1, 2]``.
+    The Python UDF used to return None for any open-null operand (added by the
+    895f3616d59 "open-null bounds are UNKNOWN" sweep), so `~`/`!~` produced NULL
+    where the spec requires true/false. The C++ surface never had that guard,
+    so this was also a dual-engine divergence (review REV-004).
+    """
+    cases = [
+        # open LOW bound
+        (
+            "intervalEquivalent(intervalFromBounds(NULL,'5',false,true), "
+            "intervalFromBounds(NULL,'5',false,true))",
+            True,
+        ),
+        (
+            "intervalEquivalent(intervalFromBounds(NULL,'5',false,true), "
+            "intervalFromBounds(NULL,'6',false,true))",
+            False,
+        ),
+        # open HIGH bound
+        (
+            "intervalEquivalent(intervalFromBounds('1',NULL,true,false), "
+            "intervalFromBounds('1',NULL,true,false))",
+            True,
+        ),
+        (
+            "intervalEquivalent(intervalFromBounds('1',NULL,true,false), "
+            "intervalFromBounds('1','2',true,true))",
+            False,
+        ),
+        # CLOSED null bounds stay equivalent to each other
+        (
+            "intervalEquivalent(intervalFromBounds('1',NULL,true,true), "
+            "intervalFromBounds('1',NULL,true,true))",
+            True,
+        ),
+        # plain intervals unchanged
+        (
+            "intervalEquivalent(intervalFromBounds('1','2',true,true), "
+            "intervalFromBounds('1','2',true,true))",
+            True,
+        ),
+    ]
+    for con_factory in (_python_only_connection, _cpp_connection):
+        con = con_factory()
+        try:
+            for sql_fragment, expected in cases:
+                row = con.execute(f"SELECT {sql_fragment}").fetchone()
+                assert row[0] is expected, (
+                    f"{con_factory.__name__}: {sql_fragment} -> {row[0]!r}, "
+                    f"expected {expected!r} (equivalence must never be NULL)"
+                )
+        finally:
+            con.close()

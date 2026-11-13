@@ -930,10 +930,15 @@ class SQLGenerator:
         """
         if not self._root_joins:
             return resolved_path, current_resource_var
+        # Base scope has two spellings: the flat path binds the base table
+        # alias (`t.resource`), while the pipelined-chain lowering carries the
+        # root resource under `__root_res`. Both mean "the base resource", so
+        # join-prefixed paths are routable from either.
+        base_scope_vars = (f"{self.table_alias}.resource", "__root_res")
         for alias, resource_ref in self._root_joins.items():
             prefix = f"{alias}."
             if resolved_path.startswith(prefix):
-                if current_resource_var != f"{self.table_alias}.resource":
+                if current_resource_var not in base_scope_vars:
                     raise ValidationError(
                         f"Join-prefixed path '{resolved_path}' used inside an "
                         "iteration context; join paths are only valid from the "
@@ -2193,9 +2198,17 @@ class SQLGenerator:
                 path = w.get("path", "") if isinstance(w, dict) else ""
                 if path:
                     resolved = self._resolve_path(path)
+                    # Join-prefixed paths must route to the joined table's
+                    # resource, exactly like root `where` and column paths do.
+                    # Without this the alias is evaluated against the BASE
+                    # resource, where it does not exist: the predicate silently
+                    # evaluates to empty and drops every row.
+                    resolved, where_var = self._route_join_path(
+                        resolved, current_var
+                    )
                     resolved, where_var = self._resolve_environment_path_context(
                         resolved,
-                        current_var,
+                        where_var,
                         root_resource_var,
                     )
                     path_expr = self._fhirpath_expression_sql(
@@ -2361,8 +2374,22 @@ class SQLGenerator:
         foreachornull_aliases: Optional[List[str]] = None,
         foreachornull_wrapper_ids: Optional[List[object]] = None,
         root_join_clauses: Optional[List[str]] = None,
+        base_type_filter_in_from: bool = False,
     ) -> str:
-        """Build a single SELECT query from a list of non-unionAll selects."""
+        """Build a single SELECT query from a list of non-unionAll selects.
+
+        ``base_type_filter_in_from`` means the caller already restricted the
+        base relation to the ViewDefinition's resource type (the shared
+        source_table is wrapped in a filtered subquery), so the resourceType
+        predicate must NOT be re-applied as a WHERE row filter. That matters
+        for ``right``/``full`` root joins: their unmatched joined rows have a
+        NULL base resource, and a WHERE resourceType predicate would drop them,
+        silently degrading the join to an inner one.
+        """
+        if not base_type_filter_in_from:
+            base_type_filter_in_from = getattr(
+                self, "_base_type_filter_in_from", False
+            )
         use_chain = self._select_tree_has_iterator(selects)
         # Chain lowering carries the root resource through the subquery
         # chain under a fixed column name, so all generated fragments
@@ -2437,7 +2464,11 @@ class SQLGenerator:
 
         if use_chain:
             resource_type_filter = None
-            if self._source_table is not None and hasattr(self, '_current_resource_type'):
+            if (
+                self._source_table is not None
+                and not base_type_filter_in_from
+                and hasattr(self, '_current_resource_type')
+            ):
                 resource_type_filter = (
                     f"json_extract_string({self.table_alias}.resource, '$.resourceType') = "
                     f"'{self._current_resource_type}'"
@@ -2459,7 +2490,11 @@ class SQLGenerator:
         from_sql = f"FROM {table_name} {self.table_alias}"
 
         # When using a shared source_table, filter by resourceType
-        if self._source_table is not None and hasattr(self, '_current_resource_type'):
+        if (
+            self._source_table is not None
+            and not base_type_filter_in_from
+            and hasattr(self, '_current_resource_type')
+        ):
             where_conditions.insert(
                 0,
                 f"json_extract_string({self.table_alias}.resource, '$.resourceType') = "
@@ -2693,6 +2728,31 @@ class SQLGenerator:
         table_name = self._get_table_name(view_definition.resource)
         root_where = list(view_definition.where)
 
+        # A ``right``/``full`` root join keeps joined rows that have no base
+        # match, and those rows carry a NULL base resource. Applying the
+        # shared-table resourceType restriction as a WHERE row filter drops
+        # exactly those rows, silently degrading the join to an inner one.
+        # Restrict the base RELATION instead: the join still only sees this
+        # ViewDefinition's resource type, but the restriction belongs to the
+        # FROM side, not to row filtering.
+        base_type_filter_in_from = False
+        if (
+            self._source_table is not None
+            and hasattr(self, '_current_resource_type')
+            and any(j.type.value in ("right", "full") for j in view_definition.joins)
+        ):
+            table_name = (
+                f"(SELECT * FROM {table_name} "
+                f"WHERE json_extract_string(resource, '$.resourceType') = "
+                f"'{self._current_resource_type}')"
+            )
+            base_type_filter_in_from = True
+        # Nested/union-branch builds do not receive the flag as an argument;
+        # they re-derive it from this per-query attribute so the resourceType
+        # restriction is never re-applied as a row filter when the base
+        # relation is already restricted.
+        self._base_type_filter_in_from = base_type_filter_in_from
+
         # Root joins (fhir4ds extension): register routing targets and
         # build the JOIN clauses. Bounded S0 surface: equality of scalar
         # FHIRPath projections; left/inner/right/full keywords via the
@@ -2753,6 +2813,7 @@ class SQLGenerator:
                 foreachornull_aliases=collected_aliases,
                 foreachornull_wrapper_ids=collected_wrapper_ids,
                 root_join_clauses=root_join_clauses,
+                base_type_filter_in_from=base_type_filter_in_from,
             )
             # The paired lists collected above identify union-expansion
             # wrapper copies at ANY nesting depth. A wrapper tagged by
@@ -2822,6 +2883,9 @@ class SQLGenerator:
                 validate_sql_name(view_definition.name, "ViewDefinition.name")
             except ValueError as exc:
                 raise ValidationError(str(exc)) from exc
+        # Per-query state: a previous generate() call must never leak the
+        # "base relation already resourceType-filtered" decision.
+        self._base_type_filter_in_from = False
         try:
             validate_root_metadata_fields(
                 resourceType=view_definition.resourceType,

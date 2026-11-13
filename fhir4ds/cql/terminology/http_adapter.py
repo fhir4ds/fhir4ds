@@ -34,6 +34,7 @@ from urllib.parse import urlparse
 
 from ..duckdb.udf.system_resolver import SystemResolver
 from .system_mappings import category_to_system_param
+from .errors import TerminologyCapabilityError
 from .types import CodeRef, SearchResult
 
 _logger = logging.getLogger(__name__)
@@ -54,7 +55,12 @@ _HEALTH_PROBE_TIMEOUT_SECONDS = 2.0
 # $search hit. The same URL is reused by fhir4ds's autocoding extension
 # downstream, so any consumer that already understands our extension
 # shape understands the sidecar's response too.
-_MATCH_GRADE_URL = "http://fhir4ds.org/fhir/StructureDefinition/match-grade"
+_MATCH_GRADE_URL = "https://fhir4ds.com/fhir/StructureDefinition/match-grade"
+# Legacy pre-0.0.23 spelling: servers may still return it.
+_MATCH_GRADE_URLS = (
+    _MATCH_GRADE_URL,
+    "http://fhir4ds.org/fhir/StructureDefinition/match-grade",
+)
 
 # Cap on concurrent HTTP calls in search_batch. Most medterm4ds sidecars
 # handle ~8 concurrent requests before saturating the SapBERT inference
@@ -96,7 +102,7 @@ def _extract_match_grade(resource: dict, search_meta: dict | None) -> str:
             for entry in ext:
                 if (
                     isinstance(entry, dict)
-                    and entry.get("url") == _MATCH_GRADE_URL
+                    and entry.get("url") in _MATCH_GRADE_URLS
                     and isinstance(entry.get("valueCode"), str)
                 ):
                     return entry["valueCode"]
@@ -303,16 +309,21 @@ class HTTPTerminologyEndpoint:
     def _contains_to_coderefs(cls, contains: list[dict[str, Any]]) -> list[CodeRef]:
         """Convert raw FHIR contains dicts into normalized CodeRef dataclasses.
 
+        Walks the RECURSIVE ``expansion.contains`` tree
+        (``expansion.contains.contains`` 0..*, "Codes contained under this
+        entry"): a hierarchical server expansion nests descendants under
+        ancestors, so a flat walk silently drops them. Blank codes are skipped
+        (0..1, "not a selectable code").
+
         System normalization (INV-5): every ``system`` value flows through
         ``SystemResolver.normalize()`` so SNOMED module URLs reduce to
         ``http://snomed.info/sct`` before they leave the adapter.
         """
+        from ..valueset_codes import iter_expansion_codes
+
         refs: list[CodeRef] = []
-        for item in contains:
-            if not isinstance(item, dict):
-                continue
-            system = SystemResolver.normalize(item.get("system"))
-            code = item.get("code")
+        for raw_system, code, display in iter_expansion_codes(contains):
+            system = SystemResolver.normalize(raw_system)
             if system is None or code is None:
                 # Skip half-formed entries — they cannot join against
                 # any valueset_codes row downstream.
@@ -321,7 +332,7 @@ class HTTPTerminologyEndpoint:
                 CodeRef(
                     system=system,
                     code=str(code),
-                    display=item.get("display"),
+                    display=display,
                 )
             )
         return refs
@@ -421,6 +432,26 @@ class HTTPTerminologyEndpoint:
                         "activeOnly": "false",
                     },
                 )
+                # A refused expansion is a BACKEND capability gap, not a
+                # transient fault, so name it instead of surfacing a bare
+                # "400 Bad Request". The resolver deliberately degrades any
+                # endpoint failure to None + WARNING (INV-8), which turns an
+                # unexplained 400 into silently-empty membership — a message
+                # naming the cause is what makes that degradation diagnosable.
+                if response.status_code in (400, 422):
+                    raise TerminologyCapabilityError(
+                        f"endpoint refused ValueSet expansion for "
+                        f"{valueset_url!r} (HTTP {response.status_code})"
+                        f"{self._diagnostics_suffix(response)}. "
+                        "Canonical-URL expansion (FHIR R4 "
+                        "ValueSet/$expand?url=...) is not implemented by every "
+                        "backend: medterm4ds, for example, resolves only a POSTed "
+                        "ValueSet body, a SNOMED fhir_vs implicit URL, or a filter "
+                        "parameter, and has no registry of stored ValueSets by "
+                        "canonical URL. Load the ValueSet locally, POST its "
+                        "definition via expand_intensional(), or point the endpoint "
+                        "at a full terminology server."
+                    )
                 response.raise_for_status()
                 payload = response.json()
             result = self._contains_to_coderefs(self._parse_contains(payload))
@@ -429,6 +460,24 @@ class HTTPTerminologyEndpoint:
         except Exception:
             self._on_call_failure()
             raise
+
+    @staticmethod
+    def _diagnostics_suffix(response: Any) -> str:
+        """Return ``": <diagnostics>"`` from an OperationOutcome, else "".
+
+        Best-effort: this runs on the failure path, so it must never raise over
+        the original error. Contains only the server's OperationOutcome text —
+        never credentials or our request headers.
+        """
+        try:
+            payload = response.json()
+            issues = payload.get("issue") or []
+            text = issues[0].get("diagnostics") if issues else None
+        except Exception:
+            return ""
+        if not text:
+            return ""
+        return ": " + " ".join(str(text).split())[:300]
 
     def expand_intensional(self, value_set: dict) -> list[CodeRef]:
         """POST <base_url>/ValueSet/$expand with an intensional ValueSet body.

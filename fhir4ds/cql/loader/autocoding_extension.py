@@ -10,7 +10,7 @@ Reference: FDD §3d, copied verbatim from master plan §2.
 Extension shape (six sub-extensions, all always present — INV-5):
 
     {
-        "url": "http://fhir4ds.org/fhir/StructureDefinition/autocoding",
+        "url": "https://fhir4ds.com/fhir/StructureDefinition/autocoding",
         "extension": [
             {"url": "engine",          "valueString":  "medterm4ds"},
             {"url": "engine-version",  "valueString":  "<engine_version>"},
@@ -31,8 +31,27 @@ from typing import Optional
 
 #: Canonical URL for the autocoding extension. Stable across releases.
 #: Downstream consumers detect auto-coded Codings by this URL.
+#:
+#: NOTE: this used to be ``http://fhir4ds.org/...``. The project does not own
+#: fhir4ds.org (it does not resolve at all), so the canonical now points at the
+#: owned domain. Codings emitted before the change still carry the legacy
+#: spelling, so readers MUST accept both — see
+#: :data:`AUTOCODING_EXTENSION_URLS`.
 AUTOCODING_EXTENSION_URL: str = (
+    "https://fhir4ds.com/fhir/StructureDefinition/autocoding"
+)
+
+#: Legacy (pre-0.0.23) spelling of the autocoding extension URL. Emitted data
+#: may carry it; never emit it, always accept it.
+AUTOCODING_EXTENSION_URL_LEGACY: str = (
     "http://fhir4ds.org/fhir/StructureDefinition/autocoding"
+)
+
+#: Every accepted spelling. Use for membership tests; emit
+#: :data:`AUTOCODING_EXTENSION_URL` only.
+AUTOCODING_EXTENSION_URLS: tuple[str, ...] = (
+    AUTOCODING_EXTENSION_URL,
+    AUTOCODING_EXTENSION_URL_LEGACY,
 )
 
 # Fixed sub-extension URL strings. The six URL constants below are
@@ -147,7 +166,7 @@ def parse_autocoding_extension(coding: dict) -> Optional[dict]:
 
     autocoding_root: Optional[dict] = None
     for ext in extensions:
-        if isinstance(ext, dict) and ext.get("url") == AUTOCODING_EXTENSION_URL:
+        if isinstance(ext, dict) and ext.get("url") in AUTOCODING_EXTENSION_URLS:
             autocoding_root = ext
             break
 

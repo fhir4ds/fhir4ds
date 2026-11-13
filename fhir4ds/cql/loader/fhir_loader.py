@@ -1,6 +1,7 @@
 # src/cql_py/loader/fhir_loader.py
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import re
@@ -15,6 +16,12 @@ except ImportError:
     duckdb = None  # type: ignore[assignment]
 
 from fhir4ds.sources.base import quote_identifier
+
+# Single source of truth for ValueSet -> enumerable-code extraction. Bound
+# under the historical private name because `fhir4ds.devserver.api` imports it.
+from fhir4ds.cql.valueset_codes import (
+    extract_codes_from_valueset_resource as _extract_codes_from_valueset_resource,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - import-time only
     # Forward-import AutoCoder and NotesPipeline only for type checkers —
@@ -31,6 +38,40 @@ _logger = logging.getLogger(__name__)
 # thread safety when multiple threads register UDFs on different connections.
 _CACHE_LOCK = threading.Lock()
 _VALUESET_UDF_CACHE_BY_CONNECTION = WeakKeyDictionary()
+# Rows-per-statement ceiling for the scoped valueset cache refresh IN-lists.
+_VALUESET_REFRESH_CHUNK = 500
+
+_CLOSED_CONNECTION_ERRORS: tuple = (
+    (duckdb.ConnectionException,) if duckdb is not None else ()
+)
+
+
+def _translate_closed_connection(operation: str):
+    """Re-raise a raw DuckDB closed-connection error as a namespaced one (INV-8).
+
+    A bare `duckdb.ConnectionException: Connection Error: Connection already
+    closed!` names no FHIR4DS operation, so in a long pipeline the caller cannot
+    tell which call failed — and only two of this class's methods used to say
+    "Cannot <op>: DuckDB connection is closed". The guard is a message
+    translation (no extra query on the happy path) and is idempotent: an
+    already-namespaced message passes through unchanged.
+    """
+
+    def decorate(fn):
+        @functools.wraps(fn)
+        def wrapper(self, *args, **kwargs):
+            try:
+                return fn(self, *args, **kwargs)
+            except _CLOSED_CONNECTION_ERRORS as exc:
+                if str(exc).startswith("Cannot "):
+                    raise
+                raise duckdb.ConnectionException(
+                    f"Cannot {operation}: DuckDB connection is closed"
+                ) from exc
+
+        return wrapper
+
+    return decorate
 _VALUESET_UDF_REGISTERED_CONNECTIONS = WeakSet()
 _FHIR_RESOURCE_TYPE_RE = re.compile(r"^[A-Z][A-Za-z0-9]*$")
 _FHIR_ID_RE = re.compile(r"^[A-Za-z0-9\-.]{1,64}$")
@@ -145,49 +186,6 @@ def _serialize_resource(resource: dict) -> str:
     return serialized
 
 
-def _extract_codes_from_valueset_resource(valueset: dict) -> list[dict[str, str | None]]:
-    """Extract codes from a raw FHIR ValueSet compose/expansion resource."""
-    codes: list[dict[str, str | None]] = []
-
-    # FHIR JSON parsing treats null members as absent (FHIR R4 json.html);
-    # "expansion": null must not crash extraction.
-    expansion_contains = (valueset.get("expansion") or {}).get("contains") or []
-    if isinstance(expansion_contains, list):
-        for item in expansion_contains:
-            if not isinstance(item, dict):
-                raise TypeError("ValueSet.expansion.contains entries must be objects")
-            system = item.get("system")
-            code = item.get("code")
-            if system is not None or code is not None:
-                codes.append({
-                    "system": system,
-                    "code": code,
-                    "display": item.get("display"),
-                })
-
-    compose_includes = (valueset.get("compose") or {}).get("include") or []
-    if isinstance(compose_includes, list):
-        for include in compose_includes:
-            if not isinstance(include, dict):
-                raise TypeError("ValueSet.compose.include entries must be objects")
-            system = include.get("system")
-            concepts = include.get("concept", [])
-            if concepts is None:
-                concepts = []
-            if not isinstance(concepts, list):
-                raise TypeError("ValueSet.compose.include.concept must be a list")
-            for concept in concepts:
-                if not isinstance(concept, dict):
-                    raise TypeError("ValueSet.compose.include.concept entries must be objects")
-                codes.append({
-                    "system": system,
-                    "code": concept.get("code"),
-                    "display": concept.get("display"),
-                })
-
-    return codes
-
-
 class FHIRDataLoader:
     """
     Load FHIR resources into DuckDB for CQL evaluation.
@@ -257,6 +255,8 @@ class FHIRDataLoader:
                 shared_cache = {}
                 _VALUESET_UDF_CACHE_BY_CONNECTION[con] = shared_cache
         self._valueset_udf_cache: dict = shared_cache
+        # Probed lazily: does the loaded CQL extension expose its valueset cache?
+        self._cpp_cache_available: Optional[bool] = None
         if create_table:
             self._create_table()
 
@@ -329,8 +329,8 @@ class FHIRDataLoader:
         Extract the patient identity from a FHIR resource.
 
         - For Patient resources: returns the resource id.
-        - For other resources: extracts from ``subject``, ``patient``, or
-          ``beneficiary`` when the reference is Patient-typed
+        - For other resources: extracts from ``subject``, ``patient``,
+          ``beneficiary``, or ``for`` when the reference is Patient-typed
           (``Patient/{id}``, an absolute URL ending ``/Patient/{id}``, or a
           version-specific ``Patient/{id}/_history/{vid}`` resolved to the
           current id), or a bundle-local ``urn:uuid:`` reference whose
@@ -345,7 +345,11 @@ class FHIRDataLoader:
         if resource_type == "Patient":
             return resource.get("id")
 
-        for path in ("subject", "patient", "beneficiary"):
+        # ``for`` is the patient compartment reference for Task (FHIR R4:
+        # Task.for 0..1 Reference(Patient|RelatedPerson|...) — the same
+        # Patient-typed guard applies; without it CMS50-style
+        # [Task: "Fulfill"] retrieves are invisible in patient context).
+        for path in ("subject", "patient", "beneficiary", "for"):
             value = resource.get(path)
             # List-valued patient references (e.g. Appointment.patient 0..*
             # in FHIR R4) are scanned for the first Patient-typed entry.
@@ -453,6 +457,7 @@ class FHIRDataLoader:
                     [d_id, d_type, d_json, d_patient_ref],
                 )
 
+    @_translate_closed_connection("load FHIR resources")
     def load_resources(self, resources: list[dict]) -> int:
         """Load multiple FHIR resources in a single batch.
 
@@ -658,6 +663,7 @@ class FHIRDataLoader:
             )
         return len(final_rows)
 
+    @_translate_closed_connection("load FHIR bundle")
     def load_bundle(self, bundle: dict) -> int:
         """
         Load all resources from a FHIR Bundle.
@@ -774,6 +780,7 @@ class FHIRDataLoader:
             self.load_resource(data)
             return 1
 
+    @_translate_closed_connection("load NDJSON")
     def load_ndjson(self, path: Union[str, Path], *, strict: bool = True) -> int:
         """
         Load from an NDJSON file (one resource per line).
@@ -906,6 +913,7 @@ class FHIRDataLoader:
 
         return total
 
+    @_translate_closed_connection("load FHIR resources from URL")
     def load_from_url(self, url: str, headers: Optional[dict] = None) -> int:
         """
         Load from a FHIR server URL.
@@ -950,10 +958,12 @@ class FHIRDataLoader:
             self.load_resource(data)
             return 1
 
+    @_translate_closed_connection("clear resources")
     def clear(self) -> None:
         """Clear all resources from the table."""
         self.con.execute(f"DELETE FROM {self._quoted_table_name}")
 
+    @_translate_closed_connection("count resources")
     def count(self, resource_type: Optional[str] = None) -> int:
         """Count resources in the table, optionally filtered by type."""
         if resource_type:
@@ -967,6 +977,7 @@ class FHIRDataLoader:
             ).fetchone()
         return result[0] if result else 0
 
+    @_translate_closed_connection("load ValueSets")
     def load_valuesets(
         self,
         valuesets: List[Any],
@@ -1034,7 +1045,16 @@ class FHIRDataLoader:
                 vs_url = vs.get("url")
                 codes = vs.get("codes")
                 if codes is None and vs.get("resourceType") == "ValueSet":
-                    codes = _extract_codes_from_valueset_resource(vs)
+                    try:
+                        codes = _extract_codes_from_valueset_resource(vs)
+                    except (TypeError, ValueError) as e:
+                        # Every other validation in this method names the
+                        # offending entry (`valuesets[i] ...`); a raw extraction
+                        # error would leave a caller with 700 ValueSets and no way
+                        # to tell which one is broken.
+                        raise type(e)(
+                            f"valuesets[{index}] (url={vs_url!r}): {e}"
+                        ) from e
                 if codes is None:
                     codes = []
             else:
@@ -1079,6 +1099,14 @@ class FHIRDataLoader:
                         f"valuesets[{index}].codes[{code_index}] must include string "
                         "'system' and 'code' values"
                     )
+                if display is not None and not isinstance(display, str):
+                    # FHIR R4: display is `string 0..1`. Without this guard the
+                    # pyarrow bulk-insert path leaks a raw ArrowTypeError from
+                    # the public API (INV-8).
+                    raise ValueError(
+                        f"valuesets[{index}].codes[{code_index}].display must be a "
+                        f"string, got {type(display).__name__}"
+                    )
 
                 valueset_urls.append(vs_url)
                 systems.append(system)
@@ -1122,9 +1150,14 @@ class FHIRDataLoader:
             ON {quoted_table_name} (valueset_url, system, code)
         """)
 
-        self._refresh_in_valueset_udf(table_name)
+        # Scope the cache refresh to the ValueSets just written; a full-table
+        # re-read per call made incremental loading quadratic in ValueSet count.
+        self._refresh_in_valueset_udf(
+            table_name, urls=sorted(set(valueset_urls)) or None
+        )
         return total_codes
 
+    @_translate_closed_connection("count ValueSet codes")
     def count_valueset_codes(
         self,
         valueset_url: Optional[str] = None,
@@ -1158,6 +1191,7 @@ class FHIRDataLoader:
             ).fetchone()
         return result[0] if result else 0
 
+    @_translate_closed_connection("clear ValueSets")
     def clear_valuesets(self, table_name: str = "valueset_codes") -> None:
         """
         Clear all codes from the valueset_codes table.
@@ -1175,6 +1209,7 @@ class FHIRDataLoader:
         self.con.execute(f"DELETE FROM {quoted_table_name}")
         self._refresh_in_valueset_udf(table_name)
 
+    @_translate_closed_connection("check the ValueSet table")
     def valueset_table_exists(self, table_name: str = "valueset_codes") -> bool:
         """
         Check if the valueset codes table exists.
@@ -1191,17 +1226,26 @@ class FHIRDataLoader:
         ).fetchone()
         return result is not None
 
-    def _refresh_in_valueset_udf(self, table_name: str = "valueset_codes") -> None:
+    def _refresh_in_valueset_udf(self, table_name: str = "valueset_codes",
+                                 urls: Optional[List[str]] = None) -> None:
         """Refresh the in_valueset Python UDF cache from the populated valueset_codes table.
 
         When duckdb_cql_py registers ``in_valueset``, it uses an empty in-memory
         cache.  After codes are loaded into the SQL table we must rebuild the cache
         so that subsequent ``in_valueset()`` calls return correct results.
 
+        ``urls`` scopes the refresh to the ValueSets just written: the cache is
+        rebuilt from the TABLE for those URLs only, which keeps the table
+        authoritative while making incremental loading O(rows written) instead of
+        O(rows in the table). Without it the whole table is re-read (used by
+        ``clear_valuesets``). A full re-read on every call made loading N
+        ValueSets one at a time quadratic in N (measured: 200 single-ValueSet
+        loads = 1.8 s vs 14 ms for the same content in one bulk call).
+
         Uses a soft import of ``duckdb_cql_py`` so that ``cql-py`` does not gain a
         hard dependency on the higher-level package.
         """
-        if self._refresh_cpp_in_valueset_cache(table_name):
+        if self._refresh_cpp_in_valueset_cache(table_name, urls):
             return
         quoted_table_name = quote_identifier(table_name)
 
@@ -1210,10 +1254,27 @@ class FHIRDataLoader:
         except ImportError:
             return
 
+        # System identifiers are normalized the same way the UDF does, so a
+        # SNOMED module URL in the table matches the base-system member.
+        from fhir4ds.cql.duckdb.udf.system_resolver import SystemResolver
+
+        scoped_urls = None if urls is None else sorted(set(urls))
+        rows: List[tuple] = []
         try:
-            rows = self.con.execute(
-                f"SELECT valueset_url, system, code FROM {quoted_table_name}"
-            ).fetchall()
+            if scoped_urls is None:
+                rows = self.con.execute(
+                    f"SELECT valueset_url, system, code FROM {quoted_table_name}"
+                ).fetchall()
+            else:
+                # Chunked IN-lists; a batched load can carry thousands of URLs.
+                for start in range(0, len(scoped_urls), _VALUESET_REFRESH_CHUNK):
+                    chunk = scoped_urls[start:start + _VALUESET_REFRESH_CHUNK]
+                    placeholders = ", ".join("?" for _ in chunk)
+                    rows.extend(self.con.execute(
+                        f"SELECT valueset_url, system, code FROM {quoted_table_name} "
+                        f"WHERE valueset_url IN ({placeholders})",
+                        chunk,
+                    ).fetchall())
         except (duckdb.CatalogException, duckdb.BinderException) if duckdb else () as e:
             _logger.warning("Failed to query valueset table '%s': %s", table_name, e)
             return
@@ -1222,11 +1283,14 @@ class FHIRDataLoader:
             raise
 
         # Update the instance-level cache dict IN-PLACE so the already-registered
-        # UDF closure sees the new values without requiring re-registration.
-        self._valueset_udf_cache.clear()
+        # UDF closure sees the new values without requiring re-registration
+        # (the closure reads the dict live).
+        if scoped_urls is None:
+            self._valueset_udf_cache.clear()
+        else:
+            for url in scoped_urls:
+                self._valueset_udf_cache.pop(url, None)
         for vs_url, system, code in rows:
-            # Normalize system identifiers (OID → URL, SNOMED module → base)
-            from fhir4ds.cql.duckdb.udf.system_resolver import SystemResolver
             norm_sys = SystemResolver.normalize(system) if system else ""
             self._valueset_udf_cache.setdefault(vs_url, set()).add((norm_sys, code or ""))
 
@@ -1253,24 +1317,72 @@ class FHIRDataLoader:
             _logger.error("Unexpected error refreshing valueset UDF macros: %s", e)
             raise
 
-    def _refresh_cpp_in_valueset_cache(self, table_name: str = "valueset_codes") -> bool:
-        """Populate the native CQL valueset cache when the C++ extension exposes it."""
+    def _cpp_valueset_cache_available(self) -> bool:
+        """True when the loaded CQL extension exposes its valueset cache API.
+
+        Probed once per loader instance against ``duckdb_functions()`` instead of
+        by attempting a mutating call: the bundled builds that predate the cache
+        API raise Catalog Errors for both functions, and the previous code path
+        only discovered that on ``cql_valueset_cache_clear()`` (swallowed) and
+        then logged a WARNING per load for ``cql_valueset_cache_add()``. Missing
+        cache support is a normal Python-UDF fallback, not a problem worth
+        logging.
+        """
+        if self._cpp_cache_available is None:
+            try:
+                found = self.con.execute(
+                    "SELECT COUNT(*) FROM duckdb_functions() WHERE "
+                    "function_name IN ('cql_valueset_cache_add', "
+                    "'cql_valueset_cache_clear')"
+                ).fetchone()[0]
+                self._cpp_cache_available = bool(found)
+            except Exception:
+                self._cpp_cache_available = False
+        return self._cpp_cache_available
+
+    def _refresh_cpp_in_valueset_cache(self, table_name: str = "valueset_codes",
+                                       urls: Optional[List[str]] = None) -> bool:
+        """Populate the native CQL valueset cache when the C++ extension exposes it.
+
+        The C++ cache API is add/clear only (no per-URL removal). When ``urls``
+        is given the batch's rows are ADDED without clearing, which is exactly
+        equivalent to a full rebuild because ``valueset_codes`` is additive
+        (``load_valuesets`` never deletes; only ``clear_valuesets`` does, and it
+        passes ``urls=None`` for a full clear+rebuild). Without this, every
+        incremental load re-read the whole table and added every row to the
+        native map — quadratic in the number of ValueSets loaded.
+        """
         import os
         use_native = os.environ.get("FHIR4DS_USE_CPP_VALUESET_CACHE", "").lower()
         if use_native in ("0", "false", "no", "off"):
             return False
+        if not self._cpp_valueset_cache_available():
+            return False
         quoted_table_name = quote_identifier(table_name)
 
-        try:
-            self.con.execute("SELECT cql_valueset_cache_clear()").fetchone()
-        except Exception:
-            return False
+        if urls is None:
+            try:
+                self.con.execute("SELECT cql_valueset_cache_clear()").fetchone()
+            except Exception:
+                return False
 
         try:
-            self.con.execute(
-                f"SELECT cql_valueset_cache_add(valueset_url, system, code) "
-                f"FROM {quoted_table_name}"
-            ).fetchall()
+            if urls is None:
+                self.con.execute(
+                    f"SELECT cql_valueset_cache_add(valueset_url, system, code) "
+                    f"FROM {quoted_table_name}"
+                ).fetchall()
+            else:
+                scoped = sorted(set(urls))
+                for start in range(0, len(scoped), _VALUESET_REFRESH_CHUNK):
+                    chunk = scoped[start:start + _VALUESET_REFRESH_CHUNK]
+                    placeholders = ", ".join("?" for _ in chunk)
+                    self.con.execute(
+                        f"SELECT cql_valueset_cache_add(valueset_url, system, code) "
+                        f"FROM {quoted_table_name} "
+                        f"WHERE valueset_url IN ({placeholders})",
+                        chunk,
+                    ).fetchall()
             # Remove stale Python macros from prior refreshes so SQL resolves to
             # the native functions. The C++ extension now registers BOTH
             # in_valueset and the translator-facing fhirpath_in_valueset alias

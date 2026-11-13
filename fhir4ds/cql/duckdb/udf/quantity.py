@@ -897,15 +897,26 @@ def _same_code_unit_valid_for_compare(unit: str | None) -> bool:
     seps = "/."
     if not any(s in core for s in seps):
         return _is_valid_ucum_atom(core)
+    # A separator directly after a stripped annotation ('{copies}/mL' ->
+    # core '/mL') leaves an EMPTY first component — annotations are valid
+    # UCUM components, so empty components are accepted when the original
+    # unit carried an annotation (CMS314 viral-load '{copies}/mL'
+    # comparisons nulled out entirely).
+    had_annotation = ("{" in unit) or ("[" in unit)
     component = ""
     for i, ch in enumerate(core):
         if ch in seps:
-            if not component or not _same_code_unit_valid_for_compare(component):
+            if component:
+                if not _same_code_unit_valid_for_compare(component):
+                    return False
+            elif not had_annotation:
                 return False
             component = ""
         else:
             component += ch
-    return bool(component) and _same_code_unit_valid_for_compare(component)
+    if component:
+        return _same_code_unit_valid_for_compare(component)
+    return had_annotation
 
 
 def quantityCompare(q1_json: str | None, q2_json: str | None, op: str) -> bool | None:
@@ -1347,6 +1358,27 @@ def toConcept(code_json: str | None) -> str | None:
     """CQL §22.30: ToConcept — wrap a Code in a Concept."""
     data = _load_clinical_json(code_json)
     if isinstance(data, dict):
+        # FHIR CodeableConcept shape: inlined FHIRHelpers.ToConcept bodies
+        # can hand the WHOLE CodeableConcept JSON here (dynamic medication
+        # choice values) — unwrap the coding array into List<Code>
+        # (CMS156 averageDailyDose strength matching produced null codes).
+        if "coding" in data or "text" in data:
+            codings = data.get("coding") or []
+            if not isinstance(codings, list):
+                codings = [codings]
+            normalized = []
+            for c in codings:
+                if isinstance(c, str):
+                    c = _load_clinical_json(c)
+                code = _normalize_code_object(c) if c is not None else None
+                if code is not None:
+                    normalized.append(code)
+            if not normalized:
+                return None
+            concept = {"codes": normalized}
+            if data.get("text") is not None:
+                concept["display"] = data["text"]
+            return orjson.dumps(concept).decode("utf-8")
         code = _normalize_code_object(data)
         if code is None:
             return None

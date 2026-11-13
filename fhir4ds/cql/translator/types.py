@@ -1699,6 +1699,133 @@ class SQLFragment:
         """
         for cte_def in self.ctes:
             self._dedup_cte(cte_def, min_occurrences)
+            # Laterals may end up attached to a scope that cannot see their
+            # references (transforms after dedup can relocate/wrap selects —
+            # e.g. _ensure_resource_column wrapping). Unwrap any lateral whose
+            # referenced aliases are not visible at its FINAL attach scope:
+            # DuckDB raises "Referenced table X not found" at bind time
+            # otherwise (CMS156 pattern: lateral referencing an alias defined
+            # inside the FROM chain's derived tables).
+            self._unwrap_scope_unsafe_laterals(cte_def.query)
+        # The main query is validated too — laterals on the outermost select
+        # have the same visibility constraints (review HIGH-1).
+        self._unwrap_scope_unsafe_laterals(self.main_query)
+
+    def _unwrap_scope_unsafe_laterals(
+        self, node, outer_visible: frozenset = frozenset()
+    ) -> None:
+        """Recursively validate lateral joins and remove scope-unsafe ones.
+
+        Uses the same scope CHAIN as the hoisting pass: a lateral is unsafe only
+        when it references an alias that is in neither its own scope nor any
+        enclosing one (DuckDB resolves outer references through the chain).
+        """
+        if node is None:
+            return
+        if isinstance(node, (list, tuple)):
+            for item in node:
+                self._unwrap_scope_unsafe_laterals(item, outer_visible)
+            return
+        if not hasattr(node, "__dataclass_fields__"):
+            return
+
+        if isinstance(node, SQLSelect):
+            visible = set(outer_visible) | self._select_local_aliases(node)
+            visible.add("_pt")
+        else:
+            visible = set(outer_visible)
+
+        if isinstance(node, SQLSelect) and node.joins:
+            kept_joins = []
+            for join in node.joins:
+                if (
+                    isinstance(join, SQLJoin)
+                    and join.join_type == "CROSS JOIN LATERAL"
+                    and isinstance(join.table, SQLSelect)
+                    and not self._lateral_join_scope_safe(join, visible)
+                ):
+                    # Unwrap: restore the original expression in place of
+                    # <alias>.value references and drop the join.
+                    lat_alias = join.alias
+                    orig_expr = None
+                    cols = join.table.columns or []
+                    if cols and isinstance(cols[0], SQLAlias):
+                        orig_expr = cols[0].expr
+                    if orig_expr is not None and lat_alias:
+                        node.columns = [
+                            self._restore_lateral_ref(c, lat_alias, orig_expr)
+                            for c in (node.columns or [])
+                        ]
+                        if node.where is not None:
+                            node.where = self._restore_lateral_ref(
+                                node.where, lat_alias, orig_expr
+                            )
+                    continue
+                kept_joins.append(join)
+            node.joins = kept_joins or None
+
+        for field_name in node.__dataclass_fields__:
+            self._unwrap_scope_unsafe_laterals(
+                getattr(node, field_name, None), frozenset(visible)
+            )
+
+    def _lateral_join_scope_safe(self, join: "SQLJoin", visible: set) -> bool:
+        """A lateral may reference only its attach scope's visible aliases
+        (or aliases it defines internally). Nested-subquery references to
+        visible aliases are allowed (DuckDB supports nested correlation to
+        the lateral's own scope chain)."""
+        internal = set()
+        referenced = []
+        stack = [join.table]
+        seen = set()
+        while stack:
+            cur = stack.pop()
+            if cur is None or id(cur) in seen:
+                continue
+            seen.add(id(cur))
+            if isinstance(cur, SQLAlias):
+                internal.add(cur.alias)
+            elif isinstance(cur, SQLSelect) and cur.from_clause is not None:
+                fr = cur.from_clause
+                if isinstance(fr, SQLAlias):
+                    internal.add(fr.alias)
+                elif isinstance(fr, SQLIdentifier):
+                    internal.add(fr.name)
+            elif isinstance(cur, SQLQualifiedIdentifier) and cur.parts:
+                referenced.append(cur.parts[0])
+            if isinstance(cur, (list, tuple)):
+                stack.extend(cur)
+                continue
+            for field_name in getattr(cur, "__dataclass_fields__", {}):
+                stack.append(getattr(cur, field_name, None))
+        return all(alias in internal or alias in visible for alias in referenced)
+
+    def _restore_lateral_ref(self, node, lat_alias: str, orig_expr):
+        """Replace `<lat_alias>.value` references with the original expression."""
+        if node is None:
+            return node
+        if isinstance(node, SQLQualifiedIdentifier) and node.parts == [lat_alias, "value"]:
+            return orig_expr
+        if isinstance(node, (list, tuple)):
+            new_items = [self._restore_lateral_ref(c, lat_alias, orig_expr) for c in node]
+            return type(node)(new_items) if isinstance(node, tuple) else new_items
+        if not hasattr(node, "__dataclass_fields__"):
+            return node
+        # Do not descend into nested query scopes: lateral references do
+        # not occur there (laterals only replace projection/WHERE refs).
+        if isinstance(node, (SQLSubquery, SQLExists)):
+            return node
+        changed = False
+        for field_name in node.__dataclass_fields__:
+            val = getattr(node, field_name, None)
+            new_val = self._restore_lateral_ref(val, lat_alias, orig_expr)
+            if new_val is not val:
+                try:
+                    setattr(node, field_name, new_val)
+                    changed = True
+                except Exception:
+                    pass
+        return node
 
     def _dedup_cte(self, cte_def: 'CTEDefinition', min_occ: int) -> None:
         """Apply lateral alias deduplication to a single CTE definition."""
@@ -1718,22 +1845,77 @@ class SQLFragment:
         if isinstance(query, SQLSelect):
             self._dedup_select(query, min_occ)
 
-    def _dedup_select(self, select: 'SQLSelect', min_occ: int) -> None:
-        """Deduplicate repeated expressions in a SELECT's projection and WHERE."""
-        self._dedup_nested_scopes(select.columns, min_occ)
-        self._dedup_nested_scopes(select.from_clause, min_occ)
-        self._dedup_nested_scopes(select.joins, min_occ)
-        self._dedup_nested_scopes(select.where, min_occ)
+    @staticmethod
+    def _select_local_aliases(select: 'SQLSelect') -> set:
+        """Aliases this select itself binds (FROM alias + JOIN aliases)."""
+        local = set()
+        for join in list(select.joins or []):
+            if isinstance(join, SQLJoin):
+                if join.alias:
+                    local.add(join.alias)
+                if isinstance(join.table, SQLAlias):
+                    local.add(join.table.alias)
+        if isinstance(select.from_clause, SQLAlias):
+            local.add(select.from_clause.alias)
+        elif isinstance(select.from_clause, SQLIdentifier):
+            local.add(select.from_clause.name)
+        return local
+
+    def _dedup_select(
+        self,
+        select: 'SQLSelect',
+        min_occ: int,
+        outer_visible: frozenset = frozenset(),
+    ) -> None:
+        """Deduplicate repeated expressions in a SELECT's projection and WHERE.
+
+        ``outer_visible`` carries the aliases of ENCLOSING selects. DuckDB
+        resolves a lateral's references through its enclosing scopes (verified:
+        2 and 3 levels up, and inside a UNION operand), so a repeated
+        correlated extraction may be hoisted even when it references an alias
+        that belongs to an ancestor rather than to this select. Without the
+        chain the collector only saw this select's own aliases and rejected
+        every such candidate (CMS2: 1.34 MB -> 12.95 MB, review BUGFIX-013).
+        """
+        # Aliases a LATERAL attached to THIS select may reference: its own FROM
+        # alias + JOIN aliases, plus every enclosing select's (scope chain).
+        local_aliases = self._select_local_aliases(select)
+        visible = frozenset(outer_visible) | local_aliases
+
+        # Recurse BEFORE hoisting here (children first), passing the right
+        # visibility per position: a FROM-subquery or a non-lateral JOIN table
+        # may NOT correlate to this select's aliases, while projection/WHERE
+        # subqueries (and LATERAL tables) may.
+        self._dedup_nested_scopes(select.columns, min_occ, visible)
+        self._dedup_nested_scopes(select.from_clause, min_occ, frozenset(outer_visible))
+        for join in list(select.joins or []):
+            if isinstance(join, SQLJoin):
+                is_lateral = "LATERAL" in (join.join_type or "").upper()
+                self._dedup_nested_scopes(
+                    join.table, min_occ, visible if is_lateral else frozenset(outer_visible)
+                )
+                self._dedup_nested_scopes(join.on_condition, min_occ, visible)
+            else:
+                self._dedup_nested_scopes(join, min_occ, frozenset(outer_visible))
+        self._dedup_nested_scopes(select.where, min_occ, visible)
 
         if select.from_clause is None:
             return
 
-        # 1) Collect candidate expressions and their serialized forms.
-        # Lateral aliases appended to this SELECT are visible to the projection
-        # and WHERE clause, but not to earlier JOIN ON conditions.
-        candidates = {}  # sql_str -> (node, count)
-        self._collect_candidates(select.columns, candidates, min_occ)
-        self._collect_candidates(select.where, candidates, min_occ)
+        # (Star projections are qualified AFTER lateral construction —
+        # see below — so appending laterals cannot widen them.)
+
+        prev_aliases = getattr(self, "_current_dedup_aliases", None)
+        self._current_dedup_aliases = visible
+        try:
+            # 1) Collect candidate expressions and their serialized forms.
+            # Lateral aliases appended to this SELECT are visible to the projection
+            # and WHERE clause, but not to earlier JOIN ON conditions.
+            candidates = {}  # sql_str -> (node, count)
+            self._collect_candidates(select.columns, candidates, min_occ)
+            self._collect_candidates(select.where, candidates, min_occ)
+        finally:
+            self._current_dedup_aliases = prev_aliases
 
         if not candidates:
             return
@@ -1761,6 +1943,33 @@ class SQLFragment:
         if not lateral_joins:
             return
 
+        # Appending laterals widens a bare star projection (the lateral's
+        # columns would join the FROM table's) — qualify the star with the
+        # FROM alias (`a.*`) so the projection stays the FROM table's
+        # columns only. Keeps UNION operand alignment (CMS-DEF-04/CMS22)
+        # without skipping the dedup entirely (a skip exploded CMS0334
+        # SQL 15x and hung the gate). When the select has JOINS, qualifying
+        # would drop the joined tables' columns AND appending laterals
+        # would widen the star — neither is safe, so skip the dedup for
+        # star+joins selects entirely (review MEDIUM-8).
+        _cols = select.columns or []
+        _is_star = (
+            len(_cols) == 1
+            and isinstance(_cols[0], SQLIdentifier)
+            and _cols[0].name == "*"
+        )
+        if _is_star and select.joins:
+            return
+        if _is_star:
+            if isinstance(select.from_clause, SQLAlias):
+                select.columns = [SQLQualifiedIdentifier(
+                    parts=[select.from_clause.alias, "*"]
+                )]
+            elif isinstance(select.from_clause, SQLIdentifier):
+                select.columns = [SQLQualifiedIdentifier(
+                    parts=[select.from_clause.name, "*"]
+                )]
+
         # 3) Replace occurrences in projection and WHERE with lateral references.
         select.columns = self._replace_alias_value(select.columns, alias_map)
         if select.where is not None:
@@ -1770,30 +1979,35 @@ class SQLFragment:
         # reference every alias visible to the WHERE clause.
         select.joins = list(select.joins or []) + lateral_joins
 
-    def _dedup_nested_scopes(self, value: Any, min_occ: int) -> None:
-        """Apply deduplication inside nested SELECT scopes without hoisting out."""
+    def _dedup_nested_scopes(
+        self, value: Any, min_occ: int, visible: frozenset = frozenset()
+    ) -> None:
+        """Apply deduplication inside nested SELECT scopes without hoisting out.
+
+        ``visible`` is the enclosing alias chain passed to nested selects.
+        """
         if value is None:
             return
 
         if isinstance(value, SQLSubquery):
             if isinstance(value.query, SQLSelect):
-                self._dedup_select(value.query, min_occ)
+                self._dedup_select(value.query, min_occ, visible)
             elif isinstance(value.query, (SQLUnion, SQLIntersect, SQLExcept)):
                 for operand in value.query.operands:
-                    self._dedup_nested_scopes(operand, min_occ)
+                    self._dedup_nested_scopes(operand, min_occ, visible)
             return
 
         if isinstance(value, SQLExists):
-            self._dedup_nested_scopes(value.subquery, min_occ)
+            self._dedup_nested_scopes(value.subquery, min_occ, visible)
             return
 
         if isinstance(value, SQLSelect):
-            self._dedup_select(value, min_occ)
+            self._dedup_select(value, min_occ, visible)
             return
 
         if isinstance(value, SQLJoin):
-            self._dedup_nested_scopes(value.table, min_occ)
-            self._dedup_nested_scopes(value.on_condition, min_occ)
+            self._dedup_nested_scopes(value.table, min_occ, visible)
+            self._dedup_nested_scopes(value.on_condition, min_occ, visible)
             return
 
         if isinstance(value, (SQLUnion, SQLIntersect, SQLExcept)):
@@ -1837,14 +2051,16 @@ class SQLFragment:
             # Only consider larger correlated subqueries. Small subqueries do not
             # materially affect CMS1218 SQL size and are less worth the join churn.
             if 'patient_id' in sql_str and len(sql_str) > 200:
-                count = candidates.get(sql_str, (None, 0))[1] + 1
-                candidates[sql_str] = (node, count)
+                if self._lateral_candidate_scope_safe(node):
+                    count = candidates.get(sql_str, (None, 0))[1] + 1
+                    candidates[sql_str] = (node, count)
             return
 
         if self._is_lateral_scalar_candidate(node):
-            sql_str = node.to_sql()
-            count = candidates.get(sql_str, (None, 0))[1] + 1
-            candidates[sql_str] = (node, count)
+            if self._lateral_candidate_scope_safe(node):
+                sql_str = node.to_sql()
+                count = candidates.get(sql_str, (None, 0))[1] + 1
+                candidates[sql_str] = (node, count)
             return
 
         if isinstance(node, SQLExists):
@@ -1854,6 +2070,59 @@ class SQLFragment:
 
         for child in self._iter_child_expressions(node):
             self._collect_candidates(child, candidates, min_occ)
+
+    def _lateral_candidate_scope_safe(self, node: 'SQLExpression') -> bool:
+        """Whether hoisting this expression into a LATERAL is scope-safe.
+
+        A CROSS JOIN LATERAL can only correlate to the aliases of the SELECT
+        it is attached to — NOT to that SELECT's own outer-scope (correlated)
+        aliases. A repeated subquery that references an outer-scope alias
+        (CMS-DEF-01B/CMS135: fluent-inlined bodies referencing the query
+        alias from deep EXISTS nesting) must keep its inline position, or
+        DuckDB raises ``Referenced table "<alias>" not found`` at bind time.
+
+        AST-level check: references to aliases the candidate DEFINES inside
+        itself (its own FROM aliases) are fine; any other qualified
+        reference must resolve to a local alias of the enclosing SELECT
+        (``_current_dedup_aliases``) or ``_pt``.
+        """
+        local = self._current_dedup_aliases
+        if local is None:
+            return True
+
+        internal: set = set()
+        referenced: list = []
+        stack = [node]
+        seen = set()
+        while stack:
+            cur = stack.pop()
+            if cur is None or id(cur) in seen:
+                continue
+            seen.add(id(cur))
+            if isinstance(cur, SQLAlias):
+                internal.add(cur.alias)
+            elif isinstance(cur, SQLSelect) and cur.from_clause is not None:
+                fr = cur.from_clause
+                if isinstance(fr, SQLAlias):
+                    internal.add(fr.alias)
+                elif isinstance(fr, SQLIdentifier):
+                    internal.add(fr.name)
+            elif isinstance(cur, SQLQualifiedIdentifier) and cur.parts:
+                referenced.append(cur.parts[0])
+            # Bare identifiers are column references, not alias
+            # qualifications — they cannot produce the "Referenced table
+            # not found" binder class, so they are not tracked.
+            if isinstance(cur, (list, tuple)):
+                stack.extend(cur)
+                continue
+            for field_name in getattr(cur, "__dataclass_fields__", {}):
+                stack.append(getattr(cur, field_name, None))
+
+        for alias in referenced:
+            if alias in internal or alias in local or alias == "_pt":
+                continue
+            return False
+        return True
 
     @staticmethod
     def _is_lateral_scalar_candidate(node: Any) -> bool:
@@ -2104,13 +2373,78 @@ class SQLUnion(SQLExpression):
             else:
                 return op.to_sql(self.precedence)
 
-        operand_sqls = [_normalize_operand(op) for op in self.operands]
+        operand_sqls = []
+        for idx, op in enumerate(self.operands):
+            sql = _normalize_operand(op)
+            if idx > 0 and _is_set_operation_node(op):
+                sql = f"({sql})"
+            operand_sqls.append(sql)
         result = f" {union_keyword} ".join(operand_sqls)
 
         if self.needs_parentheses(parent_precedence):
             return f"({result})"
 
         return result
+
+
+def _is_set_operation_node(op) -> bool:
+    """True for UNION / INTERSECT / EXCEPT nodes (set-operation operands).
+
+    Resolved at call time — SQLIntersect/SQLExcept are defined below this
+    helper in the module.
+    """
+    return isinstance(op, (SQLUnion, SQLIntersect, SQLExcept))
+
+
+def _flatten_except_union_operands(operands) -> list:
+    """Rewrite ``X except (Y union Z)`` into ``X except Y except Z``.
+
+    Set difference distributes over union ONLY on the subtracted side —
+    ``X \\ (Y ∪ Z) = (X \\ Y) \\ Z`` — so the flattened form is semantically
+    identical and needs no parentheses. SQL's UNION / INTERSECT / EXCEPT share
+    one precedence level and are left-associative, so the un-flattened text
+    ``X EXCEPT Y UNION Z`` evaluates as ``(X except Y) union Z`` and RE-ADDS
+    every Z member. This was the CMS1028 false-positive Numerator Exclusion
+    (patients whose only evidence was a ventilation procedure returned through
+    the union arm of the except's right side). Flattening also keeps the fast
+    SQL shape: parenthesizing the right operand compiles but defeats DuckDB's
+    set-operation planning.
+
+    NEVER pass the minuend (operand 0) here. ``(A ∪ B) \\ C`` is not
+    ``(A \\ B) \\ C``: flattening the first operand subtracts B from A and
+    silently loses B's rows (review REV-003).
+    """
+    flat = []
+    for op in operands:
+        if isinstance(op, SQLUnion):
+            flat.extend(_flatten_except_union_operands(op.operands))
+        else:
+            flat.append(op)
+    return flat
+
+
+def _render_set_operands(operands, keyword: str, precedence: int) -> str:
+    """Render set-operation operands with correct grouping.
+
+    ``EXCEPT`` flattens union operands (see
+    :func:`_flatten_except_union_operands`). Any remaining nested set
+    operation in a NON-FIRST position is parenthesized, because SQL's
+    UNION / INTERSECT / EXCEPT share one precedence level and are
+    left-associative — without parentheses the tree would flatten. First
+    position needs none: left-associative evaluation already matches the tree.
+    """
+    if keyword == "EXCEPT":
+        # Only the SUBTRACTED operands may be flattened: X ∖ (Y ∪ Z) =
+        # (X ∖ Y) ∖ Z holds, but (A ∪ B) ∖ C ≠ (A ∖ B) ∖ C. Flattening the
+        # minuend silently drops the union's non-first branches (REV-003).
+        operands = [operands[0], *_flatten_except_union_operands(list(operands[1:]))]
+    parts = []
+    for idx, op in enumerate(operands):
+        sql = _normalize_set_operand(op, precedence)
+        if idx > 0 and _is_set_operation_node(op):
+            sql = f"({sql})"
+        parts.append(sql)
+    return f" {keyword} ".join(parts)
 
 
 def _normalize_set_operand(op: "SQLExpression", precedence: int) -> str:
@@ -2174,8 +2508,7 @@ class SQLIntersect(SQLExpression):
         if not self.operands:
             return "SELECT NULL WHERE FALSE"
 
-        operand_sqls = [_normalize_set_operand(op, self.precedence) for op in self.operands]
-        result = " INTERSECT ".join(operand_sqls)
+        result = _render_set_operands(self.operands, "INTERSECT", self.precedence)
 
         if self.needs_parentheses(parent_precedence):
             return f"({result})"
@@ -2198,8 +2531,7 @@ class SQLExcept(SQLExpression):
         if not self.operands:
             return "SELECT NULL WHERE FALSE"
 
-        operand_sqls = [_normalize_set_operand(op, self.precedence) for op in self.operands]
-        result = " EXCEPT ".join(operand_sqls)
+        result = _render_set_operands(self.operands, "EXCEPT", self.precedence)
 
         if self.needs_parentheses(parent_precedence):
             return f"({result})"

@@ -410,3 +410,83 @@ def test_live_unknown_canonical_raises(tmp_path: Path):
     ep = VCACTerminologyEndpoint(cache_dir=tmp_path / "live-cache")
     with pytest.raises(Exception, match="value set not found"):
         ep.expand("http://example.com/no-such-valueset")
+
+
+# ---------------------------------------------------------------------------
+# Iteration 5 / Domain 6 HISTORIAN — FHIR R4 ValueSet membership semantics
+# ---------------------------------------------------------------------------
+
+
+def test_expand_walks_hierarchical_contains_tree(endpoint: VCACTerminologyEndpoint):
+    """expansion.contains.contains (0..*) descendants are members."""
+    payload = {
+        "resourceType": "ValueSet",
+        "expansion": {
+            "total": 3,
+            "contains": [
+                {"system": "http://snomed.info/sct", "code": "parent", "contains": [
+                    {"system": "http://snomed.info/sct", "code": "child"},
+                ]},
+                {"system": "http://snomed.info/sct", "code": "sibling"},
+            ],
+        },
+    }
+    with mock.patch.object(endpoint, "_get_json", return_value=payload):
+        rows = endpoint._expand_versioned("1234")
+    assert [r[1] for r in rows] == ["parent", "child", "sibling"]
+
+
+def test_expand_intensional_applies_compose_exclude(endpoint: VCACTerminologyEndpoint):
+    """compose.exclude (0..*) removes codes — ignoring it made excluded codes
+    members, i.e. false-positive clinical evidence."""
+    vs = {
+        "compose": {
+            "include": [
+                {"system": "http://snomed.info/sct",
+                 "concept": [{"code": "A"}, {"code": "B"}, {"code": "C"}]},
+            ],
+            "exclude": [
+                {"system": "http://snomed.info/sct", "concept": [{"code": "B"}]},
+            ],
+        }
+    }
+    codes = endpoint.expand_intensional(vs)
+    assert [c.code for c in codes] == ["A", "C"]
+
+
+def test_expand_intensional_exclude_survives_system_normalization(
+    endpoint: VCACTerminologyEndpoint,
+):
+    """SNOMED module URLs normalize to the base system before the exclude
+    comparison, so an exclude written with the module URL still matches."""
+    vs = {
+        "compose": {
+            "include": [
+                {"system": "http://snomed.info/sct/731000124108",
+                 "concept": [{"code": "keep"}, {"code": "drop"}]},
+            ],
+            "exclude": [
+                {"system": "http://snomed.info/sct", "concept": [{"code": "drop"}]},
+            ],
+        }
+    }
+    codes = endpoint.expand_intensional(vs)
+    assert [c.code for c in codes] == ["keep"]
+
+
+def test_expand_intensional_unenumerable_exclude_moot_when_no_codes(
+    endpoint: VCACTerminologyEndpoint,
+):
+    """A system-only include yields no codes, so its filter excludes remove
+    nothing and must not hard-fail (VSAC emits this shape, e.g. the SOPT
+    race value set)."""
+    vs = {
+        "compose": {
+            "include": [{"system": "https://nahdo.org/sopt"}],
+            "exclude": [
+                {"system": "https://nahdo.org/sopt", "filter": [
+                    {"property": "concept", "op": "is-a", "value": "6"}]},
+            ],
+        }
+    }
+    assert endpoint.expand_intensional(vs) == []

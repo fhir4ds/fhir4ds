@@ -16,6 +16,52 @@ OUTPUT_CQL_PY_DIR = TESTS_ROOT / "output"
 # Suite roots (now inside data/)
 SUITE_2025_DIR = DATA_DIR / "ecqm-content-qicore-2025"
 SUITE_2026_DIR = DATA_DIR / "dqm-content-qicore-2026"
+SUITE_CMS_2025_DIR = DATA_DIR / "dqm-content-cms-2025"
+
+# Canonical suite NAMES (what users type) are independent of the submodule
+# directory names. `qi-core` is ecqm-content-qicore-2025 and `us-core` is
+# dqm-content-cms-2025 (the CMS US Core suite). The old year-style spellings
+# stay accepted so existing scripts, CI jobs and docs keep working.
+# Names are VERSIONED because more content releases are expected: a bare
+# "qi-core" would silently mean a different suite next year.
+SUITE_QI_CORE_2025 = "qi-core-2025"
+SUITE_US_CORE_2025 = "us-core-2025"
+SUITE_QI_CORE_2026 = "qi-core-2026"
+
+CANONICAL_SUITES = (SUITE_QI_CORE_2025, SUITE_US_CORE_2025, SUITE_QI_CORE_2026)
+
+_SUITE_ALIASES = {
+    "qi-core-2025": SUITE_QI_CORE_2025,
+    "us-core-2025": SUITE_US_CORE_2025,
+    "qi-core-2026": SUITE_QI_CORE_2026,
+    # legacy (pre-rename) spellings
+    "2025": SUITE_QI_CORE_2025,
+    "cms2025": SUITE_US_CORE_2025,
+    "2026": SUITE_QI_CORE_2026,
+    # unversioned aliases introduced briefly during the rename; kept so a
+    # script written against them does not silently break. They mean the 2025
+    # release and are NOT a "latest" selector.
+    "qi-core": SUITE_QI_CORE_2025,
+    "us-core": SUITE_US_CORE_2025,
+}
+
+
+def normalize_suite(suite: str | None) -> str:
+    """Map a suite name (canonical or legacy) to its canonical spelling.
+
+    Legacy year spellings ('2025', 'cms2025', '2026') are accepted so that
+    existing invocations and the historical docs keep working.
+    """
+    if suite is None:
+        return SUITE_QI_CORE_2025
+    key = str(suite).strip().lower()
+    try:
+        return _SUITE_ALIASES[key]
+    except KeyError:
+        raise ValueError(
+            f"Unknown suite {suite!r}. Expected one of {list(CANONICAL_SUITES)} "
+            f"or a legacy alias {sorted(_SUITE_ALIASES)}."
+        ) from None
 
 # Default suite (2025)
 SUBMODULE_DIR = SUITE_2025_DIR
@@ -29,20 +75,25 @@ TESTS_DIR = SUBMODULE_DIR / "input" / "tests" / "measure"
 BUNDLE_DIR = SUBMODULE_DIR / "bundles" / "measure"
 
 
-def get_suite_paths(suite: str = "2025") -> dict:
+def get_suite_paths(suite: str = SUITE_QI_CORE_2025) -> dict:
     """
-    Return path configuration for a specific content suite year.
+    Return path configuration for a content suite.
 
     Args:
-        suite: "2025" (ecqm-content-qicore-2025) or "2026" (dqm-content-qicore-2026)
+        suite: canonical name — "qi-core-2025" (ecqm-content-qicore-2025,
+            default), "us-core-2025" (dqm-content-cms-2025, the CMS US Core
+            measures), or "qi-core-2026" (dqm-content-qicore-2026). Legacy
+            spellings "2025", "cms2025", "2026" and the unversioned
+            "qi-core"/"us-core" are accepted as aliases.
 
     Returns:
         Dict with keys: suite_dir, cql_dir, valueset_dir, tests_dir, bundle_dir
     """
-    if suite == "2026":
-        suite_dir = SUITE_2026_DIR
-    else:
-        suite_dir = SUITE_2025_DIR
+    suite_dir = {
+        SUITE_QI_CORE_2025: SUITE_2025_DIR,
+        SUITE_US_CORE_2025: SUITE_CMS_2025_DIR,
+        SUITE_QI_CORE_2026: SUITE_2026_DIR,
+    }[normalize_suite(suite)]
     return {
         "suite_dir": suite_dir,
         "cql_dir": suite_dir / "input" / "cql",

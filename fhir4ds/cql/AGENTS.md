@@ -224,11 +224,11 @@
   - 200-deep `((((1))))` parser error "Expression exceeds maximum nesting
     depth": deliberate guard against pathological input. 50-deep works.
 - Workspace environmental note: Running probes from
-  `/mnt/d/fhir4ds/.temp/qa/...` causes Python to load the user-installed
+  `~/src/fhir4ds/.temp/qa/...` causes Python to load the user-installed
   wheel at `~/.local/lib/python3.10/site-packages/fhir4ds/...` instead
   of local dev source. The installed wheel predates CQL-01 SKEPTIC/
   HISTORIAN fixes. Future probes in this workspace must prepend
-  `/mnt/d/fhir4ds` to `sys.path` and assert `fhir4ds.__file__` points
+  `~/src/fhir4ds` to `sys.path` and assert `fhir4ds.__file__` points
   to dev source.
 
 ## CQL-02 SKEPTIC Iteration 1 (Clinical Types) — 2026-06-30
@@ -409,7 +409,7 @@
   ReplaceMatches, Split, SplitOnMatches, StartsWith, Substring, Upper.
   11 vector groups, ~95 cases × 2 backends (Python fallback + C++
   extension) = 190 case-evaluations. Probe at
-  `/mnt/d/fhir4ds/.temp/qa/cql12_explorer_2026_07_01_fresh/probe.py`.
+  `~/src/fhir4ds/.temp/qa/cql12_explorer_2026_07_01_fresh/probe.py`.
 - `QA-001` RESOLVED. CQL §17 ReplaceMatches: "If any argument is null,
   the result is null." `cqlRegexReplaceMatches` at
   `fhir4ds/cql/duckdb/udf/string.py:87-118` previously caught
@@ -565,9 +565,9 @@
 
 ### Probe Artifacts
 
-- `/mnt/d/fhir4ds/.temp/qa/cql13_skeptic_2026_07_01/predictions.md`
-- `/mnt/d/fhir4ds/.temp/qa/cql13_skeptic_2026_07_01/probe.py` (70+ cases)
-- `/mnt/d/fhir4ds/.temp/qa/cql13_skeptic_2026_07_01/probe2.py` (targeted
+- `~/src/fhir4ds/.temp/qa/cql13_skeptic_2026_07_01/predictions.md`
+- `~/src/fhir4ds/.temp/qa/cql13_skeptic_2026_07_01/probe.py` (70+ cases)
+- `~/src/fhir4ds/.temp/qa/cql13_skeptic_2026_07_01/probe2.py` (targeted
   edge cases)
 
 ## NOT A BUG Registry (CQL-02 HISTORIAN additions)
@@ -792,7 +792,7 @@
   verifier ran 155 spec-grounded cases with exact value matching.
   Independent of prior SKEPTIC/HISTORIAN passes — found **2 fresh bugs**
   both had missed.
-- Probe artifacts: `/mnt/d/fhir4ds/.temp/qa/cql13_explorer_2026_07_01_fresh/`.
+- Probe artifacts: `~/src/fhir4ds/.temp/qa/cql13_explorer_2026_07_01_fresh/`.
 
 ### QA-001 RESOLVED — `_duration_high_boundary` year-target with year-precision operand (HIGH)
 
@@ -3800,8 +3800,8 @@ zero parity divergences:
 
 ### Probe Artifacts
 
-- `/mnt/d/fhir4ds/.temp/qa/cql18_historian_2026_07_02/probe.py`
-- `/mnt/d/fhir4ds/.temp/qa/cql18_historian_2026_07_02/probe_translate.py`
+- `~/src/fhir4ds/.temp/qa/cql18_historian_2026_07_02/probe.py`
+- `~/src/fhir4ds/.temp/qa/cql18_historian_2026_07_02/probe_translate.py`
 
 ## CQL-18 EXPLORER Iteration 1 (List Operators Part 1) — 2026-07-02
 
@@ -3896,15 +3896,15 @@ forced Python fallback DuckDB registrations, zero parity diffs:
 
 ### Probe Artifacts
 
-- `/mnt/d/fhir4ds/.temp/qa/cql18_explorer_2026_07_02_fresh/probe.py`
+- `~/src/fhir4ds/.temp/qa/cql18_explorer_2026_07_02_fresh/probe.py`
   (broad-spectrum 8-vector fuzz, 80+ cases)
-- `/mnt/d/fhir4ds/.temp/qa/cql18_explorer_2026_07_02_fresh/probe2.py`
+- `~/src/fhir4ds/.temp/qa/cql18_explorer_2026_07_02_fresh/probe2.py`
   (targeted spec-grounded, 20 cases)
-- `/mnt/d/fhir4ds/.temp/qa/cql18_explorer_2026_07_02_fresh/verify.py`
+- `~/src/fhir4ds/.temp/qa/cql18_explorer_2026_07_02_fresh/verify.py`
   (Exists/Includes verifiers)
-- `/mnt/d/fhir4ds/.temp/qa/cql18_explorer_2026_07_02_fresh/parity.py`
+- `~/src/fhir4ds/.temp/qa/cql18_explorer_2026_07_02_fresh/parity.py`
   (Python↔C++ parity, 57 cases)
-- `/mnt/d/fhir4ds/.temp/qa/cql18_explorer_2026_07_02_fresh/run1.log`
+- `~/src/fhir4ds/.temp/qa/cql18_explorer_2026_07_02_fresh/run1.log`
 
 ## CQL-19 HISTORIAN Iteration 1 (List Operators Part 2) — 2026-07-02
 
@@ -4120,11 +4120,11 @@ zero parity diffs:
 
 ## Probe Artifacts (CQL-19 EXPLORER)
 
-- `/mnt/d/fhir4ds/.temp/qa/cql19_explorer_2026_07_02/probe.py` (V1-V11)
-- `/mnt/d/fhir4ds/.temp/qa/cql19_explorer_2026_07_02/probe2.py` (V12-V22)
-- `/mnt/d/fhir4ds/.temp/qa/cql19_explorer_2026_07_02/probe3.py` (V23-V31)
-- `/mnt/d/fhir4ds/.temp/qa/cql19_explorer_2026_07_02/verify*.py`
-- `/mnt/d/fhir4ds/.temp/qa/cql19_explorer_2026_07_02/results.json`
+- `~/src/fhir4ds/.temp/qa/cql19_explorer_2026_07_02/probe.py` (V1-V11)
+- `~/src/fhir4ds/.temp/qa/cql19_explorer_2026_07_02/probe2.py` (V12-V22)
+- `~/src/fhir4ds/.temp/qa/cql19_explorer_2026_07_02/probe3.py` (V23-V31)
+- `~/src/fhir4ds/.temp/qa/cql19_explorer_2026_07_02/verify*.py`
+- `~/src/fhir4ds/.temp/qa/cql19_explorer_2026_07_02/results.json`
 
 ## CQL-20 EXPLORER Iteration 1 (Aggregate Functions) — 2026-07-02
 
@@ -4190,9 +4190,9 @@ zero parity diffs:
 
 ### Probe Artifacts (CQL-20 EXPLORER)
 
-- `/mnt/d/fhir4ds/.temp/qa/cql20_explorer_2026_07_02/probe.py`
+- `~/src/fhir4ds/.temp/qa/cql20_explorer_2026_07_02/probe.py`
   (104 cases × 2 backends covering all 15 chunk items)
-- `/mnt/d/fhir4ds/.temp/qa/cql20_explorer_2026_07_02/findings.json`
+- `~/src/fhir4ds/.temp/qa/cql20_explorer_2026_07_02/findings.json`
 
 ## CQL-21 SKEPTIC Iteration 1 (Clinical Operators) — 2026-07-02
 
@@ -4274,10 +4274,10 @@ zero parity diffs:
 
 ### Probe Artifacts (CQL-21 SKEPTIC)
 
-- `/mnt/d/fhir4ds/.temp/qa/cql21_skeptic_2026_07_02/probe.py` (40+
+- `~/src/fhir4ds/.temp/qa/cql21_skeptic_2026_07_02/probe.py` (40+
   cases across 3 libraries: AgeIn/CalculateAgeIn, Equal/Equivalent,
   ValueSet operators)
-- `/mnt/d/fhir4ds/.temp/qa/cql21_skeptic_2026_07_02/probe2.py`
+- `~/src/fhir4ds/.temp/qa/cql21_skeptic_2026_07_02/probe2.py`
   (targeted ambiguity + uncertainty probes — revealed QA-001)
 
 ## CQL-21 HISTORIAN Iteration 1 (Clinical Operators) — 2026-07-02
@@ -4335,7 +4335,7 @@ zero parity diffs:
 
 ### Probe Artifacts (CQL-21 HISTORIAN)
 
-- `/mnt/d/fhir4ds/.temp/qa/cql21_historian_2026_07_02_fresh/probe.py`
+- `~/src/fhir4ds/.temp/qa/cql21_historian_2026_07_02_fresh/probe.py`
   (57 cases x 2 backends: 26 AgeIn, 23 Equal/Equivalent, 8 ValueSet)
 
 ## Known Fragile Areas (CQL-21 HISTORIAN additions)
@@ -4409,13 +4409,13 @@ zero parity diffs:
 
 ### Probe Artifacts (CQL-21 EXPLORER)
 
-- `/mnt/d/fhir4ds/.temp/qa/cql21_explorer_2026_07_02_fresh/probe.py`
+- `~/src/fhir4ds/.temp/qa/cql21_explorer_2026_07_02_fresh/probe.py`
   (53 cases x 2 backends: 24 AgeIn, 15 Equal/Equivalent, 12 ValueSet,
   2 ExpandValueSet)
-- `/mnt/d/fhir4ds/.temp/qa/cql21_explorer_2026_07_02_fresh/probe2.py`
+- `~/src/fhir4ds/.temp/qa/cql21_explorer_2026_07_02_fresh/probe2.py`
   (23 cases x 2 backends: CalculateAgeIn direct UDF calls with boundary
   year values)
-- `/mnt/d/fhir4ds/.temp/qa/cql21_explorer_2026_07_02_fresh/probe3.py`
+- `~/src/fhir4ds/.temp/qa/cql21_explorer_2026_07_02_fresh/probe3.py`
   (8 cases x 2 backends: nested clinical expression chains)
 
 ## CQL-22 SKEPTIC Iteration 1 (Errors and Messaging) — 2026-07-02
@@ -4480,7 +4480,7 @@ zero parity diffs:
 
 ### Probe Artifacts (CQL-22 SKEPTIC)
 
-- `/mnt/d/fhir4ds/.temp/qa/cql22_skeptic_probe.py` (12 hypotheses:
+- `~/src/fhir4ds/.temp/qa/cql22_skeptic_probe.py` (12 hypotheses:
   integer code rejection, Message/Warning/Trace severity informational
   loss, uppercase severity acceptance, unknown severity handling,
   native C++ registration check, source type preservation, null/false
@@ -4559,11 +4559,11 @@ zero parity diffs:
 
 ### Probe Artifacts (CQL-22 HISTORIAN)
 
-- `/mnt/d/fhir4ds/.temp/qa/cql22_historian_2026_07_02_fresh/probe.py`
+- `~/src/fhir4ds/.temp/qa/cql22_historian_2026_07_02_fresh/probe.py`
   (76-case systematic spec-walkthrough: 6 batteries covering source
   passthrough, condition, code, severity, message+Error content, and
   official conformance cases).
-- `/mnt/d/fhir4ds/.temp/qa/cql22_historian_2026_07_02_fresh/probe2.py`
+- `~/src/fhir4ds/.temp/qa/cql22_historian_2026_07_02_fresh/probe2.py`
   (17-case arity + nested-Message + Message-in-arithmetic + FHIR-resource
   source edge case probe).
 
@@ -4605,9 +4605,9 @@ zero parity diffs:
 
 ### Probe Artifacts (CQL-22 EXPLORER)
 
-- `/mnt/d/fhir4ds/.temp/qa/cql22_explorer_2026_07_02_fresh/probe.py`
+- `~/src/fhir4ds/.temp/qa/cql22_explorer_2026_07_02_fresh/probe.py`
   (124-case pathological-input fuzz across 8 batteries).
-- `/mnt/d/fhir4ds/.temp/qa/cql22_explorer_2026_07_02_fresh/probe2.py`
+- `~/src/fhir4ds/.temp/qa/cql22_explorer_2026_07_02_fresh/probe2.py`
   (21-case auxiliary probe across 6 batteries: list-code rejection,
   deeply nested conditions, parameter/runtime expressions, severity
   edge cases, CQL escape sequences).
@@ -4628,7 +4628,7 @@ zero parity diffs:
   `python3 script.py` (rather than `pytest`) resolve `fhir4ds` to the
   locally-installed site-packages copy, which may be stale relative to
   source. The probe files at the paths above explicitly prepend
-  `/mnt/d/fhir4ds` to `sys.path` to use source. Pytest is unaffected
+  `~/src/fhir4ds` to `sys.path` to use source. Pytest is unaffected
   because it runs from the project root, which Python implicitly adds
   to `sys.path`. This does not affect any conformance suite or any
   consumer using `pip install -e .`.
@@ -4719,7 +4719,7 @@ zero parity diffs:
   `autocoding_extension` and `userSelected=False`.
 - New module `fhir4ds/cql/loader/autocoding_extension.py` owns the
   canonical URL
-  `http://fhir4ds.org/fhir/StructureDefinition/autocoding` plus
+  `https://fhir4ds.com/fhir/StructureDefinition/autocoding` plus
   builder/parser/predicate for the 6-field extension (engine,
   engine-version, search-mode, score, match-grade, index-version).
 - New module `fhir4ds/cql/loader/category.py` owns the
@@ -5453,7 +5453,7 @@ duckdb suite 780 passed / 5 skipped.
   tighter).
 - Gate: conformance 2832/2832; CQL pytest 5710 passed / 9 skipped;
   test_logical_parity.py 53/53.
-- Probes: /mnt/d/fhir4ds/.temp/qa/cql04_historian2_2026_08_20/probe.py.
+- Probes: ~/src/fhir4ds/.temp/qa/cql04_historian2_2026_08_20/probe.py.
 
 ## CQL-05 Structural Type Operators (2026-08-20, SKEPTIC launch)
 
@@ -5555,7 +5555,7 @@ converts.
     fraction-digit Decimal literal rounds half-up (repo path; stale
     site-packages copies may still hard-reject — always use PYTHONPATH).
 - Fragile area: stale site-packages `fhir4ds` shadowing the repo when
-  PYTHONPATH is unset — probes must run with `PYTHONPATH=/mnt/d/fhir4ds`.
+  PYTHONPATH is unset — probes must run with `PYTHONPATH=~/src/fhir4ds`.
 
 ## CQL-10 Arithmetic Part 1 (SKEPTIC re-launch iter 1, 2026-08-21) — ALL RESOLVED
 
@@ -6714,3 +6714,362 @@ depth. Same doctrine as REV-001: every extraction-side status flag needs a
 config knob that reaches BOTH paths; keep
 `test_notes_pipeline_forwards_include_family_v22_qa003` green when adding
 new status flags.
+
+## Iteration 5 / Domain 6 HISTORIAN — FHIR R4 ValueSet membership extraction
+
+**Single source of truth:** `fhir4ds/cql/valueset_codes.py::
+extract_codes_from_valueset_resource` (pure stdlib; no duckdb/medterm4ds
+import). Both `fhir4ds/cql/loader/fhir_loader.py` (bound under the historical
+private name `_extract_codes_from_valueset_resource`, which
+`fhir4ds/devserver/api.py` imports directly) and
+`fhir4ds/cql/dependency/resolver.py::_index_valueset` now delegate to it. The
+resolver previously carried an independent copy; the two had already drifted
+identically, which is why the fix is centralized rather than patched twice.
+
+FHIR R4 semantics implemented (verified against
+`https://hl7.org/fhir/R4/valueset.profile.json`, snapshot elements):
+
+- **`ValueSet.expansion.contains` is authoritative.** When an expansion is
+  present it IS the membership (what a terminology server computed from
+  filters/excludes/activity). `compose` must NOT be re-read on top of it —
+  doing so re-adds codes the expansion deliberately omitted, and duplicates
+  rows. Previously both call sites read expansion AND compose.
+- **`expansion.contains.contains` (0..*) is recursive** ("Codes contained
+  under this entry"). Hierarchical expansions (SNOMED/ICD ancestor trees —
+  what a terminology server returns for is-a expansions) were silently
+  truncated to top-level ancestors, under-reporting membership. The tree is
+  now flattened depth-first.
+- **`expansion.contains.code` is 0..1** ("Code - if blank, this is not a
+  selectable code"). Grouping/header nodes carry no code and are NOT members;
+  they used to produce `code=None` rows that made `load_valuesets` raise
+  `ValueError`. Blank codes are skipped.
+- **`compose.exclude` (0..*) removes codes** ("Explicitly exclude codes from
+  a code system or other value sets"). Was ignored entirely, so excluded codes
+  stayed members (false-positive clinical evidence). Supported forms: explicit
+  `concept` list; `filter` with `property=concept`/`op='='` (VSAC's
+  exclude-one-code spelling); no `concept`/`filter` at all = the whole system
+  is excluded.
+- **Unenumerable excludes fail loud, unless moot.** `is-a`/`descendent-of`/
+  regex filters and nested `valueSet` references cannot be enumerated locally
+  → `ValueSetExpansionError` (a `ValueError` subclass). BUT only when there
+  are included codes to remove: a system-only include (VSAC's
+  fully-intensional shape, e.g. the SOPT race ValueSet) yields zero codes, so
+  its filter excludes are moot and the existing zero-code WARNING is the
+  honest signal. Raising there would fail every measure loading that
+  ValueSet — this is why the guard is `has_included_codes`.
+- Members are de-duplicated by `(system, code)` preserving authored order: a
+  code reachable through two parents in a hierarchical expansion is one
+  member.
+
+NOT A BUG registry additions (verified this launch):
+
+- `compose.include` with `filter`/`valueSet` and no `concept` list still
+  yields zero codes with only a WARNING (unchanged, pre-existing). Enumerating
+  it needs a terminology server; `vsac_adapter.expand_intensional` raises in
+  the same situation, but the loader's warning-then-empty behaviour is pinned
+  by existing tests and is not a membership *mis*statement.
+- `resolve()` bare-id cross-type ambiguity (a bare `p1` matching Patient and
+  Practitioner with `LIMIT 1`) remains documented convenience, not a bug.
+- `load_valuesets` is ADDITIVE on reload (no delete-before-insert), unlike
+  `load_resources`; membership is a set so duplicate rows are inert.
+
+### Same contract on the terminology-endpoint adapters (found by the same walk)
+
+The identical FHIR R4 rule was violated in three more places, all fixed by
+sharing the new module:
+
+- `terminology/http_adapter.py::_contains_to_coderefs` walked only the
+  TOP-LEVEL `expansion.contains` list, so an HTTP `$expand` response with a
+  hierarchical expansion (what a server returns for an is-a expansion) lost
+  every descendant. Now uses `iter_expansion_codes` (recursive, blank-code
+  skip preserved).
+- `terminology/vsac_adapter.py::_expand_versioned` had the same flat walk over
+  paged `expansion.contains`. Now uses `iter_expansion_codes`.
+- `terminology/vsac_adapter.py::expand_intensional` read
+  `compose.include[].concept[]` and IGNORED `compose.exclude`, so excluded
+  codes came back as members. It now subtracts `excluded_members(...)` after
+  normalizing both sides through `SystemResolver` (a SNOMED module-URL exclude
+  still matches the base-system member).
+
+`in_process_adapter.expand_intensional` is NOT affected: it delegates to
+medterm4ds, which owns ValueSet expansion. Nothing else in `fhir4ds/` reads
+`expansion`/`compose` for membership (`grep -rn 'get("expansion")'` is the
+audit query; keep it that way — new membership readers must call
+`fhir4ds/cql/valueset_codes.py`, not re-walk the FHIR shape).
+
+## Iteration 6 / Domain 6 EXPLORER — membership UDF must read the cache LIVE
+
+`fhir4ds/cql/duckdb/udf/valueset.py::createValuesetMembershipUdf` must NOT
+snapshot its `valueset_codes_cache` argument. `FHIRDataLoader` registers the
+UDF exactly once per connection
+(`_VALUESET_UDF_REGISTERED_CONNECTIONS`) and every subsequent
+`load_valuesets` call only clears/repopulates the shared dict in place
+(`_refresh_in_valueset_udf`). A factory-time snapshot makes every ValueSet
+loaded after the first `load_valuesets` call invisible: `in_valueset` answers
+SQL NULL (CQL unknown) instead of true/false — silent under-membership on the
+Python-fallback engine (browser/WASM and any unsigned dev connection). The
+native C++ cache rebuilds from the table on every load, so N/N parity hides
+the bug on native connections.
+
+Current implementation: `_normalized(url)` memoizes the tuple normalization on
+the IDENTITY of that URL's entry set (`cached[0] is entries`), because the
+loader replaces sets (`clear()` + `setdefault(url, set())`) rather than
+mutating them. Keep both documented cache shapes working (bare strings →
+`("", code)`, `(system, code)` tuples pass through) and keep the "no valueset
+data loaded" warning keyed off the live dict.
+
+`load_valuesets` also validates `display` as a string (FHIR R4
+`expansion.contains.display` is `string 0..1`). Without it the pyarrow bulk
+insert leaks a raw `ArrowTypeError` (INV-8). Validation runs before any insert,
+so a rejected batch commits nothing. Corpus check when touching this: 0
+non-string displays across the 712 corpus ValueSets.
+
+## Iteration 7 / Domain 7 SKEPTIC — ingestion costs must be scope-bounded
+
+Two measured cliffs in the ValueSet ingestion path, both fixed:
+
+- **Hierarchy depth**: `_collect_expansion_codes` (valueset_codes.py) is
+  ITERATIVE by requirement, not style. A recursive walk raised a raw
+  `RecursionError` from the public loader at ~1000 nesting levels (CPython's
+  frame limit); the explicit stack has no ceiling and is ~40% faster on deep
+  trees. Keep it iterative and keep the depth-first DOCUMENT order (push
+  children reversed).
+- **Cache refresh scope**: `_refresh_in_valueset_udf` / 
+  `_refresh_cpp_in_valueset_cache` must be scoped to the URLs just written.
+  Re-reading and rebuilding the whole `valueset_codes` table per call cost
+  O(rows in table) per incremental load — measured 273 ms/call at a 200k-row
+  table vs 8 ms scoped (33x), i.e. quadratic aggregate cost when loading a
+  corpus one ValueSet at a time. `load_valuesets` passes
+  `urls=sorted(set(valueset_urls))`; `clear_valuesets` passes `urls=None` for a
+  full reset. The native add-only path is correct ONLY because
+  `valueset_codes` is additive — if a delete/replace path is ever added to
+  `load_valuesets`, the native branch must clear again.
+  CONSEQUENCE TO DOCUMENT FOR USERS: rows written to `valueset_codes` by
+  direct SQL (outside `load_valuesets`) are not observed by later incremental
+  loads; use `clear_valuesets()` + reload, or a full refresh, after external
+  mutation.
+- **Capability probing**: `_cpp_valueset_cache_available()` probes
+  `duckdb_functions()` once per loader. Do not "detect" native cache support by
+  attempting a mutating call: the previous code only discovered it on
+  `cql_valueset_cache_clear()` (silently swallowed) and then logged a WARNING
+  per load from `cql_valueset_cache_add()`, spamming any build without the
+  cache API.
+
+## Iteration 8 / Domain 7 HISTORIAN — measured throughput baselines and the
+## engine-declaration rule for perf probes
+
+Baselines (idle machine, duckdb 1.5.6, Python 3.10.12, WSL2; use these to spot
+a regression, not as SLAs):
+
+| stage | per-unit cost |
+|---|---|
+| ValueSet extraction | 0.5-0.7 µs per code (flat 100k = 66 ms) |
+| `load_resources` | 7.7-14.8 µs per row (falls with batch size) |
+| `translate_cql` | ~197-234 µs per define after warm-up (5-define cold call ~120 ms) |
+| ViewDefinition gen+exec (NATIVE) | 0.3-1.1 µs per column-cell |
+| `fhirpath` navigation | ~0.9 µs per navigated node |
+| repeated translation memory | plateaus ~0.18 MB after ~500 runs (bounded caches) |
+| independent connections in threads | 4 connections = 2.4x throughput (GIL-bound, graceful) |
+
+**PERF-PROBE RULE (gotcha that produced a false 61-second "cliff"):** a
+connection built with plain `duckdb.connect()` cannot load the bundled unsigned
+extension, so `fhir4ds.register()` silently falls back to the Python FHIRPath
+UDFs — roughly 1000x slower per call. Measure FHIRPath-bearing paths
+(ViewDefinition execution, CQL translation+execution, DQM runs) on
+`duckdb.connect(config={"allow_unsigned_extensions": True})` and state the
+engine in the probe output. A "cliff" measured on a default connection is an
+engine artefact until re-measured natively.
+
+## Iteration 9 / Domain 7 EXPLORER — hostile-scale ceilings (all verified linear)
+
+Adversarial scale probe results on this tree (all PASS, native engine):
+
+- 100,000-code ValueSet: extract 66 ms, `load_valuesets` 624 ms, traced peak
+  59 MB; membership stays **1.1 µs** per call at that size.
+- **10,000 ValueSets in ONE bulk load**: 0.11 s, all 10,000 cached — the
+  iteration-7 scoped refresh chunks `IN`-lists at
+  `_VALUESET_REFRESH_CHUNK = 500`, so 20 chunks in one call must (and do) cache
+  every URL. Regression guard: `test_scoped_refresh_chunks_large_url_batches`.
+- 100,000 resources in one `load_resources`: 1.70 s (17.0 µs/row), peak 54 MB.
+- 1,000-column × 2,000-row ViewDefinition: gen 199 ms, exec 761 ms, 575 KB SQL,
+  exact shape — linear in cells (0.38 µs/cell).
+- 2-level `forEach` over 200 × 50 × 2 nodes: 0.05 s, exactly 20,000 rows.
+- `fhirpath` over a 0.5 MB / 12,000-node document: 8 ms, 12,000 items.
+
+NOT A BUG (upstream, pinned with a vanilla repro): concurrent reads on a SINGLE
+DuckDB connection are not thread-safe — 16 threads gave 15 correct counts and 1
+`TypeError: 'NoneType' object is not subscriptable`, reproduced on vanilla
+duckdb with no fhir4ds registered. Use one connection per thread or
+`cursor()`. Independent connections scale gracefully (1/2/4 → 236/269/390 ms
+total, correct counts).
+
+## Iteration 10 / Domain 8 SKEPTIC — attribution on the ValueSet boundaries
+
+Two INV-8 (typed, actionable errors) gaps in the paths iterations 5-7 created:
+
+- **`load_valuesets` must name the offending ValueSet.** Extraction errors are
+  re-raised with `valuesets[i] (url=...)` context while PRESERVING the
+  exception type (`ValueSetExpansionError` stays a `ValueError`) and chaining
+  the cause. Every sibling validation in that method already names the index;
+  a corpus of hundreds of ValueSets with an unattributed error is unactionable.
+  Regression: `TestValuesetExtractionErrorsAreAttributed`.
+- **`DependencyResolver._index_valueset` must not abort the corpus.** It now
+  follows the class convention (`_index_json_file`, `_index_cql_file`:
+  warn + skip) but RECORDS the failure: `resolver.valueset_index_errors[url] =
+  "<path>: <cause>"` plus a WARNING that states membership against that
+  ValueSet will be false until fixed. Before this, one malformed file raised an
+  unattributed `TypeError` out of `DependencyResolver(paths=[corpus])` and
+  blocked every measure loaded from that tree. A silent skip is not acceptable
+  either — it under-reports membership, so the record is mandatory; surface
+  `valueset_index_errors` in any diagnostics output you add.
+  Regression: `test_resolver_records_bad_valueset_file_without_aborting`.
+
+## Iteration 11 / Domain 8 HISTORIAN — closed-connection symmetry (INV-8)
+
+Every connection-touching public method of `FHIRDataLoader` must report a
+closed connection as `Cannot <operation>: DuckDB connection is closed`. Before
+this pass only `__init__`/`load_resource`/`load_file`/`load_directory` did; the
+rest leaked the raw `Connection Error: Connection already closed!`, which names
+no FHIR4DS operation.
+
+Implementation: `_translate_closed_connection(operation)` decorator (module
+level, applied to `load_resources`, `load_bundle`, `load_ndjson`,
+`load_from_url`, `load_valuesets`, `count`, `clear`, `count_valueset_codes`,
+`clear_valuesets`, `valueset_table_exists`; `load_resource` keeps its inline
+guard). Two properties are load-bearing:
+- it is a MESSAGE TRANSLATION, not a pre-flight `SELECT 1` — no extra round
+  trip on the happy path (`count()` runs in loops);
+- it is IDEMPOTENT (an already-`Cannot …` message passes through), so a call
+  chain reports the innermost precise operation instead of stacking prefixes.
+
+PINNED, do not "fix": `load_bundle({"resourceType": "Bundle"})` with no entries
+returns 0 without touching the connection (no work to do, and it does not claim
+work it did not do). `DependencyResolver(paths=[missing])` tolerates missing
+search paths and `resolve_valueset`/`resolve_library` return `None` for unknown
+names (documented `Optional[...]`), unlike the raising `build_context` path.
+`create_connection(**kwargs)` forwards to `duckdb.connect`, so a bad `config=`
+surfaces the ENGINE's error (documented passthrough; do not swallow it).
+
+## Iteration 12 / Domain 8 EXPLORER — the error path is a contract too
+
+Adversarial verification of the iteration-10/11 error surfaces (24/24 PASS):
+
+- 5,000 consecutive failures → one stable typed message, 0 rows committed, and
+  traced memory returns to 0.00 MB after 2,000 more: the error path does not
+  accumulate state.
+- The attribution wrap is EXACTLY ONE layer: `exc.__cause__` holds the original
+  extraction error with un-attributed text and no further cause. Do not nest
+  re-wraps (retry loops would produce `valuesets[0]: valuesets[0]: …`).
+- `table_name` injection attempts (`resources; DROP TABLE …`, quotes, spaces,
+  digit-leading names) all raise `ValueError` and leave `valueset_codes`
+  intact.
+- Resolver over 150 files with 100 malformed ValueSets: all 100 recorded with
+  their paths, all 50 good ones indexed, no abort.
+- Closed-connection messages are stable across 1,000 calls; exceptions pickle
+  (multiprocessing-safe).
+- **DESIGN PIN — url echo uses `repr()`** (`valuesets[1] (url='…')`), so `\n`/
+  `\t` in a hostile URL are escaped and cannot forge log lines or terminal
+  control sequences. Assertions must check the repr form and the ABSENCE of a
+  raw newline; do not "simplify" this to an f-string with `{vs_url}`.
+
+## Iteration 22 / Domain 12 SKEPTIC — adapter failure models are intentionally different
+
+PINNED, do not "align" these two:
+- `InProcessTerminologyEndpoint.expand()` degrades to `[]` on helper failure or
+  an unsupported URL, logs a WARNING and increments the circuit breaker. The
+  local medterm4ds engine is an OPTIONAL feature: absent engine / unsupported
+  URL means "no terminology data here", not an outage.
+  Pinned by `test_expand_degrades_to_empty_on_helper_error` and
+  `test_in_process_circuit_breaker_trips_and_short_circuits`.
+- `HTTPTerminologyEndpoint.expand()` re-raises after counting the failure — a
+  remote service that fails IS an outage and callers must see it.
+Both feed `DependencyResolver.resolve_valueset`, which wraps the call in
+`try/except → WARNING + None` and is the only place that must degrade.
+
+Adapter symbol surface verified against the INSTALLED medterm4ds (0.0.10):
+`LocalDuckDBEngine`, `connect`, `Terminology`,
+`apps.fhir_api.expand_url_pattern`, `apps.fhir_api.expand_intensional_value_set`,
+`services.discovery.search_names` all present. The pyproject pin
+(`>=0.0.12,<0.0.13`) does NOT match the installed 0.0.10 — that is the
+user-directed ahead-of-index pin; re-verify symbol presence when 0.0.12 is
+published (release-time check, not a code defect).
+
+## Iteration 23 / Domain 12 HISTORIAN — intensional expansion return shape
+
+`InProcessTerminologyEndpoint.expand_intensional()` accepts BOTH shapes because
+medterm4ds's own contract is ambiguous: `expand_intensional_value_set` is
+annotated `-> list[dict]` but returns `(codes, depth_cap_hit)` at runtime in
+0.0.10 (verified by calling it directly). Keep the
+`isinstance(result, tuple) and len(result) == 2` check — do not "simplify" it to
+a strict unpack (breaks if a build honours the annotation) or to plain iteration
+(breaks today). Guards:
+`test_expand_intensional_accepts_both_medterm4ds_return_shapes`,
+`test_expand_intensional_positional_count_and_include_retired`.
+
+RETRACTION worth remembering: an earlier version of this note claimed the
+strict unpack silently disabled intensional expansion (HIGH). That was a PROBE
+ARTEFACT — a 1-key mock dict produced "not enough values to unpack". The live
+call returns 748 codes on the ORIGINAL code path. A mock is an assumption: call
+the real partner function and print its runtime type before filing a
+cross-package defect.
+
+## AutoCoding provenance must name the medterm4ds release actually running (2026-11-12, medterm4ds 0.0.12)
+
+`AutoCoderConfig.engine_version` defaulted to the literal `"0.0.1"` under a
+"bump per release" instruction that was never carried out, so every autocoded
+Coding claimed provenance from medterm4ds 0.0.1 regardless of which release was
+installed — which defeats the Phase 5 staleness sweep the field exists for
+(you cannot tell a 0.0.1 Coding from a 0.0.12 one). It now defaults to `None`
+and resolves from `medterm4ds.__version__` at `AutoCoder` construction, falling
+back to `"unknown"`; an explicit string still pins it, and an empty string is
+rejected at construction. `notes_pipeline.py` already detected the version —
+`AutoCoder` was the outlier.
+
+Docs had drifted from the emitted extension shape and were corrected in the same
+pass: the field is `score` (not `search-score`),
+`search-mode`/`match-grade` are `valueCode` (not `valueString`), and there is no
+`result-text-hash` field. `AUTOCODING_EXTENSION_URL` plus the six sub-url
+constants in `loader/autocoding_extension.py` are the single source of truth
+when documenting this extension.
+
+medterm4ds 0.0.12 verification (adapter contract + behavior): all five symbols
+the adapter binds to still exist with compatible signatures
+(`LocalDuckDBEngine`, both import paths, `apps.fhir_api.expand_url_pattern`,
+`expand_intensional_value_set`, `services.discovery.search_names`); the
+`extraction` extra still exists (so the `ner` pin resolves); in-process
+`connect()` + intensional expansion + `search_text` + `search_batch` + AutoCoder
+all work. The documented runtime-shape quirk persists: `expand_intensional_value_set`
+annotates `-> list[dict]` but returns a 2-tuple `(codes, depth_cap_hit)`, so the
+adapter's tolerant both-shape handling must stay. Terminology suite: 379 passed
+/ 3 failed, the 3 being the pre-existing order-dependent
+`test_in_process_adapter` mock-pollution flake (they pass in isolation, and fail
+identically on 0.0.10) — not a 0.0.12 regression.
+
+## Capability mismatches escalate; transient endpoint failures degrade (AMUX-115, 2026-11-12)
+
+Owner ruling: a terminology backend that **cannot serve the request at all** must
+fail loudly to the measure author; only **transient** faults may keep the
+graceful-degradation path.
+
+Implemented by splitting the error hierarchy in
+`fhir4ds/cql/terminology/errors.py` and branching on TYPE, never on message text:
+
+- `TerminologyCapabilityError` (subclass of `TerminologyEndpointError`) — the
+  endpoint refused the *form* of the request. `HTTPTerminologyEndpoint.expand()`
+  raises it for HTTP 400/422, with the server's OperationOutcome diagnostics,
+  the reason (medterm4ds resolves only a POSTed body, a `fhir_vs` implicit URL,
+  or a filter — no stored-ValueSet registry), and the remedies.
+  `DependencyResolver.resolve_valueset()` RE-RAISES it.
+- `TerminologyEndpointError` (base) — transient failure; the resolver keeps its
+  INV-8 contract (WARNING + `None`).
+
+Lesson that produced it: `ValueSet/$expand?url=<canonical>` is the FHIR R4
+standard and works on full servers (verified against HL7 `tx.fhir.org`), so this
+is a backend capability gap, not a client defect. The unit test
+`test_expand_invokes_get_with_canonical_url` mocks the client and asserts we SEND
+`url=`, so it can never detect server-side rejection — keep a server-contract
+test (mocked 400) alongside it.
+
+When adding a new adapter or endpoint operation, decide explicitly which class a
+refusal raises; a new "permanent gap" path that returns `[]` + WARNING recreates
+the silent-under-match bug this ruling exists to prevent.

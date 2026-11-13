@@ -7,7 +7,7 @@ test.describe("Landing page", () => {
     await page.goto(".");
     await expect(page).toHaveTitle(/FHIR for Data Science/);
     await expect(page.getByRole("heading", { level: 1, name: "FHIR for Data Science" })).toBeVisible();
-    await expect(page.getByText("v0.0.22")).toBeVisible();
+    await expect(page.getByText("v0.0.23")).toBeVisible();
 
     // Hero secondary line
     await expect(page.getByText("Production-Scale FHIR Analytics. Running Anywhere.")).toBeVisible();
@@ -23,6 +23,20 @@ test.describe("Landing page", () => {
     await expect(page.getByText("SQL mean / patient").first()).toBeVisible();
     await expect(page.getByText("Zero").first()).toBeVisible();
     await expect(page.getByText("Audit Evidence").first()).toBeVisible();
+  });
+
+  test("hero keeps Learn CQL but does not flag it as new", async ({ page }) => {
+    await page.goto(".");
+    const learnCql = page.getByRole("link", { name: /Learn CQL/ });
+    await expect(learnCql).toBeVisible();
+    await expect(learnCql).toHaveAttribute("href", /\/docs\/examples\/cql-clinic\//);
+    // The "New" call-out was retired once CQL Clinic stopped being new.
+    // CSS Modules hashes the class name, so match on the prefix rather than
+    // the authored name (a bare `.newBadge` selector matches nothing and makes
+    // this assertion vacuous).
+    await expect(page.locator('[class*="newBadge"]')).toHaveCount(0);
+    const heroCtas = page.locator(".hero__subtitle").locator("xpath=..");
+    await expect(heroCtas.getByText("New", { exact: true })).toHaveCount(0);
   });
 
   test("feature cards show speed-first ordering", async ({ page }) => {

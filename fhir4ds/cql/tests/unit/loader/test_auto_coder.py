@@ -256,6 +256,52 @@ def test_inv5_all_six_extension_fields_present(duckdb_con, endpoint):
         assert isinstance(by_url["index-version"]["valueString"], str)
 
 
+def _extension_fields(resource: dict) -> dict:
+    """Return the autocoding extension of the first Coding, keyed by sub-url."""
+    ext = resource["code"]["coding"][0]["extension"][0]
+    out = {}
+    for sub in ext["extension"]:
+        for key, value in sub.items():
+            if key.startswith("value"):
+                out[sub["url"]] = value
+    return out
+
+
+def test_engine_version_names_the_installed_medterm4ds(duckdb_con, endpoint):
+    """engine-version must report the medterm4ds actually in use.
+
+    It previously defaulted to the literal "0.0.1" under a "bump per release"
+    instruction that was never carried out, so every Coding claimed provenance
+    from 0.0.1 no matter which release ran. That defeats the Phase 5 staleness
+    sweep the field exists for: you cannot tell a 0.0.1 Coding from a 0.0.12
+    one. The default is now resolved from ``medterm4ds.__version__``.
+    """
+    medterm4ds = pytest.importorskip("medterm4ds")
+    installed = getattr(medterm4ds, "__version__", None)
+    assert installed, "medterm4ds must expose __version__ for this to be meaningful"
+
+    ac = AutoCoder(endpoint, duckdb_con)  # default config
+    resource = _text_only_condition("Type 2 Diabetes Mellitus")
+    ac.augment_resource(resource)
+
+    assert _extension_fields(resource)["engine-version"] == installed
+
+
+def test_engine_version_honours_an_explicit_override(duckdb_con, endpoint):
+    """An explicit engine_version still wins over detection (pinning)."""
+    ac = AutoCoder(endpoint, duckdb_con, config=AutoCoderConfig(engine_version="9.9.9"))
+    resource = _text_only_condition("Type 2 Diabetes Mellitus")
+    ac.augment_resource(resource)
+
+    assert _extension_fields(resource)["engine-version"] == "9.9.9"
+
+
+def test_engine_version_rejects_an_empty_string():
+    """None means 'detect'; an explicit value must be a non-empty string."""
+    with pytest.raises(ValueError, match="engine_version must be a non-empty str"):
+        AutoCoderConfig(engine_version="")
+
+
 # ── INV-6: userSelected == False ──────────────────────────────────────
 
 

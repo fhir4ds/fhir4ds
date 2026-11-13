@@ -22,6 +22,7 @@ Phase 1 scope:
 
 from __future__ import annotations
 
+from .errors import TerminologyCapabilityError, TerminologyEndpointError
 from .endpoint import TerminologyEndpoint
 from .factory import get_terminology_endpoint
 from .types import CodeRef, SearchResult, TerminologyConfig
@@ -37,6 +38,8 @@ from .closure import (
 
 __all__ = [
     "TerminologyEndpoint",
+    "TerminologyEndpointError",
+    "TerminologyCapabilityError",
     "CodeRef",
     "SearchResult",
     "TerminologyConfig",

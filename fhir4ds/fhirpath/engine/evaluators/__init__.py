@@ -445,6 +445,16 @@ def create_reduce_member_invocation(model, key):
         else:
             if key == "length":
                 toAdd = len(res.data)
+            elif key == "value" and isinstance(res.data, (str, int, float, bool)):
+                # FHIR object-model idiom over raw JSON: in the object model
+                # a FHIR primitive (FHIR.code, FHIR.string, ...) is a wrapper
+                # whose `.value` is the scalar; raw FHIR JSON flattens the
+                # primitive to the scalar itself. `.value` on a scalar node
+                # therefore resolves to the node (identity) — inlined
+                # FHIRHelpers conversions navigate `coding.code.value` on
+                # raw Coding JSON (CMS156 medication strength matching
+                # produced null codes without this).
+                toAdd = res.data
 
         childPath = (
             model["path2Type"].get(childPath, childPath)

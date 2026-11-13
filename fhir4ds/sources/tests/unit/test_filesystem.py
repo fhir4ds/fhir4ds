@@ -548,3 +548,76 @@ class TestRawFhirPatientRefDoctrine:
                  "subject": {"reference": "bare-id"}},
             ])
             assert got == {"e1": None, "c2": None}
+
+
+# ---------------------------------------------------------------------------
+# V23-004-D6 (v0.0.23, Domain 6 SKEPTIC): raw documents without Resource.id
+# ---------------------------------------------------------------------------
+
+
+class TestRawDocumentsWithoutId:
+    """FHIR ``Resource.id`` is 0..1, so a LEGAL raw document may omit it.
+
+    Raw JSON/NDJSON mode documented "every file (or line) maps to one row;
+    a Bundle file is stored as a single inert Bundle row", but the derived SQL
+    referenced ``src.id`` unconditionally: an id-less Bundle (or Patient) died
+    with a raw DuckDB binder error ("Table src does not have a column named
+    id") instead of loading as one inert row.
+    """
+
+    @staticmethod
+    def _mount_json(tmpdir, doc):
+        path = os.path.join(tmpdir, "raw.json")
+        with open(path, "w") as f:
+            json.dump(doc, f)
+        con = _make_con()
+        FileSystemSource(path, format="json").register(con)
+        return con
+
+    def test_id_less_bundle_loads_as_one_inert_row(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            con = self._mount_json(tmpdir, {
+                "resourceType": "Bundle",
+                "type": "collection",
+                "entry": [{"resource": {"resourceType": "Patient", "id": "p1"}}],
+            })
+            assert con.execute(
+                "SELECT id, resourceType, patient_ref FROM resources"
+            ).fetchall() == [(None, "Bundle", None)]
+
+    def test_bundle_with_id_unchanged(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            con = self._mount_json(tmpdir, {
+                "resourceType": "Bundle", "id": "b1", "type": "collection",
+                "entry": [{"resource": {"resourceType": "Patient", "id": "p1"}}],
+            })
+            assert con.execute(
+                "SELECT id, resourceType FROM resources"
+            ).fetchall() == [("b1", "Bundle")]
+
+    def test_id_less_resource_still_derives_patient_ref(self):
+        """Only the Patient self-id candidate needs ``src.id``; reference
+        attribution must keep working when the document has no id."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            con = self._mount_json(tmpdir, {
+                "resourceType": "Observation",
+                "subject": {"reference": "Patient/pX"},
+            })
+            assert con.execute(
+                "SELECT id, resourceType, patient_ref FROM resources"
+            ).fetchall() == [(None, "Observation", "pX")]
+
+    def test_non_fhir_document_shape_gets_actionable_error(self):
+        """Not a fhir4ds schema and no ``resourceType``: name the real cause
+        instead of surfacing a DuckDB binder error."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "junk.json")
+            with open(path, "w") as f:
+                json.dump({"rows": [{"a": 1}]}, f)
+            con = _make_con()
+            with pytest.raises(SchemaValidationError) as exc:
+                FileSystemSource(path, format="json").register(con)
+            msg = str(exc.value)
+            assert "cannot derive the 'resources' view" in msg
+            assert "found columns" in msg
+            assert "Binder Error" not in msg

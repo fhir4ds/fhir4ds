@@ -11,6 +11,7 @@ import pytest
 
 from fhir4ds.cql.loader.autocoding_extension import (
     AUTOCODING_EXTENSION_URL,
+    AUTOCODING_EXTENSION_URL_LEGACY,
     build_autocoding_extension,
     is_autocoded,
     parse_autocoding_extension,
@@ -110,6 +111,45 @@ def test_parse_autocoding_extension_round_trip():
     assert parsed["score"] == pytest.approx(0.42)
     assert parsed["match_grade"] == "certain"
     assert parsed["index_version"] == "v9"
+
+
+def test_canonical_url_is_on_the_owned_domain():
+    """The canonical must point at a domain the project actually owns.
+
+    It previously used http://fhir4ds.org/..., which does not resolve at all
+    (the project owns fhir4ds.com only), so every emitted Coding carried an
+    un-dereferenceable canonical.
+    """
+    assert AUTOCODING_EXTENSION_URL == (
+        "https://fhir4ds.com/fhir/StructureDefinition/autocoding"
+    )
+    assert "fhir4ds.org" not in AUTOCODING_EXTENSION_URL
+
+
+def test_parse_accepts_the_legacy_org_spelling():
+    """Codings emitted before the domain fix must still parse.
+
+    Readers accept both spellings; writers emit only the canonical.
+    """
+    assert AUTOCODING_EXTENSION_URL_LEGACY == (
+        "http://fhir4ds.org/fhir/StructureDefinition/autocoding"
+    )
+    ext = build_autocoding_extension(
+        engine="medterm4ds",
+        engine_version="0.0.12",
+        search_mode="hybrid",
+        score=0.9,
+        match_grade="certain",
+        index_version="v1",
+    )
+    assert ext["url"] == AUTOCODING_EXTENSION_URL  # emit canonical
+
+    legacy = dict(ext, url=AUTOCODING_EXTENSION_URL_LEGACY)  # rewrite only the URL
+    coding = {"system": "http://snomed.info/sct", "code": "44054006", "extension": [legacy]}
+    parsed = parse_autocoding_extension(coding)
+    assert parsed is not None
+    assert parsed["engine_version"] == "0.0.12"
+    assert is_autocoded(coding) is True
 
 
 def test_parse_autocoding_extension_returns_none_for_plain_coding():

@@ -15,7 +15,7 @@ function discoverWheelName(root: string): string {
     .filter((f) => /^fhir4ds_v2-.*\.whl$/.test(f))
     .sort();
   if (candidates.length > 0) return candidates[candidates.length - 1];
-  return "fhir4ds_v2-0.0.13-py3-none-any.whl";
+  return "fhir4ds_v2-0.0.23-py3-none-any.whl";
 }
 
 const WHEEL_NAME = discoverWheelName(__dirname);

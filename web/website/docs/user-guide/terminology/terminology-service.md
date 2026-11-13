@@ -105,6 +105,33 @@ All three modes (`disabled` returns `None`) expose the same protocol (`fhir4ds.c
 | `search_batch(queries, *, mode)` | `list[list[SearchResult]]` | Batched `search_text`. |
 | `is_healthy()` | `bool` | Probe the underlying engine / server without raising. Never raises. |
 
+### Backend capability note: expanding by canonical URL
+
+`expand()` issues the FHIR R4 standard request
+`GET ValueSet/$expand?url=<canonical>`. That works on a full terminology server —
+verified against HL7's `tx.fhir.org` — but **medterm4ds does not implement
+stored-ValueSet lookup by canonical URL**. It resolves three forms only:
+
+- a POSTed ValueSet **body** — use `expand_intensional()`
+- a SNOMED **`fhir_vs`** implicit ValueSet URL, e.g.
+  `http://snomed.info/sct/404684003?fhir_vs=isa`
+- a text **`filter`**
+
+So asking a medterm4ds backend to expand a canonical URL answers HTTP 400. Since
+0.0.23 that surfaces as a `TerminologyCapabilityError` naming the cause and the
+remedies, and **it is not swallowed**: `DependencyResolver.resolve_valueset()`
+escalates capability mismatches so the failure reaches whoever is running the
+measure. Load the ValueSet locally, POST its definition via
+`expand_intensional()`, or point the endpoint at a full terminology server.
+
+Transient faults — timeouts, 5xx, connection errors — keep the older
+graceful-degradation contract (INV-8): one WARNING, then no codes. The split is
+by exception type: `TerminologyCapabilityError` (a subclass of
+`TerminologyEndpointError`) for "this backend cannot do this", the base class for
+"it failed this time". The reasoning is that a retry fixes a transient fault,
+while a capability mismatch silently turns a misconfiguration into criteria that
+quietly under-match.
+
 ## 6. Circuit breaker
 
 Both adapters ship with a per-instance circuit breaker. After `breaker_threshold` consecutive failures (default 5), subsequent calls short-circuit to `[]` for `breaker_cooldown_seconds` (default 60.0). A successful call resets the counter. The breaker is not thread-safe — if you share an endpoint across threads, wrap it in an external lock.

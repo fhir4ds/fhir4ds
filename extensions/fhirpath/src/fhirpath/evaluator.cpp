@@ -1,4 +1,5 @@
 #include "fhirpath/evaluator.hpp"
+#include "duckdb_compat.hpp"
 #include "shared/ucum_units.hpp"
 #include "utf8proc_wrapper.hpp"
 #include "yyjson.hpp"
@@ -87,7 +88,13 @@ static size_t utf8ByteToChar(const std::string &s, size_t byte_pos) {
 
 static int32_t readUtf8Codepoint(const std::string &s, size_t byte, int &char_bytes) {
 	char_bytes = 0;
+#ifdef FHIR4DS_DUCKDB_V2
+	// DuckDB 2.0 added an explicit remaining-length argument so a codepoint
+	// cannot be read past the buffer.
+	int32_t cp = duckdb::Utf8Proc::UTF8ToCodepoint(s.c_str() + byte, char_bytes, s.size() - byte);
+#else
 	int32_t cp = duckdb::Utf8Proc::UTF8ToCodepoint(s.c_str() + byte, char_bytes);
+#endif
 	if (char_bytes <= 0 || byte + static_cast<size_t>(char_bytes) > s.size()) {
 		char_bytes = 1;
 		return static_cast<unsigned char>(s[byte]);
@@ -4084,6 +4091,24 @@ FPCollection Evaluator::evalMemberAccess(const ASTNode &node, const FPCollection
 					}
 				}
 			}
+		} else if ((yyjson_is_str(val) || yyjson_is_num(val) || yyjson_is_bool(val)) &&
+		           field_name == "value") {
+			// FHIR object-model idiom over raw JSON: in the object model a
+			// FHIR primitive (FHIR.code, FHIR.string, ...) is a wrapper whose
+			// `.value` is the scalar; raw FHIR JSON flattens the primitive to
+			// the scalar itself. `.value` on a scalar node therefore resolves
+			// to the node (identity) — inlined FHIRHelpers conversions
+			// navigate `coding.code.value` on raw Coding JSON (CMS156
+			// medication strength matching produced null codes without
+			// this). Mirrors the Python engine branch in
+			// create_reduce_member_invocation.
+			//
+			// Numbers and booleans belong here too: the Python engine unwraps
+			// `.value` on str/int/float/bool alike, so restricting this to
+			// strings made `valueInteger.value + 1` empty natively while the
+			// fallback returned 6, and fhirpath_bool(valueBoolean.value) NULL
+			// vs true (review REV-009).
+			result.push_back(item);
 		}
 	}
 	return result;

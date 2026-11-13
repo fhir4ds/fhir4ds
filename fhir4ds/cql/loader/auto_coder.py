@@ -145,6 +145,20 @@ def _uncoded_display(cc: dict) -> str | None:
     return None
 
 
+def _detect_engine_version() -> str:
+    """Return the installed medterm4ds release, or ``"unknown"``.
+
+    Read lazily so importing this module never pulls medterm4ds (the loader
+    keeps a zero-runtime-dependency guarantee for ``import fhir4ds``).
+    """
+    try:
+        import medterm4ds  # noqa: PLC0415 — deliberately lazy
+    except Exception:  # pragma: no cover - import failure means no engine
+        return "unknown"
+    version = getattr(medterm4ds, "__version__", None)
+    return str(version) if version else "unknown"
+
+
 @dataclass(frozen=True)
 class AutoCoderConfig:
     """Configuration for :class:`AutoCoder`.
@@ -171,9 +185,14 @@ class AutoCoderConfig:
             high-confidence search that returns 5 ``certain`` matches
             still writes only ``top_k`` Codings.
         engine_version: medterm4ds release version written into the
-            extension's ``engine-version`` field. Default ``"0.0.1"``.
-            Bump per release so Phase 5 staleness sweeps can detect
-            pre-0.0.2 Codings.
+            extension's ``engine-version`` field. ``None`` (the default)
+            resolves it at construction from the installed medterm4ds
+            (``medterm4ds.__version__``), falling back to ``"unknown"``.
+            An explicit string pins it. This used to default to the literal
+            ``"0.0.1"`` with an instruction to "bump per release"; it was
+            never bumped, so every Coding claimed provenance from
+            medterm4ds 0.0.1 regardless of what was installed — which
+            defeats the Phase 5 staleness sweep the field exists for.
         index_version: Optional explicit index version. When ``None``
             (default), the AutoCoder performs a one-shot probe-and-pin
             on the first batch (FDD §3c step 3) so the cache does not
@@ -205,7 +224,7 @@ class AutoCoderConfig:
     search_mode: str = "hybrid"
     min_match_grade: str = "certain"
     top_k: int = 3
-    engine_version: str = "0.0.1"
+    engine_version: Optional[str] = None
     index_version: Optional[str] = None
     codeable_paths: dict[str, list[str]] = field(
         default_factory=lambda: dict(DEFAULT_PATHS)
@@ -235,6 +254,14 @@ class AutoCoderConfig:
             raise ValueError(
                 f"AutoCoderConfig.batch_size must be a positive int (>=1), "
                 f"got {self.batch_size!r}"
+            )
+        if self.engine_version is not None and (
+            not isinstance(self.engine_version, str) or not self.engine_version
+        ):
+            raise ValueError(
+                f"AutoCoderConfig.engine_version must be a non-empty str or "
+                f"None (None resolves the installed medterm4ds version), "
+                f"got {self.engine_version!r}"
             )
         if not isinstance(self.top_k, int) or self.top_k < 1:
             raise ValueError(
@@ -286,6 +313,10 @@ class AutoCoder:
         self._endpoint = endpoint
         self._con = con
         self._config = config if config is not None else AutoCoderConfig()
+
+        # Resolve the engine version once. Provenance metadata must name the
+        # medterm4ds actually in use; an explicit config value wins.
+        self._engine_version = self._config.engine_version or _detect_engine_version()
 
         # One-shot probe-and-pin state (FDD §3c step 3). Resolved on
         # first cache miss; never re-probed. ``None`` here means
@@ -535,7 +566,7 @@ class AutoCoder:
         for result in kept:
             ext = build_autocoding_extension(
                 engine=_ENGINE_NAME,
-                engine_version=self._config.engine_version,
+                engine_version=self._engine_version,
                 search_mode=result.get("search_mode") or search_mode,
                 score=result.get("score", 0.0),
                 match_grade=result.get("match_grade", "ambiguous"),

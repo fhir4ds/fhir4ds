@@ -684,6 +684,13 @@ class Retrieve(Expression):
     terminology: Optional[Expression] = None
     terminology_property: Optional[str] = None
     navigation_path: Optional[str] = None
+    # Model qualifier from authored CQL ([USQualityCore.MedicationRequest] →
+    # "USQualityCore"). Preserved so the translator can resolve PROFILED
+    # retrieves through the named-profile registry (e.g. the US Quality Core
+    # medicationrequest profile) while unqualified/plain-FHIR retrieves keep
+    # base-type semantics (CMS144 7b8885c5: a MedicationNotRequested-profiled
+    # doNotPerform resource must NOT match [USQualityCore.MedicationRequest]).
+    model: Optional[str] = None
 
 
 @dataclass
@@ -781,6 +788,10 @@ class ReturnClause(ASTNode):
 
     expression: Expression
     distinct: bool = False
+    # True when the CQL spelled the `distinct` keyword explicitly. Explicit
+    # de-duplication always applies; the IMPLICIT default (plain `return`) is
+    # only applied at a definition root (see _query._return_distinct).
+    explicit_distinct: bool = False
 
 
 @dataclass

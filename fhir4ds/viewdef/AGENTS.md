@@ -28,6 +28,21 @@ The SQLQuery hashes with a NULL guard, so optional foreign keys stay NULL.
 
 ## Known Fragile Areas
 
+- ROOT-JOIN RIGHT/FULL OVER A SHARED SOURCE TABLE (2026-11-12, v0.0.23 D5
+  HISTORIAN): the shared-table `resourceType` restriction defines the base
+  RELATION, not a row filter. Emitting it as a `WHERE` predicate silently
+  degrades `right`/`full` root joins to inner joins, because the rows those
+  join types exist to preserve carry a NULL base resource and the predicate
+  is then false. `_generate_single_resource` now wraps the source table in a
+  filtered subquery and passes `base_type_filter_in_from=True`, which makes
+  `_build_single_query` skip the WHERE predicate (both the flat and the
+  pipelined-chain path). The flag is per-query generator state
+  (`self._base_type_filter_in_from`, reset at the top of `generate()`) so
+  union-branch builds inherit it and a reused `SQLGenerator` cannot leak it
+  into a later ViewDefinition. When touching the shared-table filter, keep
+  `TestRootJoinRightAndFullPreserveUnmatchedRows` green (right=2 / full=4 /
+  inner=1 / left=2 rowsets).
+
 - UNNEST LOWERING (2026-10-27, feat/unnest-cte-lowering): forEach/
   forEachOrNull/repeat lower to a PIPELINED SUBQUERY CHAIN, not correlated
   LATERAL joins (the lateral form is O(N x payload): DuckDB re-parses the
@@ -160,7 +175,7 @@ The SQLQuery hashes with a NULL guard, so optional foreign keys stay NULL.
   unionAll/repeat already had their guards). Regression class
   `TestSelectUnknownFieldAndEmptyContainerRejectionPerSpecSofVd05Skeptic` in
   tests/unit/test_parser.py. Probe:
-  `/mnt/d/fhir4ds/.temp/qa/sof_vd05_skeptic/probe.py` (17 behavioral
+  `~/src/fhir4ds/.temp/qa/sof_vd05_skeptic/probe.py` (17 behavioral
   hypotheses + native/fallback parity — all nesting semantics verified
   conformant: child context = foci per item under parent iterators else
   parent $this; cross-join rowset composition; null-preserved rows with
@@ -283,7 +298,7 @@ The SQLQuery hashes with a NULL guard, so optional foreign keys stay NULL.
   `TestForeachOrNullNestedForeachSpecSofVd05Historian` (B3a outer-empty,
   B3a outer-non-empty control, mixed partial-contact scenario). Post-fix:
   ViewDefinition pytest 1058/1058. Probe at
-  `/mnt/d/fhir4ds/fhir4ds-private/docs/prompts/.ai_loop/.temp/qa/iter3/probe_b3_simplified.py`.
+  `~/src/fhir4ds/fhir4ds-private/docs/prompts/.ai_loop/.temp/qa/iter3/probe_b3_simplified.py`.
   Keep coverage aligned when touching `generate_foreach_unnest` or
   `_generate_single_resource` UNION ALL handling.
 - SOF-VD-05 HISTORIAN ARCH-003 follow-up (iter 3, 2026-07-05): the same
@@ -304,7 +319,7 @@ The SQLQuery hashes with a NULL guard, so optional foreign keys stay NULL.
   null-preserving var just like nested `forEach`. Three regression
   tests in `TestForeachOrNullNestedRepeatSpecSofVd05Architect`. Post-fix:
   ViewDefinition pytest 1061/1061. Probe at
-  `/mnt/d/fhir4ds/fhir4ds-private/docs/prompts/.ai_loop/.temp/qa/iter3/probe_arch003.py`.
+  `~/src/fhir4ds/fhir4ds-private/docs/prompts/.ai_loop/.temp/qa/iter3/probe_arch003.py`.
 - SOF-VD-04 SKEPTIC fresh rerun verified clean (2026-07-03): 38-assertion /
   10-battery hypothesis-driven probe targeted collection default false +
   bool-only invariant, multi-value non-collection error, type URI handling
@@ -320,7 +335,7 @@ The SQLQuery hashes with a NULL guard, so optional foreign keys stay NULL.
   regex layer but `validate_optional_uri_string` guards before the regex;
   `ColumnType.normalize_name` strips the resource-type prefix for
   `URL#fragment` form (matches FHIR canonical URL semantics). Probe at
-  `/mnt/d/fhir4ds/.temp/qa/sof_vd04_skeptic_2026_07_03_fresh/probe.py`.
+  `~/src/fhir4ds/.temp/qa/sof_vd04_skeptic_2026_07_03_fresh/probe.py`.
   Post-iteration: ViewDefinition pytest 1055/1055, full conformance
   2822/2822 (ViewDefinition 134/134, FHIRPath 935/935, CQL 1706/1706,
   DQM 47/47).
@@ -345,7 +360,7 @@ The SQLQuery hashes with a NULL guard, so optional foreign keys stay NULL.
   `TestWhitespaceFhirPathRejectionPerSpecSofVd03Explorer` in
   `test_parser.py` (22 tests). Post-fix: ViewDefinition pytest 1055/1055
   (was 1033), full conformance 2822/2822 unchanged. Probe at
-  `/mnt/d/fhir4ds/.temp/qa/sof_vd03_explorer_2026_07_03_fresh/probe.py`.
+  `~/src/fhir4ds/.temp/qa/sof_vd03_explorer_2026_07_03_fresh/probe.py`.
 - SOF-VD-03 HISTORIAN fresh rerun fixed (2026-07-03):
   `parse_view_definition()` and `ViewDefinition.to_dict()` did not reject
   duplicate column names in the effective output schema, even though the
@@ -365,7 +380,7 @@ The SQLQuery hashes with a NULL guard, so optional foreign keys stay NULL.
   `test_parser.py` (9 tests). Two existing generator tests updated to assert
   the parser path now rejects. Post-fix: ViewDefinition pytest 1033/1033
   (was 1024), full conformance 2822/2822 unchanged. Probe at
-  `/mnt/d/fhir4ds/.temp/qa/sof_vd03_historian_2026_07_03_fresh/probe.py`.
+  `~/src/fhir4ds/.temp/qa/sof_vd03_historian_2026_07_03_fresh/probe.py`.
 - SOF-VD-03 SKEPTIC fresh rerun fixed (2026-07-03): The `Column` dataclass
   at `fhir4ds/viewdef/types.py:528` had a `__post_init__` that only validated
   `type` and `tag`, deferring `path`/`name`/`description`/`collection`
@@ -386,7 +401,7 @@ The SQLQuery hashes with a NULL guard, so optional foreign keys stay NULL.
   regression class `TestDirectColumnValidationPerSpecSofVd03Skeptic` in
   `test_columns.py` (8 methods / 13 assertions). Post-fix: ViewDefinition
   pytest 1024/1024 (was 1005), full conformance 2822/2822 unchanged.
-  Probe at `/mnt/d/fhir4ds/.temp/qa/sof_vd03_skeptic_2026_07_03_fresh/probe.py`.
+  Probe at `~/src/fhir4ds/.temp/qa/sof_vd03_skeptic_2026_07_03_fresh/probe.py`.
 - SOF-VD-03 DEFERRED (2026-07-03): `ViewDefinition(select=[])` and
   `Select(...)` lack `__post_init__`, so direct construction with
   spec-invalid shapes (empty root select, non-array columns, etc.) defers
@@ -413,7 +428,7 @@ The SQLQuery hashes with a NULL guard, so optional foreign keys stay NULL.
   Coverage: `TestBuiltinVariablePrecedencePerSpecSofVd02Explorer` class
   in `test_constants.py` (8 parametrized cases). Post-fix: ViewDefinition
   pytest 1005/1005 (was 997), full conformance 2822/2822 unchanged.
-  Probe at `/mnt/d/fhir4ds/.temp/qa/sof_vd02_explorer_2026_07_03_fresh/probe.py`.
+  Probe at `~/src/fhir4ds/.temp/qa/sof_vd02_explorer_2026_07_03_fresh/probe.py`.
 - SOF-VD-02 HISTORIAN iter 1 fresh rerun verified clean (2026-07-03):
   7-battery / 141-assertion systematic spec-walkthrough probe confirmed
   all 10 golden-standard invariants for `ViewDefinition.constant` are
@@ -432,7 +447,7 @@ The SQLQuery hashes with a NULL guard, so optional foreign keys stay NULL.
   constants raise `ConstantResolutionError`. DuckDB execution parity
   native ↔ forced Python fallback confirmed with spec-expected results.
   Probe at
-  `/mnt/d/fhir4ds/.temp/qa/sof_vd02_historian_2026_07_03_fresh2/probe.py`.
+  `~/src/fhir4ds/.temp/qa/sof_vd02_historian_2026_07_03_fresh2/probe.py`.
   Post-iteration: ViewDefinition pytest 997/997, full conformance
   2822/2822 (ViewDefinition 134/134, FHIRPath 935/935, CQL 1706/1706,
   DQM 47/47).
@@ -452,7 +467,7 @@ The SQLQuery hashes with a NULL guard, so optional foreign keys stay NULL.
   class in `test_constants.py` (8 new test cases). Post-fix:
   ViewDefinition pytest 997/997 (was 985); full conformance 2822/2822
   unchanged. Probe at
-  `/mnt/d/fhir4ds/.temp/qa/sof_vd02_skeptic_2026_07_03_fresh/probe.py`.
+  `~/src/fhir4ds/.temp/qa/sof_vd02_skeptic_2026_07_03_fresh/probe.py`.
   Optional future cleanup: Coding/CodeableConcept/null/empty-string
   branches in `resolve_constant` (`fhir4ds/viewdef/constants.py`) are
   now unreachable through normal Constant construction; remain as
@@ -470,7 +485,7 @@ The SQLQuery hashes with a NULL guard, so optional foreign keys stay NULL.
   generator guard), pathological VD shapes (10K columns, 100-deep nested
   select, 1K profile entries), and permissive validator (warns for unknown
   resource, accepts absent profile). Probe at
-  `/mnt/d/fhir4ds/.temp/qa/sof_vd01_explorer_2026_07_03_fresh/probe.py`.
+  `~/src/fhir4ds/.temp/qa/sof_vd01_explorer_2026_07_03_fresh/probe.py`.
   Behavioral spec confirmation (NOT A BUG): FHIR `uri` datatype regex is
   officially `\S*` ("very permissive") per https://build.fhir.org/datatypes.html
   — profile canonical values containing Unicode characters such as
@@ -488,7 +503,7 @@ The SQLQuery hashes with a NULL guard, so optional foreign keys stay NULL.
   and removed the over-broad wrapper in `from_dict` so typed exceptions
   propagate directly. Regression test:
   `test_from_dict_preserves_typed_parse_error_per_spec_sof_vd01_historian`.
-  Probe at `/mnt/d/fhir4ds/.temp/qa/sof_vd01_historian_2026_07_03_fresh/probe.py`.
+  Probe at `~/src/fhir4ds/.temp/qa/sof_vd01_historian_2026_07_03_fresh/probe.py`.
   ViewDefinition pytest 985/985; conformance 2822/2822.
 - SOF-VD-01 SKEPTIC fresh rerun verified clean (2026-07-03):
   38/38 hypothesis-driven probes passed across parser (resource 1..1
@@ -499,7 +514,7 @@ The SQLQuery hashes with a NULL guard, so optional foreign keys stay NULL.
   fixture. The shared-table resourceType filter, direct-dataclass generator
   guards, and permissive validator warnings remain aligned with prior
   SKEPTIC/HISTORIAN/EXPLORER fixes. Probe at
-  `/mnt/d/fhir4ds/.temp/qa/sof_vd01_skeptic_2026_07_03_fresh/probe.py`.
+  `~/src/fhir4ds/.temp/qa/sof_vd01_skeptic_2026_07_03_fresh/probe.py`.
   Non-blocking architectural observation: `_generate_multi_resource_union`
   (generator.py:1779-1797) is unreachable dead code because
   `validate_resource_type` rejects non-string resources before SQL generation;
@@ -1025,6 +1040,18 @@ The SQLQuery hashes with a NULL guard, so optional foreign keys stay NULL.
 
 ## NOT A BUG Registry
 
+- V23-002-D5 (2026-11-12): a `view`-target root join with no `view_tables`
+  entry resolves to `<view_schema>.<view_name>`, and `view_schema` defaults to
+  `"omop"` — so `SQLGenerator().generate()` on such a ViewDefinition emits
+  `JOIN "omop"."<view>"`, which fails unless that schema exists. This is a
+  DOCUMENTED convention with working overrides (verified: setting
+  `gen.view_schema = "main"` resolves and executes correctly, and
+  `runner.generate_view_sql(..., view_schema=...)` exposes the same knob),
+  matching the one-way `viewdef` → OMOP runner contract. Do not "fix" it by
+  silently dropping the schema qualification: that would make the reference
+  search-path dependent. A caller wanting an unqualified or different
+  relation supplies `view_tables` / `view_schema`.
+
 - SOF-VD-07 HISTORIAN (2026-08-23): repeat paths accept full FHIRPath
   expressions (where()-filters, `|` unions, children(), $this), not just dotted
   paths — verified conformant with native==fallback parity on both engines
@@ -1332,7 +1359,7 @@ https://build.fhir.org/codesystem-FHIR-version.json.
   (portable runtime-guard doctrine, SOF-VD-04 SKEPTIC).
 
 - SOF-VD-05 HISTORIAN (2026-08-23): nested-select chunk re-audited with new
-  composition probes (19/19, `/mnt/d/fhir4ds/.temp/qa/sof_vd05_historian/probe.py`)
+  composition probes (19/19, `~/src/fhir4ds/.temp/qa/sof_vd05_historian/probe.py`)
   on top of the SKEPTIC fixes (unknown select-field rejection + minItems:1 empty
   containers — both re-verified at depth-3 and inside unionAll branches). Newly
   pinned conformant: forEachOrNull-parent + child-forEach empty-part suppression
@@ -1466,7 +1493,7 @@ https://build.fhir.org/codesystem-FHIR-version.json.
   warn (SOF-VD-04 note confirmed); extra_fields retains nested nulls, 100KB
   values, case-colliding keys (Note/URL); text.div retention-only for CDATA,
   entities, xmlns, malformed xhtml; profile[]/meta.profile[] accept |version.
-- Probes: /mnt/d/fhir4ds/.temp/qa/ (inline heredocs); gate log
+- Probes: ~/src/fhir4ds/.temp/qa/ (inline heredocs); gate log
   .temp/qa/gate.log (2832/2832).
 
 ## Evolution iter 13 / Domain 5 SKEPTIC (2026-09-20, duckdb 1.5.5 campaign)

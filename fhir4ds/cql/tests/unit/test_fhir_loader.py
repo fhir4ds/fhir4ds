@@ -438,6 +438,13 @@ def test_load_valuesets_from_dict(loader):
 
 
 def test_load_valuesets_from_raw_fhir_valueset(loader):
+    """An expansion is authoritative: compose is NOT re-read on top of it.
+
+    FHIR R4 ValueSet.expansion is the membership a terminology server computed
+    from the definition (filters, exclude rules, activity status). Reading
+    compose.include alongside it re-adds codes the expansion deliberately
+    omitted, so the expansion branch wins outright.
+    """
     valuesets = [
         {
             "resourceType": "ValueSet",
@@ -466,8 +473,11 @@ def test_load_valuesets_from_raw_fhir_valueset(loader):
 
     count = loader.load_valuesets(valuesets)
 
-    assert count == 2
-    assert loader.count_valueset_codes("http://example.org/ValueSet/Raw") == 2
+    assert count == 1
+    assert loader.count_valueset_codes("http://example.org/ValueSet/Raw") == 1
+    assert loader.con.execute(
+        "SELECT system, code FROM valueset_codes"
+    ).fetchall() == [("http://snomed.info/sct", "67890")]
 
 
 def test_load_valuesets_null_expansion_compose_treated_as_absent(loader):
@@ -1185,3 +1195,496 @@ def test_loader_constructor_on_closed_connection_is_wrapped():
     con.close()
     with pytest.raises(_duckdb.ConnectionException, match="Cannot create FHIRDataLoader.*closed"):
         FHIRDataLoader(con)
+
+
+class TestValueSetExtractionPerFhirR4:
+    """Iteration 5 / Domain 6 HISTORIAN — FHIR R4 ValueSet membership semantics.
+
+    `_extract_codes_from_valueset_resource` and the dependency resolver's
+    `_index_valueset` previously duplicated this logic and both skipped
+    `expansion.contains.contains` recursion, ignored `compose.exclude`, and
+    re-read `compose` on top of a present `expansion`.
+    """
+
+    def test_hierarchical_expansion_is_flattened(self):
+        """expansion.contains.contains (0..*) descendants are members."""
+        from ...valueset_codes import extract_codes_from_valueset_resource
+
+        codes = extract_codes_from_valueset_resource({
+            "resourceType": "ValueSet",
+            "url": "http://ex.org/VS/hier",
+            "expansion": {"contains": [
+                {"system": "sct", "code": "73211009", "contains": [
+                    {"system": "sct", "code": "44054006", "contains": [
+                        {"system": "sct", "code": "deep"},
+                    ]},
+                    {"system": "sct", "code": "46635009"},
+                ]},
+            ]},
+        })
+        assert [c["code"] for c in codes] == [
+            "73211009", "44054006", "deep", "46635009"
+        ]
+
+    def test_blank_code_grouping_node_is_not_a_member(self):
+        """expansion.contains.code is 0..1 — blank means "not selectable"."""
+        from ...valueset_codes import extract_codes_from_valueset_resource
+
+        codes = extract_codes_from_valueset_resource({
+            "resourceType": "ValueSet",
+            "url": "http://ex.org/VS/grouped",
+            "expansion": {"contains": [
+                {"display": "Grouping header", "contains": [
+                    {"system": "sct", "code": "real-code"},
+                ]},
+            ]},
+        })
+        assert codes == [{"system": "sct", "code": "real-code", "display": None}]
+
+    def test_expansion_authoritative_over_compose(self):
+        from ...valueset_codes import extract_codes_from_valueset_resource
+
+        codes = extract_codes_from_valueset_resource({
+            "resourceType": "ValueSet",
+            "expansion": {"contains": [{"system": "loinc", "code": "1111-1"}]},
+            "compose": {"include": [
+                {"system": "loinc", "concept": [{"code": "1111-1"}, {"code": "9999-9"}]}
+            ]},
+        })
+        assert [c["code"] for c in codes] == ["1111-1"]
+
+    def test_compose_exclude_concept_list_removes_codes(self):
+        from ...valueset_codes import extract_codes_from_valueset_resource
+
+        codes = extract_codes_from_valueset_resource({
+            "resourceType": "ValueSet",
+            "compose": {
+                "include": [{"system": "sct", "concept": [
+                    {"code": "A"}, {"code": "B"}, {"code": "C"}]}],
+                "exclude": [{"system": "sct", "concept": [{"code": "B"}]}],
+            },
+        })
+        assert [c["code"] for c in codes] == ["A", "C"]
+
+    def test_compose_exclude_whole_system(self):
+        from ...valueset_codes import extract_codes_from_valueset_resource
+
+        codes = extract_codes_from_valueset_resource({
+            "resourceType": "ValueSet",
+            "compose": {
+                "include": [
+                    {"system": "sct", "concept": [{"code": "A"}]},
+                    {"system": "loinc", "concept": [{"code": "1111-1"}]},
+                ],
+                "exclude": [{"system": "sct"}],
+            },
+        })
+        assert codes == [{"system": "loinc", "code": "1111-1", "display": None}]
+
+    def test_compose_exclude_enumerable_eq_filter(self):
+        """VSAC emits `property=concept, op='=', value=<code>` to exclude a code."""
+        from ...valueset_codes import extract_codes_from_valueset_resource
+
+        codes = extract_codes_from_valueset_resource({
+            "resourceType": "ValueSet",
+            "compose": {
+                "include": [{"system": "sopt", "concept": [
+                    {"code": "1002-5"}, {"code": "111"}, {"code": "2106-3"}]}],
+                "exclude": [{"system": "sopt", "filter": [
+                    {"property": "concept", "op": "=", "value": "111"}]}],
+            },
+        })
+        assert [c["code"] for c in codes] == ["1002-5", "2106-3"]
+
+    def test_unenumerable_exclude_fails_loud(self):
+        """A descendant-of exclude cannot be enumerated; never over-report."""
+        from ...valueset_codes import (
+            ValueSetExpansionError,
+            extract_codes_from_valueset_resource,
+        )
+
+        with pytest.raises(ValueSetExpansionError, match="cannot be enumerated"):
+            extract_codes_from_valueset_resource({
+                "resourceType": "ValueSet",
+                "compose": {
+                    "include": [{"system": "sct", "concept": [{"code": "A"}]}],
+                    "exclude": [{"system": "sct", "filter": [
+                        {"property": "concept", "op": "is-a", "value": "root"}]}],
+                },
+            })
+
+    def test_nested_valueset_exclude_fails_loud(self):
+        from ...valueset_codes import (
+            ValueSetExpansionError,
+            extract_codes_from_valueset_resource,
+        )
+
+        with pytest.raises(ValueSetExpansionError, match="nested value sets"):
+            extract_codes_from_valueset_resource({
+                "resourceType": "ValueSet",
+                "compose": {
+                    "include": [{"system": "sct", "concept": [{"code": "A"}]}],
+                    "exclude": [{"valueSet": ["http://ex.org/VS/other"]}],
+                },
+            })
+
+    def test_expansion_duplicates_collapse(self):
+        """A code reachable through two parents is one member."""
+        from ...valueset_codes import extract_codes_from_valueset_resource
+
+        codes = extract_codes_from_valueset_resource({
+            "resourceType": "ValueSet",
+            "expansion": {"contains": [
+                {"system": "sct", "code": "shared"},
+                {"system": "sct", "code": "other", "contains": [
+                    {"system": "sct", "code": "shared"}]},
+            ]},
+        })
+        assert [c["code"] for c in codes] == ["shared", "other"]
+
+    def test_loader_loads_hierarchical_expansion(self, loader):
+        count = loader.load_valuesets([{
+            "resourceType": "ValueSet",
+            "url": "http://ex.org/VS/hier",
+            "expansion": {"contains": [
+                {"system": "sct", "code": "parent", "contains": [
+                    {"system": "sct", "code": "child"},
+                ]},
+            ]},
+        }])
+        assert count == 2
+        assert loader.count_valueset_codes("http://ex.org/VS/hier") == 2
+
+
+class TestValueSetExcludeMootWhenIncludeIsIntensional:
+    """A system-only include yields no enumerable codes, so unenumerable
+    excludes have nothing to remove and must not hard-fail.
+
+    VSAC emits exactly this shape (e.g. the SOPT race value set:
+    `include: [{system}]` with `op: 'descendent-of'` excludes). Raising here
+    would fail every measure that loads such a ValueSet, while the honest
+    signal is the existing zero-code warning.
+    """
+
+    def test_system_only_include_with_filter_excludes_returns_empty(self):
+        from ...valueset_codes import extract_codes_from_valueset_resource
+
+        codes = extract_codes_from_valueset_resource({
+            "resourceType": "ValueSet",
+            "compose": {
+                "include": [{"system": "https://nahdo.org/sopt"}],
+                "exclude": [
+                    {"system": "https://nahdo.org/sopt", "filter": [
+                        {"property": "concept", "op": "=", "value": "111"}]},
+                    {"system": "https://nahdo.org/sopt", "filter": [
+                        {"property": "concept", "op": "descendent-of", "value": "321"}]},
+                ],
+            },
+        })
+        assert codes == []
+
+    def test_enumerable_exclude_still_applies_when_codes_present(self):
+        from ...valueset_codes import extract_codes_from_valueset_resource
+
+        codes = extract_codes_from_valueset_resource({
+            "resourceType": "ValueSet",
+            "compose": {
+                "include": [{"system": "s", "concept": [
+                    {"code": "111"}, {"code": "1002-5"}]}],
+                "exclude": [{"system": "s", "filter": [
+                    {"property": "concept", "op": "=", "value": "111"}]}],
+            },
+        })
+        assert [c["code"] for c in codes] == ["1002-5"]
+
+
+class TestValuesetMembershipSeesLaterLoads:
+    """Iteration 6 / Domain 6 EXPLORER.
+
+    `createValuesetMembershipUdf` used to SNAPSHOT the codes cache at factory
+    time, but the UDF is registered exactly once per connection and
+    `load_valuesets` updates the cache dict in place afterwards. Every ValueSet
+    loaded after the first `load_valuesets` call was therefore invisible to the
+    Python-fallback membership check: `in_valueset` answered SQL NULL (unknown)
+    where the native C++ cache — repopulated from the table on every load —
+    answered true. Silent under-membership in exactly the engine mode used by
+    the browser/WASM build and any unsigned dev connection.
+    """
+
+    def test_second_load_valuesets_call_is_visible_to_membership(self, duckdb_con):
+        from ...duckdb.udf.valueset import createValuesetMembershipUdf
+
+        cache: dict = {}
+        udf = createValuesetMembershipUdf(cache)
+        loader = FHIRDataLoader(duckdb_con)
+        loader._valueset_udf_cache = cache  # same object the closure reads
+
+        loader.load_valuesets([{
+            "resourceType": "ValueSet", "url": "http://ex.org/VS/first",
+            "compose": {"include": [{"system": "s", "concept": [{"code": "c1"}]}]},
+        }])
+        assert udf('{"coding":[{"system":"s","code":"c1"}]}', "coding",
+                   "http://ex.org/VS/first") is True
+
+        loader.load_valuesets([{
+            "resourceType": "ValueSet", "url": "http://ex.org/VS/second",
+            "compose": {"include": [{"system": "s", "concept": [{"code": "c2"}]}]},
+        }])
+        # The pre-existing UDF object (registered once) must see the new set.
+        assert udf('{"coding":[{"system":"s","code":"c2"}]}', "coding",
+                   "http://ex.org/VS/second") is True
+        # ... and must keep seeing the first one.
+        assert udf('{"coding":[{"system":"s","code":"c1"}]}', "coding",
+                   "http://ex.org/VS/first") is True
+        # A genuinely absent code is False, not NULL.
+        assert udf('{"coding":[{"system":"s","code":"zz"}]}', "coding",
+                   "http://ex.org/VS/second") is False
+
+    def test_bare_string_cache_shape_still_supported(self):
+        """Documented alternate cache shape: bare codes become ("", code)."""
+        from ...duckdb.udf.valueset import createValuesetMembershipUdf
+
+        udf = createValuesetMembershipUdf({"http://ex.org/VS/bare": {"1002-5"}})
+        assert udf('{"coding":[{"system":"","code":"1002-5"}]}', "coding",
+                   "http://ex.org/VS/bare") is True
+
+    def test_cache_growing_after_factory_call_is_seen(self):
+        """A caller that keeps its own dict (documented UDF usage) stays live."""
+        from ...duckdb.udf.valueset import createValuesetMembershipUdf
+
+        cache = {"http://ex.org/VS/a": {("s", "ca")}}
+        udf = createValuesetMembershipUdf(cache)
+        assert udf('{"coding":[{"system":"s","code":"cb"}]}', "coding",
+                   "http://ex.org/VS/b") is None  # unknown set -> NULL
+        cache["http://ex.org/VS/b"] = {("s", "cb")}
+        assert udf('{"coding":[{"system":"s","code":"cb"}]}', "coding",
+                   "http://ex.org/VS/b") is True
+
+
+class TestValuesetNonStringDisplayTyped:
+    """Iteration 6 / Domain 6 EXPLORER — INV-8 at the load_valuesets boundary.
+
+    A JSON-number `display` (invalid FHIR: display is `string 0..1`) used to
+    escape the public loader API as `pyarrow.lib.ArrowTypeError` from the bulk
+    insert path. Sibling member fields (`system`, `code`) already raise a typed
+    ValueError with index attribution; display now does the same.
+    """
+
+    def test_non_string_display_raises_typed_value_error(self, loader):
+        with pytest.raises(ValueError, match=r"codes\[0\]\.display must be a string"):
+            loader.load_valuesets([{
+                "resourceType": "ValueSet", "url": "http://ex.org/VS/x",
+                "expansion": {"contains": [
+                    {"system": "s", "code": "a", "display": 42}]},
+            }])
+
+    def test_no_rows_committed_on_failure(self, loader):
+        with pytest.raises(ValueError):
+            loader.load_valuesets([{
+                "resourceType": "ValueSet", "url": "http://ex.org/VS/x",
+                "expansion": {"contains": [
+                    {"system": "s", "code": "ok"},
+                    {"system": "s", "code": "bad", "display": 42}]},
+            }])
+        assert loader.count_valueset_codes() == 0
+
+
+def test_membership_sees_in_place_set_growth():
+    """Iteration 6 / Domain 6 EXPLORER — memo invalidation on in-place growth.
+
+    The per-URL normalization memo keys on (set identity, size). The loader
+    replaces sets on refresh; a caller that grows one in place changes only the
+    size, which must still invalidate the memo.
+    """
+    from ...duckdb.udf.valueset import createValuesetMembershipUdf
+
+    entries: set = {("s", "ca")}
+    cache = {"http://ex.org/VS/a": entries}
+    udf = createValuesetMembershipUdf(cache)
+    assert udf('{"coding":[{"system":"s","code":"cb"}]}', "coding",
+               "http://ex.org/VS/a") is False
+    entries.add(("s", "cb"))          # same set object, new content
+    assert udf('{"coding":[{"system":"s","code":"cb"}]}', "coding",
+               "http://ex.org/VS/a") is True
+
+
+class TestScopedValuesetCacheRefresh:
+    """Iteration 7 / Domain 7 SKEPTIC — incremental loading must not be O(table).
+
+    `_refresh_in_valueset_udf` used to re-read the ENTIRE valueset_codes table
+    and rebuild the whole cache on every `load_valuesets` call: measured 207 ms
+    per call against a 200k-row table versus 5.7 ms scoped, so loading a corpus
+    one ValueSet at a time paid O(rows in table) per call (O(N^2) in aggregate).
+    The refresh is now scoped to the URLs just written.
+    """
+
+    def test_scoped_refresh_preserves_unrelated_cache_entries(self, loader):
+        # A sentinel entry that exists ONLY in the cache proves the refresh did
+        # not clear-and-rebuild from the table.
+        loader._valueset_udf_cache["http://ex.org/VS/sentinel"] = {("s", "keep")}
+        loader.load_valuesets([{
+            "resourceType": "ValueSet", "url": "http://ex.org/VS/new",
+            "compose": {"include": [{"system": "s", "concept": [{"code": "n1"}]}]},
+        }])
+        assert loader._valueset_udf_cache["http://ex.org/VS/sentinel"] == {("s", "keep")}
+        assert ("s", "n1") in loader._valueset_udf_cache["http://ex.org/VS/new"]
+
+    def test_scoped_refresh_replaces_only_the_written_url(self, loader):
+        loader.load_valuesets([{
+            "resourceType": "ValueSet", "url": "http://ex.org/VS/a",
+            "compose": {"include": [{"system": "s", "concept": [{"code": "a1"}]}]},
+        }])
+        # Poison the cache entry for the URL we are about to rewrite: a scoped
+        # refresh must re-read it from the table, not trust the cache.
+        loader._valueset_udf_cache["http://ex.org/VS/a"] = {("s", "stale")}
+        loader.load_valuesets([{
+            "resourceType": "ValueSet", "url": "http://ex.org/VS/a",
+            "compose": {"include": [{"system": "s", "concept": [{"code": "a2"}]}]},
+        }])
+        assert loader._valueset_udf_cache["http://ex.org/VS/a"] == {("s", "a1"), ("s", "a2")}
+
+    def test_clear_valuesets_still_does_a_full_reset(self, loader):
+        loader._valueset_udf_cache["http://ex.org/VS/sentinel"] = {("s", "keep")}
+        loader.load_valuesets([{
+            "resourceType": "ValueSet", "url": "http://ex.org/VS/a",
+            "compose": {"include": [{"system": "s", "concept": [{"code": "a1"}]}]},
+        }])
+        loader.clear_valuesets()
+        assert loader._valueset_udf_cache == {}
+
+    def test_native_cache_capability_is_probed_not_guessed(self, loader):
+        # Plain (non-native) connection: no cpp cache API, so the loader must
+        # fall back to the Python path without raising or logging a warning.
+        assert loader._cpp_valueset_cache_available() is False
+        loader.load_valuesets([{
+            "resourceType": "ValueSet", "url": "http://ex.org/VS/a",
+            "compose": {"include": [{"system": "s", "concept": [{"code": "a1"}]}]},
+        }])
+        # Second call reuses the memoized probe (no repeated duckdb_functions()).
+        assert loader._cpp_valueset_cache_available() is False
+
+
+def test_scoped_refresh_chunks_large_url_batches(loader):
+    """Iteration 7 / Domain 7 SKEPTIC — >1 chunk of URLs in a single call.
+
+    The scoped refresh builds parameterized IN-lists of at most
+    _VALUESET_REFRESH_CHUNK URLs; a single bulk load carrying more URLs than
+    that must still cache every one of them.
+    """
+    from ...loader.fhir_loader import _VALUESET_REFRESH_CHUNK
+
+    n = _VALUESET_REFRESH_CHUNK + 37
+    loader.load_valuesets([
+        {"resourceType": "ValueSet", "url": f"http://ex.org/VS/bulk{i}",
+         "compose": {"include": [{"system": "s", "concept": [{"code": f"c{i}"}]}]}}
+        for i in range(n)
+    ])
+    missing = [i for i in range(n)
+               if ("s", f"c{i}") not in loader._valueset_udf_cache.get(
+                   f"http://ex.org/VS/bulk{i}", set())]
+    assert missing == []
+    assert loader.count_valueset_codes() == n
+
+
+class TestValuesetExtractionErrorsAreAttributed:
+    """Iteration 10 / Domain 8 SKEPTIC — INV-8 attribution on the new boundaries.
+
+    `load_valuesets` validates everything else with `valuesets[i] ...` messages,
+    but the shared extractor's errors propagated raw: with a corpus of hundreds
+    of ValueSets the caller could not tell which one was broken.
+    """
+
+    def test_unenumerable_exclude_names_index_and_url(self, loader):
+        from ...valueset_codes import ValueSetExpansionError
+
+        bad = {"resourceType": "ValueSet", "url": "http://ex.org/VS/bad",
+               "compose": {"include": [{"system": "s", "concept": [{"code": "a"}]}],
+                           "exclude": [{"system": "s", "filter": [
+                               {"property": "concept", "op": "is-a", "value": "x"}]}]}}
+        with pytest.raises(ValueSetExpansionError) as exc:
+            loader.load_valuesets([
+                {"resourceType": "ValueSet", "url": "http://ex.org/VS/ok",
+                 "compose": {"include": [{"system": "s", "concept": [{"code": "ok"}]}]}},
+                bad,
+            ])
+        msg = str(exc.value)
+        assert "valuesets[1]" in msg
+        assert "http://ex.org/VS/bad" in msg
+        assert loader.count_valueset_codes() == 0
+
+    def test_malformed_container_names_index_and_url(self, loader):
+        with pytest.raises(TypeError) as exc:
+            loader.load_valuesets([
+                {"resourceType": "ValueSet", "url": "http://ex.org/VS/broken",
+                 "expansion": {"contains": "nope"}},
+            ])
+        msg = str(exc.value)
+        assert "valuesets[0]" in msg and "http://ex.org/VS/broken" in msg
+        assert loader.count_valueset_codes() == 0
+
+
+class TestClosedConnectionMessageIsNamespacedEverywhere:
+    """Iteration 11 / Domain 8 HISTORIAN — INV-8 symmetry.
+
+    Only `__init__` and `load_resource` used to say "Cannot <op>: DuckDB
+    connection is closed". The rest leaked the raw engine text
+    ("Connection Error: Connection already closed!"), which names no FHIR4DS
+    operation and is indistinguishable across a pipeline of calls. Every
+    connection-touching public method now carries the namespaced message via
+    `_translate_closed_connection` (a message translation, not an extra query,
+    and idempotent so a wrapped inner error is not re-wrapped).
+    """
+
+    def _closed(self):
+        import fhir4ds as _fhir4ds
+
+        con = duckdb.connect(":memory:")
+        _fhir4ds.register(con)
+        loader = FHIRDataLoader(con)
+        con.close()
+        return loader
+
+    def test_every_public_method_names_the_operation(self, tmp_path):
+        loader = self._closed()
+        nd = tmp_path / "x.ndjson"
+        nd.write_text('{"resourceType":"Patient","id":"p1"}\n')
+        f = tmp_path / "x.json"
+        f.write_text('{"resourceType":"Patient","id":"p1"}')
+        calls = {
+            "load_resource": lambda: loader.load_resource({"resourceType": "Patient", "id": "p2"}),
+            "load_resources": lambda: loader.load_resources([{"resourceType": "Patient", "id": "p2"}]),
+            # One entry: an EMPTY bundle is a legitimate no-op that never
+            # touches the connection (pinned by TestLoadBundleEmptyIsNoOp).
+            "load_bundle": lambda: loader.load_bundle({
+                "resourceType": "Bundle", "type": "collection",
+                "entry": [{"resource": {"resourceType": "Patient", "id": "p2"}}],
+            }),
+            "load_file": lambda: loader.load_file(f),
+            "load_ndjson": lambda: loader.load_ndjson(nd),
+            "load_directory": lambda: loader.load_directory(tmp_path),
+            "load_valuesets": lambda: loader.load_valuesets(
+                [{"resourceType": "ValueSet", "url": "u", "compose": {"include": []}}]),
+            "count": lambda: loader.count(),
+            "clear": lambda: loader.clear(),
+            "count_valueset_codes": lambda: loader.count_valueset_codes(),
+            "clear_valuesets": lambda: loader.clear_valuesets(),
+            "valueset_table_exists": lambda: loader.valueset_table_exists(),
+        }
+        for name, call in calls.items():
+            with pytest.raises(duckdb.ConnectionException) as exc:
+                call()
+            msg = str(exc.value)
+            assert msg.startswith("Cannot "), f"{name}: {msg!r}"
+            assert "DuckDB connection is closed" in msg, f"{name}: {msg!r}"
+
+
+def test_load_bundle_empty_is_a_noop_even_on_a_closed_connection():
+    """Domain 8 pin (iteration 11): an entry-less Bundle writes nothing, so it
+    must not fail — nor silently claim work it did not do. Returns 0."""
+    import fhir4ds as _fhir4ds
+
+    con = duckdb.connect(":memory:")
+    _fhir4ds.register(con)
+    loader = FHIRDataLoader(con)
+    con.close()
+    assert loader.load_bundle({"resourceType": "Bundle", "type": "collection"}) == 0

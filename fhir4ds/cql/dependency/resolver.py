@@ -27,6 +27,7 @@ from .types import (
 )
 from .errors import ResolutionError
 from .cache import DependencyCache
+from ..terminology.errors import TerminologyCapabilityError
 
 
 class DependencyResolver:
@@ -70,6 +71,9 @@ class DependencyResolver:
         self._libraries: Dict[str, ResolvedLibrary] = {}
         self._valuesets: Dict[str, ResolvedValueSet] = {}
         self._codesystems: Dict[str, ResolvedCodeSystem] = {}
+        # ValueSet URLs that failed to index (malformed/unenumerable files).
+        # Populated instead of aborting the corpus; surface it in diagnostics.
+        self.valueset_index_errors: Dict[str, str] = {}
         self._measures: Dict[str, ResolvedMeasure] = {}
 
         # Cache
@@ -165,26 +169,27 @@ class DependencyResolver:
         if not url:
             return
 
-        # Extract codes from expansion
-        codes = []
-        expansion = data.get("expansion", {}).get("contains", [])
-        for item in expansion:
-            codes.append({
-                "system": item.get("system"),
-                "code": item.get("code"),
-                "display": item.get("display"),
-            })
+        # Shared FHIR R4 extraction (expansion is authoritative and recursive;
+        # compose.exclude removes codes). Do not re-implement this here — the
+        # duplication previously drifted from the loader's copy.
+        from ..valueset_codes import extract_codes_from_valueset_resource
 
-        # Also check compose.include
-        if not codes:
-            for include in data.get("compose", {}).get("include", []):
-                system = include.get("system")
-                for concept in include.get("concept", []):
-                    codes.append({
-                        "system": system,
-                        "code": concept.get("code"),
-                        "display": concept.get("display"),
-                    })
+        try:
+            codes = extract_codes_from_valueset_resource(data)
+        except (TypeError, ValueError) as e:
+            # A malformed or unenumerable ValueSet file must not abort indexing
+            # of the whole corpus (the sibling JSON/CQL indexers warn and skip),
+            # but a silent skip would under-report membership, so the failure is
+            # recorded where callers can see it.
+            _logger.warning(
+                "Failed to index ValueSet %s from %s: %s — membership checks "
+                "against it will be false until it is fixed",
+                url,
+                file_path,
+                e,
+            )
+            self.valueset_index_errors[url] = f"{file_path}: {e}"
+            return
 
         self._valuesets[url] = ResolvedValueSet(
             url=url,
@@ -355,10 +360,17 @@ class DependencyResolver:
                ``source_path=None``.
 
         Failure-mode scoping (INV-8):
-            Any exception from the endpoint is caught and degraded to a
-            WARNING log + ``None`` return. This graceful-degradation
-            contract applies ONLY to this fallback path. Direct callers
-            of ``endpoint.expand()`` should let exceptions propagate.
+            TRANSIENT endpoint failures (timeouts, 5xx, connection errors) are
+            caught and degraded to a WARNING log + ``None`` return. This
+            graceful-degradation contract applies ONLY to this fallback path;
+            direct callers of ``endpoint.expand()`` should let exceptions
+            propagate.
+
+            CAPABILITY mismatches (:class:`TerminologyCapabilityError`) are
+            deliberately NOT degraded — owner ruling 2026-11-12 (AMUX-115 item
+            3): a backend that cannot serve the request at all must fail loudly
+            to the measure author. Degrading it silently turns a
+            misconfiguration into criteria that quietly under-match.
         """
         vs = self._valuesets.get(url)
         if vs is not None:
@@ -369,7 +381,10 @@ class DependencyResolver:
 
         try:
             codes = self._terminology_endpoint.expand(url)
-        except Exception as e:  # INV-8: degrade to None + WARNING.
+        except TerminologyCapabilityError:
+            # Capability mismatch, not a fault: propagate (AMUX-115 ruling).
+            raise
+        except Exception as e:  # INV-8: transient -> degrade to None + WARNING.
             _logger.warning(
                 "terminology endpoint expand failed for %s: %s", url, e
             )

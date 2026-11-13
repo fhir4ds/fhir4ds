@@ -6,3 +6,7 @@ sql-on-fhir:
   label: SQL-on-FHIR
 analytics:
   label: Analytics
+cql:
+  label: CQL
+performance:
+  label: Performance

@@ -134,7 +134,11 @@ class TranslationResult:
 
 # Convenience functions for common use cases
 
-def translate_cql(cql_text: str, connection: Optional[Any] = None) -> Dict[str, "SQLExpression"]:
+def translate_cql(
+    cql_text: str,
+    connection: Optional[Any] = None,
+    strict_profiles: bool = True,
+) -> Dict[str, "SQLExpression"]:
     """
     Translate CQL text to SQL expressions.
 
@@ -144,6 +148,10 @@ def translate_cql(cql_text: str, connection: Optional[Any] = None) -> Dict[str, 
     Args:
         cql_text: The CQL library text to translate.
         connection: Optional DuckDB connection for direct execution.
+        strict_profiles: STRICT PROFILE MODE (default True). When True a
+            profile-qualified retrieve requires the profile canonical in the
+            resource's ``meta.profile``; when False the filter is omitted and
+            the retrieve matches the base resource type.
 
     Returns:
         Dictionary mapping definition names to SQL expressions.
@@ -164,11 +172,17 @@ def translate_cql(cql_text: str, connection: Optional[Any] = None) -> Dict[str, 
     from ..parser import parse_cql
 
     library = parse_cql(cql_text)
-    translator = CQLToSQLTranslator(connection=connection)
+    translator = CQLToSQLTranslator(
+        connection=connection, strict_profiles=strict_profiles
+    )
     return translator.translate_library(library)
 
 
-def translate_library(library: "Library", connection: Optional[Any] = None) -> Dict[str, "SQLExpression"]:
+def translate_library(
+    library: "Library",
+    connection: Optional[Any] = None,
+    strict_profiles: bool = True,
+) -> Dict[str, "SQLExpression"]:
     """
     Translate a parsed CQL library to SQL expressions.
 
@@ -178,6 +192,10 @@ def translate_library(library: "Library", connection: Optional[Any] = None) -> D
     Args:
         library: The parsed CQL library AST from parse_cql().
         connection: Optional DuckDB connection for direct execution.
+        strict_profiles: STRICT PROFILE MODE (default True). When True a
+            profile-qualified retrieve requires the profile canonical in the
+            resource's ``meta.profile``; when False the filter is omitted and
+            the retrieve matches the base resource type.
 
     Returns:
         Dictionary mapping definition names to SQL expressions.
@@ -189,14 +207,17 @@ def translate_library(library: "Library", connection: Optional[Any] = None) -> D
         library = parse_cql(cql_text)
         results = translate_library(library)
     """
-    translator = CQLToSQLTranslator(connection=connection)
+    translator = CQLToSQLTranslator(
+        connection=connection, strict_profiles=strict_profiles
+    )
     return translator.translate_library(library)
 
 
 def translate_library_to_sql(
     library: "Library",
     final_definition: Optional[str] = None,
-    connection: Optional[Any] = None
+    connection: Optional[Any] = None,
+    strict_profiles: bool = True,
 ) -> str:
     """
     Translate a parsed CQL library to a complete SQL statement.
@@ -209,6 +230,10 @@ def translate_library_to_sql(
         final_definition: Optional name of the final definition to SELECT from.
                          If None, uses "Initial Population" or the last definition.
         connection: Optional DuckDB connection for direct execution.
+        strict_profiles: STRICT PROFILE MODE (default True). When True a
+            profile-qualified retrieve requires the profile canonical in the
+            resource's ``meta.profile``; when False the filter is omitted and
+            the retrieve matches the base resource type.
 
     Returns:
         Complete SQL string with WITH clause and CTEs.
@@ -221,7 +246,7 @@ def translate_library_to_sql(
         sql = translate_library_to_sql(library, final_definition="Numerator")
         print(sql)
     """
-    translator = CQLToSQLTranslator(connection=connection)
+    translator = CQLToSQLTranslator(connection=connection, strict_profiles=strict_profiles)
     return translator.translate_library_to_sql(library, final_definition)
 
 

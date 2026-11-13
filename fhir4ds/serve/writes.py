@@ -406,6 +406,20 @@ def _require_type(resource: Any, resource_type: str) -> None:
             "(UpperCamel ASCII letters/digits)",
             expression=["resourceType"],
         )
+    # A resource type is a CLOSED set: `Resource` is defined by the FHIR
+    # specification, so an unrecognized name is not a resource and must not be
+    # persisted — otherwise `POST /NotAResourceType` answers 201 and poisons
+    # later ViewDefinition/analytics queries and type filters. The set is
+    # data-driven from the published fhir-types value set (same source the CQL
+    # retrieve guard uses).
+    from fhir4ds.viewdef.metadata import KNOWN_FHIR_RESOURCE_TYPES
+
+    if resource_type not in KNOWN_FHIR_RESOURCE_TYPES:
+        raise bad_request(
+            f"{resource_type!r} is not a known FHIR resource type",
+            expression=["resourceType"],
+            code="not-supported",
+        )
     body_type = resource.get("resourceType")
     if body_type != resource_type:
         raise bad_request(
