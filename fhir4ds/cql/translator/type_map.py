@@ -963,6 +963,11 @@ class TypeMapBuilder:
         return self._query_type(query)
 
     def _scoped_property_from_alias(self, node: Any, scope: Dict[str, Any]) -> Optional[CQLTypeRef]:
+        # CORE-002: `N` was referenced without the local import the sibling
+        # methods use — NameError raised out of scoped-property typing
+        # whenever the source alias resolved to a Retrieve.
+        from ..parser import ast_nodes as N
+
         alias_name = getattr(node.source, "name", None)
         source_expr = scope.get(alias_name) if alias_name else None
         if isinstance(source_expr, N.Retrieve):

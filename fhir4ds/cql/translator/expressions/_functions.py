@@ -4734,7 +4734,8 @@ class FunctionsMixin:
         elif isinstance(node, SQLUnaryOp):
             node.operand = FunctionsMixin._promote_fhirpath_text_deep(node.operand)
         elif isinstance(node, SQLCast):
-            node.operand = FunctionsMixin._promote_fhirpath_text_deep(node.operand)
+            # EXP1-002: SQLCast's field is `expression` (not `operand`).
+            node.expression = FunctionsMixin._promote_fhirpath_text_deep(node.expression)
         elif isinstance(node, SQLCase):
             node.when_clauses = [
                 (
@@ -4748,8 +4749,11 @@ class FunctionsMixin:
                     node.else_clause
                 )
         elif isinstance(node, SQLUnion):
-            node.left = FunctionsMixin._promote_fhirpath_text_deep(node.left)
-            node.right = FunctionsMixin._promote_fhirpath_text_deep(node.right)
+            # EXP1-002: SQLUnion carries `operands` (not left/right).
+            node.operands = [
+                FunctionsMixin._promote_fhirpath_text_deep(op)
+                for op in node.operands
+            ]
         return node
 
     def _translate_precision_pre(self, func, translator) -> "Optional[SQLExpression]":
