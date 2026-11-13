@@ -517,6 +517,12 @@ def test_expand_intensional_accepts_both_medterm4ds_return_shapes(
     surrounding degrade-and-warn path would turn that mismatch into a silent
     empty expansion.
     """
+    # Reaches into the REAL medterm4ds module, which is an optional extra
+    # (fhir4ds-v2[terminology]); CI installs only .[dev,measures]). Skip rather
+    # than error when it is absent. Tests that use _install_medterm4ds_stub do
+    # NOT need this guard — importing the real package at module scope shadows
+    # that stub and breaks the search tests.
+    pytest.importorskip("medterm4ds")
     import medterm4ds.apps.fhir_api as fhir_api_mod
 
     monkeypatch.setattr(
@@ -539,6 +545,12 @@ def test_expand_intensional_positional_count_and_include_retired(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """count is POSITIONAL and include_retired must be True (membership policy)."""
+    # Reaches into the REAL medterm4ds module, which is an optional extra
+    # (fhir4ds-v2[terminology]); CI installs only .[dev,measures]). Skip rather
+    # than error when it is absent. Tests that use _install_medterm4ds_stub do
+    # NOT need this guard — importing the real package at module scope shadows
+    # that stub and breaks the search tests.
+    pytest.importorskip("medterm4ds")
     import medterm4ds.apps.fhir_api as fhir_api_mod
 
     seen: dict = {}

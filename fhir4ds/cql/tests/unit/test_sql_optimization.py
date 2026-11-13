@@ -1182,7 +1182,16 @@ class TestRawSQLColumnOptimization:
         optimized = optimize_property_access(query, registry)
         sql = optimized.to_sql()
 
-        assert "SELECT LastObs.period_start FROM Encounter AS LastObs" in sql
+        # The optimized bound carries the sentinel COALESCE: a null low bound
+        # means UNBOUNDED, and dropping the coalesce makes an unbounded interval
+        # stop matching its comparisons (0.0.7 Domain 3 doctrine — low bounds
+        # coalesce to the minimum temporal sentinel, exactly as high bounds
+        # coalesce to the maximum). This assertion previously pinned the bare
+        # column and had been failing since that fix landed.
+        assert (
+            "SELECT COALESCE(LastObs.period_start, '0001-01-01') "
+            "FROM Encounter AS LastObs" in sql
+        )
         assert "intervalStart" not in sql
         assert "fhirpath_text" not in sql
 
