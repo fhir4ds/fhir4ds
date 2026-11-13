@@ -103,12 +103,12 @@ mongo = [
 # adapter. medterm4ds is published on PyPI so it is declared normally —
 # pip install 'fhir4ds-v2[terminology]' pulls both.
 #
-# Bounded to <0.0.13: medterm4ds 0.0.12. NOTE — 0.0.12 is not yet published
-# on PyPI (as of 2026-11-12), so `pip install 'fhir4ds-v2[terminology]'` /
-# 'fhir4ds-v2[ner]' will not resolve until it is released. Both extras are
-# pinned to the same bound so they stay mutually satisfiable; they had
-# drifted apart (terminology <0.0.11, ner <0.0.10) and could not be
-# installed together.
+# Bounded to <0.0.13: medterm4ds 0.0.12, published 2026-11-13, so
+# `pip install 'fhir4ds-v2[terminology]'` / 'fhir4ds-v2[ner]' resolve.
+# Both extras are pinned to the same bound so they stay mutually satisfiable;
+# they had drifted apart (terminology <0.0.11, ner <0.0.10) and could not be
+# installed together. Both extras were resolved together against PyPI on
+# 2026-11-12 (pip --dry-run: fhir4ds-v2 0.0.23 + medterm4ds 0.0.12).
 # 0.0.10 was the last independently reviewed release (search performance —
 # cached lexical orphan surfaces, hybrid fusion depth 25, v3-index-ready
 # posting keys with a 2-char acronym casing guard; reviewed

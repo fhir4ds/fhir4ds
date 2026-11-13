@@ -70,11 +70,10 @@ recorded), **known issues**, and **upgrade** notes.
 
 - None to the Python or SQL API.
 - **Dependency note**: `[terminology]` and `[ner]` both pin
-  `medterm4ds>=0.0.12,<0.0.13`. medterm4ds 0.0.12 is not yet on PyPI, so
-  those two extras will not resolve until it is published; core installs are
-  unaffected. The extras previously pinned *disjoint* bounds (`<0.0.11` and
-  `<0.0.10`), so requesting both together could never resolve — they are now
-  composable.
+  `medterm4ds>=0.0.12,<0.0.13`. The extras previously pinned *disjoint* bounds
+  (`<0.0.11` and `<0.0.10`), so requesting both together could never resolve —
+  they are now composable, and both resolve against PyPI since medterm4ds
+  0.0.12 published on 2026-11-13.
 
 ### Conformance
 
