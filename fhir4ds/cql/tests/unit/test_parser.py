@@ -1436,3 +1436,78 @@ class TestExternalReviewB16ClinicalAndTupleEquivalence:
         for tail, want in cases:
             got = self._population_row("library T\ncontext Patient\n" + tail)
             assert got == want, f"{tail!r}: want {want}, got {got}"
+
+
+class TestExternalReviewB17AggregateWhereAndAuditDemotion:
+    """EXP2-008 (multi-source aggregate WHERE) and EXP2-010 (paren matching)."""
+
+    @staticmethod
+    def _aggregate_count(cql: str):
+        import duckdb
+
+        from fhir4ds.cql.duckdb import register
+        from fhir4ds.cql.loader.fhir_loader import FHIRDataLoader
+        from fhir4ds.cql.parser import parse_cql
+        from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+
+        con = duckdb.connect()
+        register(con)
+        loader = FHIRDataLoader(con)
+        loader.load_resource({"resourceType": "Patient", "id": "p1"})
+        loader.load_resource({"resourceType": "Encounter", "id": "e1", "subject": {"reference": "Patient/p1"}, "status": "finished"})
+        loader.load_resource({"resourceType": "Encounter", "id": "e2", "subject": {"reference": "Patient/p1"}, "status": "planned"})
+        loader.load_resource({"resourceType": "Observation", "id": "o1", "subject": {"reference": "Patient/p1"}, "status": "final"})
+        loader.load_resource({"resourceType": "Observation", "id": "o2", "subject": {"reference": "Patient/p1"}, "status": "preliminary"})
+        sql = CQLToSQLTranslator(con).translate_library_to_population_sql(parse_cql(cql))
+        return float(con.execute(sql).fetchone()[-1])
+
+    def test_multi_source_aggregate_where_applies_inside_source_scope(self) -> None:
+        """EXP2-008: the query WHERE references the primary alias (E),
+        which binds only inside the with-clause derived table — it must be
+        pushed down, not dangled at the derived-table level."""
+        base = (
+            "library T\ncontext Patient\n"
+            "define D: ([Encounter] E with [Observation] O such that O.status = 'final') R\n"
+            "{where}aggregate T starting 0: T + 1"
+        )
+        # with-where: only (finished E, final O) pairs count -> 1
+        assert self._aggregate_count(base.format(where="  where E.status = 'finished'\n")) == 1.0
+        # control, no where: every E x final O pair -> 2
+        assert self._aggregate_count(base.format(where="")) == 2.0
+
+    def test_single_source_aggregate_where_unchanged(self) -> None:
+        assert self._aggregate_count(
+            "library T\ncontext Patient\n"
+            "define D: ([Observation] O where O.status = 'final') R\n"
+            "  aggregate T starting 0: T + 1"
+        ) == 1.0
+
+    def test_find_matching_paren_is_string_literal_aware(self) -> None:
+        """EXP2-010: parens inside '...' literals are data, not structure."""
+        from fhir4ds.cql.translator.expressions._query import demote_audit_in_text
+
+        cases = [
+            # balanced parens in literal (worked before, must keep working)
+            (
+                "CASE WHEN audit_leaf('note', 'pain (acute)') THEN 1 ELSE 0 END",
+                "CASE WHEN struct_extract(audit_leaf('note', 'pain (acute)'), 'result') THEN 1 ELSE 0 END",
+            ),
+            # unbalanced open paren (previously: silent skip, no demotion)
+            (
+                "CASE WHEN audit_leaf('note', 'pain (chronic') THEN 1 ELSE 0 END",
+                "CASE WHEN struct_extract(audit_leaf('note', 'pain (chronic'), 'result') THEN 1 ELSE 0 END",
+            ),
+            # unbalanced close paren (previously: corrupt SQL with broken quoting)
+            (
+                "CASE WHEN audit_leaf('note', 'resolved)') THEN 1 ELSE 0 END",
+                "CASE WHEN struct_extract(audit_leaf('note', 'resolved)'), 'result') THEN 1 ELSE 0 END",
+            ),
+            # escaped quote keeps the scanner in-string across a paren
+            (
+                "CASE WHEN audit_leaf('it''s (ok', 'x)') THEN 1 ELSE 0 END",
+                "CASE WHEN struct_extract(audit_leaf('it''s (ok', 'x)'), 'result') THEN 1 ELSE 0 END",
+            ),
+        ]
+        for sql, want in cases:
+            got = demote_audit_in_text(sql)
+            assert got == want, f"{sql!r}: want {want!r}, got {got!r}"

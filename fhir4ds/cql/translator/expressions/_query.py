@@ -300,6 +300,44 @@ def _patient_correlated_where(existing_where, row_alias: str, outer_pid: str):
     )
     if existing_where is None:
         return correlation
+    return SQLBinaryOp(operator="AND", left=existing_where, right=correlation)
+
+
+def _push_where_into_derived_source(select_node) -> bool:
+    """EXP2-008: push a translated query WHERE into a derived-table source.
+
+    With-clause chains produce rows sources shaped
+    ``SELECT ... FROM (SELECT * FROM "T" AS E WHERE EXISTS(...)) AS R``;
+    the query's own WHERE was translated against the PRIMARY source alias
+    (E), which binds only INSIDE the derived select. Attaching it beside
+    the derived table binder-fails ("Referenced table E not found"). On
+    success the where is ANDed into the inner select and
+    ``select_node.where`` is cleared. Returns False (where left in place)
+    when the FROM is not a derived select.
+    """
+    where = select_node.where
+    if where is None:
+        return False
+    frm = select_node.from_clause
+    target = None
+    if (
+        isinstance(frm, SQLAlias)
+        and isinstance(frm.expr, SQLSubquery)
+        and isinstance(frm.expr.query, SQLSelect)
+    ):
+        target = frm.expr.query
+    elif isinstance(frm, SQLAlias) and isinstance(frm.expr, SQLSelect):
+        target = frm.expr
+    if target is None:
+        return False
+    if target.where is not None:
+        target.where = SQLBinaryOp(operator="AND", left=target.where, right=where)
+    else:
+        target.where = where
+    select_node.where = None
+    return True
+    if existing_where is None:
+        return correlation
     return SQLBinaryOp(
         operator="AND", left=existing_where, right=correlation
     )
@@ -639,15 +677,36 @@ import re as _re
 
 
 def _find_matching_paren(s: str, start: int) -> int:
-    """Find the closing paren matching the open paren at *start*."""
+    """Find the closing paren matching the open paren at *start*.
+
+    String-literal aware (external review EXP2-010): parentheses inside
+    '...' literals are data, not structure. Clinical text routinely
+    carries unbalanced parens ("pain (chronic", "resolved)"), which the
+    naive counter mis-reads — an early ')' truncated the match and
+    produced structurally corrupt SQL, while an unclosed '(' silently
+    skipped the demotion entirely (audit STRUCT flowing into a boolean
+    context). Doubled '' escapes are honored.
+    """
     depth = 0
-    for i in range(start, len(s)):
-        if s[i] == "(":
+    in_string = False
+    i = start
+    while i < len(s):
+        ch = s[i]
+        if in_string:
+            if ch == "'":
+                if i + 1 < len(s) and s[i + 1] == "'":
+                    i += 2  # escaped quote — stay in string
+                    continue
+                in_string = False
+        elif ch == "'":
+            in_string = True
+        elif ch == "(":
             depth += 1
-        elif s[i] == ")":
+        elif ch == ")":
             depth -= 1
             if depth == 0:
                 return i
+        i += 1
     return -1
 
 
@@ -6650,13 +6709,35 @@ class QueryMixin:
                                 _value_expr = _inner_expr
                     if _value_expr is not None:
                         from ._utils import _coerce_query_rows_to_list
+                        # EXP2-008 class: push the query WHERE into the
+                        # derived table (with-clause chains) BEFORE the
+                        # rows-to-list coercion — it references the primary
+                        # alias which binds only inside the derived select.
+                        _push_where_into_derived_source(_sel)
                         _coerced = _coerce_query_rows_to_list(source_list)
                         if _coerced is not source_list:
                             source_list = _coerced
                             if isinstance(source_list, SQLSubquery) and isinstance(source_list.query, SQLSelect):
-                                source_list.query.where = _patient_correlated_where(
-                                    source_list.query.where, _row_alias, _outer_pid
-                                )
+                                # Correlate at the PROJECTED level (where the
+                                # row alias binds), not at the coercion
+                                # wrapper (whose FROM alias is
+                                # _cql_list_source) — EXP2-008 review finding.
+                                _proj = None
+                                _w_from = source_list.query.from_clause
+                                if (
+                                    isinstance(_w_from, SQLAlias)
+                                    and isinstance(_w_from.expr, SQLSubquery)
+                                    and isinstance(_w_from.expr.query, SQLSelect)
+                                ):
+                                    _proj = _w_from.expr.query
+                                if _proj is not None:
+                                    _proj.where = _patient_correlated_where(
+                                        _proj.where, _row_alias, _outer_pid
+                                    )
+                                else:
+                                    source_list.query.where = _patient_correlated_where(
+                                        source_list.query.where, _row_alias, _outer_pid
+                                    )
                     else:
                         # Retrieve/multi-column rows: fold over the resource
                         # column of each row, patient-correlated so rows do
@@ -6702,7 +6783,13 @@ class QueryMixin:
                             from_clause=_from,
                         )
                         if _sel.where is not None:
-                            _inner.where = _sel.where
+                            # External review EXP2-008: the query WHERE
+                            # references the primary source alias (E), which
+                            # binds only INSIDE the with-clause derived
+                            # table. Push it down instead of dangling it at
+                            # the derived-table level.
+                            if not _push_where_into_derived_source(_sel):
+                                _inner.where = _sel.where
                         _inner.where = _patient_correlated_where(
                             _inner.where, _row_alias, _outer_pid
                         )
