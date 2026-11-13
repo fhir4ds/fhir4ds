@@ -24,6 +24,7 @@ def _cql_fixture_path(filename: str):
         root / "tests" / "data" / "ecqm-content-qicore-2025" / "input" / "cql" / filename,
         root / "fhir4ds" / "cql" / "resources" / "cql" / filename,
         root / "tests" / "data" / "dqm-content-qicore-2026" / "input" / "cql" / filename,
+        root / "tests" / "data" / "cql" / "dqm-content-cms-2025" / filename,
     ]
     for path in candidates:
         if path.exists():
@@ -212,19 +213,91 @@ class TestIntegrationWithStatusCql:
         # (some like isDiagnosticStudyPerformed have category exists() which we skip)
         assert len(filters) >= 18, f"Expected >= 18 filters, got {len(filters)}: {list(filters.keys())}"
 
+        # extract_all_status_filters now returns name -> LIST of configs (one per
+        # overload); Status.cql declares each function once, so unwrap the single
+        # config for the shape assertions below.
+        single = {name: cfgs[0] for name, cfgs in filters.items()}
+
         # Verify specific well-known filters
-        assert filters["isEncounterPerformed"]["status_field"] == "status"
-        assert filters["isEncounterPerformed"]["allowed"] == ["finished"]
+        assert single["isEncounterPerformed"]["status_field"] == "status"
+        assert single["isEncounterPerformed"]["allowed"] == ["finished"]
 
-        assert filters["isAssessmentPerformed"]["allowed"] == ["final", "amended", "corrected"]
+        assert single["isAssessmentPerformed"]["allowed"] == ["final", "amended", "corrected"]
 
-        assert "verified" in filters
-        assert filters["verified"]["null_passes"] is True
+        assert "verified" in single
+        assert single["verified"]["null_passes"] is True
 
-        assert filters["isInterventionOrder"]["intent_field"] == "intent"
+        assert single["isInterventionOrder"]["intent_field"] == "intent"
 
-        assert filters["isMedicationActive"]["allowed"] == ["active"]
-        assert filters["isMedicationActive"]["intent_field"] == "intent"
+        assert single["isMedicationActive"]["allowed"] == ["active"]
+        assert single["isMedicationActive"]["intent_field"] == "intent"
 
         # Verify smoking status
-        assert filters["isObservationSmokingStatus"]["allowed"] == ["final"]
+        assert single["isObservationSmokingStatus"]["allowed"] == ["final"]
+
+
+class TestExternalReviewB10OverloadAndPartial:
+    """Regression tests for the external-review CRIT-02 findings.
+
+    (a) Overload collision: `extract_all_status_filters` keyed configs by
+        function NAME alone, so the last-registered overload won. In
+        FHIRCommon.cql, `verified`/`confirmed`/`unconfirmed`/`refuted` are
+        declared for BOTH Condition and AllergyIntolerance with DIFFERENT
+        value sets — a Condition operand silently filtered with
+        AllergyIntolerance codes.
+    (b) Partial-AND drop: `_extract_and_compound` returned a left-only
+        config when the right side of an AND was not a recognized status
+        filter, silently dropping the un-extracted predicate when the
+        dispatcher replaced the call with a status-only WHERE.
+    """
+
+    def test_overloads_keyed_with_param_type(self):
+        from ...parser.parser import parse_cql
+        path = _cql_fixture_path("FHIRCommon.cql")
+        lib = parse_cql(path.read_text())
+        filters = extract_all_status_filters(lib, None)
+        # both verified overloads survive, each with its own value set
+        v = filters["verified"]
+        by_type = {c["param_type"]: c for c in v}
+        assert by_type["Condition"]["allowed"][:2] == ["confirmed", "unconfirmed"]
+        assert by_type["AllergyIntolerance"]["allowed"][:2] == [
+            "allergy-confirmed", "allergy-unconfirmed",
+        ]
+        c = filters["confirmed"]
+        assert {cfg["param_type"]: tuple(cfg["allowed"]) for cfg in c} == {
+            "Condition": ("confirmed",),
+            "AllergyIntolerance": ("allergy-confirmed",),
+        }
+
+    def test_matching_status_filter_picks_overload(self):
+        # Resolution by the resolved function definition's parameter type.
+        from ...parser.parser import parse_cql
+        from ...translator.status_filter_extractor import _func_def_param_type
+        path = _cql_fixture_path("FHIRCommon.cql")
+        lib = parse_cql(path.read_text())
+        filters = extract_all_status_filters(lib, None)
+        conds = [s for s in lib.statements
+                 if getattr(s, "fluent", False) and s.name == "verified"
+                 and _func_def_param_type(s) == "Condition"]
+        allergies = [s for s in lib.statements
+                     if getattr(s, "fluent", False) and s.name == "verified"
+                     and _func_def_param_type(s) == "AllergyIntolerance"]
+        assert conds and allergies
+        v = filters["verified"]
+        cond_cfg = next(c for c in v if c["param_type"] == "Condition")
+        allergy_cfg = next(c for c in v if c["param_type"] == "AllergyIntolerance")
+        assert "allergy" not in " ".join(cond_cfg["allowed"]).lower()
+        assert all("allergy" in a for a in allergy_cfg["allowed"])
+
+    def test_partial_and_extraction_declines(self):
+        # `status in {...} and <unrecognized predicate>` must NOT produce a
+        # partial config (the right predicate would be silently dropped).
+        from ...parser.parser import parse_expression
+        where = parse_expression(
+            "(X.status in {'final', 'amended'}) and (X.category is not null)"
+        )
+        cfg = None
+        from ...translator import status_filter_extractor as sfe
+        if isinstance(where, BinaryExpression) and where.operator == "and":
+            cfg = sfe._extract_and_compound(where, None)
+        assert cfg is None

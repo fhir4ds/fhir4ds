@@ -1180,17 +1180,25 @@ class FunctionInliner:
         _prev_inlining = getattr(self.context, '_current_inlining_library', None)
         self.context._current_inlining_library = func_def.library_name
         try:
-            substituted = self._substitute_parameters_cql(func_def.body, param_map)
-            # Prefix library references if from an external library
+            # Prefix library references BEFORE substituting caller arguments.
+            # The previous order (substitute -> prefix) renamed CALLER-supplied
+            # identifiers that happened to match an included-library define
+            # name into `<Lib>.<name>`, corrupting them (the caller's own
+            # alias/define became a dangling reference to the included
+            # library). Prefixing the pristine body protects the function's
+            # own parameters via the param-name set passed below.
+            body = func_def.body
             if func_def.library_name:
                 lib_info = self.context.includes.get(func_def.library_name)
                 if lib_info:
                     lib_defs = set(lib_info.definitions.keys())
                     lib_funcs = set(lib_info.functions.keys()) if hasattr(lib_info, 'functions') else set()
-                    substituted = self._prefix_library_refs(
-                        substituted, func_def.library_name, lib_defs, {},
+                    body = self._prefix_library_refs(
+                        body, func_def.library_name, lib_defs,
+                        {p_name: True for p_name, _ in func_def.parameters},
                         library_funcs=lib_funcs,
                     )
+            substituted = self._substitute_parameters_cql(body, param_map)
             expanded = self._inline_nested_calls_cql(substituted, func_def.library_name)
             return expanded
         finally:

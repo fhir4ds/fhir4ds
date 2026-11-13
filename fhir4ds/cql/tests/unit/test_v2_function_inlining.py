@@ -763,3 +763,62 @@ class TestCheckForCycles:
 
         with pytest.raises(TranslationError):
             inliner.check_for_cycles()
+
+
+class TestExternalReviewB10PrefixOrdering:
+    """CRIT-04 (external review): `_prefix_library_refs` used to run AFTER
+    substituting caller arguments, so a caller-supplied Identifier whose name
+    collided with an included-library DEFINE name was renamed to
+    `<Lib>.<name>` — corrupting the caller's own alias/define reference."""
+
+    def _inliner(self):
+        from ...translator.context import SQLTranslationContext
+        from ...translator.function_inliner import FunctionInliner
+
+        ctx = SQLTranslationContext()
+
+        class _LibInfo:
+            definitions = {"Foo": object()}
+            functions = {}
+
+        ctx.includes["Lib"] = _LibInfo()
+        return ctx, FunctionInliner(ctx)
+
+    def test_caller_identifier_not_captured_by_library_prefix(self):
+        from ...parser.parser import parse_expression
+        from ...parser.ast_nodes import Identifier, QualifiedIdentifier
+        from ...translator.function_inliner import FunctionDef
+
+        ctx, fi = self._inliner()
+        body = parse_expression("X union ({ Foo })")  # Foo = library define
+        fd = FunctionDef(
+            name="f", library_name="Lib",
+            parameters=[("X", None)], body=body, fluent=True,
+        )
+        fi.register_function(fd)
+        # Caller passes an identifier literally named 'Foo' (quoted).
+        out = fi.expand_function("f", Identifier(name="Foo", quoted=True), [], "Lib")
+        # Left (the substituted caller argument) must stay the CALLER's Foo...
+        assert type(out.left).__name__ == "Identifier"
+        assert out.left.name == "Foo" and out.left.quoted is True
+        # ...while the body's library-define reference becomes Lib.Foo.
+        elem = out.right.elements[0]
+        assert isinstance(elem, QualifiedIdentifier)
+        assert elem.parts == ["Lib", "Foo"]
+
+    def test_parameter_names_are_protected_from_prefixing(self):
+        from ...parser.parser import parse_expression
+        from ...parser.ast_nodes import QualifiedIdentifier
+        from ...translator.function_inliner import FunctionDef
+
+        ctx, fi = self._inliner()
+        # Parameter literally named like the library define: must NOT be
+        # prefixed (it would no longer match substitution).
+        body = parse_expression("Foo")  # bare parameter reference
+        fd = FunctionDef(
+            name="g", library_name="Lib",
+            parameters=[("Foo", None)], body=body, fluent=False,
+        )
+        fi.register_function(fd)
+        out = fi.expand_function("g", None, [], "Lib")
+        assert not isinstance(out, QualifiedIdentifier)
