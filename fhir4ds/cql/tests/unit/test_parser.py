@@ -873,3 +873,71 @@ class TestDifferenceBetweenTrailingIn:
         )
         from ...parser.ast_nodes import DifferenceBetween
         assert isinstance(e, DifferenceBetween)
+
+
+class TestExternalReviewB1ParserTokenDiscipline:
+    """Regression coverage for the 2026-11-13 external parser review, batch B1
+    (TRIAGE_cql_review_20261113.md): quoted-identifier attribution, silent
+    token drops in speculative timing-phrase branches, and the let-clause
+    trailing comma."""
+
+    def test_quoted_flag_describes_the_consumed_token(self):
+        # PAR-001: `quoted` was computed from peek() (pos+1), inverting it.
+        ident = parse_expression('"My Quoted Def"')
+        assert type(ident).__name__ == "Identifier"
+        assert ident.name == "My Quoted Def" and ident.quoted is True
+
+    def test_unquoted_identifier_followed_by_alias_is_not_quoted(self):
+        ast = parse_expression('UnquotedSource "P"')
+        src = ast.source.expression
+        assert src.name == "UnquotedSource" and src.quoted is False
+        assert ast.source.alias == "P"
+
+    def test_stray_properly_is_not_silently_dropped(self):
+        # PAR-003: `true properly` used to return Literal(True).
+        with pytest.raises(ParseError):
+            parse_expression("true properly")
+
+    def test_bare_within_without_quantity_is_not_silently_dropped(self):
+        # PAR-003: `true within 5` used to return Literal(True).
+        with pytest.raises(ParseError):
+            parse_expression("true within 5")
+
+    def test_starts_within_interval_is_not_silently_dropped(self):
+        # Grammar requires `within <quantity> <unit> of`; a bare
+        # `starts within <expr>` must be a ParseError, not `starts <expr>`.
+        with pytest.raises(ParseError):
+            parse_expression("Interval[1, 5] starts within Interval[1, 5]")
+
+    def test_valid_starts_within_quantity_of_still_parses(self):
+        ast = parse_expression(
+            "[Encounter] E where E.period starts within 3 days of @2024-01-01"
+        )
+        assert ast.where is not None
+
+    def test_let_clause_trailing_comma_is_a_parse_error(self):
+        # PAR-003 (let): the trailing comma used to be consumed and dropped.
+        with pytest.raises(ParseError):
+            parse_cql(
+                "library T\nusing FHIR version '4.0.1'\ncontext Patient\n"
+                "define \"D\": [Patient] P let x: 1, where P.active = true"
+            )
+
+    def test_let_clause_multi_binding_still_parses(self):
+        ast = parse_cql(
+            "library T\nusing FHIR version '4.0.1'\ncontext Patient\n"
+            "define \"D\": [Patient] P let x: 1, y: 2 return x + y"
+        )
+        assert ast is not None
+
+    def test_multi_word_keyword_spanning_newline_tracks_line(self):
+        # PAR-002 (line tracking): the token AFTER `or more` spanning a
+        # newline used to report the keyword's start line.
+        from ...parser.lexer import Lexer
+        tokens = Lexer("1 = 1 or\nmore garbage").tokenize()
+        # `or\nmore` lexes as one OR_MORE token; the following token must be
+        # on line 2.
+        after = [t for t in tokens if t.type not in (TokenType.INTEGER,)]
+        or_more = next(t for t in tokens if t.type == TokenType.OR_MORE)
+        idx = tokens.index(or_more)
+        assert tokens[idx + 1].line == 2

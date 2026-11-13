@@ -744,6 +744,7 @@ class CQLParser:
                              or self.peek().type in (
                                  TokenType.YEAR, TokenType.MONTH, TokenType.DAY, TokenType.HOUR,
                                  TokenType.MINUTE, TokenType.SECOND, TokenType.MILLISECOND, TokenType.WEEK)):
+                    same_pos = self.pos
                     self.advance()  # consume 'same'
                     # Optionally consume precision unit (e.g. "day" in "same day as")
                     precision = ""
@@ -757,9 +758,16 @@ class CQLParser:
                         qualifier = " or after"
                     elif self.match_and_advance(TokenType.OR_BEFORE):
                         qualifier = " or before"
-                    right = self.parse_type_expression()
-                    left = BinaryExpression(
-                        operator=f"starts same{precision}{qualifier}", left=left, right=right)
+                    if not qualifier:
+                        # Grammar (concurrentWithIntervalOperatorPhrase) requires
+                        # a qualifier or 'as' after the optional precision. Consume
+                        # nothing and surface the leftover tokens instead of
+                        # embedding them in the operator string.
+                        self.pos = same_pos
+                    else:
+                        right = self.parse_type_expression()
+                        left = BinaryExpression(
+                            operator=f"starts same{precision}{qualifier}", left=left, right=right)
                 # Handle "starts before or on EXPR" = "starts on or before EXPR"
                 elif self.match(TokenType.BEFORE) and self.peek().type == TokenType.OR and \
                         self.peek(2).type == TokenType.IDENTIFIER and self.peek(2).value.lower() == "on":
@@ -778,28 +786,26 @@ class CQLParser:
                     left = BinaryExpression(operator=f"starts {op}", left=left, right=right)
                 # Handle "starts within N unit of EXPR" timing operator
                 elif self.match(TokenType.IDENTIFIER) and self.current().value.lower() == "within":
+                    # Grammar (withinIntervalOperatorPhrase) requires
+                    # `within <quantity> <unit> of`; anything less must
+                    # surface the leftover tokens, not silently consume them.
+                    saved_pos = self.pos
                     self.advance()  # consume 'within'
-                    if self.match(TokenType.INTEGER, TokenType.DECIMAL):
+                    if self.match(TokenType.INTEGER, TokenType.DECIMAL) and self._within_unit_follows():
                         quantity_value = self.advance().value
-                        if self.match(TokenType.YEAR, TokenType.MONTH, TokenType.DAY,
-                                      TokenType.HOUR, TokenType.MINUTE, TokenType.SECOND,
-                                      TokenType.MILLISECOND, TokenType.WEEK, TokenType.YEARS,
-                                      TokenType.MONTHS, TokenType.DAYS, TokenType.HOURS,
-                                      TokenType.MINUTES, TokenType.SECONDS, TokenType.MILLISECONDS,
-                                      TokenType.WEEKS):
-                            unit = self.advance().value
-                            self.expect(TokenType.OF, "Expected 'of' after unit in 'starts within N unit of'")
-                            right = self.parse_type_expression()
-                            left = BinaryExpression(
-                                operator=f"starts within {quantity_value} {unit} of",
-                                left=left,
-                                right=right,
-                            )
-                        else:
-                            right = self.parse_type_expression()
-                            left = BinaryExpression(operator="starts", left=left, right=right)
-                    else:
+                        unit = self.advance().value
+                        self.expect(TokenType.OF, "Expected 'of' after unit in 'starts within N unit of'")
                         right = self.parse_type_expression()
+                        left = BinaryExpression(
+                            operator=f"starts within {quantity_value} {unit} of",
+                            left=left,
+                            right=right,
+                        )
+                    else:
+                        self.pos = saved_pos
+                        right = self._try_parse_complex_interval_comparison("starts")
+                        if right is None:
+                            right = self.parse_type_expression()
                         left = BinaryExpression(operator="starts", left=left, right=right)
                 else:
                     # Check for complex temporal comparison pattern:
@@ -817,6 +823,7 @@ class CQLParser:
                              or self.peek().type in (
                                  TokenType.YEAR, TokenType.MONTH, TokenType.DAY, TokenType.HOUR,
                                  TokenType.MINUTE, TokenType.SECOND, TokenType.MILLISECOND, TokenType.WEEK)):
+                    same_pos = self.pos
                     self.advance()  # consume 'same'
                     # Optionally consume precision unit (e.g. "day" in "same day as")
                     precision = ""
@@ -830,9 +837,16 @@ class CQLParser:
                         qualifier = " or after"
                     elif self.match_and_advance(TokenType.OR_BEFORE):
                         qualifier = " or before"
-                    right = self.parse_type_expression()
-                    left = BinaryExpression(
-                        operator=f"ends same{precision}{qualifier}", left=left, right=right)
+                    if not qualifier:
+                        # Grammar (concurrentWithIntervalOperatorPhrase) requires
+                        # a qualifier or 'as' after the optional precision. Consume
+                        # nothing and surface the leftover tokens instead of
+                        # embedding them in the operator string.
+                        self.pos = same_pos
+                    else:
+                        right = self.parse_type_expression()
+                        left = BinaryExpression(
+                            operator=f"ends same{precision}{qualifier}", left=left, right=right)
                 # Handle "ends before or on EXPR" = "ends on or before EXPR"
                 elif self.match(TokenType.BEFORE) and self.peek().type == TokenType.OR and \
                         self.peek(2).type == TokenType.IDENTIFIER and self.peek(2).value.lower() == "on":
@@ -851,28 +865,23 @@ class CQLParser:
                     left = BinaryExpression(operator=f"ends {op}", left=left, right=right)
                 # Handle "ends within N unit of EXPR" timing operator
                 elif self.match(TokenType.IDENTIFIER) and self.current().value.lower() == "within":
+                    saved_pos = self.pos
                     self.advance()  # consume 'within'
-                    if self.match(TokenType.INTEGER, TokenType.DECIMAL):
+                    if self.match(TokenType.INTEGER, TokenType.DECIMAL) and self._within_unit_follows():
                         quantity_value = self.advance().value
-                        if self.match(TokenType.YEAR, TokenType.MONTH, TokenType.DAY,
-                                      TokenType.HOUR, TokenType.MINUTE, TokenType.SECOND,
-                                      TokenType.MILLISECOND, TokenType.WEEK, TokenType.YEARS,
-                                      TokenType.MONTHS, TokenType.DAYS, TokenType.HOURS,
-                                      TokenType.MINUTES, TokenType.SECONDS, TokenType.MILLISECONDS,
-                                      TokenType.WEEKS):
-                            unit = self.advance().value
-                            self.expect(TokenType.OF, "Expected 'of' after unit in 'ends within N unit of'")
-                            right = self.parse_type_expression()
-                            left = BinaryExpression(
-                                operator=f"ends within {quantity_value} {unit} of",
-                                left=left,
-                                right=right,
-                            )
-                        else:
-                            right = self.parse_type_expression()
-                            left = BinaryExpression(operator="ends", left=left, right=right)
-                    else:
+                        unit = self.advance().value
+                        self.expect(TokenType.OF, "Expected 'of' after unit in 'ends within N unit of'")
                         right = self.parse_type_expression()
+                        left = BinaryExpression(
+                            operator=f"ends within {quantity_value} {unit} of",
+                            left=left,
+                            right=right,
+                        )
+                    else:
+                        self.pos = saved_pos
+                        right = self._try_parse_complex_interval_comparison("ends")
+                        if right is None:
+                            right = self.parse_type_expression()
                         left = BinaryExpression(operator="ends", left=left, right=right)
                 else:
                     # Same pattern for ends
@@ -898,8 +907,14 @@ class CQLParser:
                 right = self.parse_type_expression()
                 left = BinaryExpression(operator="properly included in", left=left, right=right)
             # Properly modifier for various operators (when properly is separate token)
-            elif self.match_and_advance(TokenType.PROPERLY):
-                # Handle "properly includes", "properly contains", "properly included in"
+            elif self.match(TokenType.PROPERLY):
+                # `properly` is only valid inside an intervalOperatorPhrase
+                # (CQL 1.5 grammar). If nothing recognizable follows, restore
+                # pos so the token surfaces as an unexpected/trailing token
+                # instead of being silently discarded (parse_expression("true
+                # properly") used to return Literal(True)).
+                saved_pos = self.pos
+                self.advance()
                 if self.match_and_advance(TokenType.INCLUDES):
                     right = self.parse_type_expression()
                     left = BinaryExpression(operator="properly includes", left=left, right=right)
@@ -918,6 +933,7 @@ class CQLParser:
                     left = BinaryExpression(operator="properly included in", left=left, right=right)
                 else:
                     # Unknown properly combination
+                    self.pos = saved_pos
                     break
             # Between operator (ternary): X between Y and Z
             elif self.match_and_advance(TokenType.BETWEEN):
@@ -931,17 +947,15 @@ class CQLParser:
                 self.advance()
             # "within N days/weeks/... of EXPR" timing operator
             elif self.match(TokenType.IDENTIFIER) and self.current().value.lower() == "within":
+                saved_pos = self.pos
                 self.advance()  # consume 'within'
-                if not self.match(TokenType.INTEGER, TokenType.DECIMAL):
+                if not (self.match(TokenType.INTEGER, TokenType.DECIMAL) and self._within_unit_follows()):
+                    # Incomplete `within` phrase: restore so the token
+                    # surfaces (trailing-token ParseError) instead of being
+                    # silently dropped with the loop's break.
+                    self.pos = saved_pos
                     break
                 quantity_value = self.advance().value
-                if not self.match(TokenType.YEAR, TokenType.MONTH, TokenType.DAY,
-                                  TokenType.HOUR, TokenType.MINUTE, TokenType.SECOND,
-                                  TokenType.MILLISECOND, TokenType.WEEK, TokenType.YEARS,
-                                  TokenType.MONTHS, TokenType.DAYS, TokenType.HOURS,
-                                  TokenType.MINUTES, TokenType.SECONDS, TokenType.MILLISECONDS,
-                                  TokenType.WEEKS):
-                    break
                 unit = self.advance().value
                 self.expect(TokenType.OF, "Expected 'of' after unit in 'within N unit of'")
                 right = self.parse_type_expression()
@@ -2153,6 +2167,19 @@ class CQLParser:
 
         return DateComponent(component=component, operand=operand)
 
+    _WITHIN_UNIT_TYPES = (
+        TokenType.YEAR, TokenType.MONTH, TokenType.DAY,
+        TokenType.HOUR, TokenType.MINUTE, TokenType.SECOND,
+        TokenType.MILLISECOND, TokenType.WEEK, TokenType.YEARS,
+        TokenType.MONTHS, TokenType.DAYS, TokenType.HOURS,
+        TokenType.MINUTES, TokenType.SECONDS, TokenType.MILLISECONDS,
+        TokenType.WEEKS,
+    )
+
+    def _within_unit_follows(self) -> bool:
+        """True when the token after a `within <number>` is a temporal unit."""
+        return self.peek().type in self._WITHIN_UNIT_TYPES
+
     def _try_parse_precision_of(self) -> Optional[str]:
         """
         Try to parse a precision specifier like 'year of', 'month of', etc.
@@ -2385,8 +2412,12 @@ class CQLParser:
 
     def _parse_identifier_or_function(self) -> Expression:
         """Parse an identifier that may be a function call."""
-        prev_token = self.peek()
-        is_quoted = prev_token and prev_token.type == TokenType.QUOTED_IDENTIFIER
+        # `quoted` must describe the token being consumed NOW. peek() looks at
+        # pos+1, so the old `self.peek()` read the token AFTER the identifier
+        # and inverted the flag: '"My Def"' parsed as quoted=False while
+        # `Source "P"` parsed Source as quoted=True.
+        current_token = self.current()
+        is_quoted = current_token.type == TokenType.QUOTED_IDENTIFIER
         name = self._parse_identifier_name()
 
         # Check for function call with parentheses
@@ -2794,19 +2825,23 @@ class CQLParser:
             clauses.append(LetClause(alias=alias, expression=expression))
 
             # Check for comma-separated additional bindings
+            pos_before_comma = self.pos
             if self.match_and_advance(TokenType.COMMA):
                 # Check if next token is an identifier (or keyword-as-identifier)
-                # followed by colon (another binding)
-                # Use lookahead: save position, try consuming identifier, check for ':'
-                saved_pos = self.pos
+                # followed by colon (another binding).
+                # Use lookahead: try consuming identifier, check for ':'
+                pos_after_comma = self.pos
                 try:
                     self._parse_identifier_name()
                     if self.match(TokenType.COLON):
-                        self.pos = saved_pos  # restore, let the loop re-parse
+                        self.pos = pos_after_comma  # loop re-parses the binding
                         continue  # Parse another binding
                 except Exception as e:
                     _logger.warning("Lookahead for let binding failed: %s", e)
-                self.pos = saved_pos
+                # Not another binding: restore to BEFORE the comma so an
+                # invalid trailing comma surfaces as an unexpected token
+                # (previously the comma was consumed and silently dropped).
+                self.pos = pos_before_comma
             break
 
         return clauses

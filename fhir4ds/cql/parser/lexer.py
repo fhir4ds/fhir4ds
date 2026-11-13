@@ -1340,7 +1340,7 @@ class Lexer:
 
         # Collect potential words to match
         words = [first_lower]
-        positions = [(self.pos, self.column)]
+        positions = [(self.pos, self.column, self.line)]
 
         # Read ahead to collect more words
         temp_pos = self.pos
@@ -1370,7 +1370,7 @@ class Lexer:
                     temp_pos += 1
                     temp_col += 1
                 words.append(word.lower())
-                positions.append((temp_pos, temp_col))
+                positions.append((temp_pos, temp_col, temp_line))
             else:
                 break
 
@@ -1383,9 +1383,15 @@ class Lexer:
                         match = False
                         break
                 if match:
-                    # Found a match - update position
+                    # Found a match - update position. positions[i][2] carries
+                    # the line at the START of word i (a word never spans a
+                    # newline), so a multi-word keyword
+                    # that spans a newline leaves the lexer on the right line
+                    # (previously self.line was never advanced and every
+                    # following token reported the keyword's start line).
                     self.pos = positions[len(kw_words) - 1][0]
                     self.column = positions[len(kw_words) - 1][1]
+                    self.line = positions[len(kw_words) - 1][2]
 
                     # Build the value string
                     value = " ".join(words[: len(kw_words)])
