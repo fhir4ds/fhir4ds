@@ -7,12 +7,12 @@ can recover the source resource, the dotted path, the exact text span,
 and the matched substring that produced the Condition.
 
 Reference: FDD ``docs/architecture/plans/FEATURE_MEDTERM4DS_PHASE4_NER.md``
-§3 (SCOPE REDUCTION block) — "Extension URL: ``http://fhir4ds.org/fhir/StructureDefinition/derived-from-text``".
+§3 (SCOPE REDUCTION block) — "Extension URL: ``https://fhir4ds.com/fhir/StructureDefinition/derived-from-text``".
 
 Extension shape (five sub-extensions, all always present):
 
     {
-        "url": "http://fhir4ds.org/fhir/StructureDefinition/derived-from-text",
+        "url": "https://fhir4ds.com/fhir/StructureDefinition/derived-from-text",
         "extension": [
             {"url": "source-ref",   "valueString":   "Observation/abc"},
             {"url": "source-path",  "valueString":   "note[0].text"},
@@ -32,7 +32,19 @@ from typing import Optional
 
 #: Canonical URL for the derived-from-text extension. Stable across releases.
 DERIVED_FROM_TEXT_EXTENSION_URL: str = (
+    "https://fhir4ds.com/fhir/StructureDefinition/derived-from-text"
+)
+
+#: Legacy (pre-0.0.23) spelling. Never emit it; always accept it — resources
+#: produced before the canonical moved to the owned domain carry it.
+DERIVED_FROM_TEXT_EXTENSION_URL_LEGACY: str = (
     "http://fhir4ds.org/fhir/StructureDefinition/derived-from-text"
+)
+
+#: Every accepted spelling (emit only the canonical).
+DERIVED_FROM_TEXT_EXTENSION_URLS: tuple[str, ...] = (
+    DERIVED_FROM_TEXT_EXTENSION_URL,
+    DERIVED_FROM_TEXT_EXTENSION_URL_LEGACY,
 )
 
 # Fixed sub-extension URL strings. Exposed as module constants so test
@@ -125,7 +137,7 @@ def parse_derived_from_text_extension(resource: dict) -> Optional[dict]:
 
     root: Optional[dict] = None
     for ext in extensions:
-        if isinstance(ext, dict) and ext.get("url") == DERIVED_FROM_TEXT_EXTENSION_URL:
+        if isinstance(ext, dict) and ext.get("url") in DERIVED_FROM_TEXT_EXTENSION_URLS:
             root = ext
             break
 

@@ -54,7 +54,12 @@ _HEALTH_PROBE_TIMEOUT_SECONDS = 2.0
 # $search hit. The same URL is reused by fhir4ds's autocoding extension
 # downstream, so any consumer that already understands our extension
 # shape understands the sidecar's response too.
-_MATCH_GRADE_URL = "http://fhir4ds.org/fhir/StructureDefinition/match-grade"
+_MATCH_GRADE_URL = "https://fhir4ds.com/fhir/StructureDefinition/match-grade"
+# Legacy pre-0.0.23 spelling: servers may still return it.
+_MATCH_GRADE_URLS = (
+    _MATCH_GRADE_URL,
+    "http://fhir4ds.org/fhir/StructureDefinition/match-grade",
+)
 
 # Cap on concurrent HTTP calls in search_batch. Most medterm4ds sidecars
 # handle ~8 concurrent requests before saturating the SapBERT inference
@@ -96,7 +101,7 @@ def _extract_match_grade(resource: dict, search_meta: dict | None) -> str:
             for entry in ext:
                 if (
                     isinstance(entry, dict)
-                    and entry.get("url") == _MATCH_GRADE_URL
+                    and entry.get("url") in _MATCH_GRADE_URLS
                     and isinstance(entry.get("valueCode"), str)
                 ):
                     return entry["valueCode"]

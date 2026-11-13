@@ -4719,7 +4719,7 @@ zero parity diffs:
   `autocoding_extension` and `userSelected=False`.
 - New module `fhir4ds/cql/loader/autocoding_extension.py` owns the
   canonical URL
-  `http://fhir4ds.org/fhir/StructureDefinition/autocoding` plus
+  `https://fhir4ds.com/fhir/StructureDefinition/autocoding` plus
   builder/parser/predicate for the 6-field extension (engine,
   engine-version, search-mode, score, match-grade, index-version).
 - New module `fhir4ds/cql/loader/category.py` owns the
@@ -7026,8 +7026,7 @@ rejected at construction. `notes_pipeline.py` already detected the version —
 `AutoCoder` was the outlier.
 
 Docs had drifted from the emitted extension shape and were corrected in the same
-pass: the URL is `http://fhir4ds.org/fhir/StructureDefinition/autocoding` (not
-`fhir4ds.com`), the field is `score` (not `search-score`),
+pass: the field is `score` (not `search-score`),
 `search-mode`/`match-grade` are `valueCode` (not `valueString`), and there is no
 `result-text-hash` field. `AUTOCODING_EXTENSION_URL` plus the six sub-url
 constants in `loader/autocoding_extension.py` are the single source of truth

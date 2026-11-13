@@ -25,7 +25,7 @@ SQL ``JOIN`` keywords inside the ``content[].data`` payload. Authors who
 care about portability should use SQLQuery instead of the ``joins``
 extension.
 
-The canonical profile URL ``https://fhir4ds.org/StructureDefinition/JoinExtension``
+The canonical profile URL ``https://fhir4ds.com/StructureDefinition/JoinExtension``
 is reserved for opt-in declaration of this extension.
 
 The optional serialization gate (``viewdef.types._EMIT_JOINS_REQUIRES_PROFILE``)

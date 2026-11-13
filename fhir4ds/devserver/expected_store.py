@@ -243,7 +243,7 @@ def stamp_capture(report: dict[str, Any]) -> dict[str, Any]:
     ext = report.setdefault("extension", [])
     ext.append(
         {
-            "url": "http://fhir4ds.org/devserver/StructureDefinition/captured-at",
+            "url": "https://fhir4ds.com/devserver/StructureDefinition/captured-at",
             "valueDateTime": datetime.now(timezone.utc).isoformat(),
         }
     )

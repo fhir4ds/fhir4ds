@@ -37,7 +37,7 @@ NER cascade — is served live by the public
    the top *k* survive. Re-filtering is instant — no new search.
 4. **Augmentation** — each surviving result becomes a Coding with
    `userSelected: false` and the
-   [`autocoding` audit extension](https://fhir4ds.org/fhir/StructureDefinition/autocoding):
+   [`autocoding` audit extension](https://fhir4ds.com/fhir/StructureDefinition/autocoding):
    engine, engine version, search mode, score, match grade.
 
 The same flow in Python is three lines — see the
