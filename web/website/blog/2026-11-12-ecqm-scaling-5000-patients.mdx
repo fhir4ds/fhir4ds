@@ -5,6 +5,14 @@ authors: joel
 tags: [fhir, cql, analytics, performance]
 date: 2026-11-12T14:00:00Z
 slug: /ecqm-scaling-5000-patients
+# UNPUBLISHED pending a full re-run on the current engine.
+# The 100/1,000/5,000 ladder and the 42x amplification profile were measured
+# before materialized retrieve scans landed (2026-10-29 18:17), so the first
+# half of this post describes an engine that no longer exists. Only the rung-100
+# before/after comparison is current. Re-run benchmarks/scaling at 1,000 and
+# 5,000 on 0.0.23 (and on both DuckDB 1.5.5 and 2.0.0), regenerate SCALING.md,
+# then delete this flag to publish.
+draft: true
 ---
 
 A clinical quality measure is a good stress test for a query engine. You take an
