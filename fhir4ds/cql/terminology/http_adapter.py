@@ -34,6 +34,7 @@ from urllib.parse import urlparse
 
 from ..duckdb.udf.system_resolver import SystemResolver
 from .system_mappings import category_to_system_param
+from .vsac_adapter import TerminologyEndpointError
 from .types import CodeRef, SearchResult
 
 _logger = logging.getLogger(__name__)
@@ -431,6 +432,26 @@ class HTTPTerminologyEndpoint:
                         "activeOnly": "false",
                     },
                 )
+                # A refused expansion is a BACKEND capability gap, not a
+                # transient fault, so name it instead of surfacing a bare
+                # "400 Bad Request". The resolver deliberately degrades any
+                # endpoint failure to None + WARNING (INV-8), which turns an
+                # unexplained 400 into silently-empty membership — a message
+                # naming the cause is what makes that degradation diagnosable.
+                if response.status_code in (400, 422):
+                    raise TerminologyEndpointError(
+                        f"endpoint refused ValueSet expansion for "
+                        f"{valueset_url!r} (HTTP {response.status_code})"
+                        f"{self._diagnostics_suffix(response)}. "
+                        "Canonical-URL expansion (FHIR R4 "
+                        "ValueSet/$expand?url=...) is not implemented by every "
+                        "backend: medterm4ds, for example, resolves only a POSTed "
+                        "ValueSet body, a SNOMED fhir_vs implicit URL, or a filter "
+                        "parameter, and has no registry of stored ValueSets by "
+                        "canonical URL. Load the ValueSet locally, POST its "
+                        "definition via expand_intensional(), or point the endpoint "
+                        "at a full terminology server."
+                    )
                 response.raise_for_status()
                 payload = response.json()
             result = self._contains_to_coderefs(self._parse_contains(payload))
@@ -439,6 +460,24 @@ class HTTPTerminologyEndpoint:
         except Exception:
             self._on_call_failure()
             raise
+
+    @staticmethod
+    def _diagnostics_suffix(response: Any) -> str:
+        """Return ``": <diagnostics>"`` from an OperationOutcome, else "".
+
+        Best-effort: this runs on the failure path, so it must never raise over
+        the original error. Contains only the server's OperationOutcome text —
+        never credentials or our request headers.
+        """
+        try:
+            payload = response.json()
+            issues = payload.get("issue") or []
+            text = issues[0].get("diagnostics") if issues else None
+        except Exception:
+            return ""
+        if not text:
+            return ""
+        return ": " + " ".join(str(text).split())[:300]
 
     def expand_intensional(self, value_set: dict) -> list[CodeRef]:
         """POST <base_url>/ValueSet/$expand with an intensional ValueSet body.

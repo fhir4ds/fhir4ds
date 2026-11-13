@@ -105,6 +105,26 @@ All three modes (`disabled` returns `None`) expose the same protocol (`fhir4ds.c
 | `search_batch(queries, *, mode)` | `list[list[SearchResult]]` | Batched `search_text`. |
 | `is_healthy()` | `bool` | Probe the underlying engine / server without raising. Never raises. |
 
+### Backend capability note: expanding by canonical URL
+
+`expand()` issues the FHIR R4 standard request
+`GET ValueSet/$expand?url=<canonical>`. That works on a full terminology server —
+verified against HL7's `tx.fhir.org` — but **medterm4ds does not implement
+stored-ValueSet lookup by canonical URL**. It resolves three forms only:
+
+- a POSTed ValueSet **body** — use `expand_intensional()`
+- a SNOMED **`fhir_vs`** implicit ValueSet URL, e.g.
+  `http://snomed.info/sct/404684003?fhir_vs=isa`
+- a text **`filter`**
+
+So asking a medterm4ds backend to expand a canonical URL answers HTTP 400. Since
+0.0.23 the adapter raises a `TerminologyEndpointError` that names the cause and
+the remedies, instead of surfacing a bare "400 Bad Request" — which matters
+because `DependencyResolver.resolve_valueset()` deliberately degrades endpoint
+failures to `None` plus a WARNING (its INV-8 contract), so that message is the
+only diagnosis you will see. Load the ValueSet locally, POST its definition via
+`expand_intensional()`, or point the endpoint at a full terminology server.
+
 ## 6. Circuit breaker
 
 Both adapters ship with a per-instance circuit breaker. After `breaker_threshold` consecutive failures (default 5), subsequent calls short-circuit to `[]` for `breaker_cooldown_seconds` (default 60.0). A successful call resets the counter. The breaker is not thread-safe — if you share an endpoint across threads, wrap it in an external lock.

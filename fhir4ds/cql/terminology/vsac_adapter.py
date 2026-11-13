@@ -60,11 +60,12 @@ _VERSION_IN_CANONICAL_RE = re.compile(r"^(?P<base>.+?)\|(?P<version>\d{8,})$")
 
 
 class TerminologyEndpointError(RuntimeError):
-    """Raised when the VSAC endpoint cannot satisfy a request.
+    """Raised when a terminology endpoint cannot satisfy a request.
 
-    Message content policy: includes the HTTP status and an OperationOutcome
-    diagnostics excerpt when available, but NEVER the API key or the raw
-    Authorization header.
+    Shared by every adapter (VSAC, generic FHIR HTTP, ...) so callers can catch
+    one type. Message content policy: includes the HTTP status and an
+    OperationOutcome diagnostics excerpt when available, but NEVER API keys,
+    credentials, or raw Authorization headers.
     """
 
 

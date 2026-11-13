@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from fhir4ds.cql.terminology import CodeRef, SearchResult
+from fhir4ds.cql.terminology import CodeRef, SearchResult, TerminologyEndpointError
 from fhir4ds.cql.terminology.http_adapter import HTTPTerminologyEndpoint
 
 
@@ -178,6 +178,41 @@ def test_expand_invokes_get_with_canonical_url():
             },
         )
     ]
+
+
+def test_expand_refused_by_backend_raises_actionable_typed_error():
+    """A 400/422 on $expand is a backend capability gap, not a bare HTTP error.
+
+    medterm4ds resolves only a POSTed ValueSet body, a SNOMED fhir_vs implicit
+    URL, or a filter parameter — it has no stored-ValueSet-by-canonical
+    registry, so ``?url=`` is refused. DependencyResolver degrades any endpoint
+    failure to None + WARNING (INV-8), so this message is the only diagnosis a
+    user ever sees: it must name the cause and a remedy, not say "400".
+    """
+    payload = {
+        "resourceType": "OperationOutcome",
+        "issue": [
+            {
+                "severity": "error",
+                "diagnostics": "Provide a ValueSet body, a fhir_vs URL, or a "
+                               "filter parameter.",
+            }
+        ],
+    }
+    response = _MockResponse(payload, status_code=400)
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir", timeout_seconds=5.0)
+    with patch.object(adapter, "_client", return_value=_MockClient(response, [])):
+        with pytest.raises(TerminologyEndpointError) as excinfo:
+            adapter.expand("http://example.org/ValueSet/Foo")
+
+    message = str(excinfo.value)
+    assert "HTTP 400" in message
+    assert "Provide a ValueSet body" in message       # server diagnostics carried through
+    assert "fhir_vs" in message and "medterm4ds" in message  # names the cause
+    assert "expand_intensional" in message           # names a remedy
+    # The failure still counts against the circuit breaker.
+    failures, _ = adapter._breaker_snapshot()
+    assert failures >= 1
 
 
 def test_expand_normalizes_snomed_module_url():
