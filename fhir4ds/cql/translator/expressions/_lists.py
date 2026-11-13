@@ -3215,36 +3215,18 @@ class ListsMixin:
         # Translate source with LIST context to get all values
         source = self.translate(node.source, usage=ExprUsage.LIST)
 
-        # Handle special aggregate functions that need custom SQL
-        if operator_lower == "geometricmean":
-            # GeometricMean: exp(avg(log(value))) for positive numbers
-            # Using DuckDB's LOG function (natural logarithm)
-            return SQLFunctionCall(
-                name="EXP",
-                args=[
-                    SQLFunctionCall(
-                        name="AVG",
-                        args=[
-                            SQLFunctionCall(name="LOG", args=[source])
-                        ]
-                    )
-                ]
-            )
-
-        if operator_lower == "product":
-            # Product: exp(sum(log(value))) for positive numbers
-            # Using DuckDB's LOG function (natural logarithm)
-            return SQLFunctionCall(
-                name="EXP",
-                args=[
-                    SQLFunctionCall(
-                        name="SUM",
-                        args=[
-                            SQLFunctionCall(name="LOG", args=[source])
-                        ]
-                    )
-                ]
-            )
+        # NOTE (external-review EXP1-013, 2026-11-13): the former
+        # GeometricMean/Product special cases lived here as
+        # EXP(AVG(LOG(x))) / EXP(SUM(LOG(x))). They were DEAD — the parser's
+        # aggregate-token branch (parser.py ~1657) is itself shadowed by the
+        # earlier identifier branch, so aggregate names parse as FunctionRefs
+        # and lower through the pre-translate hooks (exact GeometricMean UDF /
+        # list_aggregate 'product'); no code constructs AggregateExpression
+        # with these operators. Had they been reachable they were also WRONG
+        # twice over: DuckDB's 1-arg LOG is base-10 (LN is natural), and the
+        # registered CQL Log(x, base) macro shadows 1-arg LOG on every
+        # register()ed connection (Binder Error). Deleted rather than
+        # "fixed"; pinned by TestExternalReviewB15DeadAggregateBranches.
 
         # Handle different aggregate functions based on source shape
         if operator_lower == "count":

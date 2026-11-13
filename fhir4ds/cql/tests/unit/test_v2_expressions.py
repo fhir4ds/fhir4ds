@@ -1705,100 +1705,81 @@ class TestSpecialAggregateFunctions:
         return ExpressionTranslator(context)
 
     def test_geometric_mean(self, translator: ExpressionTranslator):
-        """Test GeometricMean: GeometricMean([2, 8]) -> EXP(AVG(LOG(source)))."""
-        from ...parser.ast_nodes import AggregateExpression, ListExpression
-        result = translator.translate(
-            AggregateExpression(
-                source=ListExpression(elements=[Literal(value=2), Literal(value=8)]),
-                operator="GeometricMean"
-            )
-        )
-        # Should produce EXP(AVG(LOG(source)))
-        assert isinstance(result, SQLFunctionCall)
-        assert result.name == "EXP"
-        assert len(result.args) == 1
-        # Inner should be AVG
-        inner = result.args[0]
-        assert isinstance(inner, SQLFunctionCall)
-        assert inner.name == "AVG"
-        # Innermost should be LOG
-        log_call = inner.args[0]
-        assert isinstance(log_call, SQLFunctionCall)
-        assert log_call.name == "LOG"
+        """GeometricMean never emits the LOG-domain expansion (EXP1-013).
+
+        The parser only routes Count/Sum/Min/Max/Avg/Median/Mode tokens into
+        AggregateExpression; GeometricMean arrives as a FunctionRef and the
+        pre-translate hook lowers it to the exact GeometricMean UDF. The
+        former EXP(AVG(LOG(x))) branch was dead from the parser AND doubly
+        wrong (DuckDB 1-arg LOG is base-10, and the CQL Log(x, base) macro
+        shadows it on registered connections). Deleted 2026-11-13; this
+        pins the parser-reachable lowering plus correct execution.
+        """
+        import duckdb
+
+        from fhir4ds.cql import translate_cql
+        from fhir4ds.cql.duckdb import register
+
+        r = translate_cql("library T\ndefine G: GeometricMean({2.0, 8.0})")
+        sql = r["G"].to_sql()
+        assert "GeometricMean(" in sql
+        assert "EXP(" not in sql and "LOG(" not in sql
+
+        con = duckdb.connect()
+        register(con)
+        assert con.execute(f"SELECT {sql}").fetchone()[0] == 4.0
 
     def test_geometric_mean_lowercase(self, translator: ExpressionTranslator):
-        """Test GeometricMean with lowercase operator name."""
-        from ...parser.ast_nodes import AggregateExpression, ListExpression
-        result = translator.translate(
-            AggregateExpression(
-                source=ListExpression(elements=[Literal(value=2), Literal(value=8)]),
-                operator="geometricmean"
-            )
-        )
-        assert isinstance(result, SQLFunctionCall)
-        assert result.name == "EXP"
+        """Case-insensitive spelling lowers to the same exact UDF."""
+        from fhir4ds.cql import translate_cql
+
+        r = translate_cql("library T\ndefine G: geometricmean({2.0, 8.0})")
+        sql = r["G"].to_sql()
+        assert "eometricMean(" in sql  # case-insensitive dispatch
+        assert "EXP(" not in sql and "LOG(" not in sql
 
     def test_product(self, translator: ExpressionTranslator):
-        """Test Product: Product([2, 3, 4]) -> EXP(SUM(LOG(source)))."""
-        from ...parser.ast_nodes import AggregateExpression, ListExpression
-        result = translator.translate(
-            AggregateExpression(
-                source=ListExpression(elements=[Literal(value=2), Literal(value=3), Literal(value=4)]),
-                operator="Product"
-            )
-        )
-        # Should produce EXP(SUM(LOG(source)))
-        assert isinstance(result, SQLFunctionCall)
-        assert result.name == "EXP"
-        assert len(result.args) == 1
-        # Inner should be SUM
-        inner = result.args[0]
-        assert isinstance(inner, SQLFunctionCall)
-        assert inner.name == "SUM"
-        # Innermost should be LOG
-        log_call = inner.args[0]
-        assert isinstance(log_call, SQLFunctionCall)
-        assert log_call.name == "LOG"
+        """Product lowers to exact list_aggregate('product'), never LOG-domain."""
+        import duckdb
+
+        from fhir4ds.cql import translate_cql
+        from fhir4ds.cql.duckdb import register
+
+        r = translate_cql("library T\ndefine P: Product({2.0, 3.0, 4.0})")
+        sql = r["P"].to_sql()
+        assert "list_aggregate" in sql and "'product'" in sql
+        assert "EXP(" not in sql and "LOG(" not in sql
+
+        con = duckdb.connect()
+        register(con)
+        assert con.execute(f"SELECT {sql}").fetchone()[0] == 24.0
 
     def test_product_lowercase(self, translator: ExpressionTranslator):
-        """Test Product with lowercase operator name."""
-        from ...parser.ast_nodes import AggregateExpression, ListExpression
-        result = translator.translate(
-            AggregateExpression(
-                source=ListExpression(elements=[Literal(value=2), Literal(value=3), Literal(value=4)]),
-                operator="product"
-            )
-        )
-        assert isinstance(result, SQLFunctionCall)
-        assert result.name == "EXP"
+        """Case-insensitive spelling lowers to the same exact product path."""
+        from fhir4ds.cql import translate_cql
+
+        r = translate_cql("library T\ndefine P: product({2.0, 3.0, 4.0})")
+        sql = r["P"].to_sql()
+        assert "list_aggregate" in sql and "'product'" in sql
+        assert "EXP(" not in sql
 
     def test_geometric_mean_sql_output(self, translator: ExpressionTranslator):
-        """Test GeometricMean produces correct SQL string."""
-        from ...parser.ast_nodes import AggregateExpression, ListExpression
-        result = translator.translate(
-            AggregateExpression(
-                source=ListExpression(elements=[Literal(value=2), Literal(value=8)]),
-                operator="GeometricMean"
-            )
-        )
-        sql = result.to_sql()
-        assert "EXP" in sql
-        assert "AVG" in sql
-        assert "LOG" in sql
+        """SQL output names the exact UDF, not an EXP/LOG expansion."""
+        from fhir4ds.cql import translate_cql
+
+        r = translate_cql("library T\ndefine G: GeometricMean({2.0, 8.0})")
+        sql = r["G"].to_sql()
+        assert "GeometricMean(" in sql
+        assert "LOG" not in sql
 
     def test_product_sql_output(self, translator: ExpressionTranslator):
-        """Test Product produces correct SQL string."""
-        from ...parser.ast_nodes import AggregateExpression, ListExpression
-        result = translator.translate(
-            AggregateExpression(
-                source=ListExpression(elements=[Literal(value=2), Literal(value=3)]),
-                operator="Product"
-            )
-        )
-        sql = result.to_sql()
-        assert "EXP" in sql
-        assert "SUM" in sql
-        assert "LOG" in sql
+        """SQL output uses exact list_aggregate('product'), not EXP/SUM(LOG)."""
+        from fhir4ds.cql import translate_cql
+
+        r = translate_cql("library T\ndefine P: Product({2.0, 3.0})")
+        sql = r["P"].to_sql()
+        assert "list_aggregate" in sql
+        assert "EXP" not in sql and "LOG" not in sql
 
 
 class TestStringPositionFunctions:

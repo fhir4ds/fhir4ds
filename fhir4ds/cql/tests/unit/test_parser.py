@@ -1279,3 +1279,66 @@ class TestExternalReviewB14ConditionalsAndFirstLast:
         con = duckdb.connect()
         register(con)
         assert con.execute(f"SELECT ({sql})").fetchone()[0] == 2
+
+
+class TestExternalReviewB15DeadAggregateBranches:
+    """EXP1-013: GeometricMean/Product never parse into AggregateExpression.
+
+    The parser only routes Count/Sum/Min/Max/Avg/Median/Mode tokens to
+    _parse_aggregate_expression; GeometricMean/Product parse as identifiers
+    (FunctionRef) and lower through the pre-translate hooks. The former
+    EXP(AVG(LOG(x))) branches in _translate_aggregate_expression were dead
+    AND doubly wrong (DuckDB LOG is base-10; the CQL Log(x, base) macro
+    shadows 1-arg LOG on registered connections). These tests pin that the
+    live lowering is exact and executes correctly.
+    """
+
+    def test_geometricmean_and_product_lower_exact_not_log_domain(self) -> None:
+        from fhir4ds.cql import translate_cql
+
+        r = translate_cql(
+            "library T\n"
+            "define G: GeometricMean({1.0, 2.0, 4.0})\n"
+            "define P: Product({2.0, 3.0, 4.0})\n"
+        )
+        g, p = r["G"].to_sql(), r["P"].to_sql()
+        # Live lowering: the GeometricMean UDF and exact list_aggregate
+        # 'product' — never an EXP/LOG expansion.
+        assert "GeometricMean(" in g
+        assert "LOG" not in g.upper().replace("GEOMETRICMEAN", "")
+        assert "list_aggregate" in p and "'product'" in p
+
+    def test_geometricmean_and_product_execute_correctly(self) -> None:
+        import duckdb
+
+        from fhir4ds.cql import translate_cql
+        from fhir4ds.cql.duckdb import register
+
+        con = duckdb.connect()
+        register(con)
+        r = translate_cql(
+            "library T\n"
+            "define G: GeometricMean({1.0, 2.0, 4.0})\n"
+            "define P: Product({2.0, 3.0, 4.0})\n"
+        )
+        assert con.execute(f"SELECT {r['G'].to_sql()}").fetchone()[0] == 2.0
+        assert con.execute(f"SELECT {r['P'].to_sql()}").fetchone()[0] == 24.0
+
+    def test_qualify_sort_identifiers_mutation_is_idempotent(self) -> None:
+        """EXP1-014: re-translating the same parsed library is byte-identical."""
+        import duckdb
+
+        from fhir4ds.cql.duckdb import register
+        from fhir4ds.cql.parser import parse_cql
+        from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+
+        con = duckdb.connect()
+        register(con)
+        lib = parse_cql(
+            "library T\ncontext Patient\n"
+            "define E1: ([Encounter]) E sort by start of E.period\n"
+            "define E2: ([Encounter]) E sort by date from authoredOn\n"
+        )
+        s1 = CQLToSQLTranslator(con).translate_library_to_sql(lib)
+        s2 = CQLToSQLTranslator(con).translate_library_to_sql(lib)
+        assert s1 == s2
