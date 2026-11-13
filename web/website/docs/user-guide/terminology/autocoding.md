@@ -48,7 +48,7 @@ coder.augment_resource(resource)
 #     "display": "Type 2 diabetes mellitus (disorder)",
 #     "userSelected": False,
 #     "extension": [{
-#       "url": "http://fhir4ds.org/fhir/StructureDefinition/autocoding",
+#       "url": "https://fhir4ds.com/fhir/StructureDefinition/autocoding",
 #       "extension": [
 #         {"url": "engine", "valueString": "medterm4ds"},
 #         {"url": "engine-version", "valueString": "0.0.12"},
@@ -137,7 +137,7 @@ For large loads, `AutoCoder.augment_resources(resources)` batches the terminolog
 
 ## 8. Audit extension
 
-Every derived Coding carries a structured [autocoding extension](http://fhir4ds.org/fhir/StructureDefinition/autocoding) recording:
+Every derived Coding carries a structured [autocoding extension](https://fhir4ds.com/fhir/StructureDefinition/autocoding) recording:
 
 - `engine` — `"medterm4ds"`
 - `engine-version` — the medterm4ds release that produced the Coding
