@@ -4360,6 +4360,11 @@ class FunctionsMixin:
     def _translate_singletonfrom(self, args: list) -> SQLExpression:
         """Translate CQL SingletonFrom."""
         if args:
+            # B14 follow-up: the method-form guard ('abc'.singletonFrom())
+            # existed but the keyword form (`singleton from 'abc'`) fell
+            # through to array_length(STRING_LITERAL, ...) — an opaque DuckDB
+            # BinderException instead of a typed error.
+            self._reject_scalar_string_list_function_arg(args, "SingletonFrom")
             return self._apply_singleton_from(args[0])
         return SQLNull()
 

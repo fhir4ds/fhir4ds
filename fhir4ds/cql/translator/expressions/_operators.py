@@ -9468,6 +9468,20 @@ class OperatorsMixin:
             return self._translate_component_filter_singleton(expr.operand)
 
         if operator == "singleton from":
+            # B14 follow-up: reject a statically String literal operand with
+            # a typed error. Strings are scalar (no implicit list conversion),
+            # and the generic fall-through emitted array_length('abc', ...)
+            # which surfaces as an opaque DuckDB BinderException.
+            if (
+                isinstance(expr.operand, Literal)
+                and isinstance(expr.operand.value, str)
+            ):
+                raise TranslationError(
+                    f"CQL SingletonFrom requires a list argument "
+                    f"(CQL 1.5 §20.30 SingletonFrom(argument List<T>)); "
+                    f"got the String '{expr.operand.value}'. Strings are "
+                    f"scalar, not lists."
+                )
             # CQL-19 HISTORIAN QA-002: a stored-list define reference
             # (`define G: Patient.name.given; singleton from G`) stores one
             # row whose value column IS the element list — counting rows (1)

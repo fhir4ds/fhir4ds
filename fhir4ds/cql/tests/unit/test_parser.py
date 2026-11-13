@@ -1674,3 +1674,37 @@ class TestExternalReviewB21PublicApisAndTypeMap:
         assert str(meta["CallF"].cql_type_ref) == str(meta["TopLevel"].cql_type_ref)
         assert meta["TopLevel"].cql_type_ref.bare_name == "List"
         assert meta["TopLevel"].cql_type_ref.args[0].bare_name == "String"
+
+
+class TestExternalReviewB22SingletonFromString:
+    """B14 follow-up (external review B22): keyword-form `singleton from
+    'abc'` must raise a typed TranslationError, not an opaque DuckDB binder
+    error (array_length(STRING_LITERAL, ...)). The method-form guard from
+    B14 covered 'abc'.singletonFrom() only."""
+
+    def test_keyword_singleton_from_string_raises_typed_error(self):
+        from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+        from ...errors import TranslationError
+        import duckdb
+        from fhir4ds.cql.duckdb import register
+        con = duckdb.connect(config={"allow_unsigned_extensions": True})
+        register(con)
+        lib = parse_cql(
+            "library L\nusing FHIR version '4.0.1'\ncontext Patient\n"
+            "define X: singleton from 'abc'"
+        )
+        with pytest.raises(TranslationError, match="SingletonFrom requires a list"):
+            CQLToSQLTranslator(con).translate_library_to_sql(lib, final_definition="X")
+
+    def test_singleton_from_real_lists_still_work(self):
+        from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+        import duckdb
+        from fhir4ds.cql.duckdb import register
+        con = duckdb.connect(config={"allow_unsigned_extensions": True})
+        register(con)
+        lib = parse_cql(
+            "library L\nusing FHIR version '4.0.1'\ncontext Patient\n"
+            "define X: singleton from {5}"
+        )
+        sql = CQLToSQLTranslator(con).translate_library_to_sql(lib, final_definition="X")
+        assert con.execute(sql).fetchall() == [(5,)]
