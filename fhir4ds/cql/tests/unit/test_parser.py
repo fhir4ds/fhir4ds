@@ -941,3 +941,70 @@ class TestExternalReviewB1ParserTokenDiscipline:
         or_more = next(t for t in tokens if t.type == TokenType.OR_MORE)
         idx = tokens.index(or_more)
         assert tokens[idx + 1].line == 2
+
+
+class TestExternalReviewB2DurationBetweenOperandTier:
+    """Regression coverage for the 2026-11-13 external parser review, batch B2
+    (TRIAGE_cql_review_20261113.md, PAR-004): durationBetweenExpression /
+    differenceBetweenExpression operands are expressionTerm in the CQL 1.5
+    grammar, so arithmetic (+ -) is absorbed but inequality/equality/
+    membership/logical operators must bind OUTSIDE the duration-between.
+    Also covers the `duration in <precision> between` keyword form, which
+    previously misparsed as Bin('in', Identifier, DurationBetween)."""
+
+    def _parse_expr(self, body: str):
+        return parse_expression(body)
+
+    def test_inequality_binds_outside_duration_between(self):
+        e = self._parse_expr("years between @2024-01-01 and @2024-06-01 >= 5")
+        from ...parser.ast_nodes import BinaryExpression, DurationBetween
+        assert isinstance(e, BinaryExpression) and e.operator == ">=", type(e)
+        assert isinstance(e.left, DurationBetween)
+
+    def test_equality_binds_outside_duration_between(self):
+        e = self._parse_expr("months between X and Y = 3")
+        from ...parser.ast_nodes import BinaryExpression, DurationBetween
+        assert isinstance(e, BinaryExpression) and e.operator == "="
+        assert isinstance(e.left, DurationBetween)
+
+    def test_logical_and_binds_outside_duration_between(self):
+        e = self._parse_expr("years between A and B and flag")
+        from ...parser.ast_nodes import BinaryExpression, DurationBetween
+        assert isinstance(e, BinaryExpression) and e.operator == "and"
+        assert isinstance(e.left, DurationBetween)
+
+    def test_arithmetic_still_absorbed_into_operands(self):
+        e = self._parse_expr("years between A + 1 day and B - 1 day")
+        from ...parser.ast_nodes import BinaryExpression, DurationBetween
+        assert isinstance(e, DurationBetween)
+        assert isinstance(e.operand_left, BinaryExpression) and e.operand_left.operator == "+"
+        assert isinstance(e.operand_right, BinaryExpression) and e.operand_right.operator == "-"
+
+    def test_duration_in_precision_between_keyword_form(self):
+        e = self._parse_expr("duration in years between @2024-01-01 and @2024-06-01")
+        from ...parser.ast_nodes import BinaryExpression, DurationBetween
+        assert isinstance(e, DurationBetween) and e.precision == "year", type(e)
+        assert not isinstance(e, BinaryExpression)
+
+    def test_duration_in_precision_between_inside_comparison(self):
+        e = self._parse_expr("duration in days between A and B >= 3")
+        from ...parser.ast_nodes import BinaryExpression, DurationBetween
+        assert isinstance(e, BinaryExpression) and e.operator == ">="
+        assert isinstance(e.left, DurationBetween) and e.left.precision == "day"
+
+    def test_difference_between_operands_are_term_tier(self):
+        e = self._parse_expr("difference in months between A and B in Interval[6, 12]")
+        from ...parser.ast_nodes import BinaryExpression, DifferenceBetween, Interval as Iv
+        assert isinstance(e, BinaryExpression) and e.operator == "in"
+        assert isinstance(e.left, DifferenceBetween)
+        assert isinstance(e.right, Iv)
+
+    def test_unparenthesized_cast_operand_is_rejected_parentheses_work(self):
+        # Strict grammar: typeExpression sits above expressionTerm, so an
+        # unparenthesized `X as DateTime` operand is a ParseError; the
+        # parenthesized form is the sanctioned spelling.
+        with pytest.raises(ParseError):
+            self._parse_expr("days between A as DateTime and B")
+        e = self._parse_expr("days between (A as DateTime) and B")
+        from ...parser.ast_nodes import DurationBetween
+        assert isinstance(e, DurationBetween)

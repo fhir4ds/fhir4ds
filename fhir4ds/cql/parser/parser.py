@@ -1474,6 +1474,24 @@ class CQLParser:
         if self.match(TokenType.IDENTIFIER) and token.value.lower() == "difference":
             return self._parse_difference_between()
 
+        # Duration between (keyword form): duration in years between X and Y.
+        # Guard on peek(3) == BETWEEN so the duration-extraction form
+        # `duration in days of X` keeps its existing parse (Identifier +
+        # `in` + precision-of), which the translator special-cases.
+        if (
+            self.match(TokenType.IDENTIFIER)
+            and token.value.lower() == "duration"
+            and self.peek().type == TokenType.IN
+            and self.peek(2).type in (
+                TokenType.YEAR, TokenType.YEARS, TokenType.MONTH, TokenType.MONTHS,
+                TokenType.WEEK, TokenType.WEEKS, TokenType.DAY, TokenType.DAYS,
+                TokenType.HOUR, TokenType.HOURS, TokenType.MINUTE, TokenType.MINUTES,
+                TokenType.SECOND, TokenType.SECONDS, TokenType.MILLISECOND, TokenType.MILLISECONDS,
+            )
+            and self.peek(3).type == TokenType.BETWEEN
+        ):
+            return self._parse_duration_in_between()
+
         # Literals
         if self.match(TokenType.INTEGER, TokenType.LONG, TokenType.DECIMAL):
             return self.parse_literal()
@@ -2095,27 +2113,41 @@ class CQLParser:
         precision_token = self.advance()
         precision = precision_token.value.lower().rstrip('s')
 
-        self.expect(TokenType.BETWEEN, "Expected 'between'")
-        left = self.parse_equality_expression()
-        self.expect(TokenType.AND, "Expected 'and'")
-        right = self.parse_implies_expression()
+        return self._finish_duration_between(precision)
 
-        # Same trailing-`in`-Interval restructure as _parse_difference_between.
-        from .ast_nodes import Interval as _CqlInterval
-        if (
-            isinstance(right, BinaryExpression)
-            and right.operator == "in"
-            and isinstance(right.right, _CqlInterval)
-        ):
-            return BinaryExpression(
-                operator="in",
-                left=DurationBetween(
-                    precision=precision,
-                    operand_left=left,
-                    operand_right=right.left,
-                ),
-                right=right.right,
-            )
+    def _parse_duration_in_between(self) -> DurationBetween:
+        """Parse `duration in <precision> between X and Y` (grammar's
+        durationBetweenExpression keyword form)."""
+        self.expect(TokenType.IDENTIFIER, "Expected 'duration'")
+        self.expect(TokenType.IN, "Expected 'in'")
+
+        precision_token = self.advance()
+        precision = precision_token.value.lower().rstrip('s')
+
+        return self._finish_duration_between(precision)
+
+    def _finish_duration_between(self, precision: str) -> DurationBetween:
+        """Parse `between X and Y` operands at the addition tier.
+
+        CQL 1.5 grammar: durationBetweenExpression operands are
+        expressionTerm, which includes addition/subtraction but NOT the
+        expression-level operators (inequality, equality, membership `in`,
+        and/or/xor/implies). Those must bind OUTSIDE the duration-between so
+        `years between A and B >= 18` parses as
+        `(years between A and B) >= 18`, not `years between A and (B >= 18)`.
+
+        Two deliberate deviations, both matching HEAD behavior:
+        - union/intersect/except bind INSIDE the operand (the addition tier
+          consumes set operators); the strict grammar would bind them
+          outside, but no eCQM content relies on either reading.
+        - unparenthesized `X as DateTime` operands are rejected (strict
+          grammar: typeExpression is above expressionTerm) — use
+          `(X as DateTime)`.
+        """
+        self.expect(TokenType.BETWEEN, "Expected 'between'")
+        left = self.parse_addition_expression()
+        self.expect(TokenType.AND, "Expected 'and'")
+        right = self.parse_addition_expression()
 
         return DurationBetween(precision=precision, operand_left=left, operand_right=right)
 
@@ -2128,30 +2160,9 @@ class CQLParser:
         precision = precision_token.value.lower().rstrip('s')
 
         self.expect(TokenType.BETWEEN, "Expected 'between'")
-        left = self.parse_equality_expression()
+        left = self.parse_addition_expression()
         self.expect(TokenType.AND, "Expected 'and'")
-        right = self.parse_implies_expression()
-
-        # CMS2025 (CMS771): `difference in months between A and B in Interval[6, 12]`
-        # — the official content means (difference) in Interval; the loose
-        # right-operand parse absorbs the trailing `in` clause into B.
-        # Restructure when the right operand is exactly a membership `in`
-        # over an Interval literal.
-        from .ast_nodes import Interval as _CqlInterval
-        if (
-            isinstance(right, BinaryExpression)
-            and right.operator == "in"
-            and isinstance(right.right, _CqlInterval)
-        ):
-            return BinaryExpression(
-                operator="in",
-                left=DifferenceBetween(
-                    precision=precision,
-                    operand_left=left,
-                    operand_right=right.left,
-                ),
-                right=right.right,
-            )
+        right = self.parse_addition_expression()
 
         return DifferenceBetween(precision=precision, operand_left=left, operand_right=right)
 
