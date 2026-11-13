@@ -338,6 +338,24 @@ class CQLParser:
         """Parse a define statement (expression or function)."""
         self.expect(TokenType.DEFINE, "Expected 'define'")
 
+        # PAR-008: accessModifier — `define private X: ...` / `define public
+        # X: ...`. 'private'/'public' are not lexer keywords; treat an
+        # IDENTIFIER with exactly that spelling as the modifier. Per the
+        # grammar the modifier also precedes function definitions
+        # (`define private fluent function F(...)`) and comes BEFORE 'fluent'.
+        access_level = None
+        if (
+            self.match(TokenType.IDENTIFIER)
+            and self.current().value in ("private", "public")
+            and self.peek(1).type in (
+                TokenType.IDENTIFIER,
+                TokenType.QUOTED_IDENTIFIER,
+                TokenType.FUNCTION,
+                TokenType.FLUENT,
+            )
+        ):
+            access_level = self.advance().value
+
         # Check for fluent function definition
         is_fluent = self.match(TokenType.FLUENT)
         if is_fluent:
@@ -345,18 +363,9 @@ class CQLParser:
 
         # Check for function definition
         if self.match_and_advance(TokenType.FUNCTION):
-            return self._parse_function_definition(fluent=is_fluent)
-
-        # PAR-008: accessModifier — `define private X: ...` / `define public
-        # X: ...`. 'private'/'public' are not lexer keywords; treat an
-        # IDENTIFIER with exactly that spelling as the modifier.
-        access_level = None
-        if (
-            self.match(TokenType.IDENTIFIER)
-            and self.current().value in ("private", "public")
-            and self.peek(1).type in (TokenType.IDENTIFIER, TokenType.QUOTED_IDENTIFIER)
-        ):
-            access_level = self.advance().value
+            return self._parse_function_definition(
+                fluent=is_fluent, access_level=access_level
+            )
 
         name = self._parse_identifier_name()
         self.expect(TokenType.COLON, "Expected ':' after definition name")
@@ -364,11 +373,14 @@ class CQLParser:
         expression = self.parse_expression()
         return Definition(name=name, expression=expression, access_level=access_level)
 
-    def _parse_function_definition(self, fluent: bool = False) -> FunctionDefinition:
+    def _parse_function_definition(
+        self, fluent: bool = False, access_level: Optional[str] = None
+    ) -> FunctionDefinition:
         """Parse a function definition.
 
         Args:
             fluent: Whether this is a fluent function definition.
+            access_level: Optional 'public'/'private' access modifier.
         """
         name = self._parse_identifier_name()
         self.expect(TokenType.LPAREN, "Expected '(' after function name")
@@ -395,6 +407,7 @@ class CQLParser:
             parameters=parameters,
             return_type=return_type,
             expression=expression,
+            access_level=access_level,
             fluent=fluent,
         )
 

@@ -1172,3 +1172,17 @@ class TestExternalReviewB4bLibraryGrammar:
         e = parse_expression("Code 'c' from Lib.CS")
         assert type(e).__name__ == "CodeSelector"
         assert e.system == "Lib.CS"
+
+    def test_access_modifier_on_function_definitions(self):
+        # Grammar: `define accessModifier? 'fluent'? 'function' ...` — the
+        # modifier precedes both 'fluent' and 'function'.
+        lib = parse_cql(
+            "library L\ncontext Patient\ndefine private function F(A Integer): A + 1"
+        )
+        f = [s for s in lib.statements if hasattr(s, "parameters")][0]
+        assert f.access_level == "private" and f.fluent is False
+        lib2 = parse_cql(
+            "library L\ncontext Patient\ndefine public fluent function G(A Integer): A"
+        )
+        g = [s for s in lib2.statements if hasattr(s, "parameters")][0]
+        assert g.access_level == "public" and g.fluent is True
