@@ -1342,3 +1342,97 @@ class TestExternalReviewB15DeadAggregateBranches:
         s1 = CQLToSQLTranslator(con).translate_library_to_sql(lib)
         s2 = CQLToSQLTranslator(con).translate_library_to_sql(lib)
         assert s1 == s2
+
+
+class TestExternalReviewB16ClinicalAndTupleEquivalence:
+    """EXP2-004 (Code equality 3VL) and EXP2-006 (tuple ~ through aliases)."""
+
+    @staticmethod
+    def _population_row(cql: str):
+        import duckdb
+
+        from fhir4ds.cql.duckdb import register
+        from fhir4ds.cql.loader.fhir_loader import FHIRDataLoader
+        from fhir4ds.cql.parser import parse_cql
+        from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+
+        con = duckdb.connect()
+        register(con)
+        loader = FHIRDataLoader(con)
+        loader.load_resource({"resourceType": "Patient", "id": "p1"})
+        loader.load_resource(
+            {
+                "resourceType": "Condition",
+                "id": "c1",
+                "subject": {"reference": "Patient/p1"},
+                "code": {"coding": [{"system": "u", "code": "finding"}]},
+            }
+        )
+        sql = CQLToSQLTranslator(con).translate_library_to_population_sql(parse_cql(cql))
+        return con.execute(sql).fetchone()[-1]
+
+    def test_code_equality_diff_code_with_one_sided_display_is_false(self) -> None:
+        """EXP2-004: a definitely differing element makes the tuple
+        conjunction FALSE even when display is absent on one side."""
+        got = self._population_row(
+            "library T\ncontext Patient\ncodesystem \"CS\": 'u'\n"
+            "define D: Code { code: 'a', display: 'x' } = Code { code: 'b' }"
+        )
+        assert got is False
+        # NotEqual mirrors: not(false) = true
+        got_ne = self._population_row(
+            "library T\ncontext Patient\ncodesystem \"CS\": 'u'\n"
+            "define D: Code { code: 'a', display: 'x' } != Code { code: 'b' }"
+        )
+        assert got_ne is True
+
+    def test_code_equality_same_code_one_sided_display_stays_null(self) -> None:
+        """Pinned doctrine: same code + one missing display is uncertain
+        (NULL at the expression level; the population define boundary
+        collapses null->false per the documented CQL-04 convention)."""
+        import duckdb
+
+        from fhir4ds.cql import translate_cql
+        from fhir4ds.cql.duckdb import register
+
+        con = duckdb.connect()
+        register(con)
+        r = translate_cql(
+            "library T\ncodesystem \"CS\": 'u'\n"
+            "define D: Code { code: 'a', display: 'x' } = Code { code: 'a' }"
+        )
+        assert con.execute(f"SELECT {r['D'].to_sql()}").fetchone()[0] is None
+
+    def test_code_equality_identical_and_fully_equal(self) -> None:
+        assert self._population_row(
+            "library T\ncontext Patient\ncodesystem \"CS\": 'u'\n"
+            "define D: Code { code: 'a', display: 'x' } = Code { code: 'a', display: 'x' }"
+        ) is True
+        assert self._population_row(
+            "library T\ncontext Patient\ncodesystem \"CS\": 'u'\n"
+            "define D: Code { code: 'a' } = Code { code: 'b' }"
+        ) is False
+
+    def test_tuple_equivalence_through_define_alias(self) -> None:
+        """EXP2-006: alias ~ tuple-literal folds element-wise (~ on String
+        is case-insensitive), with §9 null handling for the alias operand."""
+        cases = [
+            (
+                "define T1: Tuple { a: 1, b: 'x' }\ndefine D: T1 ~ Tuple { a: 1, b: 'X' }",
+                True,
+            ),
+            (
+                "define T1: Tuple { a: 1, b: 'x' }\ndefine T2: Tuple { a: 1, b: 'X' }\ndefine D: T1 ~ T2",
+                True,
+            ),
+            (
+                "define T1: Tuple { a: 1, b: 'x' }\ndefine D: T1 !~ Tuple { a: 1, b: 'X' }",
+                False,
+            ),
+            ("define T1: Tuple { a: 1 }\ndefine D: T1 ~ Tuple { a: 2 }", False),
+            ("define T1: Tuple { a: 1 }\ndefine D: T1 ~ Tuple { b: 1 }", False),
+            ("define D: Tuple { a: 1, b: 'x' } ~ Tuple { a: 1, b: 'X' }", True),
+        ]
+        for tail, want in cases:
+            got = self._population_row("library T\ncontext Patient\n" + tail)
+            assert got == want, f"{tail!r}: want {want}, got {got}"

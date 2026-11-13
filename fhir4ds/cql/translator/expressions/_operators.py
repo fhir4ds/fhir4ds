@@ -4067,10 +4067,32 @@ class OperatorsMixin:
         if left_value is None or right_value is None:
             return None
 
-        if set(left_value.keys()) != set(right_value.keys()):
+        # Tuple equality is a conjunction of element comparisons (CQL §9
+        # Equal). A DEFINITELY differing element (both present, both
+        # non-null, unequal) makes the whole conjunction FALSE even when
+        # another element is absent on one side — external review EXP2-004:
+        # Code { code: 'a', display: 'x' } = Code { code: 'b' } is FALSE,
+        # not null, because the codes differ. A null-vs-value asymmetry
+        # with every shared element matching stays UNCERTAIN (null), per
+        # the pinned one-missing-display doctrine (CQL-21).
+        definite_false = False
+        uncertain = False
+        for key in set(left_value) | set(right_value):
+            lv = left_value.get(key)
+            rv = right_value.get(key)
+            if lv is None and rv is None:
+                continue
+            if lv is None or rv is None:
+                uncertain = True
+            elif lv != rv:
+                definite_false = True
+                break
+        if definite_false:
+            result: SQLExpression = SQLLiteral(value=False)
+        elif uncertain:
             return SQLNull()
-
-        result: SQLExpression = SQLLiteral(value=left_value == right_value)
+        else:
+            result = SQLLiteral(value=left_value == right_value)
         if operator in ("!=", "not equal"):
             result = SQLCase(
                 when_clauses=[
@@ -6961,6 +6983,15 @@ class OperatorsMixin:
             result = SQLBinaryOp(operator="AND", left=result, right=expression)
         return result
 
+    @staticmethod
+    def _or_any(expressions: list[SQLExpression]) -> SQLExpression:
+        if not expressions:
+            return SQLLiteral(value=False)
+        result = expressions[0]
+        for expression in expressions[1:]:
+            result = SQLBinaryOp(operator="OR", left=result, right=expression)
+        return result
+
     def _translate_list_equivalence(self, expr: BinaryExpression, is_negated: bool) -> Optional[SQLExpression]:
         if not isinstance(expr.left, ListExpression) or not isinstance(expr.right, ListExpression):
             return None
@@ -6978,11 +7009,30 @@ class OperatorsMixin:
             return SQLUnaryOp(operator="NOT", operand=result)
         return result
 
+    def _resolve_tuple_equivalence_operand(self, node):
+        """Resolve a TupleExpression operand directly or through a define alias.
+
+        External review EXP2-006: `T1 ~ Tuple { ... }` where ``T1`` is a
+        define alias of a tuple literal previously fell through to raw SQL
+        ``=``, losing the per-element equivalence semantics (~ on String
+        elements is case-insensitive/whitespace-normalized). Returns
+        ``(tuple_expression, used_alias)`` or ``(None, False)``.
+        """
+        if isinstance(node, TupleExpression):
+            return node, False
+        if isinstance(node, Identifier) and not self.context.is_alias(node.name):
+            source = self._definition_source_ast(node.name, node)
+            if isinstance(source, TupleExpression):
+                return source, True
+        return None, False
+
     def _translate_tuple_equivalence(self, expr: BinaryExpression, is_negated: bool) -> Optional[SQLExpression]:
-        if not isinstance(expr.left, TupleExpression) or not isinstance(expr.right, TupleExpression):
+        left_tuple, left_is_alias = self._resolve_tuple_equivalence_operand(expr.left)
+        right_tuple, right_is_alias = self._resolve_tuple_equivalence_operand(expr.right)
+        if left_tuple is None or right_tuple is None:
             return None
-        left_elems = {element.name: element.type for element in expr.left.elements}
-        right_elems = {element.name: element.type for element in expr.right.elements}
+        left_elems = {element.name: element.type for element in left_tuple.elements}
+        right_elems = {element.name: element.type for element in right_tuple.elements}
         if set(left_elems) != set(right_elems):
             result: SQLExpression = SQLLiteral(value=False)
         else:
@@ -6993,6 +7043,24 @@ class OperatorsMixin:
                 )
                 for name in sorted(left_elems)
             ])
+        # Alias operands carry runtime-null possibility. Per CQL §9
+        # Equivalent: null ~ null -> true; null ~ value -> false (never
+        # null). Literal-vs-literal cannot be null, so the wrap is only
+        # needed when at least one operand resolved through an alias.
+        if left_is_alias or right_is_alias:
+            null_tests = []
+            for operand, is_alias in ((expr.left, left_is_alias), (expr.right, right_is_alias)):
+                if is_alias:
+                    null_tests.append(
+                        SQLUnaryOp(operator="IS NULL", operand=self.translate(operand), prefix=False)
+                    )
+            result = SQLCase(
+                when_clauses=[
+                    (self._and_all(null_tests), SQLLiteral(value=True)),
+                    (self._or_any(null_tests), SQLLiteral(value=False)),
+                ],
+                else_clause=result,
+            )
         if is_negated:
             return SQLUnaryOp(operator="NOT", operand=result)
         return result
