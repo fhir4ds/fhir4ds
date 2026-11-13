@@ -301,3 +301,46 @@ class TestExternalReviewB10OverloadAndPartial:
         if isinstance(where, BinaryExpression) and where.operator == "and":
             cfg = sfe._extract_and_compound(where, None)
         assert cfg is None
+
+
+class TestExternalReviewB11DefinitionDependencies:
+    """HIGH-01 (external review): the definition dependency walker in
+    inference.py missed CaseExpression children (comparand, case_items'
+    when/then) and treated a QUALIFIED `Lib."X"` reference inside
+    `define "X"` as a self-dependency, producing false
+    "Cyclic dependency detected" errors for local defines that shadow an
+    included-library definition name."""
+
+    def _inst(self):
+        import inspect
+        import fhir4ds.cql.translator.inference as inf
+        cls = next(o for n, o in vars(inf).items()
+                   if inspect.isclass(o) and hasattr(o, "_extract_definition_dependencies"))
+        return cls.__new__(cls)
+
+    def test_case_item_then_and_comparand_deps_found(self):
+        from ...parser.parser import parse_expression
+        inst = self._inst()
+        e = parse_expression(
+            "case X when 'm' then \"Dep\" else \"Dep2\" end"
+        )
+        deps = inst._extract_definition_dependencies(e, {"Dep", "Dep2", "X"}, {})
+        assert deps == {"Dep", "Dep2", "X"}
+
+        e2 = parse_expression('case "Dep3" when null then 1 else 2 end')
+        assert inst._extract_definition_dependencies(e2, {"Dep3"}, {}) == {"Dep3"}
+
+    def test_qualified_ref_is_not_a_self_dependency(self):
+        from ...parser.ast_nodes import QualifiedIdentifier
+        inst = self._inst()
+        qi = QualifiedIdentifier(parts=["Inc", "P1"])
+        # define "P1": Inc."P1" + 1  — qualified ref targets the INCLUDED
+        # library's CTE ("Inc.P1"), not the local P1.
+        assert inst._extract_definition_dependencies(
+            qi, {"P1"}, {}, _current_name="P1"
+        ) == set()
+        # Referenced from a DIFFERENT local define, it is a real (foreign-CTE)
+        # dependency edge as before.
+        assert inst._extract_definition_dependencies(
+            qi, {"P1", "Other"}, {}, _current_name="Other"
+        ) == {"P1"}
