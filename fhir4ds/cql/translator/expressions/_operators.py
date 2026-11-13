@@ -223,7 +223,9 @@ def _is_datetime_boundary_constructor(node: object, values: list[int]) -> bool:
 
 
 def _is_time_boundary_literal(node: object, value: str) -> bool:
-    return isinstance(node, DateTimeLiteral) and node.value == value
+    # Time boundary literals are TimeLiteral nodes since the lexer typed
+    # `@T...` as TIME (was DateTimeLiteral before that retype).
+    return isinstance(node, TimeLiteral) and node.value == value
 
 
 def _is_datetime_boundary_literal(node: object, value: str) -> bool:
@@ -1700,7 +1702,7 @@ class OperatorsMixin:
         """
         if _depth > 4:
             return False
-        if isinstance(node, DateTimeLiteral):
+        if isinstance(node, (DateTimeLiteral, TimeLiteral)):
             return True
         if isinstance(node, FunctionRef) and node.name.lower() in (
             "datetime", "date", "time", "todatetime", "todate", "totime",

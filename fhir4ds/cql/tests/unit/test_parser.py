@@ -1008,3 +1008,52 @@ class TestExternalReviewB2DurationBetweenOperandTier:
         e = self._parse_expr("days between (A as DateTime) and B")
         from ...parser.ast_nodes import DurationBetween
         assert isinstance(e, DurationBetween)
+
+
+class TestExternalReviewB3LexerLiterals:
+    """Regression coverage for the 2026-11-13 external parser review, batch B3
+    (TRIAGE_cql_review_20261113.md): PAR-005 (ratio literal float repr) and
+    PAR-009 (Time-literal token typing, month-precision calendar validation,
+    greedy datetime lexing past a non-digit '.')."""
+
+    def test_ratio_literal_preserves_authored_decimal_text(self):
+        # PAR-005: `0.00001 'mg'` must NOT render as `1e-05 'mg'` in the
+        # ToRatio argument (float repr corrupted small decimals).
+        e = parse_expression("0.00001 'mg':1 'mg'")
+        assert type(e).__name__ == "FunctionRef" and e.name == "ToRatio"
+        assert e.arguments[0].value == "0.00001 'mg':1 'mg'"
+
+    def test_ratio_literal_denominator_preserves_authored_decimal_text(self):
+        e = parse_expression("1 'mg':0.00001 'mg'")
+        assert e.arguments[0].value == "1 'mg':0.00001 'mg'"
+
+    def test_ratio_literal_preserves_long_decimal_text(self):
+        # Beyond float precision — authored text must survive verbatim.
+        e = parse_expression("0.12345678901234567890 'g':1 'g'")
+        assert e.arguments[0].value == "0.12345678901234567890 'g':1 'g'"
+
+    def test_month_precision_literal_validates_month_range(self):
+        # PAR-009: `@2024-13` used to lex successfully (the 3-component
+        # calendar check never ran for the YYYY-MM shape).
+        from ...parser.lexer import LexerError
+
+        with pytest.raises(LexerError):
+            parse_expression("@2024-13")
+        with pytest.raises(LexerError):
+            parse_expression("@2024-00")
+        assert parse_expression("@2024-02") is not None
+
+    def test_t_prefixed_literal_is_time_literal(self):
+        # PAR-009: `@T...` is the grammar's TIME token, not DATETIME.
+        from ...parser.ast_nodes import TimeLiteral
+
+        e = parse_expression("@T12:30:00")
+        assert isinstance(e, TimeLiteral) and e.value == "T12:30:00"
+
+    def test_datetime_literal_postfix_invocation_not_swallowed(self):
+        # PAR-009: greedy datetime lexing used to eat `.toString` into the
+        # literal, making the whole expression an invalid-literal LexerError.
+        e = parse_expression("@2024-01-15.toString()")
+        assert type(e).__name__ == "MethodInvocation"
+        e2 = parse_expression("@T14:30:22.5")
+        assert e2.value == "T14:30:22.5"

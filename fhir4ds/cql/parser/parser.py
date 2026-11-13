@@ -1675,12 +1675,12 @@ class CQLParser:
                 unit_token = self.advance()
                 # Normalize to singular form
                 unit = unit_token.value.lower().rstrip('s')
-                return self._maybe_parse_ratio_literal(Quantity(value=value, unit=unit))
+                return self._maybe_parse_ratio_literal(Quantity(value=value, raw_text=token.value, unit=unit))
             # Check for UCUM unit string (e.g., 1 'ml', 10 'cm', 19.99 '[lb_av]')
             if self.match(TokenType.STRING):
                 unit_token = self.advance()
                 unit = unit_token.value
-                return self._maybe_parse_ratio_literal(Quantity(value=value, unit=unit))
+                return self._maybe_parse_ratio_literal(Quantity(value=value, raw_text=token.value, unit=unit))
             # CQL §Types/Ratio: bare numeric ratio literal (e.g. `1:8`).
             # A bare numeric with no unit is treated as a Quantity with the
             # default UCUM unit '1' (CQL §Types/Quantity) so that the ratio
@@ -1692,7 +1692,7 @@ class CQLParser:
             # `starting 1: <body>`), fall back to the plain Integer Literal
             # so the caller's context-specific parser handles the COLON.
             if self.match(TokenType.COLON):
-                ratio = self._maybe_parse_ratio_literal(Quantity(value=value, unit="1"))
+                ratio = self._maybe_parse_ratio_literal(Quantity(value=value, raw_text=token.value, unit="1"))
                 if isinstance(ratio, FunctionRef):
                     return ratio
                 return Literal(value=value, type="Integer")
@@ -1701,7 +1701,7 @@ class CQLParser:
             value = int(token.value)
             # CQL §Types/Ratio: bare numeric ratio literal.
             if self.match(TokenType.COLON):
-                ratio = self._maybe_parse_ratio_literal(Quantity(value=value, unit="1"))
+                ratio = self._maybe_parse_ratio_literal(Quantity(value=value, raw_text=token.value, unit="1"))
                 if isinstance(ratio, FunctionRef):
                     return ratio
                 return Literal(value=value, type="Long")
@@ -1716,12 +1716,12 @@ class CQLParser:
                           TokenType.SECOND, TokenType.SECONDS, TokenType.MILLISECOND, TokenType.MILLISECONDS):
                 unit_token = self.advance()
                 unit = unit_token.value.lower().rstrip('s')
-                return self._maybe_parse_ratio_literal(Quantity(value=value, unit=unit))
+                return self._maybe_parse_ratio_literal(Quantity(value=value, raw_text=token.value, unit=unit))
             # Check for UCUM unit string (e.g., 1.5 'ml', 19.99 '[lb_av]')
             if self.match(TokenType.STRING):
                 unit_token = self.advance()
                 unit = unit_token.value
-                return self._maybe_parse_ratio_literal(Quantity(value=value, unit=unit))
+                return self._maybe_parse_ratio_literal(Quantity(value=value, raw_text=token.value, unit=unit))
             # CQL §2.3: standalone Decimal has max 28 integer digits and 8 fractional digits.
             # Validation only applies to Decimal literals, not Quantity values.
             raw_decimal = token.value.lstrip('+').lstrip('-')
@@ -1750,7 +1750,7 @@ class CQLParser:
                     raw_str_override = format(limited, 'f')
             # CQL §Types/Ratio: bare numeric ratio literal.
             if self.match(TokenType.COLON):
-                ratio = self._maybe_parse_ratio_literal(Quantity(value=value, unit="1"))
+                ratio = self._maybe_parse_ratio_literal(Quantity(value=value, raw_text=token.value, unit="1"))
                 if isinstance(ratio, FunctionRef):
                     return ratio
                 return Literal(value=value, type="Decimal", raw_str=raw_str_override or token.value)
@@ -1810,15 +1810,33 @@ class CQLParser:
         # A bare numeric Literal denominator is valid as a Ratio component
         # (spec example `1:8`). Promote it to a default-unit Quantity.
         if isinstance(denominator, Literal) and isinstance(denominator.value, (int, float)):
-            denominator = Quantity(value=denominator.value * sign, unit="1")
+            denominator = Quantity(
+                value=denominator.value * sign,
+                unit="1",
+                raw_text=denominator.raw_str,
+            )
         elif sign == -1 and isinstance(denominator, Quantity):
             # Signed Quantity literal denominator (e.g., `-8 'mg'`).
-            denominator = Quantity(value=denominator.value * sign, unit=denominator.unit)
+            denominator = Quantity(value=denominator.value * sign, unit=denominator.unit,
+                                   raw_text=("-" + denominator.raw_text)
+                                   if denominator.raw_text else None)
         if not isinstance(denominator, Quantity):
             raise ParseError("Expected Quantity after ':' in Ratio literal")
 
         def _quantity_text(quantity: Quantity) -> str:
-            return f"{quantity.value} '{quantity.unit}'"
+            # PAR-005: preserve the AUTHORED decimal text. `str(float)` emits
+            # scientific notation for small magnitudes (`1e-05`), which
+            # corrupts the ToRatio argument and breaks decimal exactness.
+            text = quantity.raw_text
+            if text is None:
+                v = quantity.value
+                if isinstance(v, float):
+                    from decimal import Decimal
+
+                    text = format(Decimal(str(v)), "f")
+                else:
+                    text = str(v)
+            return f"{text} '{quantity.unit}'"
 
         return FunctionRef(
             name="ToRatio",

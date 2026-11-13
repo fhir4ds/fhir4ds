@@ -404,7 +404,15 @@ class CoreMixin:
         return SQLLiteral(value=value)
 
     def _translate_time_literal(self, t: TimeLiteral, boolean_context: bool = False) -> SQLExpression:
-        """Translate a CQL Time literal to SQL TIME."""
+        """Translate a CQL Time literal to transport VARCHAR carrying 'T'.
+
+        Transport doctrine (AGENTS / TimeOfDay precedent): Time values move
+        through SQL as VARCHAR with the leading 'T' marker so precision-aware
+        UDFs parse Date/DateTime/Time uniformly. NOTE: the lexer only
+        produces TIME tokens with a 'T' prefix for validated input (the
+        ':'-only fallback branch is unreachable past
+        `_validate_datetime_literal`).
+        """
         value = t.value
         # CQL format: @T12:30:00 or @T14:00
 
@@ -438,12 +446,14 @@ class CoreMixin:
                             f"Invalid time literal: millisecond value {ms_val} exceeds 999"
                         )
 
-        return SQLFunctionCall(
-            name="CAST",
-            args=[
-                SQLLiteral(value=value),
-            ],
-        )
+        # Transport doctrine (AGENTS / TimeOfDay precedent): CQL Time values
+        # are transported as VARCHAR carrying the leading 'T' marker, so
+        # downstream precision-aware UDFs (cqlSameAsP, dateComponent, ...)
+        # parse them uniformly. This also matches what the DateTimeLiteral
+        # path emitted for `@T...` literals before the lexer typed them as
+        # TimeLiteral. The previous `CAST(<literal>)` emission was an
+        # incomplete CAST that DuckDB rejected at parse time.
+        return SQLLiteral(value=t.value)
 
     def _translate_quantity(self, qty: Quantity, boolean_context: bool = False) -> SQLExpression:
         """Translate a CQL Quantity to SQL (as JSON or UDF call)."""
