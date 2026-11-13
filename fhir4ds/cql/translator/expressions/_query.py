@@ -2235,9 +2235,14 @@ class QueryMixin:
             _is_coll = isinstance(let_clause.expression, (Query, Retrieve))
             if _is_coll:
                 self.context._let_clause_collection = True
-            let_expr_sql = self.translate(let_clause.expression, usage=ExprUsage.SCALAR)
+            try:
+                let_expr_sql = self.translate(let_clause.expression, usage=ExprUsage.SCALAR)
+            finally:
+                # Reset even on exception: a leaked True flag misclassifies
+                # every later let translation as a collection (EXP2-009).
+                if _is_coll:
+                    self.context._let_clause_collection = False
             if _is_coll:
-                self.context._let_clause_collection = False
                 let_expr_sql = _wrap_as_json_array_agg(let_expr_sql)
 
             # Decide: promote to CTE or inline?
@@ -4657,9 +4662,12 @@ class QueryMixin:
                                 _is_coll = isinstance(_lc.expression, (Query, Retrieve))
                                 if _is_coll:
                                     self.context._let_clause_collection = True
-                                _let_sql = self.translate(_lc.expression, usage=ExprUsage.SCALAR)
+                                try:
+                                    _let_sql = self.translate(_lc.expression, usage=ExprUsage.SCALAR)
+                                finally:
+                                    if _is_coll:
+                                        self.context._let_clause_collection = False
                                 if _is_coll:
-                                    self.context._let_clause_collection = False
                                     _let_sql = _wrap_as_json_array_agg(_let_sql)
                                 self.context.let_variables[_lc.alias] = _let_sql
 
@@ -5561,21 +5569,24 @@ class QueryMixin:
                     )
 
                 self.context.push_scope()
-                self.context.add_alias(alias, ast_expr=SQLIdentifier(name=_lt_param))
+                try:
+                    self.context.add_alias(alias, ast_expr=SQLIdentifier(name=_lt_param))
 
-                # Process LET clauses in the UNNEST scope
-                if hasattr(node, 'let_clauses') and node.let_clauses:
-                    self._process_let_clauses(node.let_clauses, node=node)
+                    # Process LET clauses in the UNNEST scope
+                    if hasattr(node, 'let_clauses') and node.let_clauses:
+                        self._process_let_clauses(node.let_clauses, node=node)
 
-                _ba_where = None
-                if node.where:
-                    _ba_where = _demote_audit_struct_to_bool(self.translate(node.where, usage=ExprUsage.BOOLEAN))
+                    _ba_where = None
+                    if node.where:
+                        _ba_where = _demote_audit_struct_to_bool(self.translate(node.where, usage=ExprUsage.BOOLEAN))
 
-                _ba_return = SQLIdentifier(name=_lt_param)
-                if node.return_clause:
-                    _ba_return = self.translate(node.return_clause, usage=ExprUsage.SCALAR)
-
-                self.context.pop_scope()
+                    _ba_return = SQLIdentifier(name=_lt_param)
+                    if node.return_clause:
+                        _ba_return = self.translate(node.return_clause, usage=ExprUsage.SCALAR)
+                finally:
+                    # Pop even on exception: a leaked UNNEST scope corrupts
+                    # alias resolution for any later translation (EXP2-009).
+                    self.context.pop_scope()
 
                 _ba_return = _ensure_scalar_body(_ba_return)
                 _inner_unnest = SQLSubquery(query=SQLSelect(

@@ -1511,3 +1511,62 @@ class TestExternalReviewB17AggregateWhereAndAuditDemotion:
         for sql, want in cases:
             got = demote_audit_in_text(sql)
             assert got == want, f"{sql!r}: want {want!r}, got {got!r}"
+
+
+class TestExternalReviewB18ContextStateLeaks:
+    """EXP2-009: context state must not leak when a translation raises.
+
+    A let clause whose expression is a Query/Retrieve sets
+    ``_let_clause_collection = True`` around its translation; a failing
+    translation (here: an unknown retrieve resource type) must reset the
+    flag and leave the scope stack balanced so the translator shows clean
+    state after the error.
+    """
+
+    def test_let_collection_flag_and_scope_reset_on_translation_error(self):
+        import duckdb
+        import pytest
+        from fhir4ds.cql.errors import TranslationError
+        from fhir4ds.cql.parser import parse_cql
+        from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+
+        con = duckdb.connect()
+        # Retrieve of an unknown type raises TranslationError INSIDE the let
+        # translation while _let_clause_collection is True.
+        cql = (
+            "library L\n"
+            "using FHIR version '4.0.1'\n"
+            "context Patient\n"
+            'define Bad: ([Patient] P let L: [BogusResource] B return B.id '
+            "return P.id)\n"
+        )
+        tr = CQLToSQLTranslator(con)
+        scope_before = len(tr.context.scopes)
+        with pytest.raises(TranslationError):
+            tr.translate_library(parse_cql(cql))
+        assert getattr(tr.context, "_let_clause_collection", False) is False
+        assert len(tr.context.scopes) == scope_before
+
+    def test_backbone_array_scope_reset_on_translation_error(self):
+        import duckdb
+        from fhir4ds.cql.parser import parse_cql
+        from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+
+        con = duckdb.connect()
+        # A multi-valued BackboneElement source whose WHERE fails to
+        # translate: the pushed UNNEST scope must be popped on the way out.
+        import pytest
+        from fhir4ds.cql.errors import TranslationError
+        tr = CQLToSQLTranslator(con)
+        scope_before = len(tr.context.scopes)
+        # TranslationError (not bare Exception) so the test cannot pass
+        # vacuously on a pre-handler parse failure.
+        with pytest.raises(TranslationError):
+            tr.translate_library(parse_cql(
+                "library L\n"
+                "using FHIR version '4.0.1'\n"
+                "context Patient\n"
+                "define Bad: (Patient.contact C where [BogusResource] X "
+                "return X.id return C.name.given)\n"
+            ))
+        assert len(tr.context.scopes) == scope_before
