@@ -5054,10 +5054,20 @@ class FunctionsMixin:
             # ToString(Quantity): CQL §22.31 — format as "<value> '<unit>'"
             if name_lower == "tostring":
                 arg = args[0]
-                arg_sql = arg.to_sql() if hasattr(arg, 'to_sql') else str(arg)
-                if _is_ratio_expression(arg) or 'ToRatio' in arg_sql:
+                # EXP1-003: route on SQL AST SHAPE, never on rendered SQL
+                # text — the old `'Quantity' in arg.to_sql()` sniff (a)
+                # crashed on placeholder-bearing args and (b) misrouted any
+                # string literal containing the word "Quantity" (e.g.
+                # ToString('Order Quantity')) into QuantityToString.
+                if _is_ratio_expression(arg):
                     return SQLFunctionCall("RatioToString", args)
-                if 'parse_quantity' in arg_sql or 'Quantity' in arg_sql:
+                if (
+                    isinstance(arg, SQLFunctionCall)
+                    and arg.name
+                    and arg.name.lower() in ("parse_quantity", "quantityadd",
+                                             "quantitysubtract", "quantitymultiply",
+                                             "quantitydivide", "quantityconvert")
+                ):
                     return SQLFunctionCall("QuantityToString", args)
                 return SQLFunctionCall("ToString", args)
             if name_lower in ('todatetime', 'todate'):

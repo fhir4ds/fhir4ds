@@ -714,8 +714,17 @@ class TestDateTimeDifferenceFunctions:
             )
         )
         assert isinstance(result, SQLFunctionCall)
-        assert result.name == "date_diff"
-        assert result.args[0].value == "week"
+        # EXP1-005: emits the registered CQL duration UDF (whole-period
+        # semantics, binds on VARCHAR operands) — the old date_diff emission
+        # binder-failed at execution.
+        assert result.name == "weeksBetween"
+        import duckdb as _duckdb
+        from ...duckdb import register as _reg
+
+        _con = _duckdb.connect()
+        _reg(_con)
+        got = _con.execute(f"SELECT ({result.to_sql()})::VARCHAR").fetchone()[0]
+        assert got == "4"
 
     def test_milliseconds_between(self, translator: ExpressionTranslator):
         """Test millisecondsBetween function: millisecondsBetween(start, end)."""
@@ -730,8 +739,15 @@ class TestDateTimeDifferenceFunctions:
             )
         )
         assert isinstance(result, SQLFunctionCall)
-        assert result.name == "date_diff"
-        assert result.args[0].value == "millisecond"
+        # EXP1-005: registered CQL duration UDF (see test_weeks_between).
+        assert result.name == "millisecondsBetween"
+        import duckdb as _duckdb
+        from ...duckdb import register as _reg
+
+        _con = _duckdb.connect()
+        _reg(_con)
+        got = _con.execute(f"SELECT ({result.to_sql()})::VARCHAR").fetchone()[0]
+        assert got == "1000"
 
 
 class TestAgeAtFunctions:
