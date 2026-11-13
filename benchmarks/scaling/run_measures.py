@@ -21,6 +21,7 @@ import gc
 import glob
 import json
 import os
+import tempfile
 import resource
 import sys
 import threading
@@ -163,7 +164,13 @@ def main() -> None:
     db.conn.execute("SET threads=32")
     db.conn.execute(f"SET memory_limit='{args.memory_limit}'")
     db.conn.execute("SET scalar_subquery_error_on_multiple_rows=false")
-    tmp_dir = "/tmp/opencode/duckdb_tmp"
+    # Spill directory. Must be configurable: the original hardcoded an
+    # agent-session path (/tmp/opencode/duckdb_tmp) that does not exist for
+    # other users and is not writable in a sandbox, which made this published
+    # benchmark impossible to reproduce.
+    tmp_dir = os.environ.get(
+        "SCALING_TMPDIR", os.path.join(tempfile.gettempdir(), "fhir4ds_duckdb_tmp")
+    )
     os.makedirs(tmp_dir, exist_ok=True)
     db.conn.execute(f"SET temp_directory='{tmp_dir}'")
     print(f"setup ok; measures={measure_ids}", flush=True)

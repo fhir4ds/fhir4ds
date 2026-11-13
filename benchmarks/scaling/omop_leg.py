@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import tempfile
 import resource
 import sys
 import threading
@@ -328,8 +329,11 @@ def main() -> None:
                if args.s3_endpoint else "")
             + "USE_SSL false, URL_STYLE 'path')")
     con.execute(f"SET memory_limit='{args.duckdb_memory_limit}'")
-    os.makedirs("/tmp/opencode/duckdb_tmp", exist_ok=True)
-    con.execute("SET temp_directory='/tmp/opencode/duckdb_tmp'")
+    _tmp = os.environ.get(
+        "SCALING_TMPDIR", os.path.join(tempfile.gettempdir(), "fhir4ds_duckdb_tmp")
+    )
+    os.makedirs(_tmp, exist_ok=True)
+    con.execute(f"SET temp_directory='{_tmp}'")
 
     tag = f"rung{args.patients}_{args.workload}"
     if args.explain_only:
