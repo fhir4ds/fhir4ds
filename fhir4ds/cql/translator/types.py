@@ -2364,6 +2364,12 @@ class SQLUnion(SQLExpression):
                             columns=[pid_col, col],
                             from_clause=inner.from_clause,
                             where=inner.where,
+                            # CORE-012: preserve the full clause set — the
+                            # old reconstruction dropped joins/group_by/having,
+                            # silently changing aggregate/joined operands.
+                            joins=inner.joins,
+                            group_by=inner.group_by,
+                            having=inner.having,
                             order_by=inner.order_by,
                             limit=inner.limit,
                             distinct=inner.distinct,
