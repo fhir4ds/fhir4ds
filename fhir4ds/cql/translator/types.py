@@ -2492,6 +2492,9 @@ def _normalize_set_operand(op: "SQLExpression", precedence: int) -> str:
                 where=inner.where,
                 order_by=inner.order_by,
                 distinct=inner.distinct,
+                joins=inner.joins,
+                group_by=inner.group_by,
+                having=inner.having,
             )
             return f"({normalized.to_sql(precedence)})"
         return op.to_sql(precedence)

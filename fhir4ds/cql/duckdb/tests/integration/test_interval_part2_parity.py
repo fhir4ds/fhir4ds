@@ -1140,3 +1140,80 @@ class TestExternalReviewB5IntervalSemantics:
         assert self._exec("Interval[1, null) ~ Interval[1, null]") is False
         assert self._exec("Interval[1, null] !~ Interval[1, null)") is True
         assert self._exec("Interval(null, 5] ~ Interval[1, 5]") is False
+
+
+class TestExternalReviewB13IntervalFollowUps:
+    """B5-F1 / B5-F2 follow-ups from the external review campaign."""
+
+    def _exec(self, expression: str):
+        from fhir4ds.cql import translate_cql
+        import duckdb
+        from fhir4ds.cql.duckdb import register
+
+        con = duckdb.connect()
+        register(con)
+        res = translate_cql(
+            f"library L\ncontext Unfiltered\ndefine T: {expression}"
+        )
+        v = next(iter(res.values()))
+        sql = v.to_sql() if hasattr(v, "to_sql") else str(v)
+        return con.execute(f"SELECT ({sql})").fetchone()[0]
+
+    def _sql_for(self, expression: str) -> str:
+        from fhir4ds.cql import translate_cql
+
+        res = translate_cql(
+            f"library L\ncontext Unfiltered\ndefine T: {expression}"
+        )
+        v = next(iter(res.values()))
+        return v.to_sql() if hasattr(v, "to_sql") else str(v)
+
+    def test_decomposed_overlaps_open_null_high_is_uncertain(self):
+        # B5-F1: a statically-null OPEN high bound means UNKNOWN, not
+        # unbounded — overlaps must return null (uncertain) instead of a
+        # fabricated definite True (CMS347 open-null-UNKNOWN doctrine).
+        assert self._exec(
+            "Interval[@2020-01-01, null) overlaps Interval[@2021-06-01, @2021-12-31]"
+        ) is None
+        # CLOSED null high is the point-type maximum: genuinely unbounded,
+        # overlap is definite True.
+        assert self._exec(
+            "Interval[@2020-01-01, null] overlaps Interval[@2021-06-01, @2021-12-31]"
+        ) is True
+        # An open-null LOW does not make a definitely-disjoint pair uncertain:
+        # the end comparison decides False (3VL: NULL AND False = False).
+        assert self._exec(
+            "Interval(null, @2019-01-01] overlaps Interval[@2021-06-01, @2021-12-31]"
+        ) is False
+        # Ordinary overlaps are unchanged.
+        assert self._exec(
+            "Interval[@2020-01-01, @2022-01-01] overlaps Interval[@2021-06-01, @2021-12-31]"
+        ) is True
+        assert self._exec(
+            "Interval[@2020-01-01, @2020-02-01] overlaps Interval[@2021-06-01, @2021-12-31]"
+        ) is False
+
+    def test_interval_ops_recognize_as_interval_cast_right_operand(self):
+        # B5-F2: interval-timing operators must extract the bound
+        # (intervalStart/intervalEnd) from a right operand produced by an
+        # inline `as Interval<T>` cast / First(cast) subquery instead of
+        # comparing raw interval JSON lexicographically. Uses a static
+        # interval list so the test needs no FHIR data.
+        from fhir4ds.cql.parser import parse_cql as _parse
+        from fhir4ds.cql.translator import CQLToSQLTranslator as _T
+
+        cql = (
+            "library L\ncontext Unfiltered\n"
+            "define Src: {Interval[@2020-01-01, @2020-06-01], "
+            "Interval[@2021-01-01, @2021-06-01]}\n"
+            "define T: Interval[@2019-01-01, @2019-06-01] starts on or after "
+            "First((Src X return X as Interval<DateTime>))"
+        )
+        lib = _parse(cql)
+        con = duckdb.connect()
+        register(con)
+        sql = _T(con).translate_library_to_sql(lib)
+        i = sql.find('"T" AS (')
+        assert i >= 0
+        seg = sql[i : i + 2000]
+        assert "intervalStart(" in seg or "intervalEnd(" in seg, seg[:300]

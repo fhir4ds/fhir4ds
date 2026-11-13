@@ -89,6 +89,7 @@ from ...translator.types import (
     SQLIntervalLiteral,
     SQLJoin,
     SQLLambda,
+    SQLLambda2,
     SQLLiteral,
     SQLNamedArg,
     SQLNull,
@@ -776,6 +777,22 @@ def _is_quantity_expression(expr: SQLExpression) -> bool:
         })
         if expr.name in _QUANTITY_RETURNING_FUNCS:
             return True
+        # Inline quantity list-aggregates (Min/Max/Sum/Avg over Quantity lists)
+        # lower to list_reduce/list_transform/list_filter carrying quantity
+        # elements or quantity lambdas — the result IS a Quantity even though
+        # the outer function name is generic. NOTE: heuristic — a BARE
+        # list_filter/list_transform over quantity elements returns a LIST,
+        # not a scalar Quantity; no current lowering feeds that shape to a
+        # scalar Quantity consumer (list-valued consumers wrap in
+        # len/Distinct first), but new consumers must not rely on this
+        # classification for bare list ops.
+        if expr.name in ("list_reduce", "list_transform", "list_apply", "list_filter"):
+            return any(_is_quantity_expression(a) for a in expr.args)
+    if isinstance(expr, (SQLLambda, SQLLambda2)):
+        return _is_quantity_expression(expr.body)
+    if isinstance(expr, SQLArray):
+        # Non-empty arrays of quantity values (the aggregate source list).
+        return any(_is_quantity_expression(e) for e in expr.elements)
     if isinstance(expr, SQLCase):
         for _, result in expr.when_clauses:
             if _is_quantity_expression(result):
