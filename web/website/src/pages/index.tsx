@@ -24,7 +24,6 @@ const ECQM_MEASURES = '47/47 + 73/73';
 function StatsBar() {
   const stats = [
     {value: SQL_EXECUTION_MEDIAN_ALL_MEASURES, label: 'SQL median / patient'},
-    {value: '0.09ms', label: 'Per patient @ 5k patients (Synthea)'},
     {value: 'Zero', label: 'Server infrastructure'},
     {value: TOTAL_CONFORMANCE_TESTS, label: 'Tests passing'},
     {value: 'Full', label: 'Audit Evidence'},
