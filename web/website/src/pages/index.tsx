@@ -275,6 +275,8 @@ function ComparisonSection() {
             </thead>
             <tbody>
               {[
+                ['Cohort execution at scale (5,000 patients, Synthea)', '0.09 – 11.5 ms/patient', 'per-patient cost unchanged at scale', true],
+                ['Speedup at scale (5,000 patients, extrapolated)', '~3× to ~7,600× per measure', 'baseline', true],
                 ['SQL execution per patient (all 47 measures)', SQL_EXECUTION_MEAN_ALL_MEASURES, 'N/A', true],
                 ['SQL execution per patient (46 shared measures)', SQL_EXECUTION_MEAN_SHARED_MEASURES, JAVA_EXECUTION_MEAN_SHARED_MEASURES, true],
                 ['Speedup (mean, 46 shared measures)', `${MEAN_SPEEDUP_SHARED_MEASURES} faster`, 'baseline', true],
@@ -294,8 +296,12 @@ function ComparisonSection() {
           </table>
         </div>
         <p style={{color: '#94a3b8', fontSize: '0.85rem', marginTop: '1rem'}}>
-          Per-patient figures measured on the cqframework 2025 QI-Core test bundles (46 of 47
-          measures succeed in both engines).
+          At-scale rows: Synthea 5,000-patient cohorts (100–5,000-patient ladder in the
+          {' '}<a href="/docs/getting-started/benchmarking" style={{color: '#38bdf8'}}>benchmarking report</a>);
+          the Java column is a per-patient linear extrapolation — its actual cost grows with
+          data volume. Per-patient figures measured on the cqframework 2025 QI-Core test
+          bundles (46 of 47 measures succeed in both engines) — small cohorts where fixed
+          per-query costs dominate, i.e. the conservative end of the range.
         </p>
         <div className="text--center" style={{marginTop: '2rem'}}>
           <Link className="button button--outline button--primary" to="/docs/getting-started/benchmarking/">
