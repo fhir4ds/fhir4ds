@@ -55,20 +55,22 @@ a production deployment pays them at deploy, not at query.
 
 ## The ladder
 
-Execution time on DuckDB 1.5.6, median of three runs:
+Execution time on DuckDB 1.5.6, median of three runs — total and per-patient
+at every rung:
 
-| Measure | 100 | 1,000 | 5,000 | ms/patient @ 5k |
+| Measure | 100 | 1,000 | 5,000 | ms/patient: 100 → 1,000 → 5,000 |
 |---|---|---|---|---|
-| CMS68 | 70 ms | 117 ms | 474 ms | **0.09** |
-| CMS22 | 407 ms | 1,206 ms | 4,630 ms | 0.93 |
-| CMS2 | 460 ms | 734 ms | 2,773 ms | 0.55 |
-| CMS130 | 2,219 ms | 12,733 ms | 57,357 ms | 11.5 |
-| CMS133 | 2,924 ms | 10,421 ms | 46,428 ms | 9.3 |
+| CMS68 | 70 ms | 117 ms | 474 ms | 0.70 → 0.12 → **0.09** |
+| CMS22 | 407 ms | 1,206 ms | 4,630 ms | 4.07 → 1.21 → 0.93 |
+| CMS2 | 460 ms | 734 ms | 2,773 ms | 4.60 → 0.73 → 0.55 |
+| CMS130 | 2,219 ms | 12,733 ms | 57,357 ms | 22.2 → 12.7 → 11.5 |
+| CMS133 | 2,924 ms | 10,421 ms | 46,428 ms | 29.2 → 10.4 → 9.3 |
 
 Two things to read off that table.
 
 **Per-patient cost falls as the cohort grows.** CMS68 goes from 0.70 ms/patient
-at 100 patients to 0.09 ms/patient at 5,000. A columnar engine amortizes the
+at 100 patients to 0.09 ms/patient at 5,000; every measure shows the same
+direction. A columnar engine amortizes the
 fixed cost of planning, CTE materialization and the patient roster over more
 rows — the opposite of a per-patient engine, whose cost is flat by construction.
 Against the extrapolated Java baseline at 5,000 patients, that is roughly
