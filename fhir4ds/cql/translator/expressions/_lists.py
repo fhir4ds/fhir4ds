@@ -1034,15 +1034,33 @@ class ListsMixin:
             return None
         alias_name = source_ast.name
 
+        # Let-bound and lambda variables are NOT table-backed rows — they
+        # have no patient_id/resource columns, so a correlated CTE lookup
+        # keyed on them is invalid SQL (CMS2: the ToDaily promotion CTE
+        # lookup emitted `frequency.patient_id` for the let variable
+        # `frequency` inside medicationRequestPeriod's body). Let variables
+        # inherit the enclosing row scope's cte_name when registered, so the
+        # key check below would otherwise pass.
+        if alias_name in getattr(self.context, "let_variables", {}):
+            return None
+        if alias_name.startswith("_lt_"):
+            return None
+
         # Look up the alias in the symbol table
         sym = self.context.lookup_symbol(alias_name)
         if sym is None:
             return None
 
+
         # Get the CQL definition name from the symbol's cte_name or table_alias
         cql_def_name = sym.cte_name or sym.table_alias
         if not cql_def_name:
             return None
+
+        # Canonicalize URL-form symbol labels to the valueset-name form the
+        # promotion keys and emitted retrieve CTEs use (CMS2 fix).
+        from ...translator.cte_manager import canonical_promotion_source
+        cql_def_name = canonical_promotion_source(cql_def_name, self.context)
 
         # Check if (func_name, cql_def_name) has a built CTE
         key = (func_name, cql_def_name)
@@ -1051,7 +1069,11 @@ class ListsMixin:
 
         from ...translator.cte_manager import generate_function_cte_name
         fn_cte_name = generate_function_cte_name(func_name, cql_def_name)
-        source_alias = alias_name
+        # The correlated lookup must reference the SQL table alias actually in
+        # scope. Inside a promotion CTE build the CQL alias differs from the
+        # SQL alias (sym.table_alias='_fns'); emitting the CQL alias produces
+        # invalid SQL (CMS156 `Order.patient_id`).
+        source_alias = getattr(sym, "table_alias", None) or alias_name
         return self._make_function_cte_lookup(fn_cte_name, source_alias, func_name=func_name)
 
     def _translate_alias_ref(self, ref: AliasRef, boolean_context: bool = False) -> SQLExpression:

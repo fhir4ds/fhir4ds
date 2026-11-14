@@ -148,6 +148,32 @@ def generate_function_cte_name(func_name: str, cql_def_name: str) -> str:
     return f"_fn_{func_name}_{safe_name[:32]}_{name_hash}"
 
 
+def canonical_promotion_source(source_name: str, context) -> str:
+    """Canonicalize a source-CTE label for promoted-function key matching.
+
+    Retrieve CTE names are emitted by ``build_retrieve_cte`` in the
+    URL-to-name canonical form (``"Type: <valueset CQL name>"`` — it
+    reverse-lookups the valueset URL in ``context.valuesets``). Some alias
+    registration paths, however, record the symbol ``cte_name`` in the raw
+    URL form (``"Type: http://cts.nlm.nih.gov/fhir/ValueSet/<oid>"``).
+    Promoted-function keys use the canonical form, so a consumer reading the
+    symbol must canonicalize before the ``(func, source)`` lookup or the
+    promotion silently misses (CMS2: medicationRequestPeriod's ~4,000-copy
+    inline expansion survived promotion for exactly this reason).
+
+    Canonicalization mirrors build_retrieve_cte's naming: URL segment after
+    the last '/' reverse-mapped through context.valuesets.
+    """
+    prefix, sep, url = source_name.rpartition(": ")
+    if not sep or not url.startswith("http"):
+        return source_name
+    valuesets = getattr(context, "valuesets", None) or {}
+    for name, vs_url in valuesets.items():
+        if vs_url == url:
+            return f"{prefix}: {name}"
+    return source_name
+
+
 
 
 _AGGREGATE_FUNCTION_NAMES = frozenset({
@@ -1859,6 +1885,18 @@ class CTEManagerMixin:
             return cte_body
         provisional = fc.expr.name
         entry = definition_ctes.get(provisional)
+        if entry is None:
+            # Profile-suffix tolerance: the promotion pre-scan names a source
+            # retrieve WITHOUT its distinguishing profile suffix, while the
+            # emitted retrieve CTE may carry one ("... (us-quality-core-
+            # medicationrequest)"). Resolve to the unique suffixed spelling
+            # so the fn CTE's FROM points at a CTE that actually exists
+            # (CMS156: otherwise the promotion CTE is never emitted and the
+            # fallback path diverges from baseline).
+            prefix = provisional + " ("
+            matches = [k for k in definition_ctes if k.startswith(prefix)]
+            if len(matches) == 1:
+                entry = definition_ctes[matches[0]]
         if entry:
             actual = entry[0].strip('"')  # (quoted_name, has_resource)
             if actual != provisional:

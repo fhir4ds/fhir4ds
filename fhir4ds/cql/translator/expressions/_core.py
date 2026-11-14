@@ -1396,10 +1396,16 @@ class CoreMixin:
         # Generate deterministic CTE name (must match _build_function_promotion_cte)
         from ...translator.cte_manager import generate_function_cte_name
         fn_cte_name = generate_function_cte_name(bare_name, cql_def_name)
-        source_alias = (
+        _src_name = (
             source_expr.name
             if isinstance(source_expr, Identifier)
-            else self.context.resource_alias or "E"
+            else None
         )
+        source_alias = _src_name or self.context.resource_alias or "E"
+        if _src_name:
+            _src_sym = self.context.lookup_symbol(_src_name)
+            # Prefer the SQL table alias in scope (inside promotion CTE
+            # builds the CQL alias is rebound to _fns; CMS156 fix).
+            source_alias = getattr(_src_sym, "table_alias", None) or source_alias
 
         return self._make_function_cte_lookup(fn_cte_name, source_alias, func_name=func_name)

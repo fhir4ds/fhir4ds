@@ -1038,8 +1038,18 @@ class FunctionInliner:
         else:
             first_param_expr = args[0] if args else None
 
+        # Let-bound variables are not table-backed rows: they inherit the
+        # enclosing row scope's cte_name but have no patient_id/resource
+        # columns, so a correlated CTE lookup keyed on them is invalid SQL
+        # (CMS2: `frequency.patient_id` inside medicationRequestPeriod's
+        # promotion CTE). Lambda aliases (_lt_ prefix) likewise.
+        _let_vars = getattr(self.context, "let_variables", None) or {}
+        
         if isinstance(first_param_expr, Identifier):
-            sym = self.context.lookup_symbol(first_param_expr.name)
+            _nm = first_param_expr.name
+            if _nm in _let_vars or _nm.startswith("_lt_"):
+                return False
+            sym = self.context.lookup_symbol(_nm)
             if sym and sym.cte_name:
                 key = (actual_name, sym.cte_name)
                 if key in self.context._promoted_cte_keys:
@@ -1048,7 +1058,7 @@ class FunctionInliner:
         # Strategy 2: Check current resource_alias (for calls from within
         # expanded function bodies where args are ParameterPlaceholder)
         resource_alias = self.context.resource_alias
-        if resource_alias:
+        if resource_alias and resource_alias not in _let_vars and not resource_alias.startswith("_lt_"):
             sym = self.context.lookup_symbol(resource_alias)
             if sym and sym.cte_name:
                 key = (actual_name, sym.cte_name)

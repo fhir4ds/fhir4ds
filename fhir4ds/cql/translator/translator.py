@@ -271,6 +271,8 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         # translate_library_to_sql so definition-only SQL carries the
         # retrieve CTEs definitions reference by name.
         self._phase2_retrieve_ctes: Dict[str, "SQLSelect"] = {}
+        # Collision map for phase-2 profile-suffix prediction (promotion scan)
+        self._profile_urls_by_type: Dict[str, Set[str]] = {}
 
         # SQLRetrieveCTE tracking for optimized CTE generation
         self._retrieve_ctes: List[SQLRetrieveCTE] = []
@@ -490,6 +492,9 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         # them the emitted SQL contains dangling CTE references (e.g.
         # WITH "Obs" AS (SELECT "Observation")).
         self._phase2_retrieve_ctes = dict(phase2_result.ctes)
+        # Final (phase-2) retrieve CTE names — the authoritative spelling for
+        # promotion source resolution (profile suffixes are decided here).
+        self._final_retrieve_cte_names = set(phase2_result.ctes.keys())
 
         # Copy column registry from phase2_result to context for property access optimization
         # This enables property access in expressions.py to use precomputed columns
@@ -856,7 +861,6 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 library, self._context, self
             )
             self._phase2_cte_name_map = phase2_result.cte_name_map
-
         except RecursionError:
             resolving = list(self._context._resolving_definitions)
             if resolving:
@@ -1110,8 +1114,14 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         def _emit_ready_function_promotion_ctes() -> None:
             for (fn_name, fn_src), fn_ctes in list(self._context._function_promotion_ctes.items()):
                 deps = self._context._function_cte_deps.get((fn_name, fn_src), set())
-                # All dependencies must be in definition_ctes (i.e., already emitted)
-                if fn_src not in definition_ctes:
+                # All dependencies must be in definition_ctes (i.e., already emitted).
+                # Profile-suffix tolerance: the pre-scan source name may lack
+                # the emitted retrieve CTE's distinguishing suffix; accept the
+                # unique suffixed spelling (mirrors _resolve_function_cte_source).
+                _src_emitted = fn_src in definition_ctes or any(
+                    k.startswith(fn_src + " (") for k in definition_ctes
+                )
+                if not _src_emitted:
                     continue  # source not yet emitted
                 if not deps.issubset(definition_ctes.keys()):
                     continue  # some dependencies not yet emitted
@@ -2350,57 +2360,178 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         Stores results in context.function_ref_counts.
         """
         func_calls: Dict[Tuple[str, str], int] = {}
+        self._compute_profile_collisions(library)
 
         for stmt in library.statements:
             if not isinstance(stmt, Definition):
                 continue
             expr = stmt.expression
-            if not isinstance(expr, Query):
+            if expr is None:
                 continue
-            alias_to_source_def: Dict[str, str] = {}
-            sources = expr.source if isinstance(expr.source, list) else [expr.source]
-
-            for src in sources:
-                if not isinstance(src, QuerySource):
-                    continue
-                source_key = self._promotion_source_key(src.expression)
-                if source_key:
-                    alias_to_source_def[src.alias] = source_key
-
-            # Track relationship aliases backed by CQL definitions. Repeated
-            # function calls in with/without such-that clauses are a major
-            # CMS1218 SQL growth source and were previously invisible here.
-            for with_clause in getattr(expr, "with_clauses", []) or []:
-                wc_expr = getattr(with_clause, "expression", None)
-                wc_alias = getattr(with_clause, "alias", None)
-                source_key = self._promotion_source_key(wc_expr)
-                if wc_alias and source_key:
-                    alias_to_source_def[wc_alias] = source_key
-
-            if not alias_to_source_def:
-                continue
-
-            def _visitor(node: Any) -> None:
-                if isinstance(node, MethodInvocation):
-                    # Case 1: receiver is a tracked source alias (alias.method())
-                    if isinstance(node.source, Identifier) and node.source.name in alias_to_source_def:
-                        key = (node.method, alias_to_source_def[node.source.name])
-                        func_calls[key] = func_calls.get(key, 0) + 1
-                    # Case 2: any argument is a tracked source alias (func(..., alias, ...))
-                    for arg in node.arguments:
-                        if isinstance(arg, Identifier) and arg.name in alias_to_source_def:
-                            key = (node.method, alias_to_source_def[arg.name])
-                            func_calls[key] = func_calls.get(key, 0) + 1
-                if isinstance(node, FunctionRef):
-                    # Non-fluent function call: FunctionName(alias, ...)
-                    for arg in node.arguments:
-                        if isinstance(arg, Identifier) and arg.name in alias_to_source_def:
-                            key = (node.name, alias_to_source_def[arg.name])
-                            func_calls[key] = func_calls.get(key, 0) + 1
-
-            self._walk_ast(expr, _visitor)
+            # Union-shaped defines (e.g. CMS2's "Follow Up Intervention..." arms:
+            # (retrieve-query union retrieve-query union ...)) are BinaryExpression
+            # trees, not a top-level Query — the pre-scan previously skipped the
+            # ENTIRE define, leaving ~4,000 inlined fluent-period copies invisible
+            # to promotion. Collect every nested Query node and scan each with the
+            # same alias->source logic.
+            queries: List[Any]
+            if isinstance(expr, Query):
+                queries = [expr]
+            else:
+                queries = []
+                self._walk_ast(expr, lambda n: queries.append(n) if isinstance(n, Query) else None)
+            for q in queries:
+                self._scan_query_for_promotion(q, func_calls)
 
         self._context.function_ref_counts = func_calls
+
+    def _scan_query_for_promotion(self, expr: Query, func_calls: Dict[Tuple[str, str], int]) -> None:
+        """Count alias-bound function calls inside one Query node."""
+        alias_to_source_def: Dict[str, str] = {}
+        sources = expr.source if isinstance(expr.source, list) else [expr.source]
+
+        for src in sources:
+            if not isinstance(src, QuerySource):
+                continue
+            source_key = self._promotion_source_key(src.expression)
+            if source_key:
+                alias_to_source_def[src.alias] = source_key
+                # Explosive-rule eligibility: phase-2 may append a
+                # distinguishing profile suffix to this retrieve's CTE name
+                # (registry/model driven). Skip sources whose FINAL CTE name
+                # is not predictable at pre-scan time:
+                # - collision-predicted suffixes (two profiles over the base
+                #   type anywhere in the library or its includes), and
+                # - PLAIN (unqualified) retrieve types under a profiled
+                #   using-model (CMS156 `using USQualityCore`: phase-2 binds
+                #   model profiles to plain [MedicationRequest] retrieves
+                #   context-dependently and suffixes their CTE names).
+                # Dotted, model-qualified types (CMS2
+                # `USQualityCore.MedicationRequest`) resolve deterministically
+                # in the pre-scan and are eligible.
+                if self._source_gets_profile_suffix(src.expression):
+                    self._context._promotion_suffixed_sources.add(source_key)
+
+        # Track relationship aliases backed by CQL definitions. Repeated
+        # function calls in with/without such-that clauses are a major
+        # CMS1218 SQL growth source and were previously invisible here.
+        for with_clause in getattr(expr, "with_clauses", []) or []:
+            wc_expr = getattr(with_clause, "expression", None)
+            wc_alias = getattr(with_clause, "alias", None)
+            source_key = self._promotion_source_key(wc_expr)
+            if wc_alias and source_key:
+                alias_to_source_def[wc_alias] = source_key
+
+        if not alias_to_source_def:
+            return
+
+        def _visitor(node: Any) -> None:
+            if isinstance(node, MethodInvocation):
+                # Case 1: receiver is a tracked source alias (alias.method())
+                if isinstance(node.source, Identifier) and node.source.name in alias_to_source_def:
+                    key = (node.method, alias_to_source_def[node.source.name])
+                    func_calls[key] = func_calls.get(key, 0) + 1
+                # Case 2: any argument is a tracked source alias (func(..., alias, ...))
+                for arg in node.arguments:
+                    if isinstance(arg, Identifier) and arg.name in alias_to_source_def:
+                        key = (node.method, alias_to_source_def[arg.name])
+                        func_calls[key] = func_calls.get(key, 0) + 1
+            if isinstance(node, FunctionRef):
+                # Non-fluent function call: FunctionName(alias, ...)
+                for arg in node.arguments:
+                    if isinstance(arg, Identifier) and arg.name in alias_to_source_def:
+                        key = (node.name, alias_to_source_def[arg.name])
+                        func_calls[key] = func_calls.get(key, 0) + 1
+
+        self._walk_ast(expr, _visitor)
+
+    def _source_gets_profile_suffix(self, expr: Any) -> bool:
+        """True when the retrieve's final CTE name is not predictable pre-scan.
+
+        Discriminator (CMS2 vs CMS156): a MODEL-QUALIFIED retrieve whose
+        model binds a profile to its type (`[USQualityCore.MedicationRequest]`
+        -> us-quality-core-medicationrequest) gets a distinguishing profile
+        suffix on its emitted CTE name — the pre-scan key then never matches
+        and the promotion's consumers miscorrelate (CMS156: 2/59 patients
+        flipped). A plain retrieve under a model that does not profile the
+        type (`using QICore` + `[MedicationRequest: VS]`) emits the
+        unsuffixed name the pre-scan computed (CMS2) and is eligible.
+        Collision-based suffixes (two profile URLs over one base type
+        anywhere in the library or its includes) are excluded the same way.
+        """
+        if not isinstance(expr, Retrieve):
+            return False
+        resource_type = getattr(expr, "type", None)
+        if not resource_type:
+            return False
+        registry = self._context.profile_registry
+        model = getattr(expr, "model", None)
+        if model and "." not in resource_type:
+            resolved = registry.resolve_qualified_profile(model, resource_type)
+            if resolved is not None and resolved[1]:
+                return True
+        resolved = registry.resolve_named_profile(resource_type)
+        if resolved is not None and resolved[1]:
+            base, url = resolved
+            if len(self._profile_urls_by_type.get(base, set())) >= 2:
+                return True
+        return False
+
+    def _resolve_retrieve_base_type(self, resource_type: str) -> Optional[str]:
+        registry = self._context.profile_registry
+        if "." in resource_type:
+            qualifier, _, local_name = resource_type.partition(".")
+            resolved = registry.resolve_qualified_profile(qualifier, local_name)
+        else:
+            resolved = registry.resolve_named_profile(resource_type)
+        if resolved is not None:
+            return resolved[0]
+        return resource_type
+
+    def _compute_profile_collisions(self, library: Library) -> None:
+        """Map base resource type -> distinct profile URLs across the library.
+
+        Drives the collision-based suffix prediction in
+        _source_gets_profile_suffix. Plain (unprofiled) retrieves contribute
+        no URL, so a library mixing profiled and plain retrieves of one type
+        counts only the profiled ones.
+        """
+        urls_by_type: Dict[str, Set[str]] = {}
+        retrieve_type = None
+        from ..parser.ast_nodes import Retrieve as _ScanRetrieve
+        # Walk BOTH the main library and every included library's statements:
+        # the colliding profile often comes from a retrieve inside an
+        # included function body (CMS156: us-core-medicationrequest from an
+        # included library vs us-quality-core-medicationrequest from the
+        # main measure — phase-2 suffixes BOTH CTE names).
+        all_statements = list(library.statements)
+        for lib_info in getattr(self._context, "includes", {}).values():
+            lib_ast = getattr(lib_info, "library_ast", None)
+            if lib_ast is not None:
+                all_statements.extend(getattr(lib_ast, "statements", []) or [])
+        for stmt in all_statements:
+            expr = getattr(stmt, "expression", None)
+            if expr is None:
+                continue
+
+            def _visit(node: Any) -> None:
+                if isinstance(node, _ScanRetrieve):
+                    rt = getattr(node, "type", None)
+                    if not rt:
+                        return
+                    base = self._resolve_retrieve_base_type(rt)
+                    registry = self._context.profile_registry
+                    if "." in rt:
+                        q, _, ln = rt.partition(".")
+                        resolved = registry.resolve_qualified_profile(q, ln)
+                    else:
+                        resolved = registry.resolve_named_profile(rt)
+                    url = resolved[1] if resolved else None
+                    if url:
+                        urls_by_type.setdefault(base, set()).add(url)
+
+            self._walk_ast(expr, _visit)
+        self._profile_urls_by_type = urls_by_type
 
     def _promotion_source_key(self, expr: Any) -> Optional[str]:
         """Return the CTE key for a query alias eligible for function promotion."""
@@ -2649,6 +2780,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
 
     def _select_promoted_functions(self) -> None:
         """Select functions meeting the transitive count threshold for CTE promotion."""
+        explosive = self._explosive_function_closure()
         for key, count in self._context.function_transitive_counts.items():
             if key[0] in self._FUNCTION_CTE_PROMOTION_DENYLIST:
                 continue
@@ -2658,10 +2790,105 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                     count >= self._FUNCTION_CTE_SECONDARY_THRESHOLD
                     and self._is_expensive_scalar_function(key[0])
                 )
+                or (
+                    count >= 1
+                    and key[0] in explosive
+                    and not self._is_collection_valued_function(key[0])
+                    and key[1] not in self._context._promotion_suffixed_sources
+                )
             ):
                 self._context.promoted_functions[key] = count
         _logger.info("Selected %d functions for CTE promotion (threshold=%d)",
                      len(self._context.promoted_functions), self._FUNCTION_CTE_PROMOTION_THRESHOLD)
+
+    def _is_collection_valued_function(self, func_name: str) -> bool:
+        """True when the function operates on a LIST, not a single source row.
+
+        The explosive-body promotion rule must not promote list-level fluent
+        functions (CMS156 moreThanOneOrder: takes List<MedicationRequest> and
+        self-joins it) — the promotion machinery is row-keyed scalar (lookup
+        by _row_key = row id), so a list-level function promoted as per-row
+        silently changes semantics (Numerator 1/3 flips on 2/59 patients).
+        Same discriminator as _function_body_is_likely_collection, resolved
+        from the inliner registry by (possibly qualified) name.
+        """
+        inliner = self._context.function_inliner
+        if not inliner:
+            return False
+        for fkey, candidate in inliner._functions.items():
+            if fkey == func_name or fkey.endswith(f".{func_name}"):
+                if len(candidate.parameters) != 1 or candidate.body is None:
+                    return False
+                return self._function_body_is_likely_collection(candidate)
+        return False
+
+
+    _EXPLOSIVE_CASE_BRANCHES = 20
+
+    def _explosive_function_closure(self) -> Set[str]:
+        """Functions worth promoting at count >= 1 (expansive-code bodies).
+
+        A function whose body contains a wide code-equivalence CASE (>= 20
+        branches — the CumulativeMedicationDuration ``ToDaily`` shape with
+        ~45 ``frequency ~ "X"`` arms) expands to ~50 coding_matches calls per
+        inline site, and interval-bound arithmetic re-evaluates it ~10x —
+        CMS2's "Follow Up Intervention" CTEs carried ~4,000 such calls because
+        the union-shaped define was invisible to the promotion pre-scan and
+        each (function, source) count was 1, below every threshold.
+
+        The trigger is STRUCTURAL (case width), not library-name-pinned.
+        Callers of an explosive function inherit the signal through the call
+        graph (medicationRequestPeriod -> ToDaily), so a single call site of
+        the wrapper still promotes and collapses the whole expansion.
+        """
+        call_graph = self._context.function_call_graph
+        # callee -> callers (reverse edges) for upward propagation
+        callers_of: Dict[str, Set[str]] = {}
+        for caller, callees in call_graph.items():
+            for callee in callees:
+                callers_of.setdefault(callee, set()).add(caller)
+
+        explosive: Set[str] = set()
+        inliner = self._context.function_inliner
+        if inliner:
+            for key, func_def in inliner._functions.items():
+                name = key.rsplit(".", 1)[-1] if "." in key else key
+                body = getattr(func_def, "body", None)
+                if body is not None and self._body_has_wide_case(body):
+                    explosive.add(name)
+                    explosive.add(key)
+
+        # Upward closure: any function whose body (transitively) calls an
+        # explosive function is itself expansion-explosive.
+        frontier = list(explosive)
+        while frontier:
+            current = frontier.pop()
+            for caller in callers_of.get(current, ()):  # plain names in graph
+                if caller not in explosive:
+                    explosive.add(caller)
+                    frontier.append(caller)
+        return explosive
+
+    @classmethod
+    def _body_has_wide_case(cls, node: Any) -> bool:
+        """True if the AST contains a CaseExpression with many branches."""
+        stack = [node]
+        while stack:
+            current = stack.pop()
+            if current is None:
+                continue
+            if type(current).__name__ == "CaseExpression":
+                items = getattr(current, "case_items", None) or []
+                if len(items) >= cls._EXPLOSIVE_CASE_BRANCHES:
+                    return True
+            if isinstance(current, (list, tuple)):
+                stack.extend(current)
+                continue
+            if not hasattr(current, "__dataclass_fields__"):
+                continue
+            for field_name in current.__dataclass_fields__:
+                stack.append(getattr(current, field_name, None))
+        return False
 
     def _is_expensive_scalar_function(self, func_name: str) -> bool:
         """Return true for single-argument fluent functions worth promoting at count 2."""
