@@ -102,16 +102,24 @@ Three changes, each aimed at a profile finding:
 3. **The `_patients` CTE rewritten.** It used to enumerate `patient_ref` over
    every resource row with two correlated subqueries per row — 27% of CMS68's
    operator time. It is now a single scan of the Patient rows.
+4. **Explosive fluent functions promoted to CTEs** (shipped the day after the
+   rerun below). A union-shaped define in CMS2 inlined a ~50-branch
+   code-equivalence CASE ~4,000 times into one expression. The promotion
+   scanner now sees inside union arms and promotes structurally "explosive"
+   single-argument functions (≥20-branch case bodies) to per-row CTE
+   lookups — collapsing CMS2's SQL from 1.5 MB to 119 KB and its rung-100
+   execution from 1,908 ms to 460 ms.
 
 ## The re-measured ladder
 
-Same corpus, same cohorts, same measures, current engine (DuckDB 1.5.6):
+Same corpus, same cohorts, same measures, current engine (DuckDB 1.5.6),
+measured 2026-11-14 with all four fixes above:
 
 | Measure | 100 | 1,000 | 5,000 | vs October |
 |---|---|---|---|---|
-| CMS68 | 54 ms | 115 ms | 474 ms | **11.0x** |
-| CMS130 | 2,132 ms | 13,106 ms | 58,289 ms | **4.4x** |
-| CMS2 | 1,908 ms | 2,141 ms | 3,450 ms | **4.2x** |
+| CMS68 | 70 ms | 117 ms | 474 ms | **11.0x** |
+| CMS130 | 2,219 ms | 12,733 ms | 57,357 ms | **4.5x** |
+| CMS2 | 460 ms | 734 ms | 2,773 ms | **5.3x** |
 
 Against the extrapolated Java baseline at 5,000 patients that is roughly 600x
 (CMS130), 170x (CMS2) and — for CMS68, which is down to 0.09 ms per patient —
@@ -161,6 +169,10 @@ clean engine comparison at 5,000 patients:
 | CMS133 | 44,991 ms | 5,064 ms | **−88.7%** |
 | CMS22 | 4,722 ms | 5,869 ms | +24.3% |
 | CMS2 | 3,450 ms | 39,134 ms | **+1,034%** |
+
+(Engine-split rows are the 2026-11-13 measurements, before fix #4 above;
+the promotion shifted CMS2's DuckDB 2.0 planning cost further in the wrong
+direction, so the 1.5.6 recommendation stands a fortiori.)
 
 DuckDB 2.0.0 is dramatically faster on the scan-heavy measures — the ones the
 October diagnosis was about — but regresses CMS2 badly. CMS2's generated SQL is
