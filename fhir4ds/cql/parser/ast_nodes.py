@@ -243,6 +243,10 @@ class Quantity(Expression):
 
     value: Any
     unit: str
+    # Authored numeric text (token.value) for decimal-exact re-serialization
+    # in Ratio literals (`0.00001 'mg'` must NOT render as `1e-05`).
+    # Optional; consumers fall back to non-scientific float formatting.
+    raw_text: Optional[str] = None
 
 
 @dataclass

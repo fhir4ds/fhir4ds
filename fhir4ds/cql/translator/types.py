@@ -399,10 +399,12 @@ class SQLQualifiedIdentifier(SQLExpression):
                 return part  # already quoted
             needs_quoting = (
                 ' ' in part or ':' in part or '-' in part or
-                '(' in part or ')' in part
+                '(' in part or ')' in part or '"' in part or '.' in part
             )
             if needs_quoting:
-                return f'"{part}"'
+                # Escape embedded double quotes per SQL identifier rules so
+                # a quote can never terminate the identifier early.
+                return '"' + part.replace('"', '""') + '"'
             return part
         return ".".join(_quote_part(p) for p in self.parts)
 
@@ -2245,7 +2247,7 @@ class SQLParameterRef(SQLExpression):
         # - Convert to lowercase
         # - Use getvariable() for session variables
         # - CAST to VARCHAR since getvariable returns a string literal type
-        normalized_name = self.name.replace(" ", "_").lower()
+        normalized_name = self.name.replace(" ", "_").lower().replace("'", "''")
         return f"CAST(getvariable('{normalized_name}') AS VARCHAR)"
 
 
@@ -2364,6 +2366,12 @@ class SQLUnion(SQLExpression):
                             columns=[pid_col, col],
                             from_clause=inner.from_clause,
                             where=inner.where,
+                            # CORE-012: preserve the full clause set — the
+                            # old reconstruction dropped joins/group_by/having,
+                            # silently changing aggregate/joined operands.
+                            joins=inner.joins,
+                            group_by=inner.group_by,
+                            having=inner.having,
                             order_by=inner.order_by,
                             limit=inner.limit,
                             distinct=inner.distinct,
@@ -2486,6 +2494,9 @@ def _normalize_set_operand(op: "SQLExpression", precedence: int) -> str:
                 where=inner.where,
                 order_by=inner.order_by,
                 distinct=inner.distinct,
+                joins=inner.joins,
+                group_by=inner.group_by,
+                having=inner.having,
             )
             return f"({normalized.to_sql(precedence)})"
         return op.to_sql(precedence)

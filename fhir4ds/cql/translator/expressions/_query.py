@@ -300,6 +300,44 @@ def _patient_correlated_where(existing_where, row_alias: str, outer_pid: str):
     )
     if existing_where is None:
         return correlation
+    return SQLBinaryOp(operator="AND", left=existing_where, right=correlation)
+
+
+def _push_where_into_derived_source(select_node) -> bool:
+    """EXP2-008: push a translated query WHERE into a derived-table source.
+
+    With-clause chains produce rows sources shaped
+    ``SELECT ... FROM (SELECT * FROM "T" AS E WHERE EXISTS(...)) AS R``;
+    the query's own WHERE was translated against the PRIMARY source alias
+    (E), which binds only INSIDE the derived select. Attaching it beside
+    the derived table binder-fails ("Referenced table E not found"). On
+    success the where is ANDed into the inner select and
+    ``select_node.where`` is cleared. Returns False (where left in place)
+    when the FROM is not a derived select.
+    """
+    where = select_node.where
+    if where is None:
+        return False
+    frm = select_node.from_clause
+    target = None
+    if (
+        isinstance(frm, SQLAlias)
+        and isinstance(frm.expr, SQLSubquery)
+        and isinstance(frm.expr.query, SQLSelect)
+    ):
+        target = frm.expr.query
+    elif isinstance(frm, SQLAlias) and isinstance(frm.expr, SQLSelect):
+        target = frm.expr
+    if target is None:
+        return False
+    if target.where is not None:
+        target.where = SQLBinaryOp(operator="AND", left=target.where, right=where)
+    else:
+        target.where = where
+    select_node.where = None
+    return True
+    if existing_where is None:
+        return correlation
     return SQLBinaryOp(
         operator="AND", left=existing_where, right=correlation
     )
@@ -639,15 +677,36 @@ import re as _re
 
 
 def _find_matching_paren(s: str, start: int) -> int:
-    """Find the closing paren matching the open paren at *start*."""
+    """Find the closing paren matching the open paren at *start*.
+
+    String-literal aware (external review EXP2-010): parentheses inside
+    '...' literals are data, not structure. Clinical text routinely
+    carries unbalanced parens ("pain (chronic", "resolved)"), which the
+    naive counter mis-reads — an early ')' truncated the match and
+    produced structurally corrupt SQL, while an unclosed '(' silently
+    skipped the demotion entirely (audit STRUCT flowing into a boolean
+    context). Doubled '' escapes are honored.
+    """
     depth = 0
-    for i in range(start, len(s)):
-        if s[i] == "(":
+    in_string = False
+    i = start
+    while i < len(s):
+        ch = s[i]
+        if in_string:
+            if ch == "'":
+                if i + 1 < len(s) and s[i + 1] == "'":
+                    i += 2  # escaped quote — stay in string
+                    continue
+                in_string = False
+        elif ch == "'":
+            in_string = True
+        elif ch == "(":
             depth += 1
-        elif s[i] == ")":
+        elif ch == ")":
             depth -= 1
             if depth == 0:
                 return i
+        i += 1
     return -1
 
 
@@ -2176,9 +2235,14 @@ class QueryMixin:
             _is_coll = isinstance(let_clause.expression, (Query, Retrieve))
             if _is_coll:
                 self.context._let_clause_collection = True
-            let_expr_sql = self.translate(let_clause.expression, usage=ExprUsage.SCALAR)
+            try:
+                let_expr_sql = self.translate(let_clause.expression, usage=ExprUsage.SCALAR)
+            finally:
+                # Reset even on exception: a leaked True flag misclassifies
+                # every later let translation as a collection (EXP2-009).
+                if _is_coll:
+                    self.context._let_clause_collection = False
             if _is_coll:
-                self.context._let_clause_collection = False
                 let_expr_sql = _wrap_as_json_array_agg(let_expr_sql)
 
             # Decide: promote to CTE or inline?
@@ -4598,9 +4662,12 @@ class QueryMixin:
                                 _is_coll = isinstance(_lc.expression, (Query, Retrieve))
                                 if _is_coll:
                                     self.context._let_clause_collection = True
-                                _let_sql = self.translate(_lc.expression, usage=ExprUsage.SCALAR)
+                                try:
+                                    _let_sql = self.translate(_lc.expression, usage=ExprUsage.SCALAR)
+                                finally:
+                                    if _is_coll:
+                                        self.context._let_clause_collection = False
                                 if _is_coll:
-                                    self.context._let_clause_collection = False
                                     _let_sql = _wrap_as_json_array_agg(_let_sql)
                                 self.context.let_variables[_lc.alias] = _let_sql
 
@@ -4643,7 +4710,9 @@ class QueryMixin:
                         isinstance(info[3], _ListExpr) for info in _sec_infos
                     )
                     _conds: list = []
-                    if _sec_where_sql and not isinstance(_sec_where_sql, SQLLiteral):
+                    if _sec_where_sql and not (
+                        isinstance(_sec_where_sql, SQLLiteral) and _sec_where_sql.value is True
+                    ):
                         _conds.append(_sec_where_sql)
                     if not _all_list_sources:
                         for _sa, _, _, _ast_expr in _sec_infos:
@@ -5500,21 +5569,24 @@ class QueryMixin:
                     )
 
                 self.context.push_scope()
-                self.context.add_alias(alias, ast_expr=SQLIdentifier(name=_lt_param))
+                try:
+                    self.context.add_alias(alias, ast_expr=SQLIdentifier(name=_lt_param))
 
-                # Process LET clauses in the UNNEST scope
-                if hasattr(node, 'let_clauses') and node.let_clauses:
-                    self._process_let_clauses(node.let_clauses, node=node)
+                    # Process LET clauses in the UNNEST scope
+                    if hasattr(node, 'let_clauses') and node.let_clauses:
+                        self._process_let_clauses(node.let_clauses, node=node)
 
-                _ba_where = None
-                if node.where:
-                    _ba_where = _demote_audit_struct_to_bool(self.translate(node.where, usage=ExprUsage.BOOLEAN))
+                    _ba_where = None
+                    if node.where:
+                        _ba_where = _demote_audit_struct_to_bool(self.translate(node.where, usage=ExprUsage.BOOLEAN))
 
-                _ba_return = SQLIdentifier(name=_lt_param)
-                if node.return_clause:
-                    _ba_return = self.translate(node.return_clause, usage=ExprUsage.SCALAR)
-
-                self.context.pop_scope()
+                    _ba_return = SQLIdentifier(name=_lt_param)
+                    if node.return_clause:
+                        _ba_return = self.translate(node.return_clause, usage=ExprUsage.SCALAR)
+                finally:
+                    # Pop even on exception: a leaked UNNEST scope corrupts
+                    # alias resolution for any later translation (EXP2-009).
+                    self.context.pop_scope()
 
                 _ba_return = _ensure_scalar_body(_ba_return)
                 _inner_unnest = SQLSubquery(query=SQLSelect(
@@ -5917,7 +5989,9 @@ class QueryMixin:
                         operator="=",
                         right=SQLQualifiedIdentifier(parts=[corr_target, "patient_id"]),
                     )
-                    if condition_sql and not isinstance(condition_sql, SQLLiteral):
+                    if condition_sql and not (
+                        isinstance(condition_sql, SQLLiteral) and condition_sql.value is True
+                    ):
                         # QA-016 fix: when the such_that condition contains an
                         # audit_leaf wrapping a complex argument (EXISTS subquery
                         # or non-trivial function call), DuckDB's binder fails
@@ -6421,57 +6495,66 @@ class QueryMixin:
 
         # Apply SORT clause if present (CQL §19.29)
         if node.sort and node.sort.by:
-            sort_item = node.sort.by[0]
-            direction = (getattr(sort_item, 'direction', None) or 'asc').upper()
-            sort_order = 'ASC' if direction in ('ASC', 'ASCENDING') else 'DESC'
-            nulls = 'NULLS LAST' if sort_order == 'ASC' else 'NULLS FIRST'
+            # EXP2-007: ALL sort keys matter — the old form consumed only
+            # by[0], silently dropping secondary keys.
+            def _resolve_sort_expr(sort_item):
+                """Resolve one sort key to a SQL expression (or None)."""
+                if not sort_item.expression:
+                    if isinstance(result, SQLSelect) and result.columns:
+                        col = result.columns[0]
+                        return SQLIdentifier(name=col.alias) if isinstance(col, SQLAlias) else col
+                    return None
+                _sort_ident_name = (
+                    getattr(sort_item.expression, 'name', None)
+                    if isinstance(sort_item.expression, Identifier) else None
+                )
+                _col_aliases = (
+                    {c.alias for c in result.columns if isinstance(c, SQLAlias)}
+                    if isinstance(result, SQLSelect) and result.columns else set()
+                )
+                if _sort_ident_name and _sort_ident_name in _col_aliases:
+                    return SQLIdentifier(name=_sort_ident_name)
+                if _sort_ident_name and _sort_ident_name in self.context.let_variables:
+                    return self.context.let_variables[_sort_ident_name]
+                if not _sort_ident_name:
+                    return self.translate(sort_item.expression, usage=ExprUsage.SCALAR)
+                return None  # simple identifier not in columns or let variables
+
+            _order_items = []
+            for sort_item in node.sort.by:
+                direction = (getattr(sort_item, 'direction', None) or 'asc').upper()
+                sort_order = 'ASC' if direction in ('ASC', 'ASCENDING') else 'DESC'
+                nulls = 'NULLS LAST' if sort_order == 'ASC' else 'NULLS FIRST'
+                sort_by = _resolve_sort_expr(sort_item)
+                if sort_by is not None:
+                    _order_items.append((sort_by, f"{sort_order} {nulls}"))
 
             if isinstance(result, SQLSelect):
-                # Row-producing query: add ORDER BY
-                if sort_item.expression:
-                    # If the sort expression is a simple identifier matching an
-                    # output column alias, reference the column directly instead
-                    # of re-translating (which may resolve let-bindings that
-                    # reference out-of-scope query aliases).
-                    _sort_ident_name = getattr(sort_item.expression, 'name', None) if isinstance(sort_item.expression, Identifier) else None
-                    _col_aliases = {c.alias for c in result.columns if isinstance(c, SQLAlias)} if result.columns else set()
-                    sort_by = None
-                    if _sort_ident_name and _sort_ident_name in _col_aliases:
-                        sort_by = SQLIdentifier(name=_sort_ident_name)
-                    elif _sort_ident_name and _sort_ident_name in self.context.let_variables:
-                        # Let-binding identifier (e.g. CrLabTime from a let clause) —
-                        # use the already-translated SQL expression directly.
-                        sort_by = self.context.let_variables[_sort_ident_name]
-                    elif not _sort_ident_name:
-                        # Complex expression (e.g. effective.earliest()) — translate
-                        sort_by = self.translate(sort_item.expression, usage=ExprUsage.SCALAR)
-                    # else: simple identifier not in columns or let variables — skip sort
-                    if sort_by is not None:
-                        result = SQLSelect(
-                            columns=result.columns,
-                            from_clause=result.from_clause,
-                            where=result.where,
-                            order_by=[(sort_by, f"{sort_order} {nulls}")],
-                        )
-                else:
-                    # Sort by first/only column
-                    if result.columns:
-                        col = result.columns[0]
-                        if isinstance(col, SQLAlias):
-                            sort_col = SQLIdentifier(name=col.alias)
-                        else:
-                            sort_col = col
-                        result = SQLSelect(
-                            columns=result.columns,
-                            from_clause=result.from_clause,
-                            where=result.where,
-                            order_by=[(sort_col, f"{sort_order} {nulls}")],
-                        )
+                # Row-producing query: add ORDER BY. EXP2-007: preserve the
+                # full clause set (joins/group_by/having/limit/distinct) —
+                # the old reconstruction dropped them.
+                if _order_items:
+                    result = SQLSelect(
+                        columns=result.columns,
+                        from_clause=result.from_clause,
+                        where=result.where,
+                        joins=result.joins,
+                        group_by=result.group_by,
+                        having=result.having,
+                        order_by=_order_items,
+                        limit=result.limit,
+                        distinct=result.distinct,
+                    )
             elif isinstance(result, SQLArray):
-                # Literal array: use DuckDB list_sort directly
+                # Literal array: use DuckDB list_sort directly. Direction comes
+                # from the first sort ITEM (identifier keys do not resolve to
+                # column expressions on the array path).
+                _dir0 = (getattr(node.sort.by[0], 'direction', None) or 'asc').upper()
+                _so0 = 'ASC' if _dir0 in ('ASC', 'ASCENDING') else 'DESC'
+                _nulls0 = 'NULLS LAST' if _so0 == 'ASC' else 'NULLS FIRST'
                 result = SQLFunctionCall(
                     name="list_sort",
-                    args=[result, SQLLiteral(value=sort_order), SQLLiteral(value=nulls)],
+                    args=[result, SQLLiteral(value=_so0), SQLLiteral(value=_nulls0)],
                 )
             # else: non-array, non-SELECT expression — sort not applicable
             # (DQM queries produce VARCHAR results from FHIRPath; sorting is
@@ -6637,13 +6720,35 @@ class QueryMixin:
                                 _value_expr = _inner_expr
                     if _value_expr is not None:
                         from ._utils import _coerce_query_rows_to_list
+                        # EXP2-008 class: push the query WHERE into the
+                        # derived table (with-clause chains) BEFORE the
+                        # rows-to-list coercion — it references the primary
+                        # alias which binds only inside the derived select.
+                        _push_where_into_derived_source(_sel)
                         _coerced = _coerce_query_rows_to_list(source_list)
                         if _coerced is not source_list:
                             source_list = _coerced
                             if isinstance(source_list, SQLSubquery) and isinstance(source_list.query, SQLSelect):
-                                source_list.query.where = _patient_correlated_where(
-                                    source_list.query.where, _row_alias, _outer_pid
-                                )
+                                # Correlate at the PROJECTED level (where the
+                                # row alias binds), not at the coercion
+                                # wrapper (whose FROM alias is
+                                # _cql_list_source) — EXP2-008 review finding.
+                                _proj = None
+                                _w_from = source_list.query.from_clause
+                                if (
+                                    isinstance(_w_from, SQLAlias)
+                                    and isinstance(_w_from.expr, SQLSubquery)
+                                    and isinstance(_w_from.expr.query, SQLSelect)
+                                ):
+                                    _proj = _w_from.expr.query
+                                if _proj is not None:
+                                    _proj.where = _patient_correlated_where(
+                                        _proj.where, _row_alias, _outer_pid
+                                    )
+                                else:
+                                    source_list.query.where = _patient_correlated_where(
+                                        source_list.query.where, _row_alias, _outer_pid
+                                    )
                     else:
                         # Retrieve/multi-column rows: fold over the resource
                         # column of each row, patient-correlated so rows do
@@ -6689,7 +6794,13 @@ class QueryMixin:
                             from_clause=_from,
                         )
                         if _sel.where is not None:
-                            _inner.where = _sel.where
+                            # External review EXP2-008: the query WHERE
+                            # references the primary source alias (E), which
+                            # binds only INSIDE the with-clause derived
+                            # table. Push it down instead of dangling it at
+                            # the derived-table level.
+                            if not _push_where_into_derived_source(_sel):
+                                _inner.where = _sel.where
                         _inner.where = _patient_correlated_where(
                             _inner.where, _row_alias, _outer_pid
                         )

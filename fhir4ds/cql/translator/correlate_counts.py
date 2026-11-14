@@ -43,6 +43,29 @@ _LAMBDA_FN_NAMES = frozenset({
 
 _INTERNAL_ALIAS_PREFIXES = ("_pt", "_patients", "_lv", "_lt_", "_agg", "_cql")
 
+def _iter_child_values(expr):
+    """Yield every SQL-valued child of ``expr`` for generic walking.
+
+    Handles the container shapes the dataclass field loop used to drop:
+    plain ``list``/``tuple`` field values (``SQLUnion.operands``,
+    ``SQLSelect.columns``) and ``SQLCase.when_clauses`` entries, which are
+    ``(condition, result)`` tuples without named attributes.
+    """
+    if isinstance(expr, (list, tuple)):
+        # Yield the ITEMS themselves — the caller decides whether to descend.
+        yield from expr
+        return
+    if hasattr(expr, "__dataclass_fields__"):
+        for f in expr.__dataclass_fields__:
+            yield getattr(expr, f, None)
+        return
+    # Non-dataclass expression-shaped objects.
+    items = getattr(expr, "args", None)
+    if items:
+        yield from items
+    yield from getattr(expr, "elements", None) or []
+
+
 _CHILd_ATTRS = ("left", "right", "operand", "expression", "condition",
                 "then", "else_clause", "source")
 
@@ -75,19 +98,8 @@ def _collect_outer_roots(expr, from_alias: str, roots: Set[str]) -> None:
         return
     for attr in _CHILd_ATTRS:
         _collect_outer_roots(getattr(expr, attr, None), from_alias, roots)
-    if hasattr(expr, "__dataclass_fields__"):
-        for f in expr.__dataclass_fields__:
-            _collect_outer_roots(getattr(expr, f, None), from_alias, roots)
-        return
-    items = getattr(expr, "args", None)
-    if items and not isinstance(expr, SQLFunctionCall):
-        for a in items:
-            _collect_outer_roots(a, from_alias, roots)
-    for e in getattr(expr, "elements", None) or []:
-        _collect_outer_roots(e, from_alias, roots)
-    for wc in getattr(expr, "when_clauses", None) or []:
-        _collect_outer_roots(getattr(wc, "condition", None), from_alias, roots)
-        _collect_outer_roots(getattr(wc, "then", None), from_alias, roots)
+    for child in _iter_child_values(expr):
+        _collect_outer_roots(child, from_alias, roots)
 
 
 def _has_patient_id_correlation(expr) -> bool:
@@ -104,23 +116,7 @@ def _has_patient_id_correlation(expr) -> bool:
     for attr in _CHILd_ATTRS:
         if _has_patient_id_correlation(getattr(expr, attr, None)):
             return True
-    if hasattr(expr, "__dataclass_fields__"):
-        return any(
-            _has_patient_id_correlation(getattr(expr, f, None))
-            for f in expr.__dataclass_fields__
-        )
-    items = getattr(expr, "args", None)
-    if items and not isinstance(expr, SQLFunctionCall):
-        if any(_has_patient_id_correlation(a) for a in items):
-            return True
-    if any(_has_patient_id_correlation(e) for e in getattr(expr, "elements", None) or []):
-        return True
-    for wc in getattr(expr, "when_clauses", None) or []:
-        if _has_patient_id_correlation(getattr(wc, "condition", None)):
-            return True
-        if _has_patient_id_correlation(getattr(wc, "then", None)):
-            return True
-    return False
+    return any(_has_patient_id_correlation(c) for c in _iter_child_values(expr))
 
 
 def _is_count_star_subquery(sub) -> bool:

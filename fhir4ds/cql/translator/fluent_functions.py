@@ -53,6 +53,7 @@ from ..translator.types import (
 )
 from ..translator.function_inliner import FunctionInliner, TranslationError
 from ..translator.fluent_function_loader import FluentFunctionLoader
+from ..translator.status_filter_extractor import _func_def_param_type
 from ..translator.fhirpath_builder import escape_fhirpath_string_literal
 
 if TYPE_CHECKING:
@@ -435,8 +436,8 @@ class FluentFunctionTranslator:
             if cql_func and getattr(cql_func, 'is_fluent', False):
                 # Check if this is a status filter function first — using the dedicated
                 # AST builder preserves SQLUnion sources (the inliner loses them)
-                if self._has_dynamic_status_filter(function_name, context):
-                    return self._build_status_filter_ast(function_name, resource_expr, context)
+                if self._has_dynamic_status_filter(function_name, context, cql_func):
+                    return self._build_status_filter_ast(function_name, resource_expr, context, cql_func)
 
                 # Check if the resolved overload body uses unsupported CQL constructs
                 # (e.g., 'collapse'). If so, fall back to the default overload.
@@ -775,8 +776,8 @@ class FluentFunctionTranslator:
         """
         # Dispatch based on function name
         # Check dynamically extracted status filters from library ASTs
-        if self._has_dynamic_status_filter(func_def.name, context):
-            return self._build_status_filter_ast(func_def.name, resource_expr, context)
+        if self._has_dynamic_status_filter(func_def.name, context, func_def):
+            return self._build_status_filter_ast(func_def.name, resource_expr, context, func_def)
         elif func_def.name == "prevalenceInterval":
             return self._build_prevalence_interval_ast(
                 resource_expr, args, context,
@@ -797,7 +798,7 @@ class FluentFunctionTranslator:
     def _ensure_dynamic_status_filters(self, context: SQLTranslationContext) -> None:
         """Lazily extract dynamic status filters from included library ASTs."""
         if not hasattr(self, '_dynamic_status_filters'):
-            self._dynamic_status_filters: Dict[str, dict] = {}
+            self._dynamic_status_filters: Dict[str, List[dict]] = {}
             self._dynamic_extraction_done = False
 
         if not self._dynamic_extraction_done:
@@ -808,20 +809,58 @@ class FluentFunctionTranslator:
                     if hasattr(lib_info, 'library_ast') and lib_info.library_ast is not None:
                         codes = dict(context.codes) if hasattr(context, 'codes') else None
                         extracted = extract_all_status_filters(lib_info.library_ast, codes)
-                        self._dynamic_status_filters.update(extracted)
+                        for name, configs in extracted.items():
+                            self._dynamic_status_filters.setdefault(name, []).extend(configs)
             except Exception as e:
                 logger.warning("Failed to extract dynamic status filters: %s", e)
 
-    def _has_dynamic_status_filter(self, function_name: str, context: SQLTranslationContext) -> bool:
-        """Check if a dynamic status filter exists for the given function name."""
-        self._ensure_dynamic_status_filters(context)
-        return function_name in self._dynamic_status_filters
+    def _matching_status_filter(
+        self, function_name: str, context: SQLTranslationContext, func_def=None,
+    ) -> Optional[dict]:
+        """Pick the overload config matching the RESOLVED function definition.
 
-    def _resolve_status_filter(self, function_name: str, context: SQLTranslationContext) -> dict:
-        """Resolve status filter config from dynamically extracted library ASTs."""
+        Fluent status functions are overloaded by parameter resource type
+        (FHIRCommon ``verified``/``confirmed``/``unconfirmed``/``refuted``
+        exist for both Condition and AllergyIntolerance with DIFFERENT value
+        sets). Resolving by name alone used the last-registered overload,
+        filtering Conditions with AllergyIntolerance codes.
+        """
         self._ensure_dynamic_status_filters(context)
-        if function_name in self._dynamic_status_filters:
-            return self._dynamic_status_filters[function_name]
+        configs = self._dynamic_status_filters.get(function_name)
+        if not configs:
+            return None
+        param_type = _func_def_param_type(func_def) if func_def is not None else None
+        if param_type is not None:
+            for cfg in configs:
+                if cfg.get("param_type") == param_type:
+                    return cfg
+        # Untyped overload first (generic), then a single-overload function.
+        for cfg in configs:
+            if cfg.get("param_type") is None:
+                return cfg
+        if len(configs) == 1:
+            return configs[0]
+        # Multiple typed overloads and no matching parameter type: fall back
+        # to the last registered (legacy behavior) but make it visible.
+        logger.warning(
+            "Status filter for %r: no overload matches parameter type %r; "
+            "using last-registered config", function_name, param_type,
+        )
+        return configs[-1]
+
+    def _has_dynamic_status_filter(
+        self, function_name: str, context: SQLTranslationContext, func_def=None,
+    ) -> bool:
+        """Check if a dynamic status filter exists for the given function name."""
+        return self._matching_status_filter(function_name, context, func_def) is not None
+
+    def _resolve_status_filter(
+        self, function_name: str, context: SQLTranslationContext, func_def=None,
+    ) -> dict:
+        """Resolve status filter config from dynamically extracted library ASTs."""
+        cfg = self._matching_status_filter(function_name, context, func_def)
+        if cfg is not None:
+            return cfg
         raise KeyError(
             f"No status filter found for '{function_name}'. "
             "The status filter extractor could not read this function from the CQL AST. "
@@ -833,6 +872,7 @@ class FluentFunctionTranslator:
         function_name: str,
         resource_expr: SQLExpression,
         context: SQLTranslationContext,
+        func_def=None,
     ) -> SQLExpression:
         """
         Build AST for status filter functions using dynamically extracted configs.
@@ -850,7 +890,7 @@ class FluentFunctionTranslator:
 
             fhirpath_text(resource, field) IN ('v1', 'v2', ...)
         """
-        config = self._resolve_status_filter(function_name, context)
+        config = self._resolve_status_filter(function_name, context, func_def)
         status_field = config["status_field"]
         allowed = config["allowed"]
         null_passes = config.get("null_passes", False)

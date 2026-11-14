@@ -89,6 +89,7 @@ from ...translator.types import (
     SQLIntervalLiteral,
     SQLJoin,
     SQLLambda,
+    SQLLambda2,
     SQLLiteral,
     SQLNamedArg,
     SQLNull,
@@ -223,7 +224,9 @@ def _is_datetime_boundary_constructor(node: object, values: list[int]) -> bool:
 
 
 def _is_time_boundary_literal(node: object, value: str) -> bool:
-    return isinstance(node, DateTimeLiteral) and node.value == value
+    # Time boundary literals are TimeLiteral nodes since the lexer typed
+    # `@T...` as TIME (was DateTimeLiteral before that retype).
+    return isinstance(node, TimeLiteral) and node.value == value
 
 
 def _is_datetime_boundary_literal(node: object, value: str) -> bool:
@@ -774,6 +777,23 @@ def _is_quantity_expression(expr: SQLExpression) -> bool:
         })
         if expr.name in _QUANTITY_RETURNING_FUNCS:
             return True
+        # Inline quantity list-aggregates (Min/Max/Sum/Avg over Quantity lists)
+        # lower to list_reduce/list_transform/list_filter carrying quantity
+        # elements or quantity lambdas — the result IS a Quantity even though
+        # the outer function name is generic. The aggregate's source ARRAY is
+        # only quantity-classified INSIDE this list-op context: a bare
+        # SQLArray of quantities is a LIST value (e.g. `{ 1 'g' } = { 1000 'mg' }`
+        # list equality), NOT a scalar Quantity, and must not be routed to
+        # quantity_compare/parse_quantity.
+        if expr.name in ("list_reduce", "list_transform", "list_apply", "list_filter"):
+            for a in expr.args:
+                if isinstance(a, SQLArray):
+                    if any(_is_quantity_expression(e) for e in a.elements):
+                        return True
+                elif _is_quantity_expression(a):
+                    return True
+    if isinstance(expr, (SQLLambda, SQLLambda2)):
+        return _is_quantity_expression(expr.body)
     if isinstance(expr, SQLCase):
         for _, result in expr.when_clauses:
             if _is_quantity_expression(result):
@@ -1700,7 +1720,7 @@ class OperatorsMixin:
         """
         if _depth > 4:
             return False
-        if isinstance(node, DateTimeLiteral):
+        if isinstance(node, (DateTimeLiteral, TimeLiteral)):
             return True
         if isinstance(node, FunctionRef) and node.name.lower() in (
             "datetime", "date", "time", "todatetime", "todate", "totime",
@@ -3919,7 +3939,9 @@ class OperatorsMixin:
             if info.get("code"):
                 return self._normalize_static_clinical_code(info)
         if isinstance(node, QualifiedIdentifier) and node.parts:
-            info = self.context.get_code(node.parts[-1])
+            info = self._resolve_included_code(node.parts[0], node.parts[-1])
+            if info is None:
+                info = self.context.get_code(node.parts[-1])
             if info is None:
                 # CQL-02 EXPLORER QA-001/QA-002 fix (QualifiedIdentifier path):
                 # resolve library-qualified define references whose body is a
@@ -4045,10 +4067,32 @@ class OperatorsMixin:
         if left_value is None or right_value is None:
             return None
 
-        if set(left_value.keys()) != set(right_value.keys()):
+        # Tuple equality is a conjunction of element comparisons (CQL §9
+        # Equal). A DEFINITELY differing element (both present, both
+        # non-null, unequal) makes the whole conjunction FALSE even when
+        # another element is absent on one side — external review EXP2-004:
+        # Code { code: 'a', display: 'x' } = Code { code: 'b' } is FALSE,
+        # not null, because the codes differ. A null-vs-value asymmetry
+        # with every shared element matching stays UNCERTAIN (null), per
+        # the pinned one-missing-display doctrine (CQL-21).
+        definite_false = False
+        uncertain = False
+        for key in set(left_value) | set(right_value):
+            lv = left_value.get(key)
+            rv = right_value.get(key)
+            if lv is None and rv is None:
+                continue
+            if lv is None or rv is None:
+                uncertain = True
+            elif lv != rv:
+                definite_false = True
+                break
+        if definite_false:
+            result: SQLExpression = SQLLiteral(value=False)
+        elif uncertain:
             return SQLNull()
-
-        result: SQLExpression = SQLLiteral(value=left_value == right_value)
+        else:
+            result = SQLLiteral(value=left_value == right_value)
         if operator in ("!=", "not equal"):
             result = SQLCase(
                 when_clauses=[
@@ -4107,7 +4151,12 @@ class OperatorsMixin:
                     }
             return None
         if isinstance(ast, QualifiedIdentifier) and len(ast.parts) >= 2:
-            info = self.context.get_code(ast.parts[-1])
+            # Scoped-first: a qualified ref targets the OWNING library's code
+            # (the global bare-name table may hold a sibling library's
+            # same-named declaration).
+            info = self._resolve_included_code(ast.parts[0], ast.parts[-1])
+            if info is None:
+                info = self.context.get_code(ast.parts[-1])
             if info is not None and not info.get("is_concept"):
                 return info
         return None
@@ -4185,7 +4234,9 @@ class OperatorsMixin:
                     ]
                 return [dict(info)] if info.get("code") else None
             if isinstance(node, QualifiedIdentifier) and node.parts:
-                info = self.context.get_code(node.parts[-1])
+                info = self._resolve_included_code(node.parts[0], node.parts[-1])
+                if info is None:
+                    info = self.context.get_code(node.parts[-1])
                 if info is None:
                     return None
                 if info.get("is_concept") or isinstance(info.get("codes"), list):
@@ -6611,6 +6662,13 @@ class OperatorsMixin:
                         ],
                     )
                 right_inner = self._ensure_date_cast(self.translate(cleaned_operand))
+                # EXP2-005: an INTERVAL right operand must reduce to its START
+                # bound (§ timing phrases: `A ends on or before B` compares
+                # end(A) with start(B)) — comparing against the raw interval
+                # JSON made `'2099-12-31' <= '{"low":...'` a lexicographic
+                # true.
+                if self._is_fhir_interval_expression(right_inner) or isinstance(right_inner, SQLInterval):
+                    right_inner = SQLFunctionCall(name="intervalStart", args=[right_inner])
                 # Gap 18: Use < for exclusive boundary
                 op = "<" if getattr(right_inner, 'is_exclusive_boundary', False) else "<="
                 interval_end = SQLFunctionCall(name="intervalEnd", args=[left])
@@ -6648,6 +6706,11 @@ class OperatorsMixin:
                         ],
                     )
                 right_inner = self._ensure_date_cast(self.translate(cleaned_operand))
+                # EXP2-005: interval right operand reduces to its END bound
+                # (§ timing phrases: `A ends on or after B` compares end(A)
+                # with end(B)).
+                if self._is_fhir_interval_expression(right_inner) or isinstance(right_inner, SQLInterval):
+                    right_inner = SQLFunctionCall(name="intervalEnd", args=[right_inner])
                 interval_end = SQLFunctionCall(name="intervalEnd", args=[left])
                 # Symmetric DATE truncation on BOTH sides (CQL §18.2).
                 result = SQLBinaryOp(
@@ -6665,6 +6728,9 @@ class OperatorsMixin:
                 cleaned_operand, extra_cond_ast = self._strip_and_conditions(expr.right.operand)
                 # Use TIMESTAMP to preserve sub-day precision for dateTime values
                 right_inner = self._ensure_date_cast(self.translate(cleaned_operand), "TIMESTAMP")
+                # EXP2-005: interval right operand reduces to its START bound.
+                if self._is_fhir_interval_expression(right_inner) or isinstance(right_inner, SQLInterval):
+                    right_inner = SQLFunctionCall(name="intervalStart", args=[right_inner])
                 interval_end = SQLFunctionCall(name="intervalEnd", args=[left])
                 result = SQLBinaryOp(
                     operator="<",
@@ -6681,6 +6747,9 @@ class OperatorsMixin:
                 cleaned_operand, extra_cond_ast = self._strip_and_conditions(expr.right.operand)
                 # Use TIMESTAMP to preserve sub-day precision for dateTime values
                 right_inner = self._ensure_date_cast(self.translate(cleaned_operand), "TIMESTAMP")
+                # EXP2-005: interval right operand reduces to its END bound.
+                if self._is_fhir_interval_expression(right_inner) or isinstance(right_inner, SQLInterval):
+                    right_inner = SQLFunctionCall(name="intervalEnd", args=[right_inner])
                 interval_end = SQLFunctionCall(name="intervalEnd", args=[left])
                 result = SQLBinaryOp(
                     operator=">",
@@ -6914,6 +6983,15 @@ class OperatorsMixin:
             result = SQLBinaryOp(operator="AND", left=result, right=expression)
         return result
 
+    @staticmethod
+    def _or_any(expressions: list[SQLExpression]) -> SQLExpression:
+        if not expressions:
+            return SQLLiteral(value=False)
+        result = expressions[0]
+        for expression in expressions[1:]:
+            result = SQLBinaryOp(operator="OR", left=result, right=expression)
+        return result
+
     def _translate_list_equivalence(self, expr: BinaryExpression, is_negated: bool) -> Optional[SQLExpression]:
         if not isinstance(expr.left, ListExpression) or not isinstance(expr.right, ListExpression):
             return None
@@ -6931,11 +7009,30 @@ class OperatorsMixin:
             return SQLUnaryOp(operator="NOT", operand=result)
         return result
 
+    def _resolve_tuple_equivalence_operand(self, node):
+        """Resolve a TupleExpression operand directly or through a define alias.
+
+        External review EXP2-006: `T1 ~ Tuple { ... }` where ``T1`` is a
+        define alias of a tuple literal previously fell through to raw SQL
+        ``=``, losing the per-element equivalence semantics (~ on String
+        elements is case-insensitive/whitespace-normalized). Returns
+        ``(tuple_expression, used_alias)`` or ``(None, False)``.
+        """
+        if isinstance(node, TupleExpression):
+            return node, False
+        if isinstance(node, Identifier) and not self.context.is_alias(node.name):
+            source = self._definition_source_ast(node.name, node)
+            if isinstance(source, TupleExpression):
+                return source, True
+        return None, False
+
     def _translate_tuple_equivalence(self, expr: BinaryExpression, is_negated: bool) -> Optional[SQLExpression]:
-        if not isinstance(expr.left, TupleExpression) or not isinstance(expr.right, TupleExpression):
+        left_tuple, left_is_alias = self._resolve_tuple_equivalence_operand(expr.left)
+        right_tuple, right_is_alias = self._resolve_tuple_equivalence_operand(expr.right)
+        if left_tuple is None or right_tuple is None:
             return None
-        left_elems = {element.name: element.type for element in expr.left.elements}
-        right_elems = {element.name: element.type for element in expr.right.elements}
+        left_elems = {element.name: element.type for element in left_tuple.elements}
+        right_elems = {element.name: element.type for element in right_tuple.elements}
         if set(left_elems) != set(right_elems):
             result: SQLExpression = SQLLiteral(value=False)
         else:
@@ -6946,6 +7043,24 @@ class OperatorsMixin:
                 )
                 for name in sorted(left_elems)
             ])
+        # Alias operands carry runtime-null possibility. Per CQL §9
+        # Equivalent: null ~ null -> true; null ~ value -> false (never
+        # null). Literal-vs-literal cannot be null, so the wrap is only
+        # needed when at least one operand resolved through an alias.
+        if left_is_alias or right_is_alias:
+            null_tests = []
+            for operand, is_alias in ((expr.left, left_is_alias), (expr.right, right_is_alias)):
+                if is_alias:
+                    null_tests.append(
+                        SQLUnaryOp(operator="IS NULL", operand=self.translate(operand), prefix=False)
+                    )
+            result = SQLCase(
+                when_clauses=[
+                    (self._and_all(null_tests), SQLLiteral(value=True)),
+                    (self._or_any(null_tests), SQLLiteral(value=False)),
+                ],
+                else_clause=result,
+            )
         if is_negated:
             return SQLUnaryOp(operator="NOT", operand=result)
         return result
@@ -7418,8 +7533,17 @@ class OperatorsMixin:
                 return self.context.get_code(code_name)
             if isinstance(operand_ast, Property) and isinstance(operand_ast.source, Identifier):
                 # Property(source=Identifier('QICoreCommon'), path='confirmed')
-                # This is a library-qualified code reference from function inlining
+                # This is a library-qualified code reference from function inlining.
+                # Resolve against the OWNING library's declarations first (same
+                # scoped-first doctrine as the QualifiedIdentifier branch above):
+                # the global bare-name table holds whichever same-named code
+                # registered first when multiple included libraries declare it.
                 if operand_ast.source.name in self.context.includes:
+                    scoped_prop = self._resolve_included_code(
+                        operand_ast.source.name, operand_ast.path
+                    )
+                    if scoped_prop is not None:
+                        return scoped_prop
                     return self.context.get_code(operand_ast.path)
             if isinstance(operand_ast, ParameterPlaceholder):
                 # Inlined function parameter carrying a pre-translated SQL literal
@@ -9344,6 +9468,20 @@ class OperatorsMixin:
             return self._translate_component_filter_singleton(expr.operand)
 
         if operator == "singleton from":
+            # B14 follow-up: reject a statically String literal operand with
+            # a typed error. Strings are scalar (no implicit list conversion),
+            # and the generic fall-through emitted array_length('abc', ...)
+            # which surfaces as an opaque DuckDB BinderException.
+            if (
+                isinstance(expr.operand, Literal)
+                and isinstance(expr.operand.value, str)
+            ):
+                raise TranslationError(
+                    f"CQL SingletonFrom requires a list argument "
+                    f"(CQL 1.5 §20.30 SingletonFrom(argument List<T>)); "
+                    f"got the String '{expr.operand.value}'. Strings are "
+                    f"scalar, not lists."
+                )
             # CQL-19 HISTORIAN QA-002: a stored-list define reference
             # (`define G: Patient.name.given; singleton from G`) stores one
             # row whose value column IS the element list — counting rows (1)

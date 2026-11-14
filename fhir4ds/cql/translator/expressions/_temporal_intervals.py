@@ -164,7 +164,7 @@ class IntervalMixin:
         # Handle unbounded starts/ends.  The interval UDFs treat NULL low/high
         # bounds as unbounded; keep the optimized temporal SQL equivalent.
         # Use VARCHAR consistently to avoid type mismatches.
-        def _bound_sentinel_coalesce(bound_expr, sentinel):
+        def _bound_sentinel_coalesce(bound_expr, sentinel, closed=True):
             # When the bound is extracted via intervalStart/intervalEnd, the
             # closedness information is preserved INSIDE the interval JSON:
             # closed-null bounds already return the point-type sentinel, and
@@ -179,23 +179,31 @@ class IntervalMixin:
                 and bound_expr.name in ("intervalStart", "intervalEnd")
             ):
                 return bound_expr if bound_expr and not isinstance(bound_expr, SQLNull) else SQLNull()
+            raw = bound_expr if bound_expr and not isinstance(bound_expr, SQLNull) else SQLNull()
+            if isinstance(raw, SQLNull) and not closed:
+                # Statically-null OPEN bound: unknown, not unbounded (CMS347
+                # doctrine — open-null must stay uncertain so overlaps returns
+                # NULL instead of a fabricated definite True). Leaving SQLNull
+                # makes the comparison NULL and 3VL propagates the uncertainty.
+                return SQLNull()
             return SQLFunctionCall(
                 name="COALESCE",
-                args=[
-                    (bound_expr if bound_expr and not isinstance(bound_expr, SQLNull) else SQLNull()),
-                    SQLLiteral(value=sentinel),
-                ]
+                args=[raw, SQLLiteral(value=sentinel)]
             )
-        left_start_coalesced = _bound_sentinel_coalesce(left_start, "0001-01-01")
-        right_start_coalesced = _bound_sentinel_coalesce(right_start, "0001-01-01")
-        left_end_coalesced = _bound_sentinel_coalesce(left_end, "9999-12-31")
-        right_end_coalesced = _bound_sentinel_coalesce(right_end, "9999-12-31")
+        left_start_coalesced = _bound_sentinel_coalesce(left_start, "0001-01-01", closed=left_low_closed)
+        right_start_coalesced = _bound_sentinel_coalesce(right_start, "0001-01-01", closed=right_low_closed)
+        left_end_coalesced = _bound_sentinel_coalesce(left_end, "9999-12-31", closed=left_high_closed)
+        right_end_coalesced = _bound_sentinel_coalesce(right_end, "9999-12-31", closed=right_high_closed)
 
-        # For [a, b) overlaps [c, d):
-        # a < d (since d is exclusive) AND b >= c
-        # If bounds are closed, adjust operators
-        left_op = "<=" if right_high_closed else "<"
-        right_op = ">=" if left_high_closed else ">"
+        # For [a, b] overlaps [c, d]:
+        #   a <= d AND b >= c
+        # Each comparison is inclusive ONLY when the shared endpoint is
+        # included in BOTH intervals (EXP1-007: the old form keyed each
+        # operator off one side's high-closedness only, ignoring the other
+        # side's low-closedness — `Interval(@a, b] overlaps [c, @a]` wrongly
+        # returned true for a shared open endpoint).
+        left_op = "<=" if (left_low_closed and right_high_closed) else "<"
+        right_op = ">=" if (right_low_closed and left_high_closed) else ">"
 
         # Build the comparison: left_start < right_end
         # All bounds are VARCHAR — lexicographic comparison of ISO 8601 strings
@@ -480,6 +488,13 @@ class IntervalMixin:
                 return True
             if expr.name in ("intervalExcept", "intervalIntersect", "intervalUnion"):
                 return True
+            # cql_value_is_interval_like(...) is emitted at the `is/as
+            # Interval<T>` translation site — when it appears as an operand
+            # (the cast CASE's type-check guard) the operand is
+            # interval-routed even when the inner value path is not a
+            # recognized period property (B5-F2).
+            if expr.name == "cql_value_is_interval_like":
+                return True
             # Element selection over an interval-producing list (CQL-15
             # EXPLORER QA-001): First/Last/indexer lower to LIST_EXTRACT
             # over either a list of intervalFromBounds elements or a
@@ -491,6 +506,12 @@ class IntervalMixin:
             # re-wraps the selection as a degenerate interval.
             if expr.name in ("LIST_EXTRACT", "list_extract") and expr.args:
                 source = expr.args[0]
+                # LIST_EXTRACT over a CASE (First/Last of an `as Interval<T>`
+                # cast or a ToInterval conversion — B5-F2): recurse so the
+                # CASE-branch check sees the intervalFromBounds/cast-guard
+                # arms inside.
+                if isinstance(source, SQLCase):
+                    return self._is_fhir_interval_expression(source)
                 if isinstance(source, SQLFunctionCall):
                     if source.name == "from_json" and source.args:
                         inner = source.args[0]
@@ -552,6 +573,13 @@ class IntervalMixin:
                         meta.cql_type.startswith("Interval") or meta.cql_type == "Period"
                     ):
                         return True
+                # Scalar subqueries whose single projection is itself an
+                # interval-shaped expression (inline `as Interval<T>` casts
+                # and First(ToInterval(...)) lower to a correlated SELECT
+                # wrapping a CASE — B5-F2: without this the interval-op
+                # sites compare raw interval JSON lexicographically).
+                if len(query.columns) == 1:
+                    return self._is_fhir_interval_expression(query.columns[0])
         return False
 
     def _is_list_typed_ast(self, cql_expr) -> bool:

@@ -1107,7 +1107,14 @@ def rewrite_retrieve_to_base(
                 distinct=node.distinct,
             )
         if isinstance(node, SQLUnaryOp):
-            return SQLUnaryOp(operator=node.operator, operand=rewrite_ref(node.operand))
+            # CORE-003: preserve the prefix/postfix form — the default
+            # (prefix=True) corrupted postfix `X IS NOT NULL` into the
+            # invalid `IS NOT NULL X`.
+            return SQLUnaryOp(
+                operator=node.operator,
+                operand=rewrite_ref(node.operand),
+                prefix=node.prefix,
+            )
         if isinstance(node, SQLCast):
             return SQLCast(
                 expression=rewrite_ref(node.expression),

@@ -342,10 +342,13 @@ class ListsMixin:
                     when_clauses=[(condition, operand)],
                     else_clause=SQLNull(),
                 ))
-            # Handle else_expr by adding it as another COALESCE arg
+            # Handle else_expr by adding it as another COALESCE arg.
+            # EXP1-008: `IS NOT TRUE` so a FALSE **or NULL** condition takes
+            # the else branch (`IS NULL` alone missed false; `NOT` alone
+            # missed null).
             if else_expr is not None and not isinstance(else_expr, SQLNull):
                 coalesce_args.append(SQLCase(
-                    when_clauses=[(SQLUnaryOp(operator="IS NULL", operand=condition, prefix=False), else_expr)],
+                    when_clauses=[(SQLUnaryOp(operator="IS NOT TRUE", operand=condition, prefix=False), else_expr)],
                     else_clause=SQLNull(),
                 ))
             return SQLFunctionCall(name="COALESCE", args=coalesce_args)
@@ -402,8 +405,13 @@ class ListsMixin:
                 else_clause=SQLNull(),
             ))
 
-        # Handle ELSE expression (when condition is FALSE / NOT condition)
-        _not_condition = SQLUnaryOp(operator="NOT", operand=condition)
+        # Handle ELSE expression (when condition is FALSE / NOT condition).
+        # EXP1-008: a NULL condition must take the ELSE branch (CQL treats a
+        # null condition as false for conditionals), but `NOT NULL` is NULL —
+        # `condition IS NOT TRUE` covers both false and null.
+        _not_condition = SQLUnaryOp(
+            operator="IS NOT TRUE", operand=condition, prefix=False
+        )
         if isinstance(else_expr, SQLUnion):
             # For UNION in else, add operands directly (selected when condition is false)
             for operand in else_expr.operands:
@@ -823,6 +831,15 @@ class ListsMixin:
                     ] + list(source.args[1:]),
                 )
 
+        # EXP1-009: the method form must enforce the same List<T> signature
+        # as the function form — a statically String receiver silently
+        # character-indexed ('abc'.first() -> 'a').
+        if _method_lower in {"first", "last", "singletonfrom"}:
+            self._reject_scalar_string_list_function_arg(
+                [source],
+                {"first": "First", "last": "Last"}.get(_method_lower, "SingletonFrom"),
+            )
+
         # Handle common method invocations
         if method.lower() == "first":
             # DuckDB uses list_extract with 1-based indexing
@@ -1017,15 +1034,33 @@ class ListsMixin:
             return None
         alias_name = source_ast.name
 
+        # Let-bound and lambda variables are NOT table-backed rows — they
+        # have no patient_id/resource columns, so a correlated CTE lookup
+        # keyed on them is invalid SQL (CMS2: the ToDaily promotion CTE
+        # lookup emitted `frequency.patient_id` for the let variable
+        # `frequency` inside medicationRequestPeriod's body). Let variables
+        # inherit the enclosing row scope's cte_name when registered, so the
+        # key check below would otherwise pass.
+        if alias_name in getattr(self.context, "let_variables", {}):
+            return None
+        if alias_name.startswith("_lt_"):
+            return None
+
         # Look up the alias in the symbol table
         sym = self.context.lookup_symbol(alias_name)
         if sym is None:
             return None
 
+
         # Get the CQL definition name from the symbol's cte_name or table_alias
         cql_def_name = sym.cte_name or sym.table_alias
         if not cql_def_name:
             return None
+
+        # Canonicalize URL-form symbol labels to the valueset-name form the
+        # promotion keys and emitted retrieve CTEs use (CMS2 fix).
+        from ...translator.cte_manager import canonical_promotion_source
+        cql_def_name = canonical_promotion_source(cql_def_name, self.context)
 
         # Check if (func_name, cql_def_name) has a built CTE
         key = (func_name, cql_def_name)
@@ -1034,7 +1069,11 @@ class ListsMixin:
 
         from ...translator.cte_manager import generate_function_cte_name
         fn_cte_name = generate_function_cte_name(func_name, cql_def_name)
-        source_alias = alias_name
+        # The correlated lookup must reference the SQL table alias actually in
+        # scope. Inside a promotion CTE build the CQL alias differs from the
+        # SQL alias (sym.table_alias='_fns'); emitting the CQL alias produces
+        # invalid SQL (CMS156 `Order.patient_id`).
+        source_alias = getattr(sym, "table_alias", None) or alias_name
         return self._make_function_cte_lookup(fn_cte_name, source_alias, func_name=func_name)
 
     def _translate_alias_ref(self, ref: AliasRef, boolean_context: bool = False) -> SQLExpression:
@@ -1251,6 +1290,10 @@ class ListsMixin:
 
         # For non-Query sources, use list_extract (pre-sorted list)
         source = self.translate(node.source, boolean_context=False)
+        # EXP1-009: the method form (X.first()) must enforce the same
+        # List<T> signature as the function form — a statically String
+        # source silently character-indexed ('abc'.first() -> 'a').
+        self._reject_scalar_string_list_function_arg([source], "First")
         return SQLFunctionCall(name="LIST_EXTRACT", args=[source, SQLLiteral(value=1)])
 
     def _translate_last_expression(self, node: LastExpression, boolean_context: bool = False) -> SQLExpression:
@@ -1267,6 +1310,8 @@ class ListsMixin:
 
         # For non-Query sources, use list_extract (pre-sorted list)
         source = self.translate(node.source, boolean_context=False)
+        # EXP1-009: same List<T> signature enforcement as First (above).
+        self._reject_scalar_string_list_function_arg([source], "Last")
         return SQLFunctionCall(name="LIST_EXTRACT", args=[source, SQLLiteral(value=-1)])
 
     def _translate_distinct_expression(self, node: DistinctExpression) -> SQLExpression:
@@ -3192,36 +3237,18 @@ class ListsMixin:
         # Translate source with LIST context to get all values
         source = self.translate(node.source, usage=ExprUsage.LIST)
 
-        # Handle special aggregate functions that need custom SQL
-        if operator_lower == "geometricmean":
-            # GeometricMean: exp(avg(log(value))) for positive numbers
-            # Using DuckDB's LOG function (natural logarithm)
-            return SQLFunctionCall(
-                name="EXP",
-                args=[
-                    SQLFunctionCall(
-                        name="AVG",
-                        args=[
-                            SQLFunctionCall(name="LOG", args=[source])
-                        ]
-                    )
-                ]
-            )
-
-        if operator_lower == "product":
-            # Product: exp(sum(log(value))) for positive numbers
-            # Using DuckDB's LOG function (natural logarithm)
-            return SQLFunctionCall(
-                name="EXP",
-                args=[
-                    SQLFunctionCall(
-                        name="SUM",
-                        args=[
-                            SQLFunctionCall(name="LOG", args=[source])
-                        ]
-                    )
-                ]
-            )
+        # NOTE (external-review EXP1-013, 2026-11-13): the former
+        # GeometricMean/Product special cases lived here as
+        # EXP(AVG(LOG(x))) / EXP(SUM(LOG(x))). They were DEAD — the parser's
+        # aggregate-token branch (parser.py ~1657) is itself shadowed by the
+        # earlier identifier branch, so aggregate names parse as FunctionRefs
+        # and lower through the pre-translate hooks (exact GeometricMean UDF /
+        # list_aggregate 'product'); no code constructs AggregateExpression
+        # with these operators. Had they been reachable they were also WRONG
+        # twice over: DuckDB's 1-arg LOG is base-10 (LN is natural), and the
+        # registered CQL Log(x, base) macro shadows 1-arg LOG on every
+        # register()ed connection (Binder Error). Deleted rather than
+        # "fixed"; pinned by TestExternalReviewB15DeadAggregateBranches.
 
         # Handle different aggregate functions based on source shape
         if operator_lower == "count":

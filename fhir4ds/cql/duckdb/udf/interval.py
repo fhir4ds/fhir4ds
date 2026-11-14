@@ -2188,12 +2188,22 @@ def intervalEquivalent(interval1: str | None, interval2: str | None) -> bool:
 
 
 def _equivalent_nulls_ok(iv1: dict, iv2: dict, side: str) -> bool:
-    """Return True if the side's bounds are mutually null (or both non-null)."""
+    """Return True if the side's bounds are mutually null (or both non-null).
+
+    When both raw bounds are null, the CLOSEDNESS must also match: a closed
+    null bound is the point-type extremum (known value) while an open null
+    bound is UNKNOWN — CQL §Equivalent's "same value or both null" rule does
+    not make an unknown equal to a known extremum, so `Interval[1, null]` is
+    NOT equivalent to `Interval[1, null)` (B5 / REV-004 refined finding).
+    """
     raw_key = f"{side}_raw"
+    closed_key = f"{side}_closed"
     raw1 = iv1.get(raw_key)
     raw2 = iv2.get(raw_key)
     n1 = raw1 == "__null__" or raw1 is None
     n2 = raw2 == "__null__" or raw2 is None
+    if n1 and n2:
+        return bool(iv1.get(closed_key)) == bool(iv2.get(closed_key))
     return n1 == n2
 
 

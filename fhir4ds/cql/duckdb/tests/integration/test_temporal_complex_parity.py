@@ -10,7 +10,7 @@ import pytest
 from fhir4ds.cql.duckdb import register
 from fhir4ds.cql.duckdb.extension import _register_python_supplements
 from fhir4ds.cql.parser import parse_cql, parse_expression
-from fhir4ds.cql.parser.ast_nodes import DateTimeLiteral, FunctionRef, Quantity
+from fhir4ds.cql.parser.ast_nodes import DateTimeLiteral, FunctionRef, Quantity, TimeLiteral
 from fhir4ds.cql.translator import CQLToSQLTranslator
 
 from .wasm_runtime_helpers import no_python_connection
@@ -45,7 +45,7 @@ def test_cql_temporal_and_complex_literals_parse() -> None:
     assert date.value == "2024-01-15"
     assert isinstance(datetime, DateTimeLiteral)
     assert datetime.value == "2024-01-15T10:30:00"
-    assert isinstance(time, DateTimeLiteral)
+    assert isinstance(time, TimeLiteral)
     assert time.value == "T10:30:00"
     assert isinstance(quantity, Quantity)
     assert quantity.value == 5.5
@@ -676,15 +676,31 @@ def test_cql_malformed_temporal_literals_rejected_at_lex_time_per_spec() -> None
         "@2024-1-1",  # unpadded month/day
         "@2024-01-1",  # unpadded day
         "@24-01-01",  # year must be 4 digits
-        "@2024-01-15.year",  # trailing junk swallowed into the literal
-        "@2024-01-15.abc",
-        "@T14:30:22.abc",
         "@2024-01-15T25:00:00",  # hour out of range
         "@2024-01-15T10:30:22+02",  # offset must be hh:mm
     ]
     for literal in malformed:
         with pytest.raises((ParseError, LexerError)):
             parse_expression(literal)
+
+    # PAR-009 (2026-11-13 review, batch B3): the lexer no longer greedily
+    # swallows a non-digit `.` into the literal, so a DateTime/Time literal
+    # followed by `.identifier` lexes as a grammar-valid postfix
+    # invocation/property access instead of an invalid literal. These are
+    # syntactically VALID CQL (invocationExpression); `.year` dot access on
+    # temporals surfaces as unknown-property null semantics per the CQL-03
+    # doctrine note, and `.toString()` is a real conversion invocation.
+    postfix_valid = [
+        "@2024-01-15.toString()",
+        "@2024-01-15.year",
+        "@2024-01-15.abc",
+        "@T14:30:22.abc",
+    ]
+    for literal in postfix_valid:
+        expr = parse_expression(literal)
+        assert expr is not None, literal
+        # Fractional seconds with digits still lex INTO the literal.
+        assert parse_expression("@T14:30:22.5") is not None
 
 
 def test_cql_invalid_unit_quantity_comparison_returns_null_per_spec() -> None:

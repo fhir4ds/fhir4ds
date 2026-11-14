@@ -620,3 +620,37 @@ def test_cql_todate_native_only_matches_python_semantics_s32() -> None:
         assert "MACRO IF NOT EXISTS ToDate(" not in macros_ts
     finally:
         con.close()
+
+
+class TestExternalReviewB13ToStringQuantityAggregate:
+    """B9 follow-up: ToString over inline quantity list-aggregates."""
+
+    def test_tostring_routes_quantity_aggregates_to_quantitytostring(self):
+        from fhir4ds.cql import translate_cql
+        import duckdb
+        from fhir4ds.cql.duckdb import register
+
+        con = duckdb.connect()
+        register(con)
+
+        def _run(expr: str):
+            res = translate_cql(
+                f"library L\ncontext Unfiltered\ndefine T: {expr}"
+            )
+            v = next(iter(res.values()))
+            sql = v.to_sql() if hasattr(v, "to_sql") else str(v)
+            return con.execute(f"SELECT ({sql})").fetchone()[0], sql
+
+        value, sql = _run("ToString(Min({5 'mg', 3 'mg'}))")
+        assert "QuantityToString" in sql
+        assert "ToString(" not in sql.replace("QuantityToString(", "")
+        assert value == "3 'mg'"
+
+        value, _ = _run("ToString(Sum({5 'mg', 3 'mg'}))")
+        assert value == "8 'mg'"
+
+        # Non-quantity operands keep the generic ToString path.
+        _, sql = _run("ToString('Order Quantity')")
+        assert "QuantityToString" not in sql
+        _, sql = _run("ToString(42)")
+        assert "QuantityToString" not in sql

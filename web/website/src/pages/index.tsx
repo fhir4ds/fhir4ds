@@ -9,10 +9,10 @@ import Heading from '@theme/Heading';
 import styles from './index.module.css';
 
 const PRODUCT_VERSION = '0.0.23';
-const SQL_EXECUTION_MEAN_ALL_MEASURES = '~3.9ms';
-const SQL_EXECUTION_MEAN_SHARED_MEASURES = '~6.9ms';
-const JAVA_EXECUTION_MEAN_SHARED_MEASURES = '~936ms';
-const MEAN_SPEEDUP_SHARED_MEASURES = '~137×';
+const SQL_EXECUTION_MEAN_ALL_MEASURES = '~12ms';
+const SQL_EXECUTION_MEAN_SHARED_MEASURES = '~12ms';
+const JAVA_EXECUTION_MEAN_SHARED_MEASURES = '~470ms';
+const MEAN_SPEEDUP_SHARED_MEASURES = '~39×';
 const TOTAL_CONFORMANCE_TESTS = '2,943';
 const CQL_CONFORMANCE_TESTS = '1,706';
 const FHIRPATH_CONFORMANCE_TESTS = '935';
@@ -24,6 +24,7 @@ const ECQM_MEASURES = '47/47 + 73/73';
 function StatsBar() {
   const stats = [
     {value: SQL_EXECUTION_MEAN_ALL_MEASURES, label: 'SQL mean / patient'},
+    {value: '0.09ms', label: 'Per patient @ 5k patients (Synthea)'},
     {value: 'Zero', label: 'Server infrastructure'},
     {value: TOTAL_CONFORMANCE_TESTS, label: 'Tests passing'},
     {value: 'Full', label: 'Audit Evidence'},
@@ -187,7 +188,7 @@ const FEATURES: Feature[] = [
         <li><strong style={{color: 'rgb(95, 237, 131)'}}>100%</strong> CQL ({CQL_CONFORMANCE_TESTS} tests)</li>
         <li><strong style={{color: 'rgb(95, 237, 131)'}}>100%</strong> FHIRPath ({FHIRPATH_CONFORMANCE_TESTS} tests)</li>
         <li><strong style={{color: 'rgb(95, 237, 131)'}}>100%</strong> SQL-on-FHIR v2 ({VIEWDEF_CONFORMANCE_TESTS} tests)</li>
-        <li><strong style={{color: 'rgb(95, 237, 131)'}}>{ECQM_MEASURES}</strong> eCQM measures (QI-Core 2025 + US-Core 2025)</li>
+        <li><strong style={{color: 'rgb(95, 237, 131)'}}>{ECQM_MEASURES}</strong> eCQM measures (2025 QI-Core + 2025 US-Core suites)</li>
       </ul>
     ),
   },
@@ -275,8 +276,8 @@ function ComparisonSection() {
             <tbody>
               {[
                 ['SQL execution per patient (all 47 measures)', SQL_EXECUTION_MEAN_ALL_MEASURES, 'N/A', true],
-                ['SQL execution per patient (12 shared measures)', SQL_EXECUTION_MEAN_SHARED_MEASURES, JAVA_EXECUTION_MEAN_SHARED_MEASURES, true],
-                ['Speedup (mean, 12 shared measures)', `${MEAN_SPEEDUP_SHARED_MEASURES} faster`, 'baseline', true],
+                ['SQL execution per patient (46 shared measures)', SQL_EXECUTION_MEAN_SHARED_MEASURES, JAVA_EXECUTION_MEAN_SHARED_MEASURES, true],
+                ['Speedup (mean, 46 shared measures)', `${MEAN_SPEEDUP_SHARED_MEASURES} faster`, 'baseline', true],
                 ['Zero server infrastructure', '✅ DuckDB-WASM', '❌ Requires JVM + server', true],
                 ['Audit evidence trail', '✅ Full narrative', '❌ Aggregate counts only', true],
                 ['Output is inspectable', '✅ Plain SQL', '❌ Black-box engine', true],
@@ -292,6 +293,10 @@ function ComparisonSection() {
             </tbody>
           </table>
         </div>
+        <p style={{color: '#94a3b8', fontSize: '0.85rem', marginTop: '1rem'}}>
+          Per-patient figures measured on the cqframework 2025 QI-Core test bundles (46 of 47
+          measures succeed in both engines).
+        </p>
         <div className="text--center" style={{marginTop: '2rem'}}>
           <Link className="button button--outline button--primary" to="/docs/getting-started/benchmarking/">
             View Full Benchmarking Report →

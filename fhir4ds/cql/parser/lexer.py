@@ -1140,7 +1140,19 @@ class Lexer:
         datetime_chars = ""
         while self.pos < len(self.source):
             char = self.source[self.pos]
-            if char.isalnum() or char in "-T:.+Z":
+            if char == ".":
+                # PAR-009: a '.' only continues the literal when followed by
+                # a digit (fractional seconds, e.g. `T12:30:00.5`). Otherwise
+                # it starts a postfix invocation/property access
+                # (`@2024-01-15.toString()`, `@T10:30.time`) and must NOT be
+                # swallowed into the literal (greedy lexing made the whole
+                # expression an invalid-literal LexerError).
+                nxt = self.source[self.pos + 1] if self.pos + 1 < len(self.source) else ""
+                if not nxt.isdigit():
+                    break
+                datetime_chars += char
+                self._advance()
+            elif char.isalnum() or char in "-T:+Z":
                 datetime_chars += char
                 self._advance()
             else:
@@ -1152,8 +1164,13 @@ class Lexer:
         if value:
             self._validate_datetime_literal(value, start_line, start_col)
 
-        # Determine if it's a date, datetime, or time
-        if "T" in value:
+        # Determine if it's a date, datetime, or time.
+        # PAR-009: a leading 'T' marks a Time literal (grammar token `@'T'
+        # TIMEFORMAT`) — check the prefix FIRST; the old `"T" in value` test
+        # classified `@T12:30:00` as DATETIME.
+        if value.startswith("T"):
+            self.tokens.append(Token(TokenType.TIME, value, start_line, start_col))
+        elif "T" in value:
             self.tokens.append(Token(TokenType.DATETIME, value, start_line, start_col))
         elif ":" in value:
             # Time only format @Thh:mm:ss
@@ -1249,6 +1266,13 @@ class Lexer:
                 _datetime.date(y, mo_, d)
             except ValueError as e:
                 err(str(e))
+        elif date_part.count("-") == 1:
+            # PAR-009: month-precision literal (@YYYY-MM) — the 3-component
+            # calendar check above never runs for this shape, so `@2024-13`
+            # used to lex successfully. The month must be 1-12.
+            _y, mo_ = (int(p) for p in date_part.split("-"))
+            if not 1 <= mo_ <= 12:
+                err(f"month {mo_} must be 1-12")
 
     def _read_number(self) -> None:
         """Read an integer or decimal number."""
@@ -1340,7 +1364,7 @@ class Lexer:
 
         # Collect potential words to match
         words = [first_lower]
-        positions = [(self.pos, self.column)]
+        positions = [(self.pos, self.column, self.line)]
 
         # Read ahead to collect more words
         temp_pos = self.pos
@@ -1370,7 +1394,7 @@ class Lexer:
                     temp_pos += 1
                     temp_col += 1
                 words.append(word.lower())
-                positions.append((temp_pos, temp_col))
+                positions.append((temp_pos, temp_col, temp_line))
             else:
                 break
 
@@ -1383,9 +1407,15 @@ class Lexer:
                         match = False
                         break
                 if match:
-                    # Found a match - update position
+                    # Found a match - update position. positions[i][2] carries
+                    # the line at the START of word i (a word never spans a
+                    # newline), so a multi-word keyword
+                    # that spans a newline leaves the lexer on the right line
+                    # (previously self.line was never advanced and every
+                    # following token reported the keyword's start line).
                     self.pos = positions[len(kw_words) - 1][0]
                     self.column = positions[len(kw_words) - 1][1]
+                    self.line = positions[len(kw_words) - 1][2]
 
                     # Build the value string
                     value = " ".join(words[: len(kw_words)])

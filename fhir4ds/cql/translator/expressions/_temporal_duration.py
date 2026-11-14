@@ -190,23 +190,24 @@ class DurationMixin:
         """Translate a duration between function call."""
         name_lower = name.lower()
 
-        unit_map = {
-            "yearsbetween": "year",
-            "monthsbetween": "month",
-            "weeksbetween": "week",
-            "daysbetween": "day",
-            "hoursbetween": "hour",
-            "minutesbetween": "minute",
-            "secondsbetween": "second",
-            "millisecondsbetween": "millisecond",
+        # EXP1-005: emit the REGISTERED CQL duration UDFs (exact registration
+        # casing) — `date_diff(unit, a, b)` bind-failed on VARCHAR operands
+        # and counts boundary crossings, not whole CQL periods.
+        udf_map = {
+            "yearsbetween": "YearsBetween",
+            "monthsbetween": "MonthsBetween",
+            "weeksbetween": "weeksBetween",
+            "daysbetween": "DaysBetween",
+            "hoursbetween": "HoursBetween",
+            "minutesbetween": "MinutesBetween",
+            "secondsbetween": "SecondsBetween",
+            "millisecondsbetween": "millisecondsBetween",
         }
-
-        unit = unit_map.get(name_lower, "day")
 
         if len(args) >= 2:
             return SQLFunctionCall(
-                name="date_diff",
-                args=[SQLLiteral(value=unit), args[0], args[1]],
+                name=udf_map.get(name_lower, "DaysBetween"),
+                args=[args[0], args[1]],
             )
 
         return SQLLiteral(value=0)

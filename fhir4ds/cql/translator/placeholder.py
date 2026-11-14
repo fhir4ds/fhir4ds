@@ -243,7 +243,15 @@ def _resolve_placeholders_impl(
         return SQLFunctionCall(
             name=ast.name,
             args=[resolve_placeholders(arg, cte_name_map, _memo) for arg in ast.args],
-            distinct=ast.distinct
+            distinct=ast.distinct,
+            # CORE-013: preserve ordered-aggregate ORDER BY — dropping it
+            # silently changed LIST(x ORDER BY y) semantics after placeholder
+            # resolution.
+            order_by=[
+                (resolve_placeholders(expr, cte_name_map, _memo), direction)
+                for expr, direction in (ast.order_by or [])
+            ]
+            or None,
         )
 
     elif isinstance(ast, SQLLambda):

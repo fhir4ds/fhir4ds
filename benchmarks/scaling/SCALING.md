@@ -10,193 +10,230 @@ compile diagnostics and are **never** included in speedup or ms/patient figures.
 
 - **Engine (measured):** fhir4ds compiles each eCQM's CQL to one population SQL
   query (`translate_library_to_population_sql`) over an in-memory DuckDB table of
-  FHIR resources. Execution time = median of 3 runs of the same pre-compiled SQL;
-  the query is planned/optimised by DuckDB on every execution, so planning is
-  included in execution time, compilation is not.
+  FHIR resources, run identically on **both DuckDB 1.5.6 and 2.0.0**. Execution
+  time = median of 3 runs of the same pre-compiled SQL; the query is planned/
+  optimised by DuckDB on every execution, so planning is included in execution
+  time, compilation is not.
+- **Measures:** CMS68 (low), CMS22 (medium), CMS2 (high SQL complexity), CMS130
+  (high scan amplification), CMS133 (very high scan-site count: ~110 distinct
+  Condition valueset retrieves). The first three match the 2026-10-29 baseline;
+  CMS22/CMS133 were added 2026-11-13.
 - **Cohorts:** nested deterministic prefixes (sorted bundle order) of one Synthea
   s3 generation: 100 / 1,000 / 5,000 patients; measurement period 2026-01-01..2026-12-31.
-  One fresh process per rung; cohort data loaded once per rung from the durable
-  `/mnt/d/scaling-data` corpus (never regenerated).
+  One fresh process per rung per engine; cohort data loaded once per rung from the
+  durable `/mnt/d/scaling-data` corpus (never regenerated).
 - **Baseline (extrapolated):** clinical-reasoning (Java, HAPI-based) per-patient
   ELM evaluation, linearly extrapolated by patient count from
   `benchmarks/output/cr_runs.json`. CR was not run at these sizes.
 - **Memory:** peak process RSS (`ru_maxrss`); a watchdog aborts past 50 GB.
+  Rungs 100/1,000 ran at `memory_limit=32GB`, rung 5,000 at 48 GB (no spill).
 - **Population columns are RAW per-definition truth values** (no CQM attribution
   masking), so Numerator may exceed Denominator on synthetic data; counts are
-  sanity signals, not reported measure rates.
+  sanity signals, not reported measure rates. CMS133 evaluates to empty
+  populations on this cohort (no cataracts surgery patients in Synthea s3) but
+  still executes the full query — valid for execution-cost measurement.
 
 ## Cohorts
 
-| Rung | Patients | Resources | Load (s) | Peak RSS (MB) | DuckDB memory_limit |
-|------|----------|-----------|----------|---------------|---------------------|
-| 100 | 100 | 115,509 | 12 | 2,188 | 32GB |
-| 1000 | 1,000 | 1,223,154 | 126 | 13,638 | 32GB |
-| 5000 | 5,000 | 6,275,114 | 836 | 43,910 | 48GB |
+| Engine | Rung | Patients | Resources | Load (s) | Peak RSS (MB) | memory_limit |
+|--------|------|----------|-----------|----------|---------------|--------------|
+| DuckDB 1.5.6 | 100 | 100 | 115,509 | 11 | 1,728 | 32GB |
+| DuckDB 1.5.6 | 1000 | 1,000 | 1,223,154 | 115 | 4,926 | 32GB |
+| DuckDB 1.5.6 | 5000 | 5,000 | 6,275,114 | 607 | 17,400 | 48GB |
+| DuckDB 2.0.0 | 100 | 100 | 115,509 | 11 | 2,854 | 32GB |
+| DuckDB 2.0.0 | 1000 | 1,000 | 1,223,154 | 115 | 8,010 | 32GB |
+| DuckDB 2.0.0 | 5000 | 5,000 | 6,275,114 | 601 | 20,797 | 48GB |
 
-The rung-5,000 row is the 48 GB run (no spill). The 32 GB run is preserved
-in the memory-comparison section; rungs 100/1,000 never approached the 32 GB
-limit, so their numbers are config-equivalent across the two settings.
+## Progress vs the 2026-10-29 baseline (DuckDB 1.5.6 line)
 
-## Memory-limit comparison (rung 5000): 32 GB vs 48 GB
+The committed baseline predates the `_rt_<Type>` shared-type materialization,
+the `_patients` CTE rewrite, and the disambiguation-macro work. Same corpus,
+same cohorts, same 3 measures:
 
-| Limit | CMS68 exec (ms) | CMS130 exec (ms) | CMS2 exec (ms) | Peak RSS (MB) |
-|-------|-----------------|------------------|----------------|---------------|
-| 32GB | 9,311 | 306,481 | 20,118 | 33,791 |
-| 48GB | 5,200 | 255,467 | 14,595 | 43,910 |
+| Measure | Rung | 2026-10-29 (ms) | current (ms) | speedup |
+|---------|------|------------------|--------------|---------|
+| CMS68 | 100 | 90 | 54 | 1.7x |
+| CMS68 | 1,000 | 601 | 115 | 5.2x |
+| CMS68 | 5,000 | 5,200 | 474 | 11.0x |
+| CMS130 | 100 | 4,618 | 2,132 | 2.2x |
+| CMS130 | 1,000 | 49,826 | 13,106 | 3.8x |
+| CMS130 | 5,000 | 255,467 | 58,289 | 4.4x |
+| CMS2 | 100 | 1,972 | 1,908 | 1.0x |
+| CMS2 | 1,000 | 4,140 | 2,141 | 1.9x |
+| CMS2 | 5,000 | 14,595 | 3,450 | 4.2x |
 
-Deltas (48 GB vs 32 GB):
-- **CMS68**: 9,311 ms → 5,200 ms (-44.2%)
-- **CMS130**: 306,481 ms → 255,467 ms (-16.6%)
-- **CMS2**: 20,118 ms → 14,595 ms (-27.5%)
-- **Peak RSS**: 33,791 MB → 43,910 MB
+Peak RSS at rung 5,000: 43,910 MB → 17,400 MB.
 
 ## Execution time: measured fhir4ds vs extrapolated clinical-reasoning
 
-### CMS68 — Documentation of Current Medications (low complexity)
+### CMS68 — Documentation of Current Medications
 
-| Patients | fhir4ds exec (ms) | µs/resource | fhir4ds ms/patient | CR exec (ms, extrapolated) | CR ms/patient | Speedup (CR / fhir4ds) |
-|----------|-------------------|-------------|----------------------|----------------------------|---------------|-----------------------|
-| 100 | 90 | 0.78 | 0.90 | 71,910 | 719.10 | 803x |
-| 1,000 | 601 | 0.49 | 0.60 | 719,099 | 719.10 | 1,197x |
-| 5,000 | 5,200 | 0.83 | 1.04 | 3,595,495 | 719.10 | 691x |
+| Patients | 1.5.6 exec (ms) | 2.0.0 exec (ms) | fhir4ds ms/patient (best) | CR ms/patient | Speedup (CR / best) |
+|----------|-----------------|-----------------|----------------------------|---------------|--------------------|
+| 100 | 54 | 39 | 0.39 | 719.10 | 1,853x |
+| 1,000 | 115 | 72 | 0.07 | 719.10 | 9,974x |
+| 5,000 | 474 | 225 | 0.05 | 719.10 | 15,973x |
 
-### CMS130 — Colorectal Cancer Screening (medium complexity)
+### CMS22 — PCP BP Screening & Follow-Up (medium complexity)
 
-| Patients | fhir4ds exec (ms) | µs/resource | fhir4ds ms/patient | CR exec (ms, extrapolated) | CR ms/patient | Speedup (CR / fhir4ds) |
-|----------|-------------------|-------------|----------------------|----------------------------|---------------|-----------------------|
-| 100 | 4,618 | 39.98 | 46.18 | 65,207 | 652.07 | 14x |
-| 1,000 | 49,826 | 40.74 | 49.83 | 652,067 | 652.07 | 13x |
-| 5,000 | 255,467 | 40.71 | 51.09 | 3,260,333 | 652.07 | 13x |
+| Patients | 1.5.6 exec (ms) | 2.0.0 exec (ms) | fhir4ds ms/patient (best) | CR ms/patient | Speedup (CR / best) |
+|----------|-----------------|-----------------|----------------------------|---------------|--------------------|
+| 100 | 421 | 1,348 | 4.21 | 23.64 | 6x |
+| 1,000 | 1,190 | 2,381 | 1.19 | 23.64 | 20x |
+| 5,000 | 4,722 | 5,869 | 0.94 | 23.64 | 25x |
 
-### CMS2 — Depression Screening and Follow-Up (high complexity)
+### CMS2 — Depression Screening and Follow-Up (high SQL complexity)
 
-| Patients | fhir4ds exec (ms) | µs/resource | fhir4ds ms/patient | CR exec (ms, extrapolated) | CR ms/patient | Speedup (CR / fhir4ds) |
-|----------|-------------------|-------------|----------------------|----------------------------|---------------|-----------------------|
-| 100 | 1,972 | 17.07 | 19.72 | 11,877 | 118.77 | 6x |
-| 1,000 | 4,140 | 3.38 | 4.14 | 118,768 | 118.77 | 29x |
-| 5,000 | 14,595 | 2.33 | 2.92 | 593,840 | 118.77 | 41x |
+| Patients | 1.5.6 exec (ms) | 2.0.0 exec (ms) | fhir4ds ms/patient (best) | CR ms/patient | Speedup (CR / best) |
+|----------|-----------------|-----------------|----------------------------|---------------|--------------------|
+| 100 | 1,908 | 34,513 | 19.08 | 118.77 | 6x |
+| 1,000 | 2,141 | 35,810 | 2.14 | 118.77 | 55x |
+| 5,000 | 3,450 | 39,134 | 0.69 | 118.77 | 172x |
 
-## Structural cost score (replaces SQL bytes as the classifier)
+### CMS130 — Colorectal Cancer Screening (high scan-amplification)
+
+| Patients | 1.5.6 exec (ms) | 2.0.0 exec (ms) | fhir4ds ms/patient (best) | CR ms/patient | Speedup (CR / best) |
+|----------|-----------------|-----------------|----------------------------|---------------|--------------------|
+| 100 | 2,132 | 784 | 7.84 | 652.07 | 83x |
+| 1,000 | 13,106 | 1,558 | 1.56 | 652.07 | 419x |
+| 5,000 | 58,289 | 5,458 | 1.09 | 652.07 | 597x |
+
+### CMS133 — Cataracts BCVA (very high scan-site count)
+
+| Patients | 1.5.6 exec (ms) | 2.0.0 exec (ms) | fhir4ds ms/patient (best) | CR ms/patient | Speedup (CR / best) |
+|----------|-----------------|-----------------|----------------------------|---------------|--------------------|
+| 100 | 2,724 | 644 | 6.44 | 24.38 | 4x |
+| 1,000 | 10,235 | 1,131 | 1.13 | 24.38 | 22x |
+| 5,000 | 44,991 | 5,064 | 1.01 | 24.38 | 24x |
+
+## Engine comparison: DuckDB 1.5.6 vs 2.0.0 (median exec ms)
+
+| Measure | 100: 1.5.6 / 2.0 | 1,000: 1.5.6 / 2.0 | 5,000: 1.5.6 / 2.0 | 5k delta |
+|---------|-------------------|----------------------|----------------------|-----------|
+| CMS68 | 54 / 39 | 115 / 72 | 474 / 225 | -52.5% |
+| CMS22 | 421 / 1,348 | 1,190 / 2,381 | 4,722 / 5,869 | +24.3% |
+| CMS2 | 1,908 / 34,513 | 2,141 / 35,810 | 3,450 / 39,134 | +1034.3% |
+| CMS130 | 2,132 / 784 | 13,106 / 1,558 | 58,289 / 5,458 | -90.6% |
+| CMS133 | 2,724 / 644 | 10,235 / 1,131 | 44,991 / 5,064 | -88.7% |
+
+The engines split by workload shape: DuckDB 2.0.0 is dramatically faster
+on the scan-heavy measures (CMS130 −90.6%, CMS133 −88.7%, CMS68 −52.5%) but
+regresses CMS2 (~10x) and CMS22 (+24%) — the 1.5 MB single-query SQL shape
+with thousands of pushed-down predicates. Both engine lines ship the same
+generated SQL; per-measure engine choice is a deployment decision until the
+2.0 planner regression on very large SQL is understood.
+
+## Structural cost score
 
 Counted from the generated population SQL. Score weights: scan site 1.0,
 SELECT DISTINCT 1.0, json_extract 0.25, date/timestamp CAST 0.5, join 0.5,
-derived table 0.5. Valueset/coding-match and interval-call counts are shown
-as secondary counters and are **excluded** from the score (see note below).
+derived table 0.5.
 
-| Measure | Scans | Scans by resourceType | SELECT DISTINCT | json_extract | date casts | joins | derived tables | **Score** | Secondary: valueset/coding | interval |
-|---------|-------|----------------------|-----------------|--------------|------------|-------|----------------|-----------|----------------------------|----------|
-| CMS68 | 8 | Patient 3, Procedure 2, Encounter 1, Coverage 1 | 5 | 30 | 2 | 1 | 18 | **31** | 5 | 2 |
-| CMS130 | 43 | Encounter 11, Condition 10, Observation 8, Procedure 5, Patient 3, Coverage 1, ServiceRequest 1, DeviceRequest 1, MedicationRequest 1, Medication 1 | 39 | 170 | 144 | 14 | 69 | **238** | 749 | 207 |
-| CMS2 | 19 | Patient 3, Encounter 3, Procedure 2, ServiceRequest 2, MedicationRequest 2, Medication 2, Observation 2, Condition 1, Coverage 1 | 14 | 57 | 11 | 25 | 45 | **88** | 8,013 | 1,178 |
+| Measure | Scans | SELECT DISTINCT | json_extract | date casts | joins | derived | **Score** |
+|---------|-------|-----------------|--------------|------------|-------|---------|-----------|
+| CMS68 | 4 | 6 | 31 | 2 | 1 | 12 | **25.2** |
+| CMS22 | 9 | 33 | 99 | 25 | 5 | 54 | **108.8** |
+| CMS133 | 5 | 116 | 312 | 4 | 1 | 123 | **263.0** |
+| CMS130 | 10 | 40 | 457 | 144 | 14 | 61 | **273.8** |
+| CMS2 | 10 | 15 | 2614 | 11 | 25 | 30 | **711.5** |
 
-### Does the score predict measured cost?
+Score vs measured cost @5k (1.5.6): the score ranks CMS68/CMS22/CMS133/
+CMS130 consistently, but CMS2 is the standing outlier — thousands of
+`json_extract` sites that sit behind selective filters on small row sets
+(the same refutation the 2026-10-29 report recorded; row placement is what
+the static score cannot see).
 
-`est. rows evaluated` = Σ over scan sites of the row count of that
-resourceType in the 5,000-patient cohort — i.e. how many per-row predicate
-evaluations the query performs. It is derived from the SQL structure plus
-cohort shape, not from timings.
+| Measure | Score | measured 1.5.6 @5k (ms) | ms/resource |
+|---------|-------|--------------------------|-------------|
+| CMS68 | 25.2 | 474 | 0.08 |
+| CMS22 | 108.8 | 4,722 | 0.75 |
+| CMS133 | 263.0 | 44,991 | 7.17 |
+| CMS130 | 273.8 | 58,289 | 9.29 |
+| CMS2 | 711.5 | 3,450 | 0.55 |
 
-| Measure | Score | est. rows evaluated | measured exec (ms) | µs/resource | µs per evaluated row |
-|---------|-------|---------------------|--------------------|-------------|---------------------|
-| CMS68 | 31 | 1,615,805 | 5,200 | 0.83 | 3.22 |
-| CMS130 | 238 | 29,513,190 | 255,467 | 40.71 | 8.66 |
-| CMS2 | 88 | 8,221,253 | 14,595 | 2.33 | 1.78 |
+## Operator-level attribution (EXPLAIN ANALYZE, rung 5,000)
 
-- Score ranking: CMS130 > CMS2 > CMS68
-- Est. rows-evaluated ranking: CMS130 > CMS2 > CMS68
-- Measured ranking: CMS130 > CMS2 > CMS68
-- **Verdict: CONFIRMED** — the structural score reproduces the measured complexity order.
-- Magnitude check (CMS130 vs CMS2): score 2.7x, rows evaluated 3.6x, measured cost 17.5x. Cost decomposes as rows evaluated × per-row predicate cost; the per-row term comes from the operator profile (the top scans' pushed-down filters), not from static counts.
+### DuckDB 1.5.6
 
-Secondary counters do **not** predict cost: CMS2 carries far more
-valueset/coding-match and interval calls, yet is much cheaper per resource.
-Those calls sit behind selective filters on small row sets; CMS130 spends its
-predicate weight on full Observation scans, so the same static call count
-costs far more. Row placement (which operator evaluates the expression, over
-how many rows) is what the static score cannot see and the profile reveals.
+| Measure | scan sites | rows scanned | expr eval | resource scans | distinct/agg |
+|---------|------------|--------------|-----------|----------------|--------------|
+| CMS68 | 3 | 18,819,198 | 10.9% | 87.7% | 0.6% |
+| CMS22 | 8 | 40,531,012 | 86.9% | 11.9% | 0.5% |
+| CMS2 | 9 | 56,465,786 | 81.5% | 17.8% | 0.3% |
+| CMS130 | 9 | 56,463,738 | 99.6% | 0.4% | 0.0% |
+| CMS133 | 4 | 25,094,312 | 3.7% | 96.2% | 0.0% |
 
-## Operator-level attribution (EXPLAIN ANALYZE)
+### DuckDB 2.0.0
 
-Exclusive time per operator, bucketed; captured once per measure per rung
-*after* the timed repetitions (the profiled execution itself is not counted
-in the headline numbers).
+| Measure | scan sites | rows scanned | expr eval | resource scans | distinct/agg |
+|---------|------------|--------------|-----------|----------------|--------------|
+| CMS68 | 3 | 0 | 56.2% | 17.8% | 7.9% |
+| CMS22 | 8 | 0 | 53.0% | 8.6% | 2.6% |
+| CMS2 | 9 | 0 | 67.0% | 9.0% | 3.1% |
+| CMS130 | 9 | 0 | 90.5% | 4.1% | 0.5% |
+| CMS133 | 4 | 0 | 99.0% | 1.0% | 0.0% |
 
-### rung 5,000 @48GB
+With parallel execution, per-operator timings are summed across worker
+threads — the shares above are relative cost distribution, not wall-clock.
+`rows scanned` comes from the DuckDB 1.5 profile export; the 2.0 profile
+JSON does not expose a per-query cumulative total (0 = not available).
 
-| Measure | scans executed | rows scanned | amplification | resource_scans | other_scans | joins | distinct/agg | expr eval | expr other | window | CTE | order | peak temp (MB) |
-|---------|----------------|--------------|---------------|----------------|-------------|-------|--------------|-----------|------------|--------|-----|-------|----------------|
-| CMS68 | 7 | 43,913,510 | 7.0x | 63.8% | 0.4% | 0.7% | 13.0% | 0.0% | 0.1% | 0.1% | 0.0% | 0.0% | 0 |
-| CMS130 | 42 | 263,491,300 | 42.0x | 99.5% | 0.0% | 0.0% | 0.2% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0 |
-| CMS2 | 18 | 112,929,524 | 18.0x | 86.1% | 0.1% | 0.2% | 4.1% | 0.4% | 0.0% | 0.0% | 0.0% | 0.0% | 0 |
-
-### rung 1,000
-
-| Measure | scans executed | rows scanned | amplification | resource_scans | other_scans | joins | distinct/agg | expr eval | expr other | window | CTE | order | peak temp (MB) |
-|---------|----------------|--------------|---------------|----------------|-------------|-------|--------------|-----------|------------|--------|-----|-------|----------------|
-| CMS68 | 7 | 8,549,790 | 7.0x | 43.4% | 0.5% | 1.3% | 22.7% | 0.0% | 0.7% | 1.1% | 0.0% | 0.0% | 0 |
-| CMS130 | 42 | 51,308,980 | 41.9x | 99.7% | 0.0% | 0.0% | 0.1% | 0.0% | 0.1% | 0.0% | 0.0% | 0.0% | 0 |
-| CMS2 | 18 | 21,994,244 | 18.0x | 85.9% | 0.1% | 0.3% | 5.7% | 0.4% | 0.5% | 0.1% | 0.0% | 0.0% | 0 |
-
-### rung 100
-
-| Measure | scans executed | rows scanned | amplification | resource_scans | other_scans | joins | distinct/agg | expr eval | expr other | window | CTE | order | peak temp (MB) |
-|---------|----------------|--------------|---------------|----------------|-------------|-------|--------------|-----------|------------|--------|-----|-------|----------------|
-| CMS68 | 7 | 796,275 | 6.9x | 11.8% | 0.5% | 2.8% | 43.5% | 0.0% | 0.1% | 2.9% | 0.0% | 0.0% | 0 |
-| CMS130 | 42 | 4,787,890 | 41.5x | 99.2% | 0.0% | 0.0% | 0.3% | 0.0% | 0.1% | 0.0% | 0.0% | 0.0% | 0 |
-| CMS2 | 18 | 2,056,634 | 17.8x | 57.5% | 0.2% | 1.9% | 19.2% | 0.6% | 1.8% | 1.9% | 0.0% | 0.0% | 0 |
-
-Caveats: with parallel execution, per-operator timings are summed across
-worker threads, so the shares above are relative cost distribution, not
-wall-clock seconds (wall time is the measured exec time). Predicate
-expressions (fhirpath_text / in_valueset / interval UDFs) are pushed INTO
-the scans as filters, so their evaluation cost is attributed to
-`resource_scans`, which is why `expr eval` is near zero. `rows scanned` is a
-true per-query total: rows read from the `resources` table across ALL retrieve
-scans. `amplification` = rows scanned / table rows, i.e. how many times the
-corpus is re-read per query.
-
-**Rung invariance:** amplification is essentially constant across the ladder
-(CMS130 41.5x at 100 patients vs 42.0x at 5,000; CMS2 17.8x vs 18.0x; CMS68 6.9x
-vs 7.0x), and `scans executed` is identical at every rung. Cost is therefore
-O(scan_sites x corpus) with a fixed multiplier — the engine re-reads the whole
-corpus once per retrieve CTE, at every scale.
-
-## Optimization candidates (evidence-backed, NOT implemented)
-
-Ranked by expected payoff. Joel ruled these are follow-ups; nothing below is
-implemented in this branch.
-
-1. **Per-retrieve shared CTE cache (duplicate retrieve scans).** CMS130 executes 42 resource-table scans reading 263,491,300 rows from a 6,275,114-row table (42.0x amplification); CMS2 18 scans / 18.0x; CMS68 7 scans / 7.0x. Resource scans take 99.5% (CMS130), 86.1% (CMS2) and 63.8% (CMS68) of exclusive operator time. Several CQL defines retrieve the same resourceType+filter (CMS130: 11 Encounter, 10 Condition, 8 Observation, 5 Procedure) and are re-emitted as separate full-table scans. A per-(resourceType, filter) retrieve cache collapses them.
-2. **Move heavy predicate work out of full-type scan filters (row placement).** CMS130's two most expensive operators are Observation scans whose pushed-down filter evaluates, per row, nested `CASE`/`fhirpath_text(...)`/`__fhir4ds_py_intervalEnd(...)`/`cqlSameOrBeforeP(...)` expressions 3-5 times, and emits **0 rows**. Because the predicates are scan filters they run over every Observation (2.6M rows at this rung) twice. Precomputing the derived temporal bounds as retrieve columns (the translator already does this for `period_start`/`period_end`) and filtering on those columns moves the UDF work after the cheap selectivity check.
-3. **`_patients` CTE still costs a full pass plus two lookups per row.** The optimizer decorrelates the two scalar `SELECT ... WHERE id = _outer.patient_ref` subqueries and the `EXISTS` probe into joins, but the CTE still reads the whole `resources` table (6.19M rows here) to produce 5,000 patient ids. In the CMS68 profile the `_patients` projection over 6,192,864 rows plus its `HASH_GROUP_BY` account for ~27% of thread-summed exclusive operator time. Rewriting as one join against the Patient rows (or a materialized patients table) removes the repeated lookups.
-4. **JSON→VARCHAR re-serialization at every UDF call site.** The plan shows `fhirpath_text(CAST(resource AS VARCHAR), ...)` and `in_valueset(CAST(resource AS VARCHAR), ...)` in the pushed-down filters: because `resources.resource` is typed JSON, each call re-serializes the document to text. CMS130's SQL contains 170 json_extract and (by grep) 845 fhirpath_text call sites, 200 date-normalization (`left(replace(...))`) sites and 207 interval calls; on the ~29.5M evaluated rows these conversions run inside the pushed-down scan filters. Keeping a VARCHAR shadow column (or binding the UDFs to JSON) removes the cast.
-5. **`SELECT DISTINCT` over the full JSON blob — DEMOTED, not a major win.** Every retrieve CTE dedups on `(patient_ref, resource, <columns>)`. The profile shows dedup/aggregation at only 0.2% (CMS130), 4.1% (CMS2) and 13.0% (CMS68) of exclusive operator time: after pushed-down filters the surviving row sets are small. Still worth deduping on identity rather than payload when candidate 1 lands (it shrinks the per-CTE payload), but it should not be prioritized over scans.
-
-Refuted/withdrawn: counting valueset/coding-match or interval call sites as
-complexity drivers (CMS2 has thousands yet is the cheaper measure per resource)
-and treating DISTINCT-over-JSON as the primary cost (0.2-4.1% of operator time).
+**Attribution shift vs the 2026-10-29 report:** resource scans were 64–99.5%
+of exclusive operator time then; now the dominant bucket on BOTH engines is
+**expression evaluation** — the `fhirpath_text`/`in_valueset`/interval
+predicates pushed into scan filters, evaluated over full type partitions
+before selectivity. The scan-count amplification itself was fixed
+(`_rt_<Type>` + identity-deduped retrieve CTEs); what remains is WHERE the
+predicates run, not how many scans exist. That is optimization candidate 1
+below and the next engineering target.
 
 ## Compile diagnostics (excluded from headline numbers)
 
 | Measure | SQL size | Parse (ms) | Library translation (ms) | Population SQL gen (ms) |
 |---------|----------|------------|--------------------------|--------------------------|
-| CMS68 | 9 KB | 7 | 635 | 262 |
-| CMS130 | 251 KB | 11 | 1,940 | 2,658 |
-| CMS2 | 1,337 KB | 24 | 5,567 | 13,983 |
+| CMS68 | 9 KB | 5 | 310 | 119 |
+| CMS22 | 75 KB | 37 | 238 | 262 |
+| CMS2 | 1505 KB | 20 | 5,840 | 15,646 |
+| CMS130 | 270 KB | 10 | 1,240 | 1,598 |
+| CMS133 | 107 KB | 31 | 206 | 205 |
 
 Compilation is cohort-independent (one-time per library); execution SQL is reused.
 
+## Optimization candidates (updated 2026-11-13)
+
+**Shipped since the 2026-10-29 report** (evidence: the progress table above):
+
+1. `_patients` CTE rewrite (old candidate 3) — single Patient-row scan, no
+   per-row correlated lookups. The old HASH_JOIN/DELIM_JOIN cost families are
+   gone from the profiles.
+2. `_rt_<Type>` shared base CTEs — one table scan per resource type per query
+   instead of one per retrieve CTE.
+3. Retrieve CTEs deduplicated by identity key (type+valueset+profile).
+
+**Remaining, evidence-backed, NOT implemented:**
+
+1. **Predicate row placement (old candidate 2).** Expensive `fhirpath`/
+   `in_valueset` predicates are pushed into scan filters and evaluated over
+   full type partitions before selectivity; fresh rung-1,000 CMS68 profile
+   shows a 240 ms filter emitting 0 rows (3x its scan) and a 650 ms scan.
+   Precomputing derived temporal bounds as retrieve columns (as the translator
+   already does for `period_start`/`period_end`) moves UDF work behind the
+   cheap selectivity check. This is the next optimization target.
+2. **JSON→VARCHAR re-serialization at UDF call sites (old candidate 4).**
+   `fhirpath_text(CAST(resource AS VARCHAR), ...)` re-serializes the document
+   per call; a VARCHAR shadow column (or JSON-bound UDFs) removes the cast.
+3. **`SELECT DISTINCT` over identity (old candidate 5, demoted).** Dedup on
+   `(patient_ref, id)` instead of the full payload — worthwhile only alongside
+   candidate 1; still 0.2–13% of operator time.
+
+Refuted/withdrawn: counting valueset/coding-match or interval call sites as
+complexity drivers; treating DISTINCT-over-JSON as the primary cost.
+
 ## Population results (sanity only)
 
-| Measure (rung) | Patients | Populations |
-|----------------|----------|-------------|
-| CMS68 (100) | 100 | Initial Population=43, Denominator=43, Denominator Exceptions=0, Numerator=0 |
-| CMS130 (100) | 100 | Initial Population=18, Denominator=18, Denominator Exclusions=1, Numerator=17 |
-| CMS2 (100) | 100 | Initial Population=38, Denominator=38, Denominator Exclusions=0, Denominator Exceptions=0, Numerator=0 |
-| CMS68 (1,000) | 1,000 | Initial Population=463, Denominator=463, Denominator Exceptions=0, Numerator=0 |
-| CMS130 (1,000) | 1,000 | Initial Population=183, Denominator=183, Denominator Exclusions=4, Numerator=171 |
-| CMS2 (1,000) | 1,000 | Initial Population=400, Denominator=400, Denominator Exclusions=0, Denominator Exceptions=0, Numerator=0 |
-| CMS68 (5,000) | 5,000 | Initial Population=2324, Denominator=2324, Denominator Exceptions=0, Numerator=0 |
-| CMS130 (5,000) | 5,000 | Initial Population=899, Denominator=899, Denominator Exclusions=37, Numerator=1042 |
-| CMS2 (5,000) | 5,000 | Initial Population=2029, Denominator=2029, Denominator Exclusions=0, Denominator Exceptions=0, Numerator=0 |
+- CMS68 (5,000): Initial Population=2324, Denominator=2324, Denominator Exceptions=0, Numerator=0
+- CMS22 (5,000): Initial Population=1851, Denominator=1851, Denominator Exclusions=0, Denominator Exceptions=0, Numerator=141
+- CMS2 (5,000): Initial Population=2029, Denominator=2029, Denominator Exclusions=0, Denominator Exceptions=0, Numerator=0
+- CMS130 (5,000): Initial Population=899, Denominator=899, Denominator Exclusions=37, Numerator=1042
+- CMS133 (5,000): Initial Population=0, Denominator=0, Denominator Exclusions=0, Numerator=0
 

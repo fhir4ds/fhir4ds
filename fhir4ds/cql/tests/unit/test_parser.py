@@ -873,3 +873,838 @@ class TestDifferenceBetweenTrailingIn:
         )
         from ...parser.ast_nodes import DifferenceBetween
         assert isinstance(e, DifferenceBetween)
+
+
+class TestExternalReviewB1ParserTokenDiscipline:
+    """Regression coverage for the 2026-11-13 external parser review, batch B1
+    (TRIAGE_cql_review_20261113.md): quoted-identifier attribution, silent
+    token drops in speculative timing-phrase branches, and the let-clause
+    trailing comma."""
+
+    def test_quoted_flag_describes_the_consumed_token(self):
+        # PAR-001: `quoted` was computed from peek() (pos+1), inverting it.
+        ident = parse_expression('"My Quoted Def"')
+        assert type(ident).__name__ == "Identifier"
+        assert ident.name == "My Quoted Def" and ident.quoted is True
+
+    def test_unquoted_identifier_followed_by_alias_is_not_quoted(self):
+        ast = parse_expression('UnquotedSource "P"')
+        src = ast.source.expression
+        assert src.name == "UnquotedSource" and src.quoted is False
+        assert ast.source.alias == "P"
+
+    def test_stray_properly_is_not_silently_dropped(self):
+        # PAR-003: `true properly` used to return Literal(True).
+        with pytest.raises(ParseError):
+            parse_expression("true properly")
+
+    def test_bare_within_without_quantity_is_not_silently_dropped(self):
+        # PAR-003: `true within 5` used to return Literal(True).
+        with pytest.raises(ParseError):
+            parse_expression("true within 5")
+
+    def test_starts_within_interval_is_not_silently_dropped(self):
+        # Grammar requires `within <quantity> <unit> of`; a bare
+        # `starts within <expr>` must be a ParseError, not `starts <expr>`.
+        with pytest.raises(ParseError):
+            parse_expression("Interval[1, 5] starts within Interval[1, 5]")
+
+    def test_valid_starts_within_quantity_of_still_parses(self):
+        ast = parse_expression(
+            "[Encounter] E where E.period starts within 3 days of @2024-01-01"
+        )
+        assert ast.where is not None
+
+    def test_let_clause_trailing_comma_is_a_parse_error(self):
+        # PAR-003 (let): the trailing comma used to be consumed and dropped.
+        with pytest.raises(ParseError):
+            parse_cql(
+                "library T\nusing FHIR version '4.0.1'\ncontext Patient\n"
+                "define \"D\": [Patient] P let x: 1, where P.active = true"
+            )
+
+    def test_let_clause_multi_binding_still_parses(self):
+        ast = parse_cql(
+            "library T\nusing FHIR version '4.0.1'\ncontext Patient\n"
+            "define \"D\": [Patient] P let x: 1, y: 2 return x + y"
+        )
+        assert ast is not None
+
+    def test_multi_word_keyword_spanning_newline_tracks_line(self):
+        # PAR-002 (line tracking): the token AFTER `or more` spanning a
+        # newline used to report the keyword's start line.
+        from ...parser.lexer import Lexer
+        tokens = Lexer("1 = 1 or\nmore garbage").tokenize()
+        # `or\nmore` lexes as one OR_MORE token; the following token must be
+        # on line 2.
+        after = [t for t in tokens if t.type not in (TokenType.INTEGER,)]
+        or_more = next(t for t in tokens if t.type == TokenType.OR_MORE)
+        idx = tokens.index(or_more)
+        assert tokens[idx + 1].line == 2
+
+
+class TestExternalReviewB2DurationBetweenOperandTier:
+    """Regression coverage for the 2026-11-13 external parser review, batch B2
+    (TRIAGE_cql_review_20261113.md, PAR-004): durationBetweenExpression /
+    differenceBetweenExpression operands are expressionTerm in the CQL 1.5
+    grammar, so arithmetic (+ -) is absorbed but inequality/equality/
+    membership/logical operators must bind OUTSIDE the duration-between.
+    Also covers the `duration in <precision> between` keyword form, which
+    previously misparsed as Bin('in', Identifier, DurationBetween)."""
+
+    def _parse_expr(self, body: str):
+        return parse_expression(body)
+
+    def test_inequality_binds_outside_duration_between(self):
+        e = self._parse_expr("years between @2024-01-01 and @2024-06-01 >= 5")
+        from ...parser.ast_nodes import BinaryExpression, DurationBetween
+        assert isinstance(e, BinaryExpression) and e.operator == ">=", type(e)
+        assert isinstance(e.left, DurationBetween)
+
+    def test_equality_binds_outside_duration_between(self):
+        e = self._parse_expr("months between X and Y = 3")
+        from ...parser.ast_nodes import BinaryExpression, DurationBetween
+        assert isinstance(e, BinaryExpression) and e.operator == "="
+        assert isinstance(e.left, DurationBetween)
+
+    def test_logical_and_binds_outside_duration_between(self):
+        e = self._parse_expr("years between A and B and flag")
+        from ...parser.ast_nodes import BinaryExpression, DurationBetween
+        assert isinstance(e, BinaryExpression) and e.operator == "and"
+        assert isinstance(e.left, DurationBetween)
+
+    def test_arithmetic_still_absorbed_into_operands(self):
+        e = self._parse_expr("years between A + 1 day and B - 1 day")
+        from ...parser.ast_nodes import BinaryExpression, DurationBetween
+        assert isinstance(e, DurationBetween)
+        assert isinstance(e.operand_left, BinaryExpression) and e.operand_left.operator == "+"
+        assert isinstance(e.operand_right, BinaryExpression) and e.operand_right.operator == "-"
+
+    def test_duration_in_precision_between_keyword_form(self):
+        e = self._parse_expr("duration in years between @2024-01-01 and @2024-06-01")
+        from ...parser.ast_nodes import BinaryExpression, DurationBetween
+        assert isinstance(e, DurationBetween) and e.precision == "year", type(e)
+        assert not isinstance(e, BinaryExpression)
+
+    def test_duration_in_precision_between_inside_comparison(self):
+        e = self._parse_expr("duration in days between A and B >= 3")
+        from ...parser.ast_nodes import BinaryExpression, DurationBetween
+        assert isinstance(e, BinaryExpression) and e.operator == ">="
+        assert isinstance(e.left, DurationBetween) and e.left.precision == "day"
+
+    def test_difference_between_operands_are_term_tier(self):
+        e = self._parse_expr("difference in months between A and B in Interval[6, 12]")
+        from ...parser.ast_nodes import BinaryExpression, DifferenceBetween, Interval as Iv
+        assert isinstance(e, BinaryExpression) and e.operator == "in"
+        assert isinstance(e.left, DifferenceBetween)
+        assert isinstance(e.right, Iv)
+
+    def test_unparenthesized_cast_operand_is_rejected_parentheses_work(self):
+        # Strict grammar: typeExpression sits above expressionTerm, so an
+        # unparenthesized `X as DateTime` operand is a ParseError; the
+        # parenthesized form is the sanctioned spelling.
+        with pytest.raises(ParseError):
+            self._parse_expr("days between A as DateTime and B")
+        e = self._parse_expr("days between (A as DateTime) and B")
+        from ...parser.ast_nodes import DurationBetween
+        assert isinstance(e, DurationBetween)
+
+
+class TestExternalReviewB3LexerLiterals:
+    """Regression coverage for the 2026-11-13 external parser review, batch B3
+    (TRIAGE_cql_review_20261113.md): PAR-005 (ratio literal float repr) and
+    PAR-009 (Time-literal token typing, month-precision calendar validation,
+    greedy datetime lexing past a non-digit '.')."""
+
+    def test_ratio_literal_preserves_authored_decimal_text(self):
+        # PAR-005: `0.00001 'mg'` must NOT render as `1e-05 'mg'` in the
+        # ToRatio argument (float repr corrupted small decimals).
+        e = parse_expression("0.00001 'mg':1 'mg'")
+        assert type(e).__name__ == "FunctionRef" and e.name == "ToRatio"
+        assert e.arguments[0].value == "0.00001 'mg':1 'mg'"
+
+    def test_ratio_literal_denominator_preserves_authored_decimal_text(self):
+        e = parse_expression("1 'mg':0.00001 'mg'")
+        assert e.arguments[0].value == "1 'mg':0.00001 'mg'"
+
+    def test_ratio_literal_preserves_long_decimal_text(self):
+        # Beyond float precision — authored text must survive verbatim.
+        e = parse_expression("0.12345678901234567890 'g':1 'g'")
+        assert e.arguments[0].value == "0.12345678901234567890 'g':1 'g'"
+
+    def test_month_precision_literal_validates_month_range(self):
+        # PAR-009: `@2024-13` used to lex successfully (the 3-component
+        # calendar check never ran for the YYYY-MM shape).
+        from ...parser.lexer import LexerError
+
+        with pytest.raises(LexerError):
+            parse_expression("@2024-13")
+        with pytest.raises(LexerError):
+            parse_expression("@2024-00")
+        assert parse_expression("@2024-02") is not None
+
+    def test_t_prefixed_literal_is_time_literal(self):
+        # PAR-009: `@T...` is the grammar's TIME token, not DATETIME.
+        from ...parser.ast_nodes import TimeLiteral
+
+        e = parse_expression("@T12:30:00")
+        assert isinstance(e, TimeLiteral) and e.value == "T12:30:00"
+
+    def test_datetime_literal_postfix_invocation_not_swallowed(self):
+        # PAR-009: greedy datetime lexing used to eat `.toString` into the
+        # literal, making the whole expression an invalid-literal LexerError.
+        e = parse_expression("@2024-01-15.toString()")
+        assert type(e).__name__ == "MethodInvocation"
+        e2 = parse_expression("@T14:30:22.5")
+        assert e2.value == "T14:30:22.5"
+
+
+class TestExternalReviewB4GrammarGaps:
+    """Regression coverage for the 2026-11-13 external parser review, batch B4
+    (TRIAGE_cql_review_20261113.md): PAR-007 (bare `flatten X` misparse,
+    `1 foo` over-acceptance) and PAR-008 subset (typed list selector
+    `List<T>{...}`, concept selector `Concept { Code ... }`)."""
+
+    def test_bare_flatten_prefix_parses_as_function(self):
+        # PAR-007: `flatten X` misparsed as Query(source=Identifier('flatten'),
+        # alias=X). Grammar: `('distinct'|'flatten') expression`.
+        e = parse_expression("flatten {1, 2}")
+        assert type(e).__name__ == "FunctionRef" and e.name == "flatten"
+        e2 = parse_expression("flatten X")
+        assert type(e2).__name__ == "FunctionRef" and e2.name == "flatten"
+
+    def test_bare_literal_alias_is_rejected(self):
+        # PAR-007: `1 foo` is invalid grammar — querySource is a retrieve,
+        # identifier, or parenthesized expression.
+        from ...errors import ParseError
+
+        for src in ["1 foo", "'x' bar", "true foo"]:
+            with pytest.raises(ParseError):
+                parse_expression(src)
+
+    def test_parenthesized_literal_alias_still_accepted(self):
+        # Grammar querySource admits '(' expression ')' — parens are valid.
+        e = parse_expression("(1) X return X")
+        assert type(e).__name__ == "Query"
+
+    def test_typed_list_selector(self):
+        # PAR-008: `List<Code>{ }` misparsed as chained </> comparisons.
+        e = parse_expression("List<Code>{ }")
+        from ...parser.ast_nodes import BinaryExpression, ListExpression, ListTypeSpecifier
+        assert isinstance(e, BinaryExpression) and e.operator == "as"
+        assert isinstance(e.left, ListExpression) and not e.left.elements
+        assert isinstance(e.right, ListTypeSpecifier)
+
+    def test_untyped_list_selector_and_typed_elements(self):
+        assert type(parse_expression("List{1, 2}")).__name__ == "ListExpression"
+        e = parse_expression("List<Integer>{1, 2, 3}")
+        assert e.operator == "as" and len(e.left.elements) == 3
+
+    def test_concept_selector_with_inline_codes(self):
+        # PAR-008: `Concept { Code 'x' from "CS" }` was a ParseError.
+        e = parse_expression('Concept { Code \'x\' from "CS" }')
+        from ...parser.ast_nodes import InstanceExpression, ListExpression
+        assert isinstance(e, InstanceExpression) and e.type == "Concept"
+        assert e.elements[0].name == "codes"
+        assert isinstance(e.elements[0].type, ListExpression)
+
+    def test_concept_named_field_instance_still_supported(self):
+        # The named-field form `Concept { codes: {...} }` predates the selector
+        # and must keep its generic instance parse.
+        e = parse_expression('Concept { codes: { Code \'x\' from "CS" } }')
+        assert type(e).__name__ == "InstanceExpression" and e.type == "Concept"
+        assert e.elements[0].name == "codes"
+
+    def test_concept_selector_named_code_and_display_translate(self):
+        # Review finding (B4): named-code members must emit quoted Identifiers
+        # (the fold-resolvable shape), never bare str, and the grammar's
+        # whole-selector display clause must parse. Verified end-to-end.
+        cql = (
+            "library L\n"
+            'codesystem "CS": \'http://loinc.org\'\n'
+            'code "N": \'x\' from "CS"\n'
+            "context Unfiltered\n"
+            'define C1: Concept { "N" }\n'
+            'define C2: Concept { "N", Code \'y\' from "CS" } display \'Disp\'\n'
+        )
+        lib = parse_cql(cql)  # parse-only smoke
+        assert len(lib.statements) >= 2
+
+        from fhir4ds.cql import translate_cql
+
+        res = translate_cql(cql)
+        sql1 = res["C1"].to_sql() if hasattr(res["C1"], "to_sql") else str(res["C1"])
+        assert '"code":"x"' in sql1 and '"system":"http://loinc.org"' in sql1
+        sql2 = res["C2"].to_sql() if hasattr(res["C2"], "to_sql") else str(res["C2"])
+        assert '"display":"Disp"' in sql2 and sql2.count('"code"') == 2
+
+
+class TestExternalReviewB4bLibraryGrammar:
+    """Regression coverage for the 2026-11-13 external parser review, batch
+    B4 remainder (TRIAGE_cql_review_20261113.md, PAR-008): qualified library
+    name, access modifiers on defines, and library-qualified Code selectors."""
+
+    def test_qualified_library_name(self):
+        lib = parse_cql("library a.b.C version '1.0.0'\ncontext Patient\ndefine X: 1")
+        assert lib.identifier == "a.b.C"
+
+    def test_access_modifiers_on_defines(self):
+        for mod in ("private", "public"):
+            lib = parse_cql(
+                f"library L\ncontext Patient\ndefine {mod} X: 1"
+            )
+            d = [s for s in lib.statements if hasattr(s, "expression")][0]
+            assert d.access_level == mod
+            assert d.name == "X"
+
+    def test_define_named_private_without_modifier(self):
+        # `define "private": 1` — quoted name, not an access modifier. And an
+        # unquoted `define private: 1` treats 'private' as the NAME (no
+        # identifier follows it).
+        lib = parse_cql('library L\ncontext Patient\ndefine "private": 1')
+        d = [s for s in lib.statements if hasattr(s, "expression")][0]
+        assert d.name == "private" and d.access_level is None
+        lib2 = parse_cql("library L\ncontext Patient\ndefine private: 1")
+        d2 = [s for s in lib2.statements if hasattr(s, "expression")][0]
+        assert d2.name == "private" and d2.access_level is None
+
+    def test_code_selector_accepts_qualified_codesystem(self):
+        e = parse_expression("Code 'c' from Lib.CS")
+        assert type(e).__name__ == "CodeSelector"
+        assert e.system == "Lib.CS"
+
+    def test_access_modifier_on_function_definitions(self):
+        # Grammar: `define accessModifier? 'fluent'? 'function' ...` — the
+        # modifier precedes both 'fluent' and 'function'.
+        lib = parse_cql(
+            "library L\ncontext Patient\ndefine private function F(A Integer): A + 1"
+        )
+        f = [s for s in lib.statements if hasattr(s, "parameters")][0]
+        assert f.access_level == "private" and f.fluent is False
+        lib2 = parse_cql(
+            "library L\ncontext Patient\ndefine public fluent function G(A Integer): A"
+        )
+        g = [s for s in lib2.statements if hasattr(s, "parameters")][0]
+        assert g.access_level == "public" and g.fluent is True
+
+
+class TestExternalReviewB8QueryClauses:
+    """Regression coverage for the 2026-11-13 external translator review,
+    batch B8 (TRIAGE_cql_review_20261113.md): EXP2-001 (literal FALSE
+    conditions dropped from with/such-that and multi-source where),
+    EXP2-007 (secondary sort keys dropped)."""
+
+    def _sql(self, cql_def):
+        from ... import translate_cql
+
+        res = translate_cql(f"library L\ncontext Patient\n{cql_def}")
+        v = next(iter(res.values()))
+        return str(v.to_sql() if hasattr(v, "to_sql") else v)
+
+    def test_such_that_false_is_not_dropped(self):
+        sql = self._sql(
+            "define Q: [Patient] P with [Encounter] E such that false return P.id"
+        )
+        assert "FALSE" in sql.upper(), sql
+
+    def test_where_false_literal_still_filters(self):
+        sql = self._sql("define Q: [Patient] P where false return P.id")
+        assert "FALSE" in sql.upper(), sql
+
+    def test_secondary_sort_keys_preserved(self):
+        sql = self._sql(
+            "define S: [Patient] P sort by P.gender, P.birthDate asc return P.id"
+        )
+        assert "gender" in sql and "birthDate" in sql, sql
+        assert sql.upper().count("ORDER BY") == 1
+
+    def test_single_sort_key_unchanged(self):
+        sql = self._sql("define S: [Patient] P sort by P.birthDate desc return P.id")
+        assert "ORDER BY" in sql.upper() and "DESC" in sql.upper()
+
+
+class TestExternalReviewB14ConditionalsAndFirstLast:
+    """EXP1-008 (null-condition 3VL) + EXP1-009 (method-form First/Last)."""
+
+    def test_if_null_condition_takes_else_branch(self):
+        # CQL conditionals treat a null condition as false: the ELSE branch
+        # must fire for union-bearing THEN branches too (the COALESCE-of-CASES
+        # path previously emitted `NOT cond` which is NULL for a null cond,
+        # dropping the else entirely).
+        from fhir4ds.cql import translate_cql
+        import duckdb
+        from fhir4ds.cql.duckdb import register
+
+        con = duckdb.connect()
+        register(con)
+
+        def _run(expr: str, defs: str = ""):
+            res = translate_cql(
+                f"library L\ncontext Unfiltered\n{defs}\ndefine T: {expr}"
+            )
+            v = res["T"]  # multiple defines when defs are supplied
+            sql = v.to_sql() if hasattr(v, "to_sql") else str(v)
+            return con.execute(f"SELECT ({sql})").fetchone()[0]
+
+        assert _run("if null then 1 else 2") == 2
+        assert _run("if true then 1 else 2") == 1
+        assert _run("if false then 1 else 2") == 2
+        _defs = "define A: {1, 2}\ndefine B: {2, 3}\n"
+        assert _run("if null then (A union B) else {9}", _defs) == [9]
+        assert _run("if true then (A union B) else {9}", _defs) == [1, 2, 3]
+        assert _run("if false then (A union B) else {9}", _defs) == [9]
+
+    def test_method_form_first_last_rejects_string_receiver(self):
+        # 'abc'.first() previously character-indexed the string ('a'); the
+        # method form must enforce the same List<T> signature as First(...).
+        import pytest
+        from fhir4ds.cql import translate_cql
+        from fhir4ds.cql.errors import TranslationError
+
+        for expr in ("'abc'.first()", "'abc'.last()"):
+            with pytest.raises(TranslationError, match="requires a list argument"):
+                translate_cql(
+                    f"library L\ncontext Unfiltered\ndefine T: {expr}"
+                )
+
+        # List receivers keep working in both spellings.
+        res = translate_cql(
+            "library L\ncontext Unfiltered\ndefine T: {3, 1, 2}.last()"
+        )
+        v = next(iter(res.values()))
+        sql = v.to_sql() if hasattr(v, "to_sql") else str(v)
+        import duckdb
+        from fhir4ds.cql.duckdb import register
+
+        con = duckdb.connect()
+        register(con)
+        assert con.execute(f"SELECT ({sql})").fetchone()[0] == 2
+
+
+class TestExternalReviewB15DeadAggregateBranches:
+    """EXP1-013: GeometricMean/Product never parse into AggregateExpression.
+
+    The parser only routes Count/Sum/Min/Max/Avg/Median/Mode tokens to
+    _parse_aggregate_expression; GeometricMean/Product parse as identifiers
+    (FunctionRef) and lower through the pre-translate hooks. The former
+    EXP(AVG(LOG(x))) branches in _translate_aggregate_expression were dead
+    AND doubly wrong (DuckDB LOG is base-10; the CQL Log(x, base) macro
+    shadows 1-arg LOG on registered connections). These tests pin that the
+    live lowering is exact and executes correctly.
+    """
+
+    def test_geometricmean_and_product_lower_exact_not_log_domain(self) -> None:
+        from fhir4ds.cql import translate_cql
+
+        r = translate_cql(
+            "library T\n"
+            "define G: GeometricMean({1.0, 2.0, 4.0})\n"
+            "define P: Product({2.0, 3.0, 4.0})\n"
+        )
+        g, p = r["G"].to_sql(), r["P"].to_sql()
+        # Live lowering: the GeometricMean UDF and exact list_aggregate
+        # 'product' — never an EXP/LOG expansion.
+        assert "GeometricMean(" in g
+        assert "LOG" not in g.upper().replace("GEOMETRICMEAN", "")
+        assert "list_aggregate" in p and "'product'" in p
+
+    def test_geometricmean_and_product_execute_correctly(self) -> None:
+        import duckdb
+
+        from fhir4ds.cql import translate_cql
+        from fhir4ds.cql.duckdb import register
+
+        con = duckdb.connect()
+        register(con)
+        r = translate_cql(
+            "library T\n"
+            "define G: GeometricMean({1.0, 2.0, 4.0})\n"
+            "define P: Product({2.0, 3.0, 4.0})\n"
+        )
+        assert con.execute(f"SELECT {r['G'].to_sql()}").fetchone()[0] == 2.0
+        assert con.execute(f"SELECT {r['P'].to_sql()}").fetchone()[0] == 24.0
+
+    def test_qualify_sort_identifiers_mutation_is_idempotent(self) -> None:
+        """EXP1-014: re-translating the same parsed library is byte-identical."""
+        import duckdb
+
+        from fhir4ds.cql.duckdb import register
+        from fhir4ds.cql.parser import parse_cql
+        from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+
+        con = duckdb.connect()
+        register(con)
+        lib = parse_cql(
+            "library T\ncontext Patient\n"
+            "define E1: ([Encounter]) E sort by start of E.period\n"
+            "define E2: ([Encounter]) E sort by date from authoredOn\n"
+        )
+        s1 = CQLToSQLTranslator(con).translate_library_to_sql(lib)
+        s2 = CQLToSQLTranslator(con).translate_library_to_sql(lib)
+        assert s1 == s2
+
+
+class TestExternalReviewB16ClinicalAndTupleEquivalence:
+    """EXP2-004 (Code equality 3VL) and EXP2-006 (tuple ~ through aliases)."""
+
+    @staticmethod
+    def _population_row(cql: str):
+        import duckdb
+
+        from fhir4ds.cql.duckdb import register
+        from fhir4ds.cql.loader.fhir_loader import FHIRDataLoader
+        from fhir4ds.cql.parser import parse_cql
+        from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+
+        con = duckdb.connect()
+        register(con)
+        loader = FHIRDataLoader(con)
+        loader.load_resource({"resourceType": "Patient", "id": "p1"})
+        loader.load_resource(
+            {
+                "resourceType": "Condition",
+                "id": "c1",
+                "subject": {"reference": "Patient/p1"},
+                "code": {"coding": [{"system": "u", "code": "finding"}]},
+            }
+        )
+        sql = CQLToSQLTranslator(con).translate_library_to_population_sql(parse_cql(cql))
+        return con.execute(sql).fetchone()[-1]
+
+    def test_code_equality_diff_code_with_one_sided_display_is_false(self) -> None:
+        """EXP2-004: a definitely differing element makes the tuple
+        conjunction FALSE even when display is absent on one side."""
+        got = self._population_row(
+            "library T\ncontext Patient\ncodesystem \"CS\": 'u'\n"
+            "define D: Code { code: 'a', display: 'x' } = Code { code: 'b' }"
+        )
+        assert got is False
+        # NotEqual mirrors: not(false) = true
+        got_ne = self._population_row(
+            "library T\ncontext Patient\ncodesystem \"CS\": 'u'\n"
+            "define D: Code { code: 'a', display: 'x' } != Code { code: 'b' }"
+        )
+        assert got_ne is True
+
+    def test_code_equality_same_code_one_sided_display_stays_null(self) -> None:
+        """Pinned doctrine: same code + one missing display is uncertain
+        (NULL at the expression level; the population define boundary
+        collapses null->false per the documented CQL-04 convention)."""
+        import duckdb
+
+        from fhir4ds.cql import translate_cql
+        from fhir4ds.cql.duckdb import register
+
+        con = duckdb.connect()
+        register(con)
+        r = translate_cql(
+            "library T\ncodesystem \"CS\": 'u'\n"
+            "define D: Code { code: 'a', display: 'x' } = Code { code: 'a' }"
+        )
+        assert con.execute(f"SELECT {r['D'].to_sql()}").fetchone()[0] is None
+
+    def test_code_equality_identical_and_fully_equal(self) -> None:
+        assert self._population_row(
+            "library T\ncontext Patient\ncodesystem \"CS\": 'u'\n"
+            "define D: Code { code: 'a', display: 'x' } = Code { code: 'a', display: 'x' }"
+        ) is True
+        assert self._population_row(
+            "library T\ncontext Patient\ncodesystem \"CS\": 'u'\n"
+            "define D: Code { code: 'a' } = Code { code: 'b' }"
+        ) is False
+
+    def test_tuple_equivalence_through_define_alias(self) -> None:
+        """EXP2-006: alias ~ tuple-literal folds element-wise (~ on String
+        is case-insensitive), with §9 null handling for the alias operand."""
+        cases = [
+            (
+                "define T1: Tuple { a: 1, b: 'x' }\ndefine D: T1 ~ Tuple { a: 1, b: 'X' }",
+                True,
+            ),
+            (
+                "define T1: Tuple { a: 1, b: 'x' }\ndefine T2: Tuple { a: 1, b: 'X' }\ndefine D: T1 ~ T2",
+                True,
+            ),
+            (
+                "define T1: Tuple { a: 1, b: 'x' }\ndefine D: T1 !~ Tuple { a: 1, b: 'X' }",
+                False,
+            ),
+            ("define T1: Tuple { a: 1 }\ndefine D: T1 ~ Tuple { a: 2 }", False),
+            ("define T1: Tuple { a: 1 }\ndefine D: T1 ~ Tuple { b: 1 }", False),
+            ("define D: Tuple { a: 1, b: 'x' } ~ Tuple { a: 1, b: 'X' }", True),
+        ]
+        for tail, want in cases:
+            got = self._population_row("library T\ncontext Patient\n" + tail)
+            assert got == want, f"{tail!r}: want {want}, got {got}"
+
+
+class TestExternalReviewB17AggregateWhereAndAuditDemotion:
+    """EXP2-008 (multi-source aggregate WHERE) and EXP2-010 (paren matching)."""
+
+    @staticmethod
+    def _aggregate_count(cql: str):
+        import duckdb
+
+        from fhir4ds.cql.duckdb import register
+        from fhir4ds.cql.loader.fhir_loader import FHIRDataLoader
+        from fhir4ds.cql.parser import parse_cql
+        from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+
+        con = duckdb.connect()
+        register(con)
+        loader = FHIRDataLoader(con)
+        loader.load_resource({"resourceType": "Patient", "id": "p1"})
+        loader.load_resource({"resourceType": "Encounter", "id": "e1", "subject": {"reference": "Patient/p1"}, "status": "finished"})
+        loader.load_resource({"resourceType": "Encounter", "id": "e2", "subject": {"reference": "Patient/p1"}, "status": "planned"})
+        loader.load_resource({"resourceType": "Observation", "id": "o1", "subject": {"reference": "Patient/p1"}, "status": "final"})
+        loader.load_resource({"resourceType": "Observation", "id": "o2", "subject": {"reference": "Patient/p1"}, "status": "preliminary"})
+        sql = CQLToSQLTranslator(con).translate_library_to_population_sql(parse_cql(cql))
+        return float(con.execute(sql).fetchone()[-1])
+
+    def test_multi_source_aggregate_where_applies_inside_source_scope(self) -> None:
+        """EXP2-008: the query WHERE references the primary alias (E),
+        which binds only inside the with-clause derived table — it must be
+        pushed down, not dangled at the derived-table level."""
+        base = (
+            "library T\ncontext Patient\n"
+            "define D: ([Encounter] E with [Observation] O such that O.status = 'final') R\n"
+            "{where}aggregate T starting 0: T + 1"
+        )
+        # with-where: only (finished E, final O) pairs count -> 1
+        assert self._aggregate_count(base.format(where="  where E.status = 'finished'\n")) == 1.0
+        # control, no where: every E x final O pair -> 2
+        assert self._aggregate_count(base.format(where="")) == 2.0
+
+    def test_single_source_aggregate_where_unchanged(self) -> None:
+        assert self._aggregate_count(
+            "library T\ncontext Patient\n"
+            "define D: ([Observation] O where O.status = 'final') R\n"
+            "  aggregate T starting 0: T + 1"
+        ) == 1.0
+
+    def test_find_matching_paren_is_string_literal_aware(self) -> None:
+        """EXP2-010: parens inside '...' literals are data, not structure."""
+        from fhir4ds.cql.translator.expressions._query import demote_audit_in_text
+
+        cases = [
+            # balanced parens in literal (worked before, must keep working)
+            (
+                "CASE WHEN audit_leaf('note', 'pain (acute)') THEN 1 ELSE 0 END",
+                "CASE WHEN struct_extract(audit_leaf('note', 'pain (acute)'), 'result') THEN 1 ELSE 0 END",
+            ),
+            # unbalanced open paren (previously: silent skip, no demotion)
+            (
+                "CASE WHEN audit_leaf('note', 'pain (chronic') THEN 1 ELSE 0 END",
+                "CASE WHEN struct_extract(audit_leaf('note', 'pain (chronic'), 'result') THEN 1 ELSE 0 END",
+            ),
+            # unbalanced close paren (previously: corrupt SQL with broken quoting)
+            (
+                "CASE WHEN audit_leaf('note', 'resolved)') THEN 1 ELSE 0 END",
+                "CASE WHEN struct_extract(audit_leaf('note', 'resolved)'), 'result') THEN 1 ELSE 0 END",
+            ),
+            # escaped quote keeps the scanner in-string across a paren
+            (
+                "CASE WHEN audit_leaf('it''s (ok', 'x)') THEN 1 ELSE 0 END",
+                "CASE WHEN struct_extract(audit_leaf('it''s (ok', 'x)'), 'result') THEN 1 ELSE 0 END",
+            ),
+        ]
+        for sql, want in cases:
+            got = demote_audit_in_text(sql)
+            assert got == want, f"{sql!r}: want {want!r}, got {got!r}"
+
+
+class TestExternalReviewB18ContextStateLeaks:
+    """EXP2-009: context state must not leak when a translation raises.
+
+    A let clause whose expression is a Query/Retrieve sets
+    ``_let_clause_collection = True`` around its translation; a failing
+    translation (here: an unknown retrieve resource type) must reset the
+    flag and leave the scope stack balanced so the translator shows clean
+    state after the error.
+    """
+
+    def test_let_collection_flag_and_scope_reset_on_translation_error(self):
+        import duckdb
+        import pytest
+        from fhir4ds.cql.errors import TranslationError
+        from fhir4ds.cql.parser import parse_cql
+        from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+
+        con = duckdb.connect()
+        # Retrieve of an unknown type raises TranslationError INSIDE the let
+        # translation while _let_clause_collection is True.
+        cql = (
+            "library L\n"
+            "using FHIR version '4.0.1'\n"
+            "context Patient\n"
+            'define Bad: ([Patient] P let L: [BogusResource] B return B.id '
+            "return P.id)\n"
+        )
+        tr = CQLToSQLTranslator(con)
+        scope_before = len(tr.context.scopes)
+        with pytest.raises(TranslationError):
+            tr.translate_library(parse_cql(cql))
+        assert getattr(tr.context, "_let_clause_collection", False) is False
+        assert len(tr.context.scopes) == scope_before
+
+    def test_backbone_array_scope_reset_on_translation_error(self):
+        import duckdb
+        from fhir4ds.cql.parser import parse_cql
+        from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+
+        con = duckdb.connect()
+        # A multi-valued BackboneElement source whose WHERE fails to
+        # translate: the pushed UNNEST scope must be popped on the way out.
+        import pytest
+        from fhir4ds.cql.errors import TranslationError
+        tr = CQLToSQLTranslator(con)
+        scope_before = len(tr.context.scopes)
+        # TranslationError (not bare Exception) so the test cannot pass
+        # vacuously on a pre-handler parse failure.
+        with pytest.raises(TranslationError):
+            tr.translate_library(parse_cql(
+                "library L\n"
+                "using FHIR version '4.0.1'\n"
+                "context Patient\n"
+                "define Bad: (Patient.contact C where [BogusResource] X "
+                "return X.id return C.name.given)\n"
+            ))
+        assert len(tr.context.scopes) == scope_before
+
+
+class TestExternalReviewB21PublicApisAndTypeMap:
+    """CORE-014 / CORE-016 regression coverage (external review B21)."""
+
+    def _conn(self):
+        import duckdb
+        from fhir4ds.cql.duckdb import register
+        con = duckdb.connect(config={"allow_unsigned_extensions": True})
+        register(con)
+        from fhir4ds.cql.loader import FHIRDataLoader
+        ld = FHIRDataLoader(con)
+        ld.load_resource({"resourceType": "Patient", "id": "p1"})
+        ld.load_resource({"resourceType": "Observation", "id": "o1",
+                          "status": "final", "subject": {"reference": "Patient/p1"}})
+        ld.load_resource({"resourceType": "Observation", "id": "o2",
+                          "status": "preliminary", "subject": {"reference": "Patient/p1"}})
+        return con
+
+    def test_translate_library_to_sql_emits_retrieve_ctes_and_executes(self):
+        """CORE-014: definition-only SQL must carry the retrieve CTEs it
+        references; previously the retrieve define lowered to a bare
+        `SELECT "Observation"` column reference with no FROM."""
+        from fhir4ds.cql import parse_cql
+        from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+        con = self._conn()
+        lib = parse_cql(
+            "library L\nusing FHIR version '4.0.1'\ncontext Patient\n"
+            "define Obs: [Observation]"
+        )
+        sql = CQLToSQLTranslator(con).translate_library_to_sql(lib, final_definition="Obs")
+        assert 'resourceType = \'Observation\'' in sql
+        rows = con.execute(sql).fetchall()
+        assert len(rows) == 2  # both observations, patient-correlated columns
+
+    def test_translate_library_to_sql_scalar_over_retrieve_executes(self):
+        """CORE-014: final definitions with per-patient correlation (`_pt`)
+        are inlined against the patients CTE instead of dangling."""
+        from fhir4ds.cql import parse_cql
+        from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+        con = self._conn()
+        for cql, final, expected in [
+            ("define Obs: [Observation]\ndefine S: First(Obs).status", "S",
+             {"final", "preliminary"}),  # First over an unordered retrieve
+            ("define N: Count([Observation])", "N", {2}),
+        ]:
+            lib = parse_cql(
+                "library L\nusing FHIR version '4.0.1'\ncontext Patient\n" + cql
+            )
+            sql = CQLToSQLTranslator(con).translate_library_to_sql(lib, final_definition=final)
+            rows = con.execute(sql).fetchall()
+            # Membership, not equality: retrieve row order is nondeterministic
+            # (established doctrine), so First(...) may return either element.
+            # The scalar's transport shape is also unstable across runs
+            # (VARCHAR vs single-element list), so unwrap before comparing.
+            value = rows[0][0]
+            if isinstance(value, list):
+                assert len(value) == 1, f"{final}: {rows!r}"
+                value = value[0]
+            if isinstance(expected, set):
+                assert value in expected, f"{final}: {rows!r}"
+            else:
+                assert value == expected, f"{final}: {rows!r}"
+
+    def test_translate_definition_with_context_ctes_returns_valid_node(self):
+        """CORE-014 part 2: the accumulated-CTEs branch previously built
+        `SQLExpression(sql=...)` — the base dataclass has no such fields, so
+        the branch raised TypeError on every call."""
+        from fhir4ds.cql import parse_cql
+        from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+        from fhir4ds.cql.translator.types import CTEDefinition, SQLExpression, SQLSelect
+        con = self._conn()
+        lib = parse_cql(
+            "library L\nusing FHIR version '4.0.1'\ncontext Patient\ndefine X: 1 + 2"
+        )
+        t = CQLToSQLTranslator(con)
+        t._setup_context(lib)
+        t._context.add_cte(CTEDefinition(name='"dummy_cte"', query=SQLSelect(columns=[])))
+        stmt = [s for s in lib.statements if getattr(s, "name", None) == "X"][0]
+        result = t.translate_definition(stmt)  # raised TypeError pre-fix
+        assert isinstance(result, SQLExpression)
+        assert "WITH" in result.to_sql()
+
+    def test_function_param_list_query_types_as_list(self):
+        """CORE-016: a query inside a fluent-function body must type the
+        same as the identical top-level query (List<String>), not the bare
+        element type / Any. Also covers _specifier_ref on
+        ListTypeSpecifier."""
+        from fhir4ds.cql import parse_cql
+        from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+        con = self._conn()
+        lib = parse_cql(
+            "library L\nusing FHIR version '4.0.1'\ncontext Patient\n"
+            "define function F(Obs List<Observation>):\n"
+            "  (Obs O return O.status)\n"
+            "define TopLevel: ([Observation] O return O.status)\n"
+            "define CallF: F([Observation])"
+        )
+        t = CQLToSQLTranslator(con)
+        t.translate_library(lib)  # runs TypeMapBuilder.attach()
+        meta = t._context.definition_meta
+        assert str(meta["CallF"].cql_type_ref) == str(meta["TopLevel"].cql_type_ref)
+        assert meta["TopLevel"].cql_type_ref.bare_name == "List"
+        assert meta["TopLevel"].cql_type_ref.args[0].bare_name == "String"
+
+
+class TestExternalReviewB22SingletonFromString:
+    """B14 follow-up (external review B22): keyword-form `singleton from
+    'abc'` must raise a typed TranslationError, not an opaque DuckDB binder
+    error (array_length(STRING_LITERAL, ...)). The method-form guard from
+    B14 covered 'abc'.singletonFrom() only."""
+
+    def test_keyword_singleton_from_string_raises_typed_error(self):
+        from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+        from ...errors import TranslationError
+        import duckdb
+        from fhir4ds.cql.duckdb import register
+        con = duckdb.connect(config={"allow_unsigned_extensions": True})
+        register(con)
+        lib = parse_cql(
+            "library L\nusing FHIR version '4.0.1'\ncontext Patient\n"
+            "define X: singleton from 'abc'"
+        )
+        with pytest.raises(TranslationError, match="SingletonFrom requires a list"):
+            CQLToSQLTranslator(con).translate_library_to_sql(lib, final_definition="X")
+
+    def test_singleton_from_real_lists_still_work(self):
+        from fhir4ds.cql.translator.translator import CQLToSQLTranslator
+        import duckdb
+        from fhir4ds.cql.duckdb import register
+        con = duckdb.connect(config={"allow_unsigned_extensions": True})
+        register(con)
+        lib = parse_cql(
+            "library L\nusing FHIR version '4.0.1'\ncontext Patient\n"
+            "define X: singleton from {5}"
+        )
+        sql = CQLToSQLTranslator(con).translate_library_to_sql(lib, final_definition="X")
+        assert con.execute(sql).fetchall() == [(5,)]
