@@ -55,16 +55,16 @@ a production deployment pays them at deploy, not at query.
 
 ## The ladder
 
-Execution time on DuckDB 1.5.6, median of three runs — total and per-patient
-at every rung:
+Execution time on DuckDB 1.5.6, median of three runs. Each cell shows the
+total and (per-patient) time:
 
-| Measure | 100 | 1,000 | 5,000 | ms/patient: 100 → 1,000 → 5,000 |
-|---|---|---|---|---|
-| CMS68 | 70 ms | 117 ms | 474 ms | 0.70 → 0.12 → **0.09** |
-| CMS22 | 407 ms | 1,206 ms | 4,630 ms | 4.07 → 1.21 → 0.93 |
-| CMS2 | 460 ms | 734 ms | 2,773 ms | 4.60 → 0.73 → 0.55 |
-| CMS130 | 2,219 ms | 12,733 ms | 57,357 ms | 22.2 → 12.7 → 11.5 |
-| CMS133 | 2,924 ms | 10,421 ms | 46,428 ms | 29.2 → 10.4 → 9.3 |
+| Measure | 100 | 1,000 | 5,000 |
+|---|---|---|---|
+| CMS68 | 70 ms (0.70) | 117 ms (0.12) | 474 ms (**0.09**) |
+| CMS22 | 407 ms (4.07) | 1,206 ms (1.21) | 4,630 ms (0.93) |
+| CMS2 | 460 ms (4.60) | 734 ms (0.73) | 2,773 ms (0.55) |
+| CMS130 | 2,219 ms (22.2) | 12,733 ms (12.7) | 57,357 ms (11.5) |
+| CMS133 | 2,924 ms (29.2) | 10,421 ms (10.4) | 46,428 ms (9.3) |
 
 Two things to read off that table.
 
