@@ -9,10 +9,10 @@ import Heading from '@theme/Heading';
 import styles from './index.module.css';
 
 const PRODUCT_VERSION = '0.0.23';
-const SQL_EXECUTION_MEAN_ALL_MEASURES = '~12ms';
-const SQL_EXECUTION_MEAN_SHARED_MEASURES = '~12ms';
-const JAVA_EXECUTION_MEAN_SHARED_MEASURES = '~470ms';
-const MEAN_SPEEDUP_SHARED_MEASURES = '~39×';
+const SQL_EXECUTION_MEDIAN_ALL_MEASURES = '~4.5ms';
+const SQL_EXECUTION_MEDIAN_SHARED_MEASURES = '~4.4ms';
+const JAVA_EXECUTION_MEDIAN_SHARED_MEASURES = '~575ms';
+const SPEEDUP_MEDIAN_SHARED_MEASURES = '~131×';
 const TOTAL_CONFORMANCE_TESTS = '2,943';
 const CQL_CONFORMANCE_TESTS = '1,706';
 const FHIRPATH_CONFORMANCE_TESTS = '935';
@@ -23,7 +23,7 @@ const ECQM_MEASURES = '47/47 + 73/73';
 
 function StatsBar() {
   const stats = [
-    {value: SQL_EXECUTION_MEAN_ALL_MEASURES, label: 'SQL mean / patient'},
+    {value: SQL_EXECUTION_MEDIAN_ALL_MEASURES, label: 'SQL median / patient'},
     {value: '0.09ms', label: 'Per patient @ 5k patients (Synthea)'},
     {value: 'Zero', label: 'Server infrastructure'},
     {value: TOTAL_CONFORMANCE_TESTS, label: 'Tests passing'},
@@ -128,7 +128,7 @@ const FEATURES: Feature[] = [
     title: 'Columnar Speed',
     description: (
       <>
-        Process entire populations in a single SQL scan. {MEAN_SPEEDUP_SHARED_MEASURES} faster than 
+        Process entire populations in a single SQL scan. {SPEEDUP_MEDIAN_SHARED_MEASURES} faster than 
         traditional engines by utilizing vectorized execution and SIMD.
       </>
     ),
@@ -277,9 +277,9 @@ function ComparisonSection() {
               {[
                 ['Cohort execution at scale (5,000 patients, Synthea)', '0.09 – 11.5 ms/patient', 'per-patient cost unchanged at scale', true],
                 ['Speedup at scale (5,000 patients, extrapolated)', '~3× to ~7,600× per measure', 'baseline', true],
-                ['SQL execution per patient (all 47 measures)', SQL_EXECUTION_MEAN_ALL_MEASURES, 'N/A', true],
-                ['SQL execution per patient (46 shared measures)', SQL_EXECUTION_MEAN_SHARED_MEASURES, JAVA_EXECUTION_MEAN_SHARED_MEASURES, true],
-                ['Speedup (mean, 46 shared measures)', `${MEAN_SPEEDUP_SHARED_MEASURES} faster`, 'baseline', true],
+                ['SQL execution per patient, median (all 47 measures)', SQL_EXECUTION_MEDIAN_ALL_MEASURES, 'N/A', true],
+                ['SQL execution per patient, median (46 shared measures)', SQL_EXECUTION_MEDIAN_SHARED_MEASURES, JAVA_EXECUTION_MEDIAN_SHARED_MEASURES, true],
+                ['Speedup, median (46 shared measures)', `${SPEEDUP_MEDIAN_SHARED_MEASURES} faster`, 'baseline', true],
                 ['Zero server infrastructure', '✅ DuckDB-WASM', '❌ Requires JVM + server', true],
                 ['Audit evidence trail', '✅ Full narrative', '❌ Aggregate counts only', true],
                 ['Output is inspectable', '✅ Plain SQL', '❌ Black-box engine', true],

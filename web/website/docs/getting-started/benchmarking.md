@@ -14,11 +14,11 @@ FHIR4DS achieves **100% spec compliance** across all test suites — 2,943 total
 
 | Metric | Result |
 |--------|-----------------|
-| **Spec Compliance (CQL)** | **100%** (1,706 / 1,706 tests) |
-| **Spec Compliance (FHIRPath)** | **100%** (935 / 935 tests) |
-| **Spec Compliance (SQL-on-FHIR)** | **100%** (144 / 144 tests) |
-| **eCQM Measures (2025 QI-Core suite)** | **100% pass rate** (47 / 47) |
-| **eCQM Measures (2025 US-Core suite)** | **100% pass rate** (73 / 73) |
+| **CQL** | **100%** (1,706 / 1,706 tests) |
+| **FHIRPath** | **100%** (935 / 935 tests) |
+| **SQL-on-FHIR** | **100%** (144 / 144 tests) |
+| **eCQMs (2025 QI-Core suite)** | **100% pass rate** (47 / 47) |
+| **DQMs (2025 US-Core suite)** | **100% pass rate** (73 / 73) |
 
 ### Known Upstream Accuracy Gaps
 4 measures have documented accuracy gaps caused by bugs in the official CMS test bundles, not by FHIR4DS implementation errors. These measures fail equally in all conformant engines.
@@ -42,10 +42,9 @@ We compared FHIR4DS against the industry-standard [Java Clinical Reasoning](http
 
 | Metric | Traditional Engine (Java) | FHIR4DS (SQL Native) | Speedup |
 |--------|---------------------------|----------------------|---------|
-| **Mean Execution/Patient** | ~470ms | **~12.1ms** | **~39×** |
 | **Median Execution/Patient** | ~575ms | **~4.4ms** | **~131×** |
 
-Across all 47 measures of the 2025 QI-Core suite, FHIR4DS executes at ~12ms mean / ~4.5ms median per patient. Compile phases are one-time costs at deploy (not included in the per-patient figures): ~19ms parse and ~457ms SQL translation per library.
+Across all 47 measures of the 2025 QI-Core suite, FHIR4DS executes at a median of ~4.5ms per patient. We report the median rather than the mean because a small heavy tail inflates the mean (~12ms) — the three most expensive measures (CMS0334, CMS128, CMS117) run 28–118ms/patient on these small test cohorts while half of all measures run under 4.5ms. Compile phases are one-time costs at deploy (not included in the per-patient figures): ~19ms parse and ~457ms SQL translation per library.
 
 ### Scalability
 

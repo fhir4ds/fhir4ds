@@ -14,8 +14,8 @@ FHIR4DS represents a paradigm shift in clinical quality measurement and populati
 
 | Metric | FHIR4DS Capability |
 |--------|-----------------|
-| **Execution Speed** | **~12ms mean** (~4.5ms median) per patient across the 2025 QI-Core benchmark suite |
-| **Throughput Advantage** | **~39× faster (mean)** than the Java Clinical Reasoning engine on shared successful measures |
+| **Execution Speed** | **~4.5ms median** per patient across the 2025 QI-Core benchmark suite (mean ~12ms — a small heavy tail of complex measures inflates it; the median is the representative figure) |
+| **Throughput Advantage** | **~131× faster (median)** than the Java Clinical Reasoning engine on shared successful measures |
 | **Standards Compliance** | **100%** across CQL (1,706), FHIRPath (935), SQL-on-FHIR v2 (144), and DQM (47 QI-Core + 73 US-Core) |
 | **Auditability** | Full per-expression evidence narratives |
 | **Infrastructure** | **Zero-server** — runs in notebooks or browser (WASM) |
@@ -42,7 +42,6 @@ In head-to-head benchmarks against the industry-standard [Java Clinical Reasonin
 
 | Metric | Traditional Engine (Java) | FHIR4DS (SQL Native) | Speedup |
 |--------|---------------------------|----------------------|---------|
-| **Mean Execution/Patient** | ~470ms | **~12.1ms** | **~39×** |
 | **Median Execution/Patient** | ~575ms | **~4.4ms** | **~131×** |
 
 ### Linear vs. Near-Zero Marginal Scalability
@@ -52,7 +51,7 @@ Because FHIR4DS uses a set-based architecture, the cost of adding a patient to a
 FHIR4DS separates the analytical lifecycle into three distinct phases:
 1.  **CQL Parse**: Resolves syntax and creates an ELM-compatible AST (~19ms average in the benchmark suite).
 2.  **SQL Translation**: Compiles the AST into optimized DuckDB SQL (~457ms average in the benchmark suite).
-3.  **SQL Execution**: The relevant production metric (~12ms/patient across all 47 measures).
+3.  **SQL Execution**: The relevant production metric (~4.5ms median per patient across all 47 measures).
 
 Phase 1 and 2 are **pre-compilation steps** that happen once per library version and are cached. Phase 3 is the only recurring cost during production runs.
 
