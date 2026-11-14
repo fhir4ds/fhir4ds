@@ -32,7 +32,7 @@ MEASURE_TITLES = {
     "CMS133": "Cataracts BCVA (very high scan-site count)",
 }
 RUNGS = [100, 1000, 5000]
-ENGINES = [("d156", "DuckDB 1.5.6"), ("d20", "DuckDB 2.0.0")]
+ENGINES = [("d156v2", "DuckDB 1.5.6"), ("d20v2", "DuckDB 2.0.0")]
 # 2026-10-29 committed baseline (pre materialization/patients-rewrite) for the
 # progress comparison. Artifacts preserved under results/.
 BASELINE_TAG = {100: "rung100", 1000: "rung1000", 5000: "rung5000_48g"}
@@ -138,12 +138,12 @@ def main() -> None:
     for mid in ("CMS68", "CMS130", "CMS2"):
         for r in RUNGS:
             old = med(base[r], mid) if base[r] else None
-            new = med(data[("d156", r)], mid)
+            new = med(data[("d156v2", r)], mid)
             if old and new:
                 A(f"| {mid} | {r:,} | {old:,.0f} | {new:,.0f} | {old / new:.1f}x |")
     A("")
     rss_old = base[5000]["peak_rss_mb"] if base[5000] else None
-    rss_new = data[("d156", 5000)]["peak_rss_mb"] if data[("d156", 5000)] else None
+    rss_new = data[("d156v2", 5000)]["peak_rss_mb"] if data[("d156v2", 5000)] else None
     if rss_old and rss_new:
         A(f"Peak RSS at rung 5,000: {rss_old:,.0f} MB → {rss_new:,.0f} MB.")
     A("")
@@ -158,8 +158,8 @@ def main() -> None:
         A("| Patients | 1.5.6 exec (ms) | 2.0.0 exec (ms) | fhir4ds ms/patient (best) | CR ms/patient | Speedup (CR / best) |")
         A("|----------|-----------------|-----------------|----------------------------|---------------|--------------------|")
         for r in RUNGS:
-            m156 = med(data[("d156", r)], mid)
-            m20 = med(data[("d20", r)], mid)
+            m156 = med(data[("d156v2", r)], mid)
+            m20 = med(data[("d20v2", r)], mid)
             best = min(x for x in (m156, m20) if x is not None) if (m156 or m20) else None
             if best is None:
                 continue
@@ -176,16 +176,16 @@ def main() -> None:
         cells = []
         d5 = None
         for r in RUNGS:
-            m156 = med(data[("d156", r)], mid)
-            m20 = med(data[("d20", r)], mid)
+            m156 = med(data[("d156v2", r)], mid)
+            m20 = med(data[("d20v2", r)], mid)
             cells.append(f"{m156:,.0f} / {m20:,.0f}")
             if r == 5000 and m156 and m20:
                 d5 = (m20 / m156 - 1) * 100
         A(f"| {mid} | " + " | ".join(cells) + f" | {d5 and f'{d5:+.1f}%'} |")
     A("")
     A("The engines split by workload shape: DuckDB 2.0.0 is dramatically faster")
-    A("on the scan-heavy measures (CMS130 −90.6%, CMS133 −88.7%, CMS68 −52.5%) but")
-    A("regresses CMS2 (~10x) and CMS22 (+24%) — the 1.5 MB single-query SQL shape")
+    A("on the scan-heavy measures (CMS130 −90.3%, CMS133 −88.3%, CMS68 −51.6%) but")
+    A("regresses CMS2 (~15x) and CMS22 (+31%) — the very large single-query SQL shape")
     A("with thousands of pushed-down predicates. Both engine lines ship the same")
     A("generated SQL; per-measure engine choice is a deployment decision until the")
     A("2.0 planner regression on very large SQL is understood.")
@@ -214,7 +214,7 @@ def main() -> None:
     A("")
     A("| Measure | Score | measured 1.5.6 @5k (ms) | ms/resource |")
     A("|---------|-------|--------------------------|-------------|")
-    d5 = data[("d156", 5000)]
+    d5 = data[("d156v2", 5000)]
     nres = d5["resources_loaded"] if d5 else 0
     for mid, s in ranked:
         m = med(d5, mid)
@@ -263,7 +263,7 @@ def main() -> None:
     A("")
     A("| Measure | SQL size | Parse (ms) | Library translation (ms) | Population SQL gen (ms) |")
     A("|---------|----------|------------|--------------------------|--------------------------|")
-    d1k = data[("d156", 1000)]
+    d1k = data[("d156v2", 1000)]
     for mid in MEASURE_TITLES:
         m = d1k["measures"].get(mid)
         if m and m.get("status") == "success":
@@ -308,7 +308,7 @@ def main() -> None:
     # Population sanity
     A("## Population results (sanity only)")
     A("")
-    d5 = data[("d156", 5000)]
+    d5 = data[("d156v2", 5000)]
     for mid in MEASURE_TITLES:
         m = d5["measures"].get(mid)
         if m and m.get("status") == "success":

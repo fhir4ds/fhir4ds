@@ -164,15 +164,16 @@ clean engine comparison at 5,000 patients:
 
 | Measure | 1.5.6 | 2.0.0 | Delta |
 |---|---|---|---|
-| CMS68 | 474 ms | 225 ms | −52.5% |
-| CMS130 | 58,289 ms | 5,458 ms | **−90.6%** |
-| CMS133 | 44,991 ms | 5,064 ms | **−88.7%** |
-| CMS22 | 4,722 ms | 5,869 ms | +24.3% |
-| CMS2 | 3,450 ms | 39,134 ms | **+1,034%** |
+| CMS68 | 474 ms | 229 ms | −51.6% |
+| CMS130 | 57,357 ms | 5,588 ms | **−90.3%** |
+| CMS133 | 46,428 ms | 5,435 ms | **−88.3%** |
+| CMS22 | 4,630 ms | 6,054 ms | +30.8% |
+| CMS2 | 2,773 ms | 40,422 ms | **+1,358%** |
 
-(Engine-split rows are the 2026-11-13 measurements, before fix #4 above;
-the promotion shifted CMS2's DuckDB 2.0 planning cost further in the wrong
-direction, so the 1.5.6 recommendation stands a fortiori.)
+(Engine-split rows re-measured 2026-11-14 with all four fixes above. Fix #4
+widened the CMS2 gap — 1.5.6 dropped to 2.8 s while 2.0's planning cost for
+the promotion-lookup subqueries kept it near 40 s — so the 1.5.6
+recommendation for CMS2-class SQL stands a fortiori.)
 
 DuckDB 2.0.0 is dramatically faster on the scan-heavy measures — the ones the
 October diagnosis was about — but regresses CMS2 badly. CMS2's generated SQL is
