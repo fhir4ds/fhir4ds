@@ -5258,14 +5258,71 @@ class QueryMixin:
                     self.context.add_alias(alias, table_alias=alias, cte_name=provisional_cte_name)
                 else:
                     cte_name = cte_key if isinstance(cte_key, str) else str(cte_key)
-                    result = SQLSelect(
-                        columns=[SQLIdentifier(name="*")],
-                        from_clause=SQLAlias(
-                            expr=SQLIdentifier(name=cte_name, quoted=True),
-                            alias=alias
+                    # v0.0.24 it7 (d3 SKEPTIC): a STORED-LIST define as a
+                    # query source (`define L: {1,2}` then `L X where
+                    # X = 1`). The CTE holds the WHOLE element list in one
+                    # `value` row per patient, so a plain
+                    # `SELECT * FROM "L" AS X` makes per-element WHERE/
+                    # RETURN predicates compare the list itself
+                    # (TRY_CAST([1,2] AS DOUBLE) -> NULL -> silently
+                    # FALSE). Expand the stored list to one row per
+                    # element via unnest, keeping the CTE's patient_id.
+                    _sl_meta = self.context.definition_meta.get(cte_name)
+                    if (
+                        _sl_meta is not None
+                        and not _sl_meta.has_resource
+                        and getattr(_sl_meta, "stores_list_value", False)
+                        and (node.where or node.return_clause)
+                    ):
+                        result = SQLSelect(
+                            columns=[SQLIdentifier(name="*")],
+                            from_clause=SQLAlias(
+                                expr=SQLSubquery(query=SQLSelect(
+                                    columns=[
+                                        SQLAlias(
+                                            expr=SQLFunctionCall(
+                                                name="unnest",
+                                                args=[
+                                                    SQLQualifiedIdentifier(
+                                                        parts=["_slv", "value"]
+                                                    )
+                                                ],
+                                            ),
+                                            alias="value",
+                                        ),
+                                        SQLQualifiedIdentifier(
+                                            parts=["_slv", "patient_id"]
+                                        ),
+                                    ],
+                                    from_clause=SQLAlias(
+                                        expr=SQLIdentifier(
+                                            name=cte_name, quoted=True
+                                        ),
+                                        alias="_slv",
+                                    ),
+                                )),
+                                alias=alias,
+                            ),
                         )
-                    )
-                    self.context.add_alias(alias, table_alias=alias, cte_name=cte_name)
+                        # Element-value binding (like the inline list
+                        # source): property access and comparisons on the
+                        # alias resolve against the ELEMENT (X.value), not
+                        # row semantics (X.resource).
+                        self.context.add_alias(
+                            alias,
+                            ast_expr=SQLQualifiedIdentifier(
+                                parts=[alias, "value"]
+                            ),
+                        )
+                    else:
+                        result = SQLSelect(
+                            columns=[SQLIdentifier(name="*")],
+                            from_clause=SQLAlias(
+                                expr=SQLIdentifier(name=cte_name, quoted=True),
+                                alias=alias
+                            )
+                        )
+                        self.context.add_alias(alias, table_alias=alias, cte_name=cte_name)
         elif alias and _contains_cte_ref(source_expr) and not isinstance(source_expr, (SQLFunctionCall, SQLCase)):
             # Source contains a CTE reference (e.g., SQLCase with CTE in THEN clause)
             # or a nested RetrievePlaceholder (e.g., inside DeferredTemplateSubstitution).
