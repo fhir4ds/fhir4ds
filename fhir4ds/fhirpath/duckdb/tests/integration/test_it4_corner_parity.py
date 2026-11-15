@@ -144,3 +144,101 @@ class TestIt5TypedTemporalFieldParity:
         finally:
             native.close()
             fallback.close()
+
+
+class TestIt6ExplorerBoundaryAndEquivalenceParity:
+    """v0.0.24 it6 (domain 2 EXPLORER) regressions (e3edf1475a4).
+
+    1. Native Time boundaries with an explicit precision argument preserve
+       components at the input's precision (§G-5 doctrine): specified
+       seconds survive, only sub-precision components take the 59/999
+       (high) / 00/000 (low) fill; authored fraction digits render
+       verbatim. The native output carries no '@' prefix while the
+       fallback renders the literal form — normalized here (documented
+       it5 divergence, harness-normalized in conformance).
+    2. Fallback temporal EQUIVALENCE on typed FHIR `time` fields: the
+       §6.1.2 implicit-conversion gate must classify ResourceNode-wrapped
+       strings as temporal when the peer is temporal, else
+       `valueTime ~ @T10:30:00` returned False while `=` returned True.
+    """
+
+    TIME_RES = json.dumps(
+        {
+            "resourceType": "Observation",
+            "id": "o6",
+            "status": "final",
+            "code": {"text": "t"},
+            "valueTime": "10:30:00",
+        }
+    )
+
+    def _strip_at(self, value):
+        if isinstance(value, str):
+            return value.lstrip("@")
+        return value
+
+    def test_time_boundary_preserves_specified_components_it6(self):
+        con = _connection()
+        cases = [
+            ("@T10:30:00.highBoundary(9)", "T10:30:00.999"),
+            ("@T10:30:00.lowBoundary(9)", "T10:30:00.000"),
+            ("@T10:30:45.highBoundary(9)", "T10:30:45.999"),
+            ("@T10:30:45.lowBoundary(9)", "T10:30:45.000"),
+            ("@T10:30:45.123.highBoundary(9)", "T10:30:45.123"),
+            ("@T10:30:00.5.highBoundary(9)", "T10:30:00.5"),
+            # sub-precision inputs keep the template fill
+            ("@T10:30.highBoundary(9)", "T10:30:59.999"),
+            ("@T10.highBoundary(9)", "T10:59:59.999"),
+            # coarser requested precision truncates
+            ("@T10:30:00.highBoundary(4)", "T10:30"),
+        ]
+        for expression, expected in cases:
+            row = con.execute(
+                "SELECT fhirpath(?, ?)", [json.dumps({"resourceType": "Patient", "id": "p"}), expression]
+            ).fetchone()
+            assert row is not None and row[0] is not None, expression
+            got = [self._strip_at(v) for v in row[0]]
+            assert got == [expected], f"{expression}: {got} != ['{expected}']"
+
+    def test_time_boundary_parity_native_vs_fallback_it6(self, monkeypatch):
+        native = _connection()
+        fallback = _python_fallback_connection(monkeypatch)
+        for expression in [
+            "@T10:30:00.highBoundary(9)",
+            "@T10:30:00.lowBoundary(9)",
+            "@T10:30:45.highBoundary(9)",
+            "@T10:30:45.123.highBoundary(9)",
+            "@T10:30.highBoundary(9)",
+            "@T10:30:00.highBoundary(4)",
+        ]:
+            resource = json.dumps({"resourceType": "Patient", "id": "p"})
+            nv = native.execute("SELECT fhirpath(?, ?)", [resource, expression]).fetchone()[0]
+            fv = fallback.execute("SELECT fhirpath(?, ?)", [resource, expression]).fetchone()[0]
+            assert nv is not None and fv is not None, expression
+            assert [self._strip_at(v) for v in nv] == [self._strip_at(v) for v in fv], expression
+
+    def test_typed_time_field_equivalence_it6(self):
+        con = _connection()
+        for expression, expected in [
+            ("valueTime ~ @T10:30:00", ["true"]),
+            ("valueTime !~ @T10:30:00", ["false"]),
+            ("valueTime ~ @T10:30:30", ["false"]),
+            ("valueTime = @T10:30:00", ["true"]),
+            # Time vs Date/DateTime peer remains non-equivalent
+            ("valueTime ~ @2012-01-01", ["false"]),
+        ]:
+            row = con.execute(
+                "SELECT fhirpath(?, ?)", [self.TIME_RES, expression]
+            ).fetchone()
+            assert row is not None and row[0] is not None, expression
+            got = [str(v).lower() for v in row[0]]
+            assert got == expected, f"{expression}: {got} != {expected}"
+
+    def test_typed_time_field_equivalence_parity_it6(self, monkeypatch):
+        native = _connection()
+        fallback = _python_fallback_connection(monkeypatch)
+        for expression in ["valueTime ~ @T10:30:00", "valueTime ~ @T10:30:30"]:
+            nv = native.execute("SELECT fhirpath(?, ?)", [self.TIME_RES, expression]).fetchone()[0]
+            fv = fallback.execute("SELECT fhirpath(?, ?)", [self.TIME_RES, expression]).fetchone()[0]
+            assert nv is not None and fv is not None, expression
+            assert [str(v).lower() for v in nv] == [str(v).lower() for v in fv], expression
