@@ -253,6 +253,12 @@ def register_cql(
     else:
         _ensure_valueset_membership_surface(con)
 
+    # Step 4: Engine 2.x tuning (planner + division semantics). Applied at
+    # the register_cql tail so EVERY registration path (fhir4ds.register,
+    # fhir4ds.cql.register_udfs, the conformance runners) gets it; idempotent
+    # and version-guarded (see helper docstring).
+    _apply_engine_2x_planner_tuning(con)
+
     return cql_cpp
 
 
@@ -277,20 +283,34 @@ def _apply_engine_2x_planner_tuning(con: "duckdb.DuckDBPyConnection") -> None:
     m = _re.match(r"^(\d+)\.", _duckdb_mod.__version__ or "")
     if not m or int(m.group(1)) < 2:
         return
+    # delim_join_as_cte: planning blowup (see docstring above).
     try:
         con.execute("SET delim_join_as_cte=false")
     except _duckdb_mod.Error as exc:
-        global _PLANNER_TUNING_WARNED
-        if not _PLANNER_TUNING_WARNED:
-            _PLANNER_TUNING_WARNED = True
-            import logging
+        _warn_tuning("delim_join_as_cte", exc)
+    # error_on_division_by_zero: DuckDB 2.0 made division/modulo by zero
+    # RAISE instead of returning NULL. CQL semantics are NULL on divide-by-
+    # zero (official fixture Modulo0By0 expects null), and 1.5.x returned
+    # NULL — restore that behavior so generated CQL SQL is engine-neutral.
+    try:
+        con.execute("SET error_on_division_by_zero=false")
+    except _duckdb_mod.Error as exc:
+        _warn_tuning("error_on_division_by_zero", exc)
 
-            logging.getLogger(__name__).warning(
-                "delim_join_as_cte=false could not be applied on DuckDB %s "
-                "(%s); large generated SQL may plan slowly on 2.x",
-                _duckdb_mod.__version__,
-                exc,
-            )
+
+def _warn_tuning(name: str, exc: Exception) -> None:
+    global _PLANNER_TUNING_WARNED
+    if _PLANNER_TUNING_WARNED:
+        return
+    _PLANNER_TUNING_WARNED = True
+    import logging
+
+    logging.getLogger(__name__).warning(
+        "%s could not be applied (%s); DuckDB 2.x may plan slowly or "
+        "raise on division by zero where CQL expects NULL",
+        name,
+        exc,
+    )
 
 
 _PLANNER_TUNING_WARNED = False
@@ -350,9 +370,7 @@ def register(
     cql_cpp = register_cql(con, valueset_cache=valueset_cache)
     from fhir4ds.fhirpath.duckdb.extension import _is_cpp_extension_loaded
     fhirpath_cpp = _is_cpp_extension_loaded(con)
-    # Engine 2.x planner tuning (validated strict win, see helper docstring).
-    # Runs after registration so UDF loading is never blocked by it; a
-    # user may re-enable the planner default with
-    # ``SET delim_join_as_cte=true`` after register() if they need to.
-    _apply_engine_2x_planner_tuning(con)
+    # Engine 2.x tuning (planner + division semantics) is applied inside
+    # register_cql so every registration path gets it; a user may restore
+    # the DuckDB defaults with SET after register() if needed.
     return {"fhirpath_cpp": fhirpath_cpp, "cql_cpp": cql_cpp}

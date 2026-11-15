@@ -124,11 +124,20 @@ def _parse_date(value: str) -> date | None:
 def _parse_time(value: str) -> "time | None":
     """Parse time from ISO 8601 / CQL time string (e.g. '15:59:59.999' or 'T15:59:59.999')."""
     from datetime import time as _time_class
+    import re as _re
     if not value:
         return None
     try:
         s = value.lstrip("T").strip()
         body, tz_suffix = _split_timezone_suffix(s)
+        # GUARD (DuckDB 2.0 conformance, 2026-11-14): Python 3.11 relaxed
+        # time.fromisoformat enough that DATE-shaped strings parse as times
+        # ('2014-06' -> 20:14 with a timezone offset). CQL Time strings are
+        # strictly hh[:mm[:ss[.fff]]] — gate the shape BEFORE delegating so
+        # Date/DateTime inputs can never fall into the Time branch of
+        # dateAddQuantity and friends.
+        if not _re.match(r"^\d{2}(:\d{2}(:\d{2}(\.\d{1,9})?)?)?$", body):
+            return None
         s = body + ("+00:00" if tz_suffix == "Z" else tz_suffix)
         # Normalize fractional seconds to 6 digits for fromisoformat compatibility
         if '.' in s:

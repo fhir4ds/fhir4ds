@@ -52,3 +52,18 @@ def test_register_idempotent_with_planner_tuning():
         fhir4ds.register(con)  # idempotent, must not raise
     finally:
         con.close()
+
+
+def test_parse_time_rejects_date_shaped_strings():
+    """Python 3.11's relaxed time.fromisoformat parses '2014-06' as a time
+    (20:14 with tz) — the shape gate in _parse_time prevents Date/DateTime
+    inputs from falling into the Time branch of dateAddQuantity (the cause
+    of 8 DuckDB-2.0 conformance failures, 2026-11-14)."""
+    from fhir4ds.cql.duckdb.udf.datetime import _parse_time, dateAddQuantity
+
+    for bad in ("2014-06", "2014-06-01", "2014", "2014-06-01T10:00"):
+        assert _parse_time(bad) is None, bad
+    for good in ("14:30", "T14:30:00", "T14:30:00.123", "23:59:59.999"):
+        assert _parse_time(good) is not None, good
+    q = '{"value": 1, "unit": "year", "system": "http://unitsofmeasure.org"}'
+    assert dateAddQuantity("2014-06", q) == "2015-06"
