@@ -120,12 +120,47 @@ def equality(ctx, x, y):
     a_type = type(a_raw)
     b_type = type(b_raw)
     if a_type != b_type:
+        # v0.0.24 it2 (HISTORIAN, upstream corpus 2026-11): complex-vs-primitive
+        # equality is definitively FALSE ("different types are not equal"),
+        # pinned by official tests testEquality29/30 + testNEquality25/26
+        # (name.first() = 'Peter' // false). Primitive-vs-primitive type
+        # mismatches (Boolean = 1, 1 = '1') remain EMPTY per the older
+        # fixture-pinned uncertainty doctrine.
+        a_complex = isinstance(a_raw, (abc.Mapping, list))
+        b_complex = isinstance(b_raw, (abc.Mapping, list))
+        if a_complex != b_complex:
+            # Carve-out (official testQuantityUnitVsNoUnitEqual // empty): a
+            # Quantity-shaped payload on either side keeps the UNCERTAIN
+            # quantity semantics — a unit-carrying Quantity vs a unitless
+            # quantity object is empty, not false.
+            def _quantity_shaped(v):
+                return (
+                    isinstance(v, abc.Mapping)
+                    and "value" in v
+                    and any(k in v for k in ("unit", "code", "system"))
+                )
+
+            def _value_payload(v):
+                return isinstance(v, abc.Mapping) and "value" in v
+
+            other_numeric = lambda v: isinstance(v, (int, float, Decimal)) and not isinstance(v, bool)
+            if (
+                _quantity_shaped(a_raw)
+                or _quantity_shaped(b_raw)
+                or isinstance(a, nodes.FP_Quantity)
+                or isinstance(b, nodes.FP_Quantity)
+                # Bare unitless quantity payloads vs numerics stay UNCERTAIN
+                # (FP-12 milestone-4 pin: {"value":120} = 120 // empty).
+                or ((_value_payload(a_raw) and other_numeric(b_raw)) or (_value_payload(b_raw) and other_numeric(a_raw)))
+            ):
+                return None
+            return False
         # Allow numeric type mixing (int/float/Decimal)
         numeric = (int, float, Decimal)
         a_numeric = isinstance(a_raw, numeric) and not isinstance(a_raw, bool)
         b_numeric = isinstance(b_raw, numeric) and not isinstance(b_raw, bool)
         if not (a_numeric and b_numeric):
-            return None  # incompatible types → empty
+            return None  # incompatible primitives → empty
 
     # Compare the unwrapped values, not the original ResourceNode-wrapped
     # operands. ``util.get_data`` materializes raw JSON floats to ``Decimal``
@@ -218,11 +253,16 @@ def _quantities_equivalent(left, right):
     l_base = _quantity_base(left)
     r_base = _quantity_base(right)
     if l_base is None or r_base is None:
-        return None
+        # v0.0.24 it2 (HISTORIAN): quantities that can't be compared are NOT
+        # equivalent — official testEquivalent28 (`1 'x' ~ 1 year` // false)
+        # and testEquivalent29 (`1 year ~ 1 'kg'` // false). Supersedes the
+        # FP-13 SKEPTIC QA-003 empty-doctrine pin for `~` (equality `=`
+        # keeps empty for uncertainty cases).
+        return False
     l_value, l_unit = l_base
     r_value, r_unit = r_base
     if l_unit != r_unit:
-        return None
+        return False
 
     tolerance = max(
         _quantity_equivalence_half_width(left, l_value),

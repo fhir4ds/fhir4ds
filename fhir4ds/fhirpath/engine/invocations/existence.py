@@ -139,6 +139,10 @@ def has_value_fn(ctx, x):
     For FHIR primitives with extensions but no value (e.g., from _given array
     where the corresponding given element is null), hasValue() should return
     false since there is no actual value, only an extension.
+
+    v0.0.24 it2 (HISTORIAN, upstream corpus refresh): complex nodes (e.g. a
+    HumanName from name.first()) carry no primitive value — official pin
+    testHasCodingValue2 (`name.first().hasValue()` // false).
     """
     if len(x) != 1:
         return [False]
@@ -159,8 +163,10 @@ def has_value_fn(ctx, x):
         # When a primitive has only an extension (no actual value), the data
         # is a dict with 'extension' key but no 'value' key
         if isinstance(x[0].data, abc.Mapping):
-            # If it has extension but no value key, it's an extension-only primitive
-            if 'extension' in x[0].data and 'value' not in x[0].data:
+            # Complex nodes (mappings without a primitive 'value' payload,
+            # e.g. HumanName/Address/Coding) have no primitive value at all;
+            # primitives carrying their value in a wrapper dict keep true.
+            if 'value' not in x[0].data:
                 return [False]
 
     return [True]

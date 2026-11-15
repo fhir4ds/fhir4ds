@@ -599,8 +599,11 @@ def test_complex_equality_recurses_into_decimal_and_quantity_children(monkeypatc
         "rangeA !~ rangeB": False,
         "rangeA = rangeBad": None,
         "rangeA != rangeBad": None,
-        "rangeA ~ rangeBad": None,
-        "rangeA !~ rangeBad": None,
+        # v0.0.24 it2: quantities that can't be compared are NOT
+        # equivalent, including nested inside complex values (official
+        # testEquivalent28/29 rule) — supersedes the old empty pin.
+        "rangeA ~ rangeBad": False,
+        "rangeA !~ rangeBad": True,
         "nestedA ~ nestedB": True,
         "nestedA !~ nestedB": False,
     }

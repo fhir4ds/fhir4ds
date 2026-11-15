@@ -338,6 +338,11 @@ def join(ctx, coll, separator=""):
         else:
             raise TypeError("Join requires a collection of strings.")
 
+    if not stringValues:
+        # v0.0.24 it2 (HISTORIAN, upstream corpus refresh): join of an empty
+        # (or all-null) collection is EMPTY, not '' — official pin
+        # testJoinEmpty (`name.prefix.join(',')` on patient-example // {}).
+        return []
     return separator.join(stringValues)
 
 
