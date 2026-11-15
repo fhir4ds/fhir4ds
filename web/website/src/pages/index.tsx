@@ -297,7 +297,7 @@ function ComparisonSection() {
         </div>
         <p style={{color: '#94a3b8', fontSize: '0.85rem', marginTop: '1rem'}}>
           At-scale rows: Synthea 5,000-patient cohorts, DuckDB 2.0.0 (100–5,000-patient
-          ladder in the {' '}<a href="/docs/getting-started/benchmarking" style={{color: '#38bdf8'}}>benchmarking report</a>);
+          ladder in the {' '}<a href="/docs/getting-started/benchmarking/" style={{color: '#38bdf8'}}>benchmarking report</a>);
           the Java column is a per-patient linear extrapolation — its actual cost grows with
           data volume. Per-patient figures measured on DuckDB 2.0.0 against the cqframework
           2025 QI-Core test bundles (46 of 47 measures succeed in both engines) — small
