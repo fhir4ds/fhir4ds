@@ -111,3 +111,52 @@ class TestStoredListQuerySource(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestQuantityAliasElements(unittest.TestCase):
+    """v0.0.24 it9 (d3 EXPLORER): Quantity elements through query where.
+
+    `exists({1 'g', 2 'g'} X where X = 2 'g')` previously lowered the
+    element to TRY_CAST(quantity-JSON AS DOUBLE) -> NULL -> silently
+    false. The alias element now routes through unit-aware quantity
+    comparison (2000 'mg' = 2 'g' included).
+    """
+
+    def test_stored_quantity_equality(self):
+        value = _run_define_query(
+            """
+            library T using FHIR version '4.0.1'
+            define L: { 1 'g', 2 'g' }
+            define R: exists(L X where X = 2 'g')
+            """
+        )
+        self.assertIs(bool(value), True)
+
+    def test_inline_quantity_equality(self):
+        value = _run_define_query(
+            """
+            library T using FHIR version '4.0.1'
+            define R: exists({ 1 'g', 2 'g' } X where X = 2 'g')
+            """
+        )
+        self.assertIs(bool(value), True)
+
+    def test_quantity_unit_aware_equality(self):
+        value = _run_define_query(
+            """
+            library T using FHIR version '4.0.1'
+            define L: { 1 'g', 2000 'mg' }
+            define R: exists(L X where X = 2 'g')
+            """
+        )
+        self.assertIs(bool(value), True)
+
+    def test_scalar_and_string_unaffected(self):
+        value = _run_define_query(
+            """
+            library T using FHIR version '4.0.1'
+            define L: { 1, 2 }
+            define R: exists(L X where X = 2)
+            """
+        )
+        self.assertIs(bool(value), True)

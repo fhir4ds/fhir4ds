@@ -1935,6 +1935,12 @@ class OperatorsMixin:
             return True
         if isinstance(node, Quantity):
             return True
+        # v0.0.24 it9 (d3 EXPLORER): a query-alias ELEMENT over a
+        # Quantity-typed list source (`{1 'g', 2 'g'} X where X = 2 'g'`).
+        # Without this the element's quantity JSON hit numeric coercion
+        # (TRY_CAST(... AS DOUBLE) -> NULL -> silently false).
+        if isinstance(node, Identifier) and self._alias_element_is_quantity(node.name):
+            return True
         # Dynamic FHIR property paths typed Quantity via the FHIR schema
         # (e.g. MedicationRequest.dispenseRequest.quantity). Without this,
         # `Order.dispenseRequest.quantity * MedicationStrength` treated the
@@ -3891,6 +3897,23 @@ class OperatorsMixin:
             )
         # String contains: CQL 'left contains right' → contains(left, right)
         return SQLFunctionCall(name="system.contains", args=[left, right])
+
+    def _alias_element_is_quantity(self, alias_name: str) -> bool:
+        """True when *alias_name* iterates Quantity elements (source AST is
+        a list of Quantity literals, or a define chain resolving to one)."""
+        from ...parser.ast_nodes import Quantity as _QtyNode, ListExpression as _ListExpr, Identifier as _Ident
+        seen = 0
+        node = self.context._alias_source_asts.get(alias_name)
+        while node is not None and seen < 4:
+            seen += 1
+            if isinstance(node, _ListExpr):
+                elements = getattr(node, "elements", None) or []
+                return bool(elements) and all(isinstance(e, _QtyNode) for e in elements)
+            if isinstance(node, _Ident):
+                node = self._definition_source_ast(node.name, node)
+                continue
+            break
+        return False
 
     def _alias_element_is_interval(self, alias_name: str) -> bool:
         """True when *alias_name* is a query alias whose SOURCE AST is a list
