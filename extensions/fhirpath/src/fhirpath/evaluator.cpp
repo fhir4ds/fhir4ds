@@ -9789,7 +9789,30 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 			// Incompatible types
 			auto lt = effectiveType(lv);
 			auto rt = effectiveType(rv);
+			// v0.0.24 it2 (upstream corpus refresh): complex-vs-primitive
+			// equality is definitively FALSE — official testEquality29/30
+			// (`name.first() = 'Peter'` // false). Carve-out: a bare
+			// {"value": ...}-shaped payload vs a numeric stays UNCERTAIN
+			// (FP-12 milestone-4 pin: `{"value":120} = 120` // empty).
 			if (lt != rt) {
+				bool lv_complex =
+				    lv.type == FPValue::Type::JsonVal && lv.json_val && yyjson_is_obj(lv.json_val);
+				bool rv_complex =
+				    rv.type == FPValue::Type::JsonVal && rv.json_val && yyjson_is_obj(rv.json_val);
+				if (lv_complex != rv_complex) {
+					yyjson_val *obj = lv_complex ? lv.json_val : rv.json_val;
+					const FPValue &prim = lv_complex ? rv : lv;
+					yyjson_val *vfield = yyjson_obj_get(obj, "value");
+					bool numeric_prim = (prim.type == FPValue::Type::Integer ||
+					                    prim.type == FPValue::Type::Decimal ||
+					                    (prim.type == FPValue::Type::JsonVal && prim.json_val &&
+					                     yyjson_is_num(prim.json_val)));
+					if (!(vfield && numeric_prim)) {
+						// complex vs primitive: not equal (definitive)
+						if (op == "=" || op == "~") return {FPValue::FromBoolean(false)};
+						return {FPValue::FromBoolean(true)};
+					}
+				}
 				// FHIRPath §6.1: = between incompatible types returns empty
 				if (op == "=" || op == "!=") return {};
 				// Equivalence (~) between incompatible types returns false
