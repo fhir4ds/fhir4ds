@@ -62,19 +62,84 @@ def _translate_population_sql() -> str:
 
 
 class TestPromotionJoinRewrite(unittest.TestCase):
-    def test_gate_on_rewrites_promotion_lookups_as_left_join(self):
+    def test_gate_on_rewrites_bare_patient_id_consumer(self):
+        """The tuple-return consumer lowers to SELECT DISTINCT patient_id,
+        json_object(...). The join WRAPS the CTE in a projection-renaming
+        subquery (exposing only `value` + renamed keys), so the bare
+        patient_id projection stays unambiguous and the rewrite fires."""
         os.environ["FHIR4DS_CQL_PROMOTION_JOINS"] = "1"
         try:
             sql = _translate_population_sql()
         finally:
             os.environ.pop("FHIR4DS_CQL_PROMOTION_JOINS", None)
 
-        self.assertIn('LEFT JOIN "_fn_encStart_', sql)
-        # three call sites collapsed onto one deduplicated join alias
+        self.assertIn('LEFT JOIN (SELECT _fvjs0.patient_id AS _pj_pid', sql)
         self.assertIn("_fvj0.value", sql)
         self.assertNotIn("_fvj1", sql)
-        # the rewritten sites carry no correlated lookup subquery anymore
-        self.assertNotIn('(SELECT value FROM "_fn_', sql)
+        self.assertNotIn('(SELECT value FROM "_fn_encStart_', sql)
+
+    def test_gate_on_rewrites_lookup_in_qualified_projection(self):
+        """A consumer whose projection qualifies every column (the CMS2
+        WHERE/define shapes) must still rewrite to LEFT JOINs."""
+        from fhir4ds.cql.translator.types import (
+            CTEDefinition,
+            SQLAlias,
+            SQLBinaryOp,
+            SQLFragment,
+            SQLIdentifier,
+            SQLQualifiedIdentifier,
+            SQLSelect,
+            SQLSubquery,
+        )
+
+        lookup = SQLSubquery(
+            query=SQLSelect(
+                columns=[SQLIdentifier(name="value")],
+                from_clause=SQLAlias(
+                    expr=SQLIdentifier(name="_fn_g", quoted=True), alias="_fv"
+                ),
+                where=SQLBinaryOp(
+                    operator="AND",
+                    left=SQLBinaryOp(
+                        operator="=",
+                        left=SQLQualifiedIdentifier(parts=["_fv", "patient_id"]),
+                        right=SQLQualifiedIdentifier(parts=["E", "patient_id"]),
+                    ),
+                    right=SQLBinaryOp(
+                        operator="=",
+                        left=SQLQualifiedIdentifier(parts=["_fv", "_row_key"]),
+                        right=SQLQualifiedIdentifier(parts=["E", "resource"]),
+                    ),
+                ),
+            )
+        )
+        main = SQLSelect(
+            columns=[SQLQualifiedIdentifier(parts=["E", "patient_id"]), lookup],
+            from_clause=SQLAlias(
+                expr=SQLIdentifier(name="inner_tbl", quoted=True), alias="E"
+            ),
+        )
+        frag = SQLFragment(
+            main_query=main,
+            ctes=[
+                CTEDefinition(
+                    name='"_fn_g"',
+                    query=SQLSelect(columns=[SQLIdentifier(name="value")]),
+                )
+            ],
+        )
+        os.environ["FHIR4DS_CQL_PROMOTION_JOINS"] = "1"
+        try:
+            frag.rewrite_promotion_lookups_as_joins()
+        finally:
+            os.environ.pop("FHIR4DS_CQL_PROMOTION_JOINS", None)
+
+        sql = frag.to_sql()
+        self.assertIn('LEFT JOIN (SELECT _fvjs0.patient_id AS _pj_pid', sql)
+        self.assertIn('"_fn_g" AS _fvjs0', sql)
+        self.assertIn("_fvj0.value", sql)
+        self.assertNotIn("_fvj1", sql)
+        self.assertNotIn('(SELECT value FROM "_fn_g"', sql)
 
     def test_gate_off_keeps_correlated_subqueries(self):
         os.environ.pop("FHIR4DS_CQL_PROMOTION_JOINS", None)
@@ -170,7 +235,7 @@ class TestPromotionJoinRewriteScopes(unittest.TestCase):
         inner_sql = inner.to_sql()
         outer_sql = frag.main_query.to_sql()
         # inner scope got the join and the reference
-        self.assertIn('LEFT JOIN "_fn_g"', inner_sql)
+        self.assertIn('_fvj0.value', inner_sql)
         self.assertIn("_fvj0.value", inner_sql)
         self.assertNotIn('(SELECT value FROM "_fn_g"', inner_sql)
         # the outer select was NOT given a join for the shadowed lookup

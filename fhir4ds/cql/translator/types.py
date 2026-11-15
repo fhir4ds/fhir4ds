@@ -1717,9 +1717,10 @@ class SQLFragment:
             for cte in self.ctes:
                 _before += _count_promotion_lookups_generic(cte.query)
             _before += _count_promotion_lookups_generic(self.main_query)
+        _global_counter = [0]
         for cte in self.ctes:
-            _promotions_rewrite_select(cte.query)
-        _promotions_rewrite_select(self.main_query)
+            _promotions_rewrite_select(cte.query, _global_counter)
+        _promotions_rewrite_select(self.main_query, _global_counter)
         _PJ_DEBUG = False
         if _dbg:
             import sys
@@ -2918,7 +2919,7 @@ def _promotions_bound_aliases(select: "SQLSelect") -> set:
     return names
 
 
-def _promotions_match_lookup(node, available: set):
+def _promotions_match_lookup(node, available: set, from_alias=None):
     """Match the promotion-lookup scalar-subquery shape.
 
     Returns (cte_name, src_alias, row_key_expr, value_alias) or None.
@@ -2998,6 +2999,13 @@ def _promotions_match_lookup(node, available: set):
             )
         return None
     src_alias = pid_other.parts[0]
+    # Review hardening (LOW-MED): the rewritten join is PREPENDED at index 0,
+    # so its ON may only reference the FROM alias — a lookup correlating on a
+    # lateral-join alias would emit an ON referencing an alias bound by a
+    # LATER join (DuckDB binder error). Reject anything but the FROM alias
+    # when the caller threads it in.
+    if from_alias is not None and src_alias != from_alias:
+        return None
     # row-key expression must reference ONLY the source alias (no sibling
     # tables), so the join ON is evaluable from FROM+earlier joins alone
     refs = set()
@@ -3031,7 +3039,7 @@ def _promotions_match_lookup(node, available: set):
     return (cte.name, src_alias, key_other, value_alias)
 
 
-def _promotions_rewrite_select(select) -> None:
+def _promotions_rewrite_select(select, _global_counter=None) -> None:
     """Rewrite promotion lookups within one select's own scope, then recurse
     into child selects (nested subqueries are separate scopes UNLESS they do
     not shadow any of this scope's aliases)."""
@@ -3050,9 +3058,16 @@ def _promotions_rewrite_select(select) -> None:
         return
     if not isinstance(select, SQLSelect):
         return
+    # FIX (AMUX-126 review): ONE fragment-global alias counter — per-scope
+    # counters let a child-scope pass and an enclosing-scope pass mint the
+    # SAME _fvjN inside one subquery; DuckDB resolves the innermost binding,
+    # silently hijacking the outer join reference (CMS0334/CMS1028 false
+    # positives: the EGA timing window degenerated to trivially true).
+    if _global_counter is None:
+        _global_counter = [0]
     # Process nested selects first (bottom-up): each gets its own rewrite.
     for child in _promotions_child_selects(select):
-        _promotions_rewrite_select(child)
+        _promotions_rewrite_select(child, _global_counter)
 
     available = _promotions_bound_aliases(select)
     if not available:
@@ -3060,7 +3075,7 @@ def _promotions_rewrite_select(select) -> None:
     # collect matches across this select's own expressions (not descending
     # into non-shadowing child selects yet — handled below)
     joins_added: dict = {}
-    counter = [0]
+    counter = _global_counter
     select.columns = [
         _promotions_rewrite_expr(c, available, joins_added, counter, select)
         for c in (select.columns or [])
@@ -3122,7 +3137,10 @@ def _promotions_rewrite_expr(node, available, joins_added, counter, select):
     if _PJ_DEBUG:
         global _PJ_CALLS, _PJ_MATCHES
         _PJ_CALLS += 1
-    match = _promotions_match_lookup(node, available)
+    _fa = None
+    if isinstance(select.from_clause, SQLAlias) and select.from_clause.alias:
+        _fa = select.from_clause.alias
+    match = _promotions_match_lookup(node, available, from_alias=_fa)
     if _PJ_DEBUG and match is not None:
         _PJ_MATCHES += 1
     if match is not None:
@@ -3131,24 +3149,49 @@ def _promotions_rewrite_expr(node, available, joins_added, counter, select):
         jkey = (cte_name, src_alias, key_sql)
         if jkey not in joins_added:
             join_alias = f"_fvj{counter[0]}"
+            join_alias_src = f"_fvjs{counter[0]}"
             counter[0] += 1
             src_pid = SQLQualifiedIdentifier(parts=[src_alias, "patient_id"])
             on = SQLBinaryOp(
                 operator="AND",
                 left=SQLBinaryOp(
                     operator="=",
-                    left=SQLQualifiedIdentifier(parts=[join_alias, "patient_id"]),
+                    left=SQLQualifiedIdentifier(parts=[join_alias, "_pj_pid"]),
                     right=src_pid,
                 ),
                 right=SQLBinaryOp(
                     operator="=",
-                    left=SQLQualifiedIdentifier(parts=[join_alias, "_row_key"]),
+                    left=SQLQualifiedIdentifier(parts=[join_alias, "_pj_rk"]),
                     right=key_expr,
                 ),
             )
+            # Wrap the CTE in a projection-renaming subquery: the join then
+            # exposes ONLY `value` (plus the renamed key columns), so it can
+            # never make an unqualified `patient_id` / `_row_key` / `value`
+            # in the consumer's projection ambiguous (the CMS2 element-value
+            # shapes all project bare patient_id).
+            _wrapped = SQLSubquery(
+                query=SQLSelect(
+                    columns=[
+                        SQLAlias(
+                            expr=SQLQualifiedIdentifier(parts=[join_alias_src, "patient_id"]),
+                            alias="_pj_pid",
+                        ),
+                        SQLAlias(
+                            expr=SQLQualifiedIdentifier(parts=[join_alias_src, "_row_key"]),
+                            alias="_pj_rk",
+                        ),
+                        SQLQualifiedIdentifier(parts=[join_alias_src, "value"]),
+                    ],
+                    from_clause=SQLAlias(
+                        expr=SQLIdentifier(name=cte_name, quoted=True),
+                        alias=join_alias_src,
+                    ),
+                )
+            )
             join = SQLJoin(
                 join_type="LEFT",
-                table=SQLIdentifier(name=cte_name, quoted=True),
+                table=_wrapped,
                 alias=join_alias,
                 on_condition=on,
             )
@@ -3181,7 +3224,15 @@ def _promotions_rewrite_expr(node, available, joins_added, counter, select):
         # aliases (child-selects pass handles it); rewrite with THIS scope's
         # aliases only when it does not shadow them (lateral semantics).
         shadowed = _promotions_bound_aliases(node) & available
-        if not shadowed:
+        # FIX (AMUX-126 review): a child that binds any NON-INNER join cannot
+        # host references to THIS scope's LEFT JOIN aliases — DuckDB rejects
+        # correlated non-inner joins. Leave those lookups as subqueries.
+        _child_nij = any(
+            isinstance(j, SQLJoin) and str(getattr(j, "join_type", "") or "").upper()
+            not in ("INNER", "CROSS", "")
+            for j in (node.joins or [])
+        )
+        if not shadowed and not _child_nij:
             node.columns = [_rw(c) for c in (node.columns or [])]
             if node.where is not None:
                 node.where = _rw(node.where)
