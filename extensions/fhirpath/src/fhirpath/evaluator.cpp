@@ -11577,7 +11577,10 @@ static bool _pj_parse_decimal_text(std::string text, bool &negative,
 	// strip leading zeros (keep at least one digit)
 	size_t fnz = digits.find_first_not_of('0');
 	digits = fnz == std::string::npos ? "0" : digits.substr(fnz);
-	e10 = static_cast<int>(frac_part.size()) - exp;
+	// Decimal-as_tuple exponent: e-notation exponent minus mantissa
+	// fraction length ("9.5e2" -> 2-1 = +1; "-2.5e-3" -> -3-1 = -4;
+	// "12.500" -> 0-3 = -3).
+	e10 = exp - static_cast<int>(frac_part.size());
 	return !digits.empty() &&
 	       digits.find_first_not_of("0123456789") == std::string::npos;
 }
