@@ -9700,8 +9700,8 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 
 		// Date/time equality with precision
 		if (isDateTimeType(lv) && isDateTimeType(rv)) {
-			auto lt = effectiveType(lv);
-			auto rt = effectiveType(rv);
+			auto lt = temporalValueType(lv);
+			auto rt = temporalValueType(rv);
 			if (isDateVsDateTimePair(lt, rt)) {
 				if (op == "=" || op == "!=") return {};
 				is_eq = false;
