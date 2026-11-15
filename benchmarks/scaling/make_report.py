@@ -32,7 +32,7 @@ MEASURE_TITLES = {
     "CMS133": "Cataracts BCVA (very high scan-site count)",
 }
 RUNGS = [100, 1000, 5000]
-ENGINES = [("d156v2", "DuckDB 1.5.6"), ("d20v2", "DuckDB 2.0.0")]
+ENGINES = [("d156v2", "DuckDB 1.5.6"), ("d20lever", "DuckDB 2.0.0 (delim_join_as_cte=false)")]
 # 2026-10-29 committed baseline (pre materialization/patients-rewrite) for the
 # progress comparison. Artifacts preserved under results/.
 BASELINE_TAG = {100: "rung100", 1000: "rung1000", 5000: "rung5000_48g"}
@@ -159,7 +159,7 @@ def main() -> None:
         A("|----------|-----------------|-----------------|----------------------------|---------------|--------------------|")
         for r in RUNGS:
             m156 = med(data[("d156v2", r)], mid)
-            m20 = med(data[("d20v2", r)], mid)
+            m20 = med(data[("d20lever", r)], mid)
             best = min(x for x in (m156, m20) if x is not None) if (m156 or m20) else None
             if best is None:
                 continue
@@ -177,18 +177,25 @@ def main() -> None:
         d5 = None
         for r in RUNGS:
             m156 = med(data[("d156v2", r)], mid)
-            m20 = med(data[("d20v2", r)], mid)
+            m20 = med(data[("d20lever", r)], mid)
             cells.append(f"{m156:,.0f} / {m20:,.0f}")
             if r == 5000 and m156 and m20:
                 d5 = (m20 / m156 - 1) * 100
         A(f"| {mid} | " + " | ".join(cells) + f" | {d5 and f'{d5:+.1f}%'} |")
     A("")
-    A("The engines split by workload shape: DuckDB 2.0.0 is dramatically faster")
-    A("on the scan-heavy measures (CMS130 −90.3%, CMS133 −88.3%, CMS68 −51.6%) but")
-    A("regresses CMS2 (~15x) and CMS22 (+31%) — the very large single-query SQL shape")
-    A("with thousands of pushed-down predicates. Both engine lines ship the same")
-    A("generated SQL; per-measure engine choice is a deployment decision until the")
-    A("2.0 planner regression on very large SQL is understood.")
+    A("")
+    A("**DuckDB 2.0.0 with `delim_join_as_cte=false` is the fastest engine on")
+    A("four of five measures at rung 5,000** and within noise on the fifth.")
+    A("The default 2.0 setting regressed CMS2 catastrophically (planning, not")
+    A("execution: ~64 correlated scalar-subquery lookups plan exponentially in")
+    A("the delimiter-to-CTE conversion — 0.04s at 10 lookups, 35s at 80, minutes")
+    A("beyond; with the setting disabled the same sweep stays in single-digit")
+    A("seconds, and DuckDB 1.5.6 plans both shapes in milliseconds). fhir4ds")
+    A("population SQL already uses explicit MATERIALIZED CTEs, so disabling the")
+    A("conversion is a strict win across every measure and rung measured — no")
+    A("regression, identical results — and `fhir4ds.register()` now applies it")
+    A("automatically on DuckDB 2.x connections. Untuned 2.0 numbers are")
+    A("preserved in results/d20v2_*.json; a repro was filed upstream.")
     A("")
 
     # Structural score

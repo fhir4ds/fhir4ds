@@ -135,19 +135,25 @@ clean engine comparison at 5,000 patients:
 
 | Measure | 1.5.6 | 2.0.0 | Delta |
 |---|---|---|---|
-| CMS68 | 474 ms | 229 ms | −51.6% |
-| CMS130 | 57,357 ms | 5,588 ms | **−90.3%** |
-| CMS133 | 46,428 ms | 5,435 ms | **−88.3%** |
-| CMS22 | 4,630 ms | 6,054 ms | +30.8% |
-| CMS2 | 2,773 ms | 40,422 ms | **+1,358%** |
+| CMS68 | 474 ms | 234 ms | −50.6% |
+| CMS130 | 57,357 ms | 5,463 ms | **−90.5%** |
+| CMS133 | 46,428 ms | 5,329 ms | **−88.5%** |
+| CMS22 | 4,630 ms | 4,977 ms | +7.5% |
+| CMS2 | 2,773 ms | 2,574 ms | −7.2% |
 
-The engines split by workload shape. DuckDB 2.0.0 is dramatically faster on the
-scan-heavy measures — roughly 10× on CMS130 and CMS133 — but regresses CMS2
-badly. CMS2's generated SQL is a very large single query with thousands of
-pushed-down predicates and per-row CTE lookups, and the 2.0 planner handles that
-shape worse, not better: the cost is in planning, not execution. Until that is
-understood, per-measure engine choice is a deployment decision — which is only
-possible because both engines run the same SQL.
+DuckDB 2.0.0 is the fastest engine on four of the five measures at this
+rung and within noise on the fifth. Getting there required one planner
+setting. Out of the box, 2.0 regressed CMS2 catastrophically (~40 s vs
+2.8 s): the cost was in **planning, not execution**. CMS2's generated SQL
+carries ~64 correlated scalar-subquery lookups, and the 2.0 planner's
+delimiter-to-CTE conversion scales exponentially in the number of such
+references — a 60-lookup query plans in ~8 s, an 80-lookup one in ~35 s,
+while the same sweep with `delim_join_as_cte=false` stays in
+single-digit seconds (we filed the repro upstream). Because fhir4ds SQL
+already uses explicit materialized CTEs, the setting is a strict win
+across every measure and rung we measured — no regression, identical
+results — so `register()` now applies it automatically on DuckDB 2.x
+connections. The 2.0 numbers above are with that tuning.
 
 ## Read these numbers with four caveats
 

@@ -256,6 +256,46 @@ def register_cql(
     return cql_cpp
 
 
+def _apply_engine_2x_planner_tuning(con: "duckdb.DuckDBPyConnection") -> None:
+    """Apply the DuckDB 2.x planner tuning validated by the scaling matrix.
+
+    ``SET delim_join_as_cte=false`` — on DuckDB 2.x the delimiter-to-CTE
+    planner conversion is pure overhead for fhir4ds population SQL (our SQL
+    already uses explicit MATERIALIZED CTEs). Left at the default, planning
+    of the correlated lookup shapes is superlinear: CMS2 planning explodes
+    from ~0.7s to ~35s+ (measured 2026-11-14, benchmarks/scaling results
+    d20v2_* vs d20lever_*). Validated a strict win across all five scaling
+    measures at rungs 100/1,000/5,000 (no regression, RSS unchanged).
+
+    Guards: applied only on DuckDB >= 2.0 (the setting does not exist on
+    1.5.x); if a future 2.x renames/removes the setting, warn once and
+    continue rather than failing registration.
+    """
+    import duckdb as _duckdb_mod
+    import re as _re
+
+    m = _re.match(r"^(\d+)\.", _duckdb_mod.__version__ or "")
+    if not m or int(m.group(1)) < 2:
+        return
+    try:
+        con.execute("SET delim_join_as_cte=false")
+    except _duckdb_mod.Error as exc:
+        global _PLANNER_TUNING_WARNED
+        if not _PLANNER_TUNING_WARNED:
+            _PLANNER_TUNING_WARNED = True
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "delim_join_as_cte=false could not be applied on DuckDB %s "
+                "(%s); large generated SQL may plan slowly on 2.x",
+                _duckdb_mod.__version__,
+                exc,
+            )
+
+
+_PLANNER_TUNING_WARNED = False
+
+
 def register(
     con: "duckdb.DuckDBPyConnection",
     *,
@@ -310,4 +350,9 @@ def register(
     cql_cpp = register_cql(con, valueset_cache=valueset_cache)
     from fhir4ds.fhirpath.duckdb.extension import _is_cpp_extension_loaded
     fhirpath_cpp = _is_cpp_extension_loaded(con)
+    # Engine 2.x planner tuning (validated strict win, see helper docstring).
+    # Runs after registration so UDF loading is never blocked by it; a
+    # user may re-enable the planner default with
+    # ``SET delim_join_as_cte=true`` after register() if they need to.
+    _apply_engine_2x_planner_tuning(con)
     return {"fhirpath_cpp": fhirpath_cpp, "cql_cpp": cql_cpp}

@@ -40,9 +40,9 @@ compile diagnostics and are **never** included in speedup or ms/patient figures.
 | DuckDB 1.5.6 | 100 | 100 | 115,509 | 13 | 1,724 | 32GB |
 | DuckDB 1.5.6 | 1000 | 1,000 | 1,223,154 | 143 | 5,370 | 32GB |
 | DuckDB 1.5.6 | 5000 | 5,000 | 6,275,114 | 744 | 18,617 | 48GB |
-| DuckDB 2.0.0 | 100 | 100 | 115,509 | 14 | 1,841 | 32GB |
-| DuckDB 2.0.0 | 1000 | 1,000 | 1,223,154 | 143 | 7,847 | 32GB |
-| DuckDB 2.0.0 | 5000 | 5,000 | 6,275,114 | 759 | 19,851 | 48GB |
+| DuckDB 2.0.0 (delim_join_as_cte=false) | 100 | 100 | 115,509 | 11 | 1,819 | 32GB |
+| DuckDB 2.0.0 (delim_join_as_cte=false) | 1000 | 1,000 | 1,223,154 | 128 | 7,724 | 32GB |
+| DuckDB 2.0.0 (delim_join_as_cte=false) | 5000 | 5,000 | 6,275,114 | 626 | 20,092 | 48GB |
 
 ## Progress vs the 2026-10-29 baseline (DuckDB 1.5.6 line)
 
@@ -70,58 +70,65 @@ Peak RSS at rung 5,000: 43,910 MB → 18,617 MB.
 
 | Patients | 1.5.6 exec (ms) | 2.0.0 exec (ms) | fhir4ds ms/patient (best) | CR ms/patient | Speedup (CR / best) |
 |----------|-----------------|-----------------|----------------------------|---------------|--------------------|
-| 100 | 70 | 40 | 0.40 | 719.10 | 1,784x |
-| 1,000 | 117 | 79 | 0.08 | 719.10 | 9,126x |
-| 5,000 | 474 | 229 | 0.05 | 719.10 | 15,680x |
+| 100 | 70 | 40 | 0.40 | 719.10 | 1,798x |
+| 1,000 | 117 | 78 | 0.08 | 719.10 | 9,279x |
+| 5,000 | 474 | 234 | 0.05 | 719.10 | 15,379x |
 
 ### CMS22 — PCP BP Screening & Follow-Up (medium complexity)
 
 | Patients | 1.5.6 exec (ms) | 2.0.0 exec (ms) | fhir4ds ms/patient (best) | CR ms/patient | Speedup (CR / best) |
 |----------|-----------------|-----------------|----------------------------|---------------|--------------------|
-| 100 | 407 | 1,262 | 4.07 | 23.64 | 6x |
-| 1,000 | 1,206 | 2,436 | 1.21 | 23.64 | 20x |
-| 5,000 | 4,630 | 6,054 | 0.93 | 23.64 | 26x |
+| 100 | 407 | 942 | 4.07 | 23.64 | 6x |
+| 1,000 | 1,206 | 1,980 | 1.21 | 23.64 | 20x |
+| 5,000 | 4,630 | 4,977 | 0.93 | 23.64 | 26x |
 
 ### CMS2 — Depression Screening and Follow-Up (high SQL complexity)
 
 | Patients | 1.5.6 exec (ms) | 2.0.0 exec (ms) | fhir4ds ms/patient (best) | CR ms/patient | Speedup (CR / best) |
 |----------|-----------------|-----------------|----------------------------|---------------|--------------------|
-| 100 | 460 | 35,895 | 4.60 | 118.77 | 26x |
-| 1,000 | 734 | 35,379 | 0.73 | 118.77 | 162x |
-| 5,000 | 2,773 | 40,422 | 0.55 | 118.77 | 214x |
+| 100 | 460 | 871 | 4.60 | 118.77 | 26x |
+| 1,000 | 734 | 1,218 | 0.73 | 118.77 | 162x |
+| 5,000 | 2,773 | 2,574 | 0.51 | 118.77 | 231x |
 
 ### CMS130 — Colorectal Cancer Screening (high scan-amplification)
 
 | Patients | 1.5.6 exec (ms) | 2.0.0 exec (ms) | fhir4ds ms/patient (best) | CR ms/patient | Speedup (CR / best) |
 |----------|-----------------|-----------------|----------------------------|---------------|--------------------|
-| 100 | 2,219 | 832 | 8.32 | 652.07 | 78x |
-| 1,000 | 12,733 | 1,559 | 1.56 | 652.07 | 418x |
-| 5,000 | 57,357 | 5,588 | 1.12 | 652.07 | 583x |
+| 100 | 2,219 | 722 | 7.22 | 652.07 | 90x |
+| 1,000 | 12,733 | 1,564 | 1.56 | 652.07 | 417x |
+| 5,000 | 57,357 | 5,463 | 1.09 | 652.07 | 597x |
 
 ### CMS133 — Cataracts BCVA (very high scan-site count)
 
 | Patients | 1.5.6 exec (ms) | 2.0.0 exec (ms) | fhir4ds ms/patient (best) | CR ms/patient | Speedup (CR / best) |
 |----------|-----------------|-----------------|----------------------------|---------------|--------------------|
-| 100 | 2,924 | 520 | 5.20 | 24.38 | 5x |
-| 1,000 | 10,421 | 1,118 | 1.12 | 24.38 | 22x |
-| 5,000 | 46,428 | 5,435 | 1.09 | 24.38 | 22x |
+| 100 | 2,924 | 560 | 5.60 | 24.38 | 4x |
+| 1,000 | 10,421 | 1,152 | 1.15 | 24.38 | 21x |
+| 5,000 | 46,428 | 5,329 | 1.07 | 24.38 | 23x |
 
 ## Engine comparison: DuckDB 1.5.6 vs 2.0.0 (median exec ms)
 
 | Measure | 100: 1.5.6 / 2.0 | 1,000: 1.5.6 / 2.0 | 5,000: 1.5.6 / 2.0 | 5k delta |
 |---------|-------------------|----------------------|----------------------|-----------|
-| CMS68 | 70 / 40 | 117 / 79 | 474 / 229 | -51.6% |
-| CMS22 | 407 / 1,262 | 1,206 / 2,436 | 4,630 / 6,054 | +30.8% |
-| CMS2 | 460 / 35,895 | 734 / 35,379 | 2,773 / 40,422 | +1357.8% |
-| CMS130 | 2,219 / 832 | 12,733 / 1,559 | 57,357 / 5,588 | -90.3% |
-| CMS133 | 2,924 / 520 | 10,421 / 1,118 | 46,428 / 5,435 | -88.3% |
+| CMS68 | 70 / 40 | 117 / 78 | 474 / 234 | -50.7% |
+| CMS22 | 407 / 942 | 1,206 / 1,980 | 4,630 / 4,977 | +7.5% |
+| CMS2 | 460 / 871 | 734 / 1,218 | 2,773 / 2,574 | -7.2% |
+| CMS130 | 2,219 / 722 | 12,733 / 1,564 | 57,357 / 5,463 | -90.5% |
+| CMS133 | 2,924 / 560 | 10,421 / 1,152 | 46,428 / 5,329 | -88.5% |
 
-The engines split by workload shape: DuckDB 2.0.0 is dramatically faster
-on the scan-heavy measures (CMS130 −90.3%, CMS133 −88.3%, CMS68 −51.6%) but
-regresses CMS2 (~15x) and CMS22 (+31%) — the very large single-query SQL shape
-with thousands of pushed-down predicates. Both engine lines ship the same
-generated SQL; per-measure engine choice is a deployment decision until the
-2.0 planner regression on very large SQL is understood.
+
+**DuckDB 2.0.0 with `delim_join_as_cte=false` is the fastest engine on
+four of five measures at rung 5,000** and within noise on the fifth.
+The default 2.0 setting regressed CMS2 catastrophically (planning, not
+execution: ~64 correlated scalar-subquery lookups plan exponentially in
+the delimiter-to-CTE conversion — 0.04s at 10 lookups, 35s at 80, minutes
+beyond; with the setting disabled the same sweep stays in single-digit
+seconds, and DuckDB 1.5.6 plans both shapes in milliseconds). fhir4ds
+population SQL already uses explicit MATERIALIZED CTEs, so disabling the
+conversion is a strict win across every measure and rung measured — no
+regression, identical results — and `fhir4ds.register()` now applies it
+automatically on DuckDB 2.x connections. Untuned 2.0 numbers are
+preserved in results/d20v2_*.json; a repro was filed upstream.
 
 ## Structural cost score
 
@@ -163,15 +170,15 @@ the static score cannot see).
 | CMS130 | 9 | 56,463,738 | 99.7% | 0.3% | 0.0% |
 | CMS133 | 4 | 25,094,312 | 5.4% | 94.6% | 0.0% |
 
-### DuckDB 2.0.0
+### DuckDB 2.0.0 (delim_join_as_cte=false)
 
 | Measure | scan sites | rows scanned | expr eval | resource scans | distinct/agg |
 |---------|------------|--------------|-----------|----------------|--------------|
-| CMS68 | 3 | 0 | 57.5% | 16.7% | 8.1% |
-| CMS22 | 8 | 0 | 52.2% | 8.3% | 2.6% |
-| CMS2 | 9 | 0 | 68.3% | 10.7% | 3.1% |
-| CMS130 | 9 | 0 | 90.7% | 3.9% | 0.5% |
-| CMS133 | 4 | 0 | 99.1% | 0.9% | 0.0% |
+| CMS68 | 3 | 0 | 55.0% | 17.2% | 8.3% |
+| CMS22 | 8 | 0 | 51.1% | 9.4% | 1.5% |
+| CMS2 | 9 | 0 | 77.2% | 10.8% | 0.9% |
+| CMS130 | 9 | 0 | 90.5% | 4.2% | 0.3% |
+| CMS133 | 4 | 0 | 98.9% | 1.0% | 0.0% |
 
 With parallel execution, per-operator timings are summed across worker
 threads — the shares above are relative cost distribution, not wall-clock.

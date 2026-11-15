@@ -144,6 +144,16 @@ def main() -> None:
         action="store_true",
         help="after timed reps, capture EXPLAIN ANALYZE + JSON profile per measure",
     )
+    ap.add_argument(
+        "--set",
+        action="append",
+        default=[],
+        metavar="NAME=VALUE",
+        help="extra DuckDB SET applied after the standard setup (repeatable; "
+        "e.g. --set delim_join_as_cte=false). Applied only if the setting "
+        "exists on this engine version (a Catalog 'unknown setting' error "
+        "is reported and skipped so the same command works on any version).",
+    )
     args = ap.parse_args()
 
     data_root = Path(args.data_root)
@@ -173,6 +183,23 @@ def main() -> None:
     )
     os.makedirs(tmp_dir, exist_ok=True)
     db.conn.execute(f"SET temp_directory='{tmp_dir}'")
+    # Extra engine settings (e.g. --set delim_join_as_cte=false for the
+    # DuckDB 2.0 planner validation). Unknown settings on this engine
+    # version are reported and skipped so cross-version commands work.
+    for setting in args.set:
+        if "=" not in setting:
+            print(f"WARNING: ignoring malformed --set {setting!r} (expected NAME=VALUE)", flush=True)
+            continue
+        name, value = setting.split("=", 1)
+        try:
+            db.conn.execute(f"SET {name}={value}")
+            print(f"extra setting applied: {name}={value}", flush=True)
+        except Exception as exc:
+            print(
+                f"WARNING: setting {name}={value} not applicable on this "
+                f"engine version ({exc}); skipped",
+                flush=True,
+            )
     print(f"setup ok; measures={measure_ids}", flush=True)
 
     # Valuesets for the selected measures
