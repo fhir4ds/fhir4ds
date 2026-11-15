@@ -20,7 +20,7 @@ interactive lessons that run in your browser — then experiment freely in the
 The `cql` module is the "brain" of the FHIR4DS toolkit. It handles the complexity of healthcare logic—such as time-interval math and terminology resolution—by translating it directly into optimized DuckDB SQL.
 
 -   **Accuracy**: 100% compliance with the CQL grammar and parsing specification (1,706 tests).
--   **Speed**: Leveraging columnar execution provides a **~131× median execution speedup** over traditional sequential engines on shared successful benchmark measures (2025 QI-Core suite).
+-   **Speed**: Leveraging columnar execution provides a **~83× median execution speedup** over traditional sequential engines on shared successful benchmark measures (2025 QI-Core suite, DuckDB 2.0.0).
 -   **Transparency**: The resulting SQL is fully inspectable, allowing for auditability and debugging.
 
 ---

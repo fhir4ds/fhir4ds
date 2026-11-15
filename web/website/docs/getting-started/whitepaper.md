@@ -14,8 +14,8 @@ FHIR4DS represents a paradigm shift in clinical quality measurement and populati
 
 | Metric | FHIR4DS Capability |
 |--------|-----------------|
-| **Execution Speed** | **~4.5ms median** per patient across the 2025 QI-Core benchmark suite (mean ~12ms — a small heavy tail of complex measures inflates it; the median is the representative figure) |
-| **Throughput Advantage** | **~131× faster (median)** than the Java Clinical Reasoning engine on shared successful measures |
+| **Execution Speed** | **~6.9ms median** per patient on DuckDB 2.0.0 across the 2025 QI-Core benchmark suite (mean ~15ms — a small heavy tail of complex measures inflates it; the median is the representative figure) |
+| **Throughput Advantage** | **~83× faster (median)** than the Java Clinical Reasoning engine on shared successful measures (DuckDB 2.0.0; DuckDB 1.5.6 footnote: ~4.5ms median, ~131×) |
 | **Standards Compliance** | **100%** across CQL (1,706), FHIRPath (935), SQL-on-FHIR v2 (144), and DQM (47 QI-Core + 73 US-Core) |
 | **Auditability** | Full per-expression evidence narratives |
 | **Infrastructure** | **Zero-server** — runs in notebooks or browser (WASM) |
@@ -40,18 +40,20 @@ FHIR4DS introduces **SQL-Native Execution**. Instead of looping through patients
 ### Speed Benchmarks
 In head-to-head benchmarks against the industry-standard [Java Clinical Reasoning](https://github.com/cqframework/clinical-reasoning) engine, measured on the **cqframework 2025 QI-Core test bundles** (46 of 47 measures succeed in both engines), FHIR4DS demonstrated a transformative performance gap:
 
-| Metric | Traditional Engine (Java) | FHIR4DS (SQL Native) | Speedup |
-|--------|---------------------------|----------------------|---------|
-| **Median Execution/Patient** | ~575ms | **~4.4ms** | **~131×** |
+| Metric | Traditional Engine (Java) | FHIR4DS (DuckDB 2.0.0) | Speedup |
+|--------|---------------------------|-------------------------|---------|
+| **Median Execution/Patient** | ~575ms | **~6.9ms** | **~83×** |
+
+On DuckDB 1.5.6 the same cohorts measure ~4.4ms median (~131×) — on the tiny per-patient test cohorts (tens to low hundreds of patients), 2.0's per-query overhead makes it slightly slower than 1.5.6; at population scale 2.0 wins decisively (see the benchmarking report's scaling ladder).
 
 ### Linear vs. Near-Zero Marginal Scalability
-Because FHIR4DS uses a set-based architecture, the cost of adding a patient to a query is near-zero compared to the linear overhead of row-by-row engines. At production scales (10,000+ patients), the advantage compounds, enabling real-time analytics that were previously only possible via overnight batch processing. On **Synthea synthetic patients** (distinct from the cqframework 2025 QI-Core test bundles used for the head-to-head above), CMS68 evaluates at **0.09ms per patient at 5,000 patients** — population-level amortization in action.
+Because FHIR4DS uses a set-based architecture, the cost of adding a patient to a query is near-zero compared to the linear overhead of row-by-row engines. At production scales (10,000+ patients), the advantage compounds, enabling real-time analytics that were previously only possible via overnight batch processing. On **Synthea synthetic patients** (distinct from the cqframework 2025 QI-Core test bundles used for the head-to-head above), CMS68 evaluates at **0.045ms per patient at 5,000 patients** on DuckDB 2.0.0 — population-level amortization in action.
 
 ### Timing Explained: Pre-Compilation vs. Execution
 FHIR4DS separates the analytical lifecycle into three distinct phases:
-1.  **CQL Parse**: Resolves syntax and creates an ELM-compatible AST (~19ms average in the benchmark suite).
-2.  **SQL Translation**: Compiles the AST into optimized DuckDB SQL (~457ms average in the benchmark suite).
-3.  **SQL Execution**: The relevant production metric (~4.5ms median per patient across all 47 measures).
+1.  **CQL Parse**: Resolves syntax and creates an ELM-compatible AST (~15ms average in the benchmark suite).
+2.  **SQL Translation**: Compiles the AST into optimized DuckDB SQL (~476ms average in the benchmark suite).
+3.  **SQL Execution**: The relevant production metric (~6.9ms median per patient across all 47 measures on DuckDB 2.0.0).
 
 Phase 1 and 2 are **pre-compilation steps** that happen once per library version and are cached. Phase 3 is the only recurring cost during production runs.
 

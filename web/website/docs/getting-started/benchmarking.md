@@ -40,11 +40,13 @@ By leveraging a SQL-native, vectorized architecture, FHIR4DS provides a transfor
 
 We compared FHIR4DS against the industry-standard [Java Clinical Reasoning](https://github.com/cqframework/clinical-reasoning) engine on the **cqframework 2025 QI-Core test bundles**. 46 of 47 measures succeed in both engines; the head-to-head below covers that shared set of 46 measures (per-patient execution time only).
 
-| Metric | Traditional Engine (Java) | FHIR4DS (SQL Native) | Speedup |
-|--------|---------------------------|----------------------|---------|
-| **Median Execution/Patient** | ~575ms | **~4.4ms** | **~131×** |
+| Metric | Traditional Engine (Java) | FHIR4DS (DuckDB 2.0.0) | Speedup |
+|--------|---------------------------|-------------------------|---------|
+| **Median Execution/Patient** | ~575ms | **~6.9ms** | **~83×** |
 
-Across all 47 measures of the 2025 QI-Core suite, FHIR4DS executes at a median of ~4.5ms per patient. We report the median rather than the mean because a small heavy tail inflates the mean (~12ms) — the three most expensive measures (CMS0334, CMS128, CMS117) run 28–118ms/patient on these small test cohorts while half of all measures run under 4.5ms. Compile phases are one-time costs at deploy (not included in the per-patient figures): ~19ms parse and ~457ms SQL translation per library.
+Across all 47 measures of the 2025 QI-Core suite, FHIR4DS executes at a median of ~6.9ms per patient on DuckDB 2.0.0 (the recommended engine; `fhir4ds.register()` automatically applies the validated `delim_join_as_cte=false` planner tuning on DuckDB 2.x). We report the median rather than the mean because a small heavy tail inflates the mean (~15ms) — the three most expensive measures (CMS117 ~92ms, CMS128 ~89ms, CMS0334 ~70ms per patient) run well above the typical measure on these small test cohorts. Compile phases are one-time diagnostics at deploy (not included in the per-patient figures): ~15ms parse and ~476ms SQL translation per library.
+
+> **DuckDB 1.5.6 footnote:** on the same per-patient test cohorts (tens to low hundreds of patients), DuckDB 1.5.6 measured a median of ~4.5ms (mean ~11.9ms), i.e. ~131× median / ~39× mean vs Java. On these tiny cohorts, DuckDB 2.0's per-query overhead makes it slightly slower than 1.5.6; the tables turn decisively at population scale (see the scaling ladder below, where 2.0 is ~10× faster on CMS130/CMS133 at 5,000 patients).
 
 ### Scalability
 
@@ -54,17 +56,19 @@ Java baseline numbers at scale are a per-patient linear extrapolation from the h
 
 ### Scaling Ladder (Synthea synthetic patients)
 
-Measured on **Synthea synthetic patients** (distinct from the cqframework 2025 QI-Core test bundles used for the head-to-head above), with nested deterministic prefixes, measurement period 2026, in-memory DuckDB 1.5.6, median of 3 runs. The top rung covers 6.28M resources.
+Measured on **Synthea synthetic patients** (distinct from the cqframework 2025 QI-Core test bundles used for the head-to-head above), with nested deterministic prefixes, measurement period 2026, in-memory **DuckDB 2.0.0** with the automatic planner tuning, median of 3 runs. The top rung covers 6.28M resources.
 
 | Measure | 100 patients | 1,000 patients | 5,000 patients |
 |---------|-------------|----------------|----------------|
-| **CMS68** | 70ms | 117ms | 474ms |
-| **CMS22** | 407ms | 1,206ms | 4,630ms |
-| **CMS2** | 460ms | 734ms | 2,773ms |
-| **CMS130** | 2,219ms | 12,733ms | 57,357ms |
-| **CMS133** | 2,924ms | 10,421ms | 46,428ms |
+| **CMS68** | 45ms | 88ms | 225ms |
+| **CMS22** | 948ms | 1,863ms | 5,074ms |
+| **CMS2** | 1,118ms | 1,377ms | 2,706ms |
+| **CMS130** | 816ms | 1,654ms | 5,576ms |
+| **CMS133** | 606ms | 1,287ms | 5,166ms |
 
-Peak RSS at 5,000 patients: 18.6 GB. CMS68 at 5,000 patients runs at **0.09ms per patient** — evidence of population-level amortization: a single scan's fixed cost is spread across the whole cohort.
+Peak RSS at 5,000 patients: ~20 GB. CMS68 at 5,000 patients runs at **0.045ms per patient** — evidence of population-level amortization: a single scan's fixed cost is spread across the whole cohort.
+
+> **DuckDB 1.5.6 footnote (@5,000 patients):** CMS68 474ms, CMS22 4,630ms, CMS2 2,773ms, CMS130 57,357ms, CMS133 46,428ms. DuckDB 2.0.0 is roughly **10× faster on CMS130 and CMS133** at this rung — the planner improvements in 2.0 compound with population scale.
 
 ---
 
