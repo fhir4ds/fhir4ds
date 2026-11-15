@@ -88,22 +88,20 @@ def test_temporal_literal_string_concat_empty_iter3(cpp, pyfb):
         assert _fhirpath(cpp, RESOURCE, expr) == _fhirpath(pyfb, RESOURCE, expr) == []
 
 
-def test_cross_kind_json_equality_is_empty_iter3(cpp, pyfb):
-    # obj-vs-scalar and arr-vs-scalar `=`/`!=` are incompatible-type pairs ->
-    # empty per the FP-03 QA-001 doctrine, not definitive booleans.
-    for expr in [
-        "extension = extension.valueString",
-        "extension != extension.valueString",
-        "extension.valueString = extension",
-        "arrField.strList = 'a'",  # control: multi-item vs literal is FALSE, not empty
+def test_cross_kind_json_equality_is_false_iter3(cpp, pyfb):
+    # v0.0.24 it2 (upstream corpus refresh): complex-vs-primitive is
+    # definitively FALSE — official testEquality29/30. Supersedes the
+    # iter3/FP-03 empty pin for obj-vs-scalar pairs.
+    for expr, expected in [
+        ("extension = extension.valueString", ["false"]),
+        ("extension != extension.valueString", ["true"]),
+        ("extension.valueString = extension", ["false"]),
+        ("arrField.strList = 'a'", ["false"]),  # multi-item control
     ]:
         cpp_res = _fhirpath(cpp, RESOURCE, expr)
         py_res = _fhirpath(pyfb, RESOURCE, expr)
         assert cpp_res == py_res
-        if expr == "arrField.strList = 'a'":
-            assert cpp_res == ["false"]
-        else:
-            assert cpp_res == []
+        assert cpp_res == expected
 
 
 def test_same_kind_json_equality_definitive_iter3(cpp, pyfb):

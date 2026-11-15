@@ -578,7 +578,9 @@ def test_escaped_backslash_argument_literals_lex_correctly_fp10_explorer(
         ("p.replaceMatches('\\\\d', '#')", ["C:\\x\\y"]),
         # Tolerated raw-backslash corners must be unchanged
         (r"'abc\'", ["abc"]),
-        (r"'short \u005'", ["short u005"]),
+        # v0.0.24 it2: \u MUST carry 4 hex digits — official pin
+        # testLiteralUnicodeInvalid; both engines now reject (empty).
+        (r"'short \u005'", []),
         ("'a\\nb'.length()", ["3"]),
     ]
 

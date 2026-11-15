@@ -1950,7 +1950,31 @@ static int jsonValuesEqualState(yyjson_val *left, yyjson_val *right) {
 		if (yyjson_is_obj(v) || yyjson_is_arr(v)) return 2; // structural
 		return 1;                                            // scalar
 	};
-	if (jsonKindClass(left) != jsonKindClass(right)) return -1;
+	if (jsonKindClass(left) != jsonKindClass(right)) {
+		// v0.0.24 it2 (upstream corpus refresh): complex-vs-primitive is
+		// definitively NOT equal (testEquality29/30). The unitless
+		// quantity payload vs number carve-out above already returned -1.
+		return 0;
+	}
+	// v0.0.24 it2: a quantity-carrying object vs a unitless value object
+	// is UNCERTAIN (official testQuantityUnitVsNoUnitEqual // empty) —
+	// do not fall into the deep obj compare that would say false.
+	{
+		auto objHasQuantityMarker = [](yyjson_val *v) -> bool {
+			return v && yyjson_is_obj(v) &&
+			       (yyjson_obj_get(v, "unit") != nullptr || yyjson_obj_get(v, "code") != nullptr);
+		};
+		if (yyjson_is_obj(left) && yyjson_is_obj(right) &&
+		    objHasQuantityMarker(left) != objHasQuantityMarker(right) &&
+		    jsonValueIsUnitlessQuantityShape(left) != jsonValueIsUnitlessQuantityShape(right)) {
+			return -1;
+		}
+		if (yyjson_is_obj(left) && yyjson_is_obj(right) &&
+		    objHasQuantityMarker(left) != objHasQuantityMarker(right) &&
+		    (jsonValueIsUnitlessQuantityShape(left) || jsonValueIsUnitlessQuantityShape(right))) {
+			return -1;
+		}
+	}
 	if (yyjson_is_bool(left) || yyjson_is_bool(right)) {
 		return (yyjson_is_bool(left) && yyjson_is_bool(right) &&
 		        yyjson_get_bool(left) == yyjson_get_bool(right)) ? 1 : 0;
@@ -9805,6 +9829,7 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 					yyjson_val *vfield = yyjson_obj_get(obj, "value");
 					bool numeric_prim = (prim.type == FPValue::Type::Integer ||
 					                    prim.type == FPValue::Type::Decimal ||
+					                    prim.type == FPValue::Type::Quantity ||
 					                    (prim.type == FPValue::Type::JsonVal && prim.json_val &&
 					                     yyjson_is_num(prim.json_val)));
 					if (!(vfield && numeric_prim)) {
