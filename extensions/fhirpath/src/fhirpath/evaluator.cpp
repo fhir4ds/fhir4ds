@@ -5700,11 +5700,22 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 			if (input.empty()) {
 				return {};
 			}
+			// v0.0.24 it4 (SKEPTIC): N1 §join "takes a collection of
+			// strings" — non-String items signal an error (empty at the
+			// UDF boundary), they are NOT coerced via toString.
 			std::string separator = toString(arg[0]);
 			std::string result;
 			for (size_t i = 0; i < input.size(); i++) {
+				const auto &item = input[i];
+				bool is_string = item.type == FPValue::Type::String ||
+				                 (item.type == FPValue::Type::JsonVal &&
+				                  item.json_val && yyjson_is_str(item.json_val));
+				if (!is_string) {
+					throw FHIRPathSpecError(
+					    "join() requires a collection of strings");
+				}
 				if (i > 0) result += separator;
-				result += toString(input[i]);
+				result += toString(item);
 			}
 			return {FPValue::FromString(result)};
 		}
@@ -11534,6 +11545,127 @@ static int countDigits(const std::string &s) {
 	return count;
 }
 
+// v0.0.24 it4 (SKEPTIC): exact string-arithmetic decimal boundaries,
+// mirroring the Python Decimal authority (invocations/datetime.py).
+// Unified half-unit rule (it2): half = 0.5 * 10^Decimal-exponent, where
+// the exponent is mantissa-fraction-length minus e-notation exponent and
+// mantissa trailing zeros are PRESERVED ("12.500" -> 0.0005, "9.5e2" -> 5).
+// The previous double floor/ceil produced last-digit noise
+// (-2.5e-3.lowBoundary(8) -> -0.00255001) and the near-zero early return
+// skipped precision padding (highBoundary(2) -> "0.0" not "0.00").
+static bool _pj_parse_decimal_text(std::string text, bool &negative,
+                                   std::string &digits, int &e10) {
+	negative = false;
+	if (!text.empty() && (text[0] == '+' || text[0] == '-')) {
+		negative = text[0] == '-';
+		text = text.substr(1);
+	}
+	size_t exp_pos = text.find_first_of("eE");
+	int exp = 0;
+	if (exp_pos != std::string::npos) {
+		try {
+			exp = std::stoi(text.substr(exp_pos + 1));
+		} catch (const std::exception &) {
+			return false;
+		}
+		text = text.substr(0, exp_pos);
+	}
+	size_t dot = text.find('.');
+	std::string int_part = dot == std::string::npos ? text : text.substr(0, dot);
+	std::string frac_part = dot == std::string::npos ? std::string() : text.substr(dot + 1);
+	digits = int_part + frac_part;
+	// strip leading zeros (keep at least one digit)
+	size_t fnz = digits.find_first_not_of('0');
+	digits = fnz == std::string::npos ? "0" : digits.substr(fnz);
+	e10 = static_cast<int>(frac_part.size()) - exp;
+	return !digits.empty() &&
+	       digits.find_first_not_of("0123456789") == std::string::npos;
+}
+
+static bool _pj_str_add1(std::string &d) { // decimal digit string += 1
+	int carry = 1;
+	for (int i = static_cast<int>(d.size()) - 1; i >= 0 && carry; --i) {
+		if (d[static_cast<size_t>(i)] == '9') {
+			d[static_cast<size_t>(i)] = '0';
+		} else {
+			d[static_cast<size_t>(i)]++;
+			carry = 0;
+		}
+	}
+	if (carry) d.insert(d.begin(), '1');
+	return true;
+}
+
+static void _pj_str_add_small(std::string &d, const std::string &small) {
+	// d += small (non-negative decimal strings)
+	int carry = 0;
+	int sj = static_cast<int>(small.size()) - 1;
+	for (int i = static_cast<int>(d.size()) - 1; i >= 0 || carry || sj >= 0; --i) {
+		int a = i >= 0 ? d[static_cast<size_t>(i)] - '0' : 0;
+		int b = sj >= 0 ? small[static_cast<size_t>(sj--)] - '0' : 0;
+		int v = a + b + carry;
+		carry = v / 10;
+		v %= 10;
+		if (i >= 0) d[static_cast<size_t>(i)] = static_cast<char>('0' + v);
+		else d.insert(d.begin(), static_cast<char>('0' + v));
+	}
+	size_t fnz = d.find_first_not_of('0');
+	d = fnz == std::string::npos ? "0" : d.substr(fnz);
+}
+
+static bool _pj_str_sub_small(std::string &d, const std::string &small) {
+	// d -= small (both non-negative decimal strings, d >= small)
+	int borrow = 0;
+	int sj = static_cast<int>(small.size()) - 1;
+	for (int i = static_cast<int>(d.size()) - 1; i >= 0; --i) {
+		int a = d[static_cast<size_t>(i)] - '0';
+		int b = sj >= 0 ? small[static_cast<size_t>(sj--)] - '0' : 0;
+		int v = a - b - borrow;
+		if (v < 0) { v += 10; borrow = 1; } else { borrow = 0; }
+		d[static_cast<size_t>(i)] = static_cast<char>('0' + v);
+	}
+	size_t fnz = d.find_first_not_of('0');
+	d = fnz == std::string::npos ? "0" : d.substr(fnz);
+	return true;
+}
+
+static int _pj_str_cmp(const std::string &a, const std::string &b) {
+	// compare non-negative decimal strings numerically
+	std::string x = a, y = b;
+	size_t fx = x.find_first_not_of('0'); x = fx == std::string::npos ? "0" : x.substr(fx);
+	size_t fy = y.find_first_not_of('0'); y = fy == std::string::npos ? "0" : y.substr(fy);
+	if (x.size() != y.size()) return x.size() < y.size() ? -1 : 1;
+	return x < y ? -1 : (x > y ? 1 : 0);
+}
+
+static std::string _pj_format_at_scale(const std::string &q_magnitude, bool q_negative, int P) {
+	// render |q| (integer string) at scale P with sign; keeps P fractional
+	// digits; negative zero is rendered signed only when magnitude is zero
+	// AND q_negative is set by the caller (near-zero spelling "-0.00").
+	std::string mag = q_magnitude;
+	size_t fnz = mag.find_first_not_of('0');
+	mag = fnz == std::string::npos ? "0" : mag.substr(fnz);
+	bool zero = (mag == "0");
+	std::string int_part, frac_part;
+	if (P <= 0) {
+		int_part = mag;
+		frac_part = "";
+	} else {
+		if (static_cast<int>(mag.size()) <= P) {
+			int_part = "0";
+			frac_part = std::string(static_cast<size_t>(P) - mag.size(), '0') + mag;
+		} else {
+			int_part = mag.substr(0, mag.size() - static_cast<size_t>(P));
+			frac_part = mag.substr(mag.size() - static_cast<size_t>(P));
+		}
+	}
+	std::string out = P > 0 ? int_part + "." + frac_part : int_part;
+	if (q_negative && !zero) {
+		out.insert(out.begin(), '-');
+	}
+	return out;
+}
+
 static FPCollection decimalBoundary(const FPValue &val, const FPCollection *precision_arg, bool is_high) {
 	int out_prec = 8;
 	if (precision_arg && !precision_arg->empty()) {
@@ -11542,6 +11674,108 @@ static FPCollection decimalBoundary(const FPValue &val, const FPCollection *prec
 	}
 	if (out_prec < 0 || out_prec > 28) return {};
 
+	// Preferred: exact text path (source text, incl. e-notation spellings).
+	std::string text = val.source_text;
+	bool parsed_ok = false, negative = false;
+	std::string digits;
+	int e10 = 0;
+	if (!text.empty()) {
+		parsed_ok = _pj_parse_decimal_text(text, negative, digits, e10);
+	} else if (val.type == FPValue::Type::Integer) {
+		digits = std::to_string(val.int_val);
+		negative = val.int_val < 0;
+		if (negative) digits.erase(0, 1);
+		e10 = 0;
+		parsed_ok = true;
+	} else if (val.type == FPValue::Type::JsonVal && val.json_val && yyjson_is_int(val.json_val)) {
+		long long iv = yyjson_get_sint(val.json_val);
+		digits = std::to_string(llabs(iv));
+		negative = iv < 0;
+		e10 = 0;
+		parsed_ok = true;
+	}
+	if (parsed_ok) {
+		// boundary = B * 10^(e10-1) where B = coeff*10 +/- 5 exactly:
+		//   high, value >= 0 :  B =  coeff*10 + 5   (positive)
+		//   high, value < 0  :  B = -(coeff*10 - 5) (negative; coeff==0 -> +5)
+		//   low,  value >= 0 :  B =  coeff*10 - 5   (positive; coeff==0 -> -5)
+		//   low,  value < 0  :  B = -(coeff*10 + 5) (negative)
+		int S = e10 - 1; // scale of B
+		bool b_negative;
+		std::string b_mag = digits + "0"; // coeff * 10 (>= 10 when coeff >= 1)
+		if (is_high && !negative) {
+			_pj_str_add_small(b_mag, std::string("5"));
+			b_negative = false;
+		} else if (is_high && negative) {
+			if (digits == "0") { b_mag = "5"; b_negative = false; }
+			else { _pj_str_sub_small(b_mag, std::string("5")); b_negative = true; }
+		} else if (!is_high && !negative) {
+			if (digits == "0") { b_mag = "5"; b_negative = true; }
+			else { _pj_str_sub_small(b_mag, std::string("5")); b_negative = false; }
+		} else { // low, negative
+			_pj_str_add_small(b_mag, std::string("5"));
+			b_negative = true;
+		}
+		// near-zero: |boundary| <= 0.5 * 10^-P  <=>  |B| <= 5 * 10^(-P-1-S)
+		int t = -out_prec - 1 - S;
+		bool near_zero = false;
+		if (_pj_str_cmp(b_mag, "0") == 0) {
+			near_zero = true;
+		} else if (t >= 0) {
+			std::string threshold = "5" + std::string(static_cast<size_t>(t), '0');
+			near_zero = _pj_str_cmp(b_mag, threshold) <= 0;
+		} else {
+			// threshold fractional (< 5): only exact zero qualifies (handled)
+			near_zero = false;
+		}
+		if (near_zero) {
+			// fb doctrine: high -> 0.00 (either side); low from below -> -0.00
+			std::string out;
+			if (!is_high && b_negative) {
+				out = out_prec > 0 ? "-0." + std::string(static_cast<size_t>(out_prec), '0')
+				                   : std::string("0");
+			} else {
+				out = out_prec > 0 ? "0." + std::string(static_cast<size_t>(out_prec), '0')
+				                   : std::string("0");
+			}
+			FPValue rv = FPValue::FromDecimal(std::strtod(out.c_str(), nullptr));
+			rv.source_text = out;
+			return {rv};
+		}
+		// q at scale P: q = B * 10^(S+P)
+		int k = S + out_prec;
+		std::string q_mag = b_mag;
+		bool q_negative = b_negative;
+		if (k >= 0) {
+			q_mag += std::string(static_cast<size_t>(k), '0');
+		} else {
+			int shift = -k;
+			if (static_cast<int>(q_mag.size()) > shift) {
+				std::string rem = q_mag.substr(q_mag.size() - static_cast<size_t>(shift));
+				q_mag = q_mag.substr(0, q_mag.size() - static_cast<size_t>(shift));
+				bool has_rem = rem.find_first_not_of('0') != std::string::npos;
+				if (has_rem) {
+					if (is_high && !q_negative) _pj_str_add1(q_mag);        // ceil toward +inf
+					if (!is_high && q_negative) _pj_str_add1(q_mag);        // floor toward -inf
+				}
+			} else {
+				// everything shifts out; boundary magnitude < 10^-P
+				bool has_rem = q_mag.find_first_not_of('0') != std::string::npos;
+				q_mag = "0";
+				if (has_rem) {
+					if (is_high && !q_negative) q_mag = "1";
+					if (!is_high && q_negative) { q_mag = "1"; }
+					// otherwise rounds to signed zero -> near-zero handled above
+				}
+			}
+		}
+		std::string out = _pj_format_at_scale(q_mag, q_negative, out_prec);
+		FPValue rv = FPValue::FromDecimal(std::strtod(out.c_str(), nullptr));
+		rv.source_text = out;
+		return {rv};
+	}
+
+	// Fallback (no usable text): legacy double path, unchanged.
 	double d;
 	if (val.type == FPValue::Type::Integer) {
 		d = static_cast<double>(val.int_val);
@@ -11552,33 +11786,21 @@ static FPCollection decimalBoundary(const FPValue &val, const FPCollection *prec
 	}
 	int decimal_places = countDecimalPlaces(val);
 	double half_unit = 0.5 * std::pow(10.0, -decimal_places);
-
 	double boundary = is_high ? (d + half_unit) : (d - half_unit);
-
-	// Special case near zero
 	double out_half = 0.5 * std::pow(10.0, -(out_prec > 0 ? out_prec : 0));
-	if (is_high && boundary > 0 && boundary <= out_half) {
-		return {FPValue::FromDecimal(0.0)};
+	if (std::abs(boundary) <= out_half) {
+		FPValue rv = FPValue::FromDecimal(is_high ? 0.0 : (!is_high && boundary < 0 ? -0.0 : 0.0));
+		if (out_prec > 0) {
+			std::ostringstream pad_oss;
+			pad_oss << std::fixed << std::setprecision(out_prec) << 0.0;
+			rv.source_text = pad_oss.str();
+		}
+		return {rv};
 	}
-	if (is_high && boundary < 0 && std::abs(boundary) <= out_half) {
-		return {FPValue::FromDecimal(0.0)};
-	}
-	if (!is_high && boundary < 0 && std::abs(boundary) <= out_half) {
-		return {FPValue::FromDecimal(-0.0)};
-	}
-	if (!is_high && boundary > 0 && boundary <= out_half) {
-		return {FPValue::FromDecimal(0.0)};
-	}
-
 	double factor = std::pow(10.0, out_prec);
-	double result;
-	if (is_high) {
-		result = std::ceil(boundary * factor) / factor;
-	} else {
-		result = std::floor(boundary * factor) / factor;
-	}
+	double result = is_high ? (std::ceil(boundary * factor) / factor)
+	                        : (std::floor(boundary * factor) / factor);
 	FPValue rv = FPValue::FromDecimal(result);
-	// Store source_text with padded precision for proper formatting
 	if (out_prec > 0) {
 		std::ostringstream pad_oss;
 		pad_oss << std::fixed << std::setprecision(out_prec) << result;

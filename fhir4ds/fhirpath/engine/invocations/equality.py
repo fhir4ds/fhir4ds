@@ -58,7 +58,18 @@ def equality(ctx, x, y):
             return None
         return all(results)
 
+    # v0.0.24 it4 (SKEPTIC): complex-vs-temporal equality (either side) is
+    # definitively FALSE — same it2 doctrine as complex-vs-primitive
+    # (testEquality29/30). Without this guard the temporal dispatch below
+    # swallowed the mismatch as uncertain (code = @2020-01-01 -> empty,
+    # native -> false).
     if type(x[0]) in DATETIME_NODES_LIST or type(y[0]) in DATETIME_NODES_LIST:
+        _a_early = util.get_data(x[0]) if hasattr(x[0], "data") else x[0]
+        _b_early = util.get_data(y[0]) if hasattr(y[0], "data") else y[0]
+        _a_cx = isinstance(_a_early, (abc.Mapping, list))
+        _b_cx = isinstance(_b_early, (abc.Mapping, list))
+        if _a_cx != _b_cx:
+            return False
         return datetime_equality(ctx, x, y)
 
     a = util.parse_value(x[0])
