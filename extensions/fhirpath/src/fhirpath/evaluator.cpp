@@ -821,6 +821,25 @@ static FPValue::Type effectiveType(const FPValue &v) {
 	return v.type;
 }
 
+// v0.0.24 it5 (HISTORIAN): model-typed temporal fields (valueTime,
+// effectiveDate, ...) carry fhir_type metadata from member access; consult
+// it so they compare/order as their FHIR type instead of plain strings.
+// Plain string LITERALS have no fhir_type and keep the lexical-shape-only
+// route (FP-03 SKEPTIC QA-002 pin: '10:00' < @T10:30 stays empty).
+static FPValue::Type temporalValueType(const FPValue &v) {
+	auto t = effectiveType(v);
+	if (t == FPValue::Type::String && !v.fhir_type.empty()) {
+		std::string ft = v.fhir_type;
+		std::transform(ft.begin(), ft.end(), ft.begin(), [](unsigned char c) {
+			return static_cast<char>(std::tolower(c));
+		});
+		if (ft == "time") return FPValue::Type::Time;
+		if (ft == "date") return FPValue::Type::Date;
+		if (ft == "datetime" || ft == "instant") return FPValue::Type::DateTime;
+	}
+	return t;
+}
+
 static bool extractStrictInteger(const FPValue &v, int64_t &out) {
 	if (v.type == FPValue::Type::Integer) {
 		out = v.int_val;
@@ -1314,7 +1333,7 @@ static bool isNumericType(const FPValue &v) {
 }
 
 static bool isDateTimeType(const FPValue &v) {
-	auto t = effectiveType(v);
+	auto t = temporalValueType(v);
 	if (t == FPValue::Type::Date || t == FPValue::Type::DateTime || t == FPValue::Type::Time) return true;
 	// Check for date-like strings (from JSON)
 	if (t == FPValue::Type::String) {
@@ -2357,8 +2376,8 @@ static bool fpValuesEqual(const FPValue &a, const FPValue &b) {
 
 	// Both date/time types: compare string values
 	if (isDateTimeType(a) && isDateTimeType(b)) {
-		auto at = effectiveType(a);
-		auto bt = effectiveType(b);
+		auto at = temporalValueType(a);
+		auto bt = temporalValueType(b);
 		if (isDateVsDateTimePair(at, bt)) return false;
 		bool a_is_time = (at == FPValue::Type::Time);
 		bool b_is_time = (bt == FPValue::Type::Time);
@@ -9484,8 +9503,8 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 				return jsonNumbersEquivalent(lv.json_val, rv.json_val) ? 1 : 0;
 			}
 			if (isDateTimeType(lv) && isDateTimeType(rv)) {
-				auto lt = effectiveType(lv);
-				auto rt = effectiveType(rv);
+				auto lt = temporalValueType(lv);
+				auto rt = temporalValueType(rv);
 				if (isDateVsDateTimePair(lt, rt)) return 0;
 				bool l_is_time = (lt == FPValue::Type::Time);
 				bool r_is_time = (rt == FPValue::Type::Time);
@@ -9554,8 +9573,8 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 		auto valuesEqualState = [this](const FPValue &lv, const FPValue &rv) -> int {
 			// Return 1 for true, 0 for false, and -1 for empty/indeterminate.
 			if (isDateTimeType(lv) && isDateTimeType(rv)) {
-				auto lt = effectiveType(lv);
-				auto rt = effectiveType(rv);
+				auto lt = temporalValueType(lv);
+				auto rt = temporalValueType(rv);
 				if (isDateVsDateTimePair(lt, rt)) return -1;
 				bool l_is_time = (lt == FPValue::Type::Time);
 				bool r_is_time = (rt == FPValue::Type::Time);
@@ -9872,7 +9891,7 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 
 		// Date/time comparison
 		if (isDateTimeType(lv) && isDateTimeType(rv)) {
-			int cmp = compareDateTimes(toString(lv), toString(rv), effectiveType(lv), effectiveType(rv));
+			int cmp = compareDateTimes(toString(lv), toString(rv), temporalValueType(lv), temporalValueType(rv));
 			if (cmp == INT_MIN) return {};
 			if (op == "<") return {FPValue::FromBoolean(cmp < 0)};
 			if (op == ">") return {FPValue::FromBoolean(cmp > 0)};
