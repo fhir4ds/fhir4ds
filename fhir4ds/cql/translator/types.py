@@ -1691,6 +1691,41 @@ class SQLFragment:
         with_clause = "WITH " + ",\n".join(cte_parts)
         return f"{with_clause}\n{self.main_query.to_sql()}"
 
+
+
+    def rewrite_promotion_lookups_as_joins(self) -> None:
+        """AMUX-126: rewrite promotion-lookup correlated scalar subqueries as LEFT JOINs.
+
+        The promotion machinery emits per-call lookups of the shape
+            (SELECT value FROM "<fn-cte>" AS _fv
+             WHERE _fv.patient_id = <src>.patient_id
+               AND _fv._row_key = <key-expr over <src>>)
+        DuckDB 2.0's planner scales EXPONENTIALLY in the number of such
+        correlated subqueries (duckdb/duckdb#28842); LEFT JOINs plan
+        linearly. This pass, run after lateral dedup, finds every such
+        subquery whose source alias is bound at the same SELECT scope,
+        adds one deduplicated LEFT JOIN per (cte, source, key) triple,
+        and replaces the subqueries with `_fvN.value` column references.
+        Lookups in unreachable scopes (shadowed aliases) are left as-is.
+        """
+        import os as _os
+        global _PJ_DEBUG
+        _dbg = _os.environ.get("FHIR4DS_CQL_PROMOTION_JOINS_DEBUG") == "1"
+        _PJ_DEBUG = _dbg
+        _before = 0
+        if _dbg:
+            for cte in self.ctes:
+                _before += _count_promotion_lookups_generic(cte.query)
+            _before += _count_promotion_lookups_generic(self.main_query)
+        for cte in self.ctes:
+            _promotions_rewrite_select(cte.query)
+        _promotions_rewrite_select(self.main_query)
+        _PJ_DEBUG = False
+        if _dbg:
+            import sys
+            print(f"[promo-joins] lookups before={_before} matcher_calls={_PJ_CALLS} matches={_PJ_MATCHES} rejects={_PJ_REJECTS}", file=sys.stderr)
+
+
     def deduplicate_lateral_aliases(self, min_occurrences: int = 3) -> None:
         """Deduplicate repeated scalar subqueries in CTE WHERE clauses.
 
@@ -2862,3 +2897,416 @@ __all__ = [
     "SQLEvidenceItem",
     "SQLAuditStruct",
 ]
+
+
+# ---------------------------------------------------------------------------
+# AMUX-126: promotion-lookup → LEFT JOIN rewrite
+# ---------------------------------------------------------------------------
+
+def _promotions_bound_aliases(select: "SQLSelect") -> set:
+    """Aliases visible to expressions of this select: the FROM alias plus
+    every JOIN alias (lateral or not — laterals see earlier bindings)."""
+    names = set()
+    fc = select.from_clause
+    if isinstance(fc, SQLAlias) and fc.alias:
+        names.add(fc.alias)
+    for join in select.joins or []:
+        if isinstance(join, SQLJoin) and join.alias:
+            names.add(join.alias)
+        elif isinstance(join, SQLJoin) and isinstance(join.table, SQLAlias) and join.table.alias:
+            names.add(join.table.alias)
+    return names
+
+
+def _promotions_match_lookup(node, available: set):
+    """Match the promotion-lookup scalar-subquery shape.
+
+    Returns (cte_name, src_alias, row_key_expr, value_alias) or None.
+    """
+    if not isinstance(node, SQLSubquery):
+        return None
+    q = node.query
+    if not isinstance(q, SQLSelect) or q.group_by or q.having or q.joins:
+        return None
+    _dbg = _PJ_DEBUG
+    # projection must be exactly the value column
+    if len(q.columns) != 1 or not isinstance(q.columns[0], SQLIdentifier) or q.columns[0].name != "value":
+        if _dbg:
+            _pj_reject("columns", q.columns)
+        return None
+    fc = q.from_clause
+    if not isinstance(fc, SQLAlias):
+        if _dbg:
+            _pj_reject("from_clause", fc)
+        return None
+    cte = fc.expr
+    if not isinstance(cte, SQLIdentifier) or not cte.quoted:
+        if _dbg:
+            _pj_reject("cte_ident", fc.expr)
+        return None
+    if fc.alias is None:
+        if _dbg:
+            _pj_reject("alias_none", fc)
+        return None
+    value_alias = fc.alias
+    w = q.where
+    if not isinstance(w, SQLBinaryOp) or (w.operator or "").upper() != "AND":
+        if _dbg:
+            _pj_reject("where_shape", w)
+        return None
+
+    def _eq_parts(op):
+        # match X = Y where one side is <a>.patient_id / <a>._row_key with
+        # a == value_alias; return (kind, other_expr)
+        if not isinstance(op, SQLBinaryOp) or (op.operator or "") != "=":
+            return None
+        for lhs, rhs in ((op.left, op.right), (op.right, op.left)):
+            if (
+                isinstance(lhs, SQLQualifiedIdentifier)
+                and len(lhs.parts) == 2
+                and lhs.parts[0] == value_alias
+            ):
+                kind = lhs.parts[1]
+                if kind in ("patient_id", "_row_key"):
+                    return (kind, rhs)
+        return None
+
+    a = _eq_parts(w.left)
+    b = _eq_parts(w.right)
+    if a is None or b is None:
+        if _dbg:
+            _pj_reject("eq_sides", (w.left, w.right))
+        return None
+    kinds = {a[0], b[0]}
+    if kinds != {"patient_id", "_row_key"}:
+        if _dbg:
+            _pj_reject("kinds", (a[0], b[0]))
+        return None
+    pid_other = a[1] if a[0] == "patient_id" else b[1]
+    key_other = a[1] if a[0] == "_row_key" else b[1]
+    # patient_id side must be <src>.patient_id with src bound at this scope
+    if not (
+        isinstance(pid_other, SQLQualifiedIdentifier)
+        and len(pid_other.parts) == 2
+        and pid_other.parts[1] == "patient_id"
+        and pid_other.parts[0] in available
+    ):
+        if _dbg:
+            _pj_reject(
+                "pid_src",
+                getattr(pid_other, "parts", pid_other),
+            )
+        return None
+    src_alias = pid_other.parts[0]
+    # row-key expression must reference ONLY the source alias (no sibling
+    # tables), so the join ON is evaluable from FROM+earlier joins alone
+    refs = set()
+
+    def _collect_refs(n):
+        if isinstance(n, SQLQualifiedIdentifier):
+            if len(n.parts) >= 2:
+                refs.add(n.parts[0])
+        elif isinstance(n, SQLFunctionCall):
+            for arg in n.args or []:
+                _collect_refs(arg)
+        elif isinstance(n, SQLBinaryOp):
+            _collect_refs(n.left)
+            _collect_refs(n.right)
+        elif isinstance(n, SQLUnaryOp):
+            _collect_refs(n.operand)
+        elif isinstance(n, SQLCase):
+            for cond, res in n.when_clauses or []:
+                _collect_refs(cond)
+                _collect_refs(res)
+            if n.else_clause is not None:
+                _collect_refs(n.else_clause)
+        elif isinstance(n, SQLCast):
+            _collect_refs(n.expression)
+
+    _collect_refs(key_other)
+    if refs - {src_alias}:
+        if _dbg:
+            _pj_reject("key_refs", refs)
+        return None
+    return (cte.name, src_alias, key_other, value_alias)
+
+
+def _promotions_rewrite_select(select) -> None:
+    """Rewrite promotion lookups within one select's own scope, then recurse
+    into child selects (nested subqueries are separate scopes UNLESS they do
+    not shadow any of this scope's aliases)."""
+    if isinstance(select, SQLUnion):
+        for arm in select.operands or []:
+            if isinstance(arm, SQLSelect):
+                _promotions_rewrite_select(arm)
+            elif isinstance(arm, SQLSubquery):
+                _promotions_rewrite_select(arm.query)
+            elif isinstance(arm, SQLAlias):
+                inner = arm.expr
+                if isinstance(inner, SQLSelect):
+                    _promotions_rewrite_select(inner)
+                elif isinstance(inner, SQLSubquery):
+                    _promotions_rewrite_select(inner.query)
+        return
+    if not isinstance(select, SQLSelect):
+        return
+    # Process nested selects first (bottom-up): each gets its own rewrite.
+    for child in _promotions_child_selects(select):
+        _promotions_rewrite_select(child)
+
+    available = _promotions_bound_aliases(select)
+    if not available:
+        return
+    # collect matches across this select's own expressions (not descending
+    # into non-shadowing child selects yet — handled below)
+    joins_added: dict = {}
+    counter = [0]
+    select.columns = [
+        _promotions_rewrite_expr(c, available, joins_added, counter, select)
+        for c in (select.columns or [])
+    ]
+    if select.where is not None:
+        select.where = _promotions_rewrite_expr(
+            select.where, available, joins_added, counter, select
+        )
+    # Snapshot the join list: the rewriter PREPENDS new joins to
+    # select.joins, and iterating the live list while prepending shifts
+    # every element right, starving later joins (the lateral bodies after
+    # the insertion point were never visited).
+    for join in list(select.joins or []):
+        if isinstance(join, SQLJoin):
+            if join.on_condition is not None:
+                join.on_condition = _promotions_rewrite_expr(
+                    join.on_condition, available, joins_added, counter, select
+                )
+            _lat_sel = None
+            if isinstance(join.table, SQLSelect):
+                _lat_sel = join.table
+            elif isinstance(join.table, SQLSubquery):
+                _lat_sel = join.table.query
+            elif isinstance(join.table, SQLAlias) and isinstance(join.table.expr, SQLSelect):
+                _lat_sel = join.table.expr
+            if _lat_sel is not None:
+                # lateral body: same scope for outer aliases if the lateral
+                # does not shadow them; its own scope is processed via the
+                # child-selects pass
+                shadowed = _promotions_bound_aliases(_lat_sel) & available
+                if not shadowed:
+                    _lat_sel.columns = [
+                        _promotions_rewrite_expr(c, available, joins_added, counter, select)
+                        for c in (_lat_sel.columns or [])
+                    ]
+                    if _lat_sel.where is not None:
+                        _lat_sel.where = _promotions_rewrite_expr(
+                            _lat_sel.where, available, joins_added, counter, select
+                        )
+
+
+_PJ_DEBUG = False
+_PJ_CALLS = 0
+_PJ_MATCHES = 0
+_PJ_REJECTS: "dict[str, int]" = {}
+
+
+def _pj_reject(reason: str, obj=None) -> None:
+    _PJ_REJECTS[reason] = _PJ_REJECTS.get(reason, 0) + 1
+    if _PJ_REJECTS[reason] == 1 and obj is not None:
+        import sys
+        print(f"[promo-joins] reject[{reason}]: {type(obj).__name__} {str(obj)[:140]!r}", file=sys.stderr)
+
+
+def _promotions_rewrite_expr(node, available, joins_added, counter, select):
+    """Recursively rewrite within an expression tree. Returns the replacement."""
+    if node is None or isinstance(node, (str, int, float, bool)):
+        return node
+    if _PJ_DEBUG:
+        global _PJ_CALLS, _PJ_MATCHES
+        _PJ_CALLS += 1
+    match = _promotions_match_lookup(node, available)
+    if _PJ_DEBUG and match is not None:
+        _PJ_MATCHES += 1
+    if match is not None:
+        cte_name, src_alias, key_expr, _va = match
+        key_sql = key_expr.to_sql()
+        jkey = (cte_name, src_alias, key_sql)
+        if jkey not in joins_added:
+            join_alias = f"_fvj{counter[0]}"
+            counter[0] += 1
+            src_pid = SQLQualifiedIdentifier(parts=[src_alias, "patient_id"])
+            on = SQLBinaryOp(
+                operator="AND",
+                left=SQLBinaryOp(
+                    operator="=",
+                    left=SQLQualifiedIdentifier(parts=[join_alias, "patient_id"]),
+                    right=src_pid,
+                ),
+                right=SQLBinaryOp(
+                    operator="=",
+                    left=SQLQualifiedIdentifier(parts=[join_alias, "_row_key"]),
+                    right=key_expr,
+                ),
+            )
+            join = SQLJoin(
+                join_type="LEFT",
+                table=SQLIdentifier(name=cte_name, quoted=True),
+                alias=join_alias,
+                on_condition=on,
+            )
+            # Prepend: the ON references only the FROM alias, so the join is
+            # valid at position 0 and its alias is visible everywhere later.
+            if select.joins is None:
+                select.joins = [join]
+            else:
+                select.joins.insert(0, join)
+            joins_added[jkey] = join_alias
+        join_alias = joins_added[jkey]
+        repl = SQLQualifiedIdentifier(parts=[join_alias, "value"])
+        # Preserve the list-valued tag the lookup carried (CMS0334
+        # in_valueset list-guard contract).
+        rt = getattr(node, "result_type", None)
+        if rt:
+            repl.result_type = rt
+        return repl
+    # generic recursion: descend into EVERY dataclass field that holds
+    # SQL expressions (covers SQLExists.subquery, SQLIn, SQLBetween and any
+    # other composite the hardcoded lists would miss — the CMS2 consumer
+    # lookups live under SQLExists.subquery chains and SQLCase.when_clauses).
+    import dataclasses as _dc
+
+    def _rw(value):
+        return _promotions_rewrite_expr(value, available, joins_added, counter, select)
+
+    if isinstance(node, SQLSelect):
+        # A select reached in expression position: separate scope for its own
+        # aliases (child-selects pass handles it); rewrite with THIS scope's
+        # aliases only when it does not shadow them (lateral semantics).
+        shadowed = _promotions_bound_aliases(node) & available
+        if not shadowed:
+            node.columns = [_rw(c) for c in (node.columns or [])]
+            if node.where is not None:
+                node.where = _rw(node.where)
+            # Lateral bodies of this child select see the ENCLOSING scope's
+            # aliases too — an outer-correlated lookup inside a lateral of a
+            # non-shadowing subquery (e.g. inside EXISTS ... CROSS JOIN
+            # LATERAL) belongs to THIS scope and its join must land here.
+            for join in list(node.joins or []):
+                if not isinstance(join, SQLJoin):
+                    continue
+                if join.on_condition is not None:
+                    join.on_condition = _rw(join.on_condition)
+                _lat = None
+                if isinstance(join.table, SQLSelect):
+                    _lat = join.table
+                elif isinstance(join.table, SQLSubquery):
+                    _lat = join.table.query
+                elif isinstance(join.table, SQLAlias) and isinstance(join.table.expr, SQLSelect):
+                    _lat = join.table.expr
+                if _lat is not None and not (_promotions_bound_aliases(_lat) & available):
+                    _lat.columns = [_rw(c) for c in (_lat.columns or [])]
+                    if _lat.where is not None:
+                        _lat.where = _rw(_lat.where)
+        return node
+    if _dc.is_dataclass(node) and not isinstance(node, type):
+        # Rewrite every field that carries SQL expressions, recursing through
+        # nested containers. SQLCase.when_clauses is a list of (cond, result)
+        # TUPLES — a flat "list of SQLExpression" scan skips them entirely,
+        # which is exactly where the remaining consumer lookups live.
+        def _rw_container(v):
+            if isinstance(v, SQLExpression):
+                return _rw(v)
+            if isinstance(v, list):
+                return [_rw_container(x) for x in v]
+            if isinstance(v, tuple):
+                return tuple(_rw_container(x) for x in v)
+            return v
+
+        for fname, fval in list(vars(node).items()):
+            setattr(node, fname, _rw_container(fval))
+        return node
+    return node
+
+
+def _promotions_child_selects(select) -> list:
+    """Direct child SQLSelect nodes: every SQLSubquery encountered anywhere
+    in the select's expression tree contributes its .query as a child scope.
+    Uses generic dataclass-field descent (SQLExists.subquery and similar
+    field names are followed)."""
+    import dataclasses as _dc
+
+    out: list = []
+    seen: set = set()
+
+    def _walk(x, depth=0):
+        if (
+            depth > 90
+            or x is None
+            or isinstance(x, (str, int, float, bool, type))
+        ):
+            return
+        if id(x) in seen:
+            return
+        seen.add(id(x))
+        if isinstance(x, SQLSubquery):
+            out.append(x.query)
+            _walk(x.query, depth + 1)
+            return
+        if _dc.is_dataclass(x):
+            for v in vars(x).values():
+                _walk(v, depth + 1)
+        elif isinstance(x, (list, tuple)):
+            for v in x:
+                _walk(v, depth + 1)
+
+    if select is not None:
+        if isinstance(select, SQLUnion):
+            for arm in select.operands or []:
+                if isinstance(arm, SQLSelect):
+                    _walk(arm)
+                elif isinstance(arm, SQLSubquery):
+                    out.append(arm.query)
+                    _walk(arm.query)
+                elif isinstance(arm, SQLAlias):
+                    inner = arm.expr
+                    if isinstance(inner, SQLSelect):
+                        _walk(inner)
+                    elif isinstance(inner, SQLSubquery):
+                        out.append(inner.query)
+                        _walk(inner.query)
+            return out
+        _walk(select)
+    return out
+
+
+def _count_promotion_lookups_generic(root) -> int:
+    import re as _re
+    n = 0
+    seen = set()
+
+    def _w(x):
+        nonlocal n
+        if x is None or isinstance(x, (str, int, float, bool, type)):
+            return
+        if id(x) in seen:
+            return
+        seen.add(id(x))
+        if isinstance(x, SQLRaw):
+            n += len(_re.findall(r"\(SELECT value FROM \"(_fn_|_let_fn_)", x.raw_sql or ""))
+            return
+        if isinstance(x, SQLSubquery):
+            fc = x.query.from_clause if isinstance(x.query, SQLSelect) else None
+            if (
+                isinstance(fc, SQLAlias)
+                and isinstance(fc.expr, SQLIdentifier)
+                and fc.expr.name.startswith(("_fn_", "_let_fn_"))
+            ):
+                n += 1
+        import dataclasses as _dc
+        if _dc.is_dataclass(x):
+            for f in x.__dict__.values():
+                _w(f)
+        elif isinstance(x, (list, tuple)):
+            for f in x:
+                _w(f)
+
+    _w(root)
+    return n

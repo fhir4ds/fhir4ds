@@ -1247,6 +1247,11 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         if os.environ.get("FHIR4DS_CQL_LATERAL_DEDUP", "1") != "0":
             min_occurrences = int(os.environ.get("FHIR4DS_CQL_LATERAL_DEDUP_MIN", "2"))
             fragment.deduplicate_lateral_aliases(min_occurrences=min_occurrences)
+        # AMUX-126: rewrite promotion-lookup correlated scalar subqueries as
+        # LEFT JOINs (structural planner immunity — duckdb/duckdb#28842).
+        # Gated for A/B validation; defaults ON once validated.
+        if os.environ.get("FHIR4DS_CQL_PROMOTION_JOINS", "0") == "1":
+            fragment.rewrite_promotion_lookups_as_joins()
         sql_text = self._substitute_fold_placeholders(fragment.to_sql())
         if self._context.column_registry:
             sql_text = optimize_rendered_property_access(
