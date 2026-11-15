@@ -302,11 +302,31 @@ def _is_implicitly_equivalent_pair(a, b):
     # precision mismatch). Time is NOT compatible with Date/DateTime.
     a_is_temporal = isinstance(a_raw, DATETIME_NODES_LIST)
     b_is_temporal = isinstance(b_raw, DATETIME_NODES_LIST)
+    # v0.0.24 it6 (EXPLORER): ResourceNode-wrapped strings participate in
+    # temporal comparison when their peer is temporal (datetime_equality's
+    # ResourceNode guard materializes them via get_match_data). The §6.1.2
+    # gate must classify them as temporal too, or typed FHIR `time` fields
+    # lose ~ comparisons: `valueTime ~ @T10:30:00` returned False because
+    # the raw str was classified non-time against the FP_Time literal
+    # (while `=` worked). Only the FP_Time peer needs this — Date/DateTime
+    # typed fields already pass (neither side is FP_Time).
+    if not a_is_temporal and b_is_temporal and isinstance(a_raw, str) \
+            and isinstance(a, nodes.ResourceNode):
+        a_is_temporal = True
+    if not b_is_temporal and a_is_temporal and isinstance(b_raw, str) \
+            and isinstance(b, nodes.ResourceNode):
+        b_is_temporal = True
     if a_is_temporal or b_is_temporal:
         # Time vs Date/DateTime is not implicitly convertible (no
         # conversion path in §5.5 table between Time and Date/DateTime).
         a_is_time = isinstance(a_raw, nodes.FP_Time)
         b_is_time = isinstance(b_raw, nodes.FP_Time)
+        if not a_is_time and b_is_time and isinstance(a_raw, str) \
+                and isinstance(a, nodes.ResourceNode):
+            a_is_time = nodes.FP_TimeBase.get_match_data(a_raw) is not None
+        if not b_is_time and a_is_time and isinstance(b_raw, str) \
+                and isinstance(b, nodes.ResourceNode):
+            b_is_time = nodes.FP_TimeBase.get_match_data(b_raw) is not None
         if a_is_time != b_is_time:
             return False
         return True

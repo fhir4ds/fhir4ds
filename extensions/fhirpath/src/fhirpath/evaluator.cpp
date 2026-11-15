@@ -11859,11 +11859,21 @@ static std::string formatDateTimeBoundary(const DateTimeParts &p, int digit_prec
 	oss << ":" << std::setfill('0') << std::setw(2)
 	    << ((p.precision >= 5) ? p.minute : (is_high ? 59 : 0));
 	if (digit_prec <= (is_time ? 4 : 12)) return oss.str();
+	// v0.0.24 it6 (EXPLORER): for Time inputs, preserve components at the
+	// input's precision and fill only components below it (§G-5 doctrine,
+	// mirroring the Python fallback _time_boundary): highBoundary(12:34:00)
+	// = 12:34:00.999; highBoundary(12:34:00.5) = 12:34:00.5 (authored
+	// fraction preserved verbatim). DateTime keeps the historical shared
+	// fill-from-template behavior (both engines agree; fixture-unpinned).
 	oss << ":" << std::setfill('0') << std::setw(2)
-	    << (is_high ? 59 : 0);
+	    << ((is_time && p.precision >= 6) ? p.second : (is_high ? 59 : 0));
 	if (digit_prec <= (is_time ? 6 : 14)) return oss.str();
-	oss << "." << std::setfill('0') << std::setw(3)
-	    << (is_high ? 999 : 0);
+	if (is_time && p.precision >= 7 && !p.frac_digits.empty()) {
+		oss << "." << p.frac_digits;
+	} else {
+		oss << "." << std::setfill('0') << std::setw(3)
+		    << (is_high ? 999 : 0);
+	}
 
 	// Add timezone for high precision
 	if (!is_time) {
