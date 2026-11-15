@@ -159,15 +159,14 @@ def has_value_fn(ctx, x):
         if x[0].data is None:
             return [False]
 
-        # Handle FHIR primitives with extensions but no value
-        # When a primitive has only an extension (no actual value), the data
-        # is a dict with 'extension' key but no 'value' key
         if isinstance(x[0].data, abc.Mapping):
-            # Complex nodes (mappings without a primitive 'value' payload,
-            # e.g. HumanName/Address/Coding) have no primitive value at all;
-            # primitives carrying their value in a wrapper dict keep true.
-            if 'value' not in x[0].data:
-                return [False]
+            # v0.0.24 it3 (EXPLORER): ANY mapping is a complex node — no
+            # primitive value. A quantity-shaped {"value":..,"unit":..} is a
+            # FHIR Quantity (complex datatype), not a primitive; native
+            # fn_hasValue returns false for every JSON object. The old
+            # "'value' in data" carve-out made the fallback diverge
+            # (valueQuantity.hasValue() true vs native false).
+            return [False]
 
     return [True]
 
