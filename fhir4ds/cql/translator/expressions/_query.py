@@ -1397,7 +1397,11 @@ class QueryMixin:
             meta = self.context.definition_meta.get(source_ast.name)
             if meta and meta.quantity_fields and field_name in meta.quantity_fields:
                 return "Quantity"
-            field_type = self._definition_tuple_field_type(source_ast.name, field_name, set())
+            # InferenceMixin lives on CQLToSQLTranslator; the embedded
+            # ExpressionTranslator may not carry it (it8: reachable now that
+            # stored-list define alias sources are recorded).
+            _fn = getattr(self, "_definition_tuple_field_type", None)
+            field_type = _fn(source_ast.name, field_name, set()) if _fn else None
             return field_type if field_type and field_type != "Any" else None
         return None
 
@@ -5314,6 +5318,10 @@ class QueryMixin:
                                 parts=[alias, "value"]
                             ),
                         )
+                        # it8: record the source AST so interval-typed
+                        # element lists keep interval operator routing
+                        # (contains/in) inside the where clause.
+                        self.context._alias_source_asts[alias] = source_expr_node
                     else:
                         result = SQLSelect(
                             columns=[SQLIdentifier(name="*")],

@@ -3870,8 +3870,48 @@ class OperatorsMixin:
             and len(left.args) == 2
         ):
             return self._list_contains_call(left, right, expr.left, expr.right)
+        # v0.0.24 it8 (d3 HISTORIAN): a query-alias ELEMENT over an
+        # interval-typed list source (`{Interval[1,5], Interval[10,15]} I
+        # where I contains 3`). The element arrives as a bare alias
+        # reference (VARCHAR-serialized interval); without this guard the
+        # dispatch falls through to DuckDB string contains.
+        if isinstance(expr.left, Identifier) and self._alias_element_is_interval(
+            expr.left.name
+        ):
+            if self._is_fhir_interval_expression(right):
+                return SQLFunctionCall(name="intervalIncludes", args=[left, right])
+            return SQLFunctionCall(
+                name="intervalContains",
+                args=[
+                    left,
+                    self._quantity_interval_point_arg(right)
+                    if self._is_quantity_interval_sql(left)
+                    else self._ensure_interval_varchar(right),
+                ],
+            )
         # String contains: CQL 'left contains right' → contains(left, right)
         return SQLFunctionCall(name="system.contains", args=[left, right])
+
+    def _alias_element_is_interval(self, alias_name: str) -> bool:
+        """True when *alias_name* is a query alias whose SOURCE AST is a list
+        whose elements are all Interval selectors (inline list literal or a
+        stored-list define's body) — the alias then iterates Interval
+        elements and interval operator routing must win."""
+        from ...parser.ast_nodes import Interval as _IntervalNode, ListExpression as _ListExpr, Identifier as _Ident
+        seen = 0
+        node = self.context._alias_source_asts.get(alias_name)
+        while node is not None and seen < 4:
+            seen += 1
+            if isinstance(node, _ListExpr):
+                elements = getattr(node, "elements", None) or []
+                if elements and all(isinstance(e, _IntervalNode) for e in elements):
+                    return True
+                return False
+            if isinstance(node, _Ident):
+                node = self._definition_source_ast(node.name, node)
+                continue
+            break
+        return False
 
     def _static_clinical_value_object(self, node) -> Optional[dict[str, Any]]:
         """Return a static CQL Code or Concept value object when known."""

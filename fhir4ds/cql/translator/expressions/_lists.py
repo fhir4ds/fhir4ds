@@ -203,7 +203,28 @@ class ListsMixin:
                     row_alias = None
                     if isinstance(inner_select.from_clause, SQLAlias):
                         row_alias = inner_select.from_clause.alias
-                    if row_alias:
+                    # v0.0.24 it8 (d3 HISTORIAN): only correlate when the
+                    # inner FROM source actually CARRIES patient_id — a
+                    # CTE-named source does; an inline constant list source
+                    # (`(SELECT unnest([...]) AS I) AS _list`) does NOT, and
+                    # the blind correlation raised Binder Error "Referenced
+                    # table _list ... patient_id" for Count/exists over
+                    # filtered inline list queries.
+                    _src = inner_select.from_clause.expr
+                    _carries_pid = False
+                    if isinstance(_src, (SQLIdentifier,)) and _src.quoted:
+                        _carries_pid = True
+                    elif isinstance(_src, SQLSubquery) and isinstance(_src.query, SQLSelect):
+                        for _c in _src.query.columns or []:
+                            _cname = (
+                                _c.alias
+                                if isinstance(_c, SQLAlias)
+                                else getattr(_c, "name", None)
+                            )
+                            if _cname == "patient_id":
+                                _carries_pid = True
+                                break
+                    if row_alias and _carries_pid:
                         from ._query import _patient_correlated_where
                         outer = self.context.patient_alias or "_pt"
                         inner_select.where = _patient_correlated_where(

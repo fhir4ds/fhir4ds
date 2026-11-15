@@ -476,6 +476,30 @@ class IntervalMixin:
         # SQLInterval nodes from CQL Interval literals are always intervals
         if isinstance(expr, SQLInterval):
             return True
+        # v0.0.24 it8 (d3 HISTORIAN): a query-alias ELEMENT over an
+        # interval-typed list source (inline `{Interval[1,5]} I where ...`
+        # or a stored-list define) is itself an Interval operand. The bare
+        # alias reference carries no interval SQL shape, so recognize it
+        # via the alias's source AST.
+        from ...translator.types import (
+            SQLQualifiedIdentifier as _SQLQI,
+            SQLIdentifier as _SQLI,
+        )
+        _alias_name = None
+        if isinstance(expr, _SQLQI) and len(expr.parts) in (1, 2) and (
+            len(expr.parts) == 1 or expr.parts[1] == "value"
+        ):
+            # bare `I` (inline-list element) or `I.value` (stored-list
+            # define element via the ast_expr element-value binding)
+            _alias_name = expr.parts[0]
+        elif isinstance(expr, _SQLI) and not expr.quoted:
+            _alias_name = expr.name
+        if (
+            _alias_name is not None
+            and getattr(self, "_alias_element_is_interval", None) is not None
+            and self._alias_element_is_interval(_alias_name)
+        ):
+            return True
         if isinstance(expr, SQLFunctionCall):
             if expr.name == "fhirpath_text" and len(expr.args) >= 2:
                 path_arg = expr.args[1]
