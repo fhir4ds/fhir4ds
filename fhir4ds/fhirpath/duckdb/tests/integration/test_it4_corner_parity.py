@@ -90,3 +90,57 @@ class TestIt4CornerParity:
 
     def test_complex_vs_temporal_equality_it4(self, monkeypatch):
         self._run(monkeypatch, EQUALITY_CASES)
+
+
+class TestIt5TypedTemporalFieldParity:
+    """v0.0.24 it5 (HISTORIAN): model-typed temporal fields compare as their
+    FHIR type (native temporalValueType fix) and default-precision DateTime
+    boundaries carry the default timezone (fallback fix). The '@'-prefix
+    rendering on partial-precision boundary outputs is a documented
+    harness-normalized divergence (fallback '@2020' vs native '2020')."""
+
+    def test_value_time_field_orders_as_time_it5(self, monkeypatch):
+        res = json.dumps(
+            {"resourceType": "Observation", "valueTime": "10:30:00"}
+        )
+        native = _connection()
+        fallback = _python_fallback_connection(monkeypatch)
+        try:
+            for expression, expected in [
+                ("valueTime < @T11:00:00", ["true"]),
+                ("valueTime = @T10:30:00", ["true"]),
+                # FP-03 QA-002 pin: plain string literals stay UNCOERCED
+                ("'10:30:00' < @T11:00:00", []),
+            ]:
+                cpp = native.execute(
+                    "SELECT fhirpath(?::JSON, ?)", [res, expression]
+                ).fetchone()[0]
+                py = fallback.execute(
+                    "SELECT fhirpath(?::JSON, ?)", [res, expression]
+                ).fetchone()[0]
+                assert cpp == py == expected, (expression, cpp, py)
+        finally:
+            native.close()
+            fallback.close()
+
+    def test_datetime_boundary_default_tz_parity_it5(self, monkeypatch):
+        res = json.dumps(
+            {"resourceType": "Observation", "effectiveDateTime": "2020-06-15T10:30"}
+        )
+        native = _connection()
+        fallback = _python_fallback_connection(monkeypatch)
+        try:
+            for expression, expected in [
+                ("effectiveDateTime.lowBoundary()", ["2020-06-15T10:30:00.000+14:00"]),
+                ("effectiveDateTime.highBoundary()", ["2020-06-15T10:30:59.999-12:00"]),
+            ]:
+                cpp = native.execute(
+                    "SELECT fhirpath(?::JSON, ?)", [res, expression]
+                ).fetchone()[0]
+                py = fallback.execute(
+                    "SELECT fhirpath(?::JSON, ?)", [res, expression]
+                ).fetchone()[0]
+                assert cpp == py == expected, (expression, cpp, py)
+        finally:
+            native.close()
+            fallback.close()

@@ -285,8 +285,11 @@ def _datetime_boundary(data, precision, fill, is_high):
         return [result]
     else:
         result = f"{year}-{month}-{day}T{hour}:{minute}:{second}.{ms}"
-        if tz:
-            result += tz
+        # v0.0.24 it5 (HISTORIAN): default-precision boundaries carry the
+        # default timezone when none was authored (+14:00 low / -12:00
+        # high), matching the precision>14 branch, native formatDateTime
+        # Boundary, and the official boundary fixtures' tz convention.
+        result += tz if tz else fill.get("tz_default", "")
         return [FP_DateTime(result)]
 
 
