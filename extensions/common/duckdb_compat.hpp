@@ -61,23 +61,28 @@ inline T *data(duckdb::Vector &vector) {
 
 // Templates so the expression types only need to be complete at the CALL SITE
 // (the planner headers are not includable this early in every DuckDB version).
-template <typename Expr>
-inline auto bind_info(Expr &expr) {
+// v0.0.24 it2: explicit trailing return types keep this header valid under
+// the older -std used by the 1.5.6 build tree (`auto`/`decltype(auto)`
+// placeholders require C++14).
 #ifdef FHIR4DS_DUCKDB_V2
+template <typename Expr>
+inline auto bind_info(Expr &expr) -> decltype(expr.BindInfo().get()) {
 	return expr.BindInfo().get();
-#else
-	return expr.bind_info.get();
-#endif
 }
-
 template <typename Expr>
-inline decltype(auto) const_value(Expr &expr) {
-#ifdef FHIR4DS_DUCKDB_V2
+inline auto const_value(Expr &expr) -> decltype(expr.GetValue()) {
 	return expr.GetValue();
-#else
-	return expr.value;
-#endif
 }
+#else
+template <typename Expr>
+inline auto bind_info(Expr &expr) -> decltype(expr.bind_info.get()) {
+	return expr.bind_info.get();
+}
+template <typename Expr>
+inline auto const_value(Expr &expr) -> decltype(expr.value) {
+	return expr.value;
+}
+#endif
 
 // --- Scalar-function bind callback ---------------------------------------
 //

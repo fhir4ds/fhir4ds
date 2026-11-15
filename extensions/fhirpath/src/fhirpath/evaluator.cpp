@@ -1840,12 +1840,15 @@ static int leastPrecisionDecimalPlaces(const FPValue &val) {
 }
 
 static int quantityEquivalentState(const FPValue &left, const FPValue &right) {
-	// FP-13 HISTORIAN (2026-06-29): Mirror the offset-temperature guard
-	// from quantityEqualState for the ~ operator (see comment there).
+	// v0.0.24 it2 (upstream corpus refresh): quantities that can't be
+	// compared are NOT equivalent — official testEquivalent28 (`1 'x' ~ 1
+	// year` // false) and testEquivalent29 (`1 year ~ 1 'kg'` // false).
+	// Supersedes the FP-13 empty-doctrine for `~` (equality `=` keeps
+	// empty for these pairs).
 	if (left.quantity_unit != right.quantity_unit &&
 	    (isOffsetTemperatureUnit(left.quantity_unit) ||
 	     isOffsetTemperatureUnit(right.quantity_unit))) {
-		return -1;
+		return 0;
 	}
 	// FP-01 SKEPTIC QA-003 (2026-08-16): year↔month pairs compare in
 	// months (§5.5.7 "1 year = 12 months"); other time pairs convert with
@@ -1868,7 +1871,9 @@ static int quantityEquivalentState(const FPValue &left, const FPValue &right) {
 	    unanchoredDurationSeconds(left.quantity_value, left.quantity_unit, left_base);
 	double right_conv =
 	    unanchoredDurationSeconds(right.quantity_value, right.quantity_unit, right_base);
-	if (left_base != right_base) return -1;
+	// v0.0.24 it2: incomparable units (unknown codes, dimensional mismatch)
+	// are NOT equivalent (testEquivalent28/29) — was -1/empty.
+	if (left_base != right_base) return 0;
 	int left_dp = leastPrecisionDecimalPlaces(left);
 	int right_dp = leastPrecisionDecimalPlaces(right);
 	double left_scale = (left.quantity_value != 0) ? left_conv / left.quantity_value : 1.0;
@@ -5665,6 +5670,12 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 			}
 		}
 		if (name == "join") {
+			// v0.0.24 it2 (upstream corpus refresh): join of an empty
+			// collection is EMPTY, not '' — official pin testJoinEmpty
+			// (`name.prefix.join(',')` // {}).
+			if (input.empty()) {
+				return {};
+			}
 			std::string separator = toString(arg[0]);
 			std::string result;
 			for (size_t i = 0; i < input.size(); i++) {
@@ -9554,6 +9565,29 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 				return jsonValuesEqualState(lv.json_val, rv.json_val);
 			}
 
+			// v0.0.24 it2 (upstream corpus refresh): complex-vs-primitive
+			// equality is definitively FALSE — official testEquality29/30
+			// (`name.first() = 'Peter'` // false). Carve-out: a bare
+			// {"value": ...}-shaped payload vs a numeric keeps the
+			// UNCERTAIN semantics (FP-12 milestone-4 pin:
+			// `{"value":120} = 120` // empty).
+			{
+				bool lv_complex = lv.type == FPValue::Type::JsonVal && lv.json_val &&
+				                  yyjson_is_obj(lv.json_val);
+				bool rv_complex = rv.type == FPValue::Type::JsonVal && rv.json_val &&
+				                  yyjson_is_obj(rv.json_val);
+				if (lv_complex != rv_complex && !isDateTimeType(lv) && !isDateTimeType(rv)) {
+					yyjson_val *obj = lv_complex ? lv.json_val : rv.json_val;
+					const FPValue &prim = lv_complex ? rv : lv;
+					yyjson_val *vfield = yyjson_obj_get(obj, "value");
+					bool numeric_prim = isNumericType(prim);
+					if (vfield && numeric_prim) {
+						return -1; // unitless quantity payload vs number: uncertain
+					}
+					return 0; // complex vs primitive: not equal
+				}
+			}
+
 			if (effectiveType(lv) != effectiveType(rv)) return -1;
 			return fpValuesEqual(lv, rv) ? 1 : 0;
 		};
@@ -9790,6 +9824,18 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 		// Quantity comparison with unit conversion
 		if (lv.type == FPValue::Type::Quantity && rv.type == FPValue::Type::Quantity) {
 			if (isMixedCalendarUcumDurationAboveSeconds(lv.quantity_unit, rv.quantity_unit)) return {};
+			// v0.0.24 it2 (upstream corpus refresh): a calendar YEAR
+			// keyword does not order against any non-year unit — official
+			// pins testLessThan29 (`1 year < 2 months` // {}), testLessOrEqual28
+			// (`1 year <= 2 days` // {}), testGreaterThan29 (`1 year > 2
+			// months` // {}): "calendar durations in different units are
+			// not compared by their values". Month↔day-family ordering
+			// (§5.5.7 factors) is unchanged.
+			{
+				bool l_year = (lv.quantity_unit == "year" || lv.quantity_unit == "years");
+				bool r_year = (rv.quantity_unit == "year" || rv.quantity_unit == "years");
+				if (l_year != r_year) return {};
+			}
 			// FP-14 SKEPTIC (2026-06-29): Offset-temperature cross-unit
 			// conversion (Cel <-> [degF], Cel <-> K, etc.) is undefined for
 			// the multiplicative-only convertQuantityToBase path. UCUM marks
