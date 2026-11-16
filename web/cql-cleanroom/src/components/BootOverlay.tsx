@@ -52,6 +52,12 @@ export function VersionBadge({
 // ---------------------------------------------------------------------------
 
 let sharedWorker: Worker | null = null;
+// Last boot result, cached: a boot failure can fire BEFORE any overlay
+// subscribes (the lazy-boot worker may be created during the
+// server-detection window when useBootProgress is still skipped). Without
+// the cache the failure dispatches to zero listeners and the overlay
+// mounts into an eternal "Loading engine…" state.
+let lastBootMsg: { type: string; ok: boolean; error?: string; wheelVersion?: string; bootMs?: number } | null = null;
 let bootListeners: Array<(m: any) => void> = [];
 let requestListeners = new Map<number, (m: any) => void>();
 let nextReqId = 1;
@@ -62,8 +68,19 @@ function getWorker(): Worker {
     new URL("../workers/cleanroom.worker.ts", import.meta.url),
     { type: "module" },
   );
+  // A module-worker whose chunk fails to LOAD (network error, stale hash)
+  // never starts, so it can never postMessage a boot failure. Surface the
+  // load failure through the same boot-listener protocol so the overlay
+  // reaches its error state instead of hanging on "Loading engine…".
+  sharedWorker.onerror = (ev: ErrorEvent) => {
+    const detail = ev.message || "engine worker failed to load";
+    const msg = { type: "boot", ok: false, error: `Engine worker failed to load: ${detail}` };
+    lastBootMsg = msg;
+    for (const fn of bootListeners) fn(msg);
+  };
   sharedWorker.onmessage = (e: MessageEvent) => {
     const m = e.data as { id?: number; type?: string };
+    if (m && m.type === "boot") lastBootMsg = m as typeof lastBootMsg;
     for (const fn of bootListeners) fn(m);
     if (m && typeof m.id === "number" && requestListeners.has(m.id)) {
       const fn = requestListeners.get(m.id)!;
@@ -100,6 +117,9 @@ export function useBootProgress(skip = false): BootState {
       return;
     }
     setState({ phase: "booting", step: "Loading engine…", startedAt: Date.now() });
+    // A boot result may already have arrived (early worker failure during
+    // the server-detect window, or a boot completed by an earlier mount).
+    const pre = lastBootMsg;
     const listener = (msg: any) => {
       if (msg.type !== "boot") return;
       if (msg.ok) {
@@ -113,6 +133,7 @@ export function useBootProgress(skip = false): BootState {
       }
     };
     bootListeners.push(listener);
+    if (pre) listener(pre); // replay a boot result that pre-dated this mount
     getWorker(); // idempotent: boots once per page
     return () => {
       bootListeners = bootListeners.filter((f) => f !== listener);
