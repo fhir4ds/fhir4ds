@@ -279,14 +279,19 @@ async function executeSnippet(
     // console's SQL/AST/CQL tabs replay the selection run faithfully.
     env.cql = executedText;
     if (diagShift > 0) {
+      // D2 (QA it5): EOF diagnostics sit one line PAST the selection end
+      // (the parser reports EOF at the synthesized text's last line + 1).
+      // Clamp renumbered lines to the selection's line count so a
+      // diagnostic never points at a line the user cannot see.
+      const selectionLines = body.split("\n").length;
       for (const d of env.diagnostics ?? []) {
         const loc = d.location;
         if (!loc) continue;
         if (loc.start_line != null && loc.start_line >= diagShift) {
-          loc.start_line = loc.start_line - diagShift;
+          loc.start_line = Math.min(loc.start_line - diagShift, selectionLines);
         }
         if (loc.end_line != null && loc.end_line >= diagShift) {
-          loc.end_line = loc.end_line - diagShift;
+          loc.end_line = Math.min(loc.end_line - diagShift, selectionLines);
         }
       }
     }
