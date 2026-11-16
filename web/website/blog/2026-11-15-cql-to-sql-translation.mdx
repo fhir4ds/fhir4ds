@@ -1,0 +1,202 @@
+---
+title: "Translating Clinical Quality Language to SQL: How CQL Compiles to Relational Queries"
+description: "How Clinical Quality Language (HL7 CQL) translates into relational SQL queries in DuckDB: AST lowering, Common Table Expressions, temporal algebra, and benchmarks."
+authors: joel
+tags: [cql, fhir, sql-on-fhir, analytics, performance]
+date: 2026-11-15T12:00:00Z
+slug: /cql-to-sql-translation
+---
+
+When clinical informaticists and healthcare data engineers talk about **CQL to SQL**, they are addressing an architectural divide in health IT: computable clinical knowledge—such as CMS electronic Clinical Quality Measures (eCQMs) and decision support guidelines—is authored in **HL7 Clinical Quality Language (CQL)**, but population analytics, quality reporting, and observational research run on relational data warehouses and SQL query engines.
+
+*(Note: "CQL" is also the acronym for Cassandra Query Language in Apache Cassandra database migrations. This article is about the HL7 healthcare standard: compiling Clinical Quality Language into relational SQL queries).*
+
+Traditionally, executing CQL has required an imperative, row-by-row Java engine (`cqframework` and HAPI FHIR). While that architecture works for transactional decision support on an individual patient in an EHR, evaluating thousands or millions of patients for quality reporting in a JVM quickly runs into memory and throughput walls.
+
+Here is how compiling CQL directly to relational SQL works in `fhir4ds`, how the translator handles complex clinical constructs (temporal intervals, polymorphic choice fields, and terminology resolution), and the performance characteristics of running CQL as set-based relational algebra.
+
+{/* truncate */}
+
+## The Architectural Divide: Per-Patient Loops vs. Set-Based Relational Algebra
+
+A clinical quality measure expressed in CQL defines a series of logical definitions over a patient's clinical history: demographics, clinical encounters, diagnostic reports, laboratory observations, and medications.
+
+In the standard Java execution model, the engine iterates over the cohort sequentially. In contrast, compiling CQL to SQL evaluates the entire population in a single set-based query:
+
+<div className="row" style={{ margin: '1.5rem 0' }}>
+  <div className="col col--6" style={{ marginBottom: '1rem' }}>
+    <div style={{ border: '1px solid #334155', borderRadius: '8px', padding: '1.25rem', background: '#0f172a', height: '100%' }}>
+      <div style={{ color: '#94a3b8', fontWeight: 600, fontSize: '1rem', marginBottom: '0.5rem' }}>Traditional Java Engine (CQF / HAPI)</div>
+      <div style={{ color: '#64748b', fontSize: '0.85rem', marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Imperative &bull; Row-by-Row</div>
+      <ul style={{ margin: 0, paddingLeft: '1.2rem', color: '#cbd5e1', fontSize: '0.9rem', lineHeight: 1.6 }}>
+        <li>Deserializes FHIR JSON per patient into JVM heap memory</li>
+        <li>Iterates clinical definitions sequentially in application code</li>
+        <li>High garbage collection overhead on cohorts &gt;1,000 patients</li>
+        <li>Emits N individual evaluation bundles</li>
+      </ul>
+    </div>
+  </div>
+  <div className="col col--6" style={{ marginBottom: '1rem' }}>
+    <div style={{ border: '1px solid #0284c7', borderRadius: '8px', padding: '1.25rem', background: '#0f172a', height: '100%' }}>
+      <div style={{ color: '#38bdf8', fontWeight: 600, fontSize: '1rem', marginBottom: '0.5rem' }}>FHIR4DS (SQL on DuckDB)</div>
+      <div style={{ color: '#38bdf8', fontSize: '0.85rem', marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Declarative &bull; Set-Based</div>
+      <ul style={{ margin: 0, paddingLeft: '1.2rem', color: '#cbd5e1', fontSize: '0.9rem', lineHeight: 1.6 }}>
+        <li>Parses CQL once at deploy time into a single SQL plan</li>
+        <li>Scans columnar Parquet or DuckDB tables directly</li>
+        <li>Executes with SIMD vectorization across all CPU cores</li>
+        <li>Emits one unified population roster (~83&times; faster)</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+For 100 patients, this is fast enough. At 5,000 to 50,000 patients, two bottlenecks emerge:
+1. **Redundant deserialization:** Every patient bundle is parsed into JVM heap memory as thousands of Java POJOs (`Encounter`, `Observation`, `Condition`). In large cohorts, garbage collection overhead dominates total runtime.
+2. **Missing columnar vectorization:** Analytical databases like DuckDB, ClickHouse, and BigQuery process data column-wise, operating over arrays of numbers and strings using SIMD instructions. An imperative loop in application code cannot leverage modern vectorized database planners.
+
+Compiling CQL to SQL flips this model. The CQL library is parsed and translated **once** at deploy time into a single relational query. That query runs across the entire patient population in a single analytical pass.
+
+## How the Translation Pipeline Works
+
+CQL is a declarative, strongly-typed expression language with first-class support for clinical concepts, interval arithmetic, and three-valued logic (3VL). Compiling it to SQL requires three distinct translation stages:
+
+```mermaid
+flowchart LR
+    A["<b>1. CQL Source</b><br/>Definitions, Intervals & ValueSets"] 
+    --> B["<b>2. Relational Compiler</b><br/>CTEs, Date Math & FHIRPath UDFs"] 
+    --> C["<b>3. Unified SQL Query</b><br/>Topologically Ordered Plan"] 
+    --> D["<b>4. Vectorized Execution</b><br/>Instant DuckDB Population Roster"]
+
+    classDef default fill:#1e293b,stroke:#38bdf8,color:#cbd5e1,stroke-width:1px
+    classDef highlight fill:#0f172a,stroke:#38bdf8,color:#f8fafc,stroke-width:2px
+    class D highlight
+    linkStyle default stroke:#38bdf8,stroke-width:2px
+```
+
+### 1. Common Table Expressions (CTEs) for CQL Definitions
+
+Each named `define` statement in a CQL library maps to a Common Table Expression (CTE) in the generated SQL. For example, consider this demographic and diagnostic screening logic:
+
+```cql
+library ScreeningExample version '1.0.0'
+using FHIR version '4.0.1'
+
+parameter "Measurement Period" Interval<DateTime>
+
+define "In Age Demographic":
+  Patient.gender = 'female'
+    and AgeInYearsAt(start of "Measurement Period") between 50 and 74
+
+define "Bilateral Mastectomy":
+  [Procedure: "Bilateral Mastectomy Procedure"] P
+    where P.status = 'completed'
+      and P.performed starts on or before end of "Measurement Period"
+
+define "Denominator Exclusion":
+  exists "Bilateral Mastectomy"
+```
+
+The compiler translates these definitions into chained CTEs that resolve dependencies in topological order:
+
+```sql
+WITH "Measurement Period" AS (
+  SELECT make_interval(start := '2025-01-01', end := '2025-12-31') AS val
+),
+"In Age Demographic" AS (
+  SELECT 
+    p.id AS patient_id,
+    (fhirpath_text(p.resource, 'gender') = 'female'
+      AND date_diff('year', TRY_CAST(fhirpath_text(p.resource, 'birthDate') AS DATE), '2025-01-01'::DATE) BETWEEN 50 AND 74
+    ) AS val
+  FROM resources p
+  WHERE p.resourceType = 'Patient'
+),
+"Bilateral Mastectomy" AS (
+  SELECT 
+    proc.patient_id,
+    bool_or(
+      fhirpath_text(proc.resource, 'status') = 'completed'
+      AND fhirpath_date(proc.resource, 'performedDateTime') <= '2025-12-31'
+    ) AS val
+  FROM resources proc
+  JOIN valueset_codes vc 
+    ON vc.code = fhirpath_text(proc.resource, 'code.coding[0].code')
+   AND vc.valueset_id = 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.198.12.1005'
+  WHERE proc.resourceType = 'Procedure'
+    AND proc.patient_id IS NOT NULL
+  GROUP BY proc.patient_id
+),
+"Denominator Exclusion" AS (
+  SELECT 
+    p.patient_id,
+    COALESCE(bm.val, FALSE) AS val
+  FROM "In Age Demographic" p
+  LEFT JOIN "Bilateral Mastectomy" bm ON p.patient_id = bm.patient_id
+)
+SELECT patient_id, val FROM "Denominator Exclusion";
+```
+
+### 2. Temporal Interval Arithmetic
+
+A major strength of CQL is interval algebra (Allen's interval algebra). Expressions like `A during B`, `A starts before end of B`, or `A overlaps B` are translated into explicit comparison predicates on interval boundaries:
+
+| CQL Expression | Relational SQL Lowering |
+|---|---|
+| `X during Interval[Start, End]` | `X >= Start AND X <= End` |
+| `A overlaps B` | `A.start <= B.end AND A.end >= B.start` |
+| `A starts on or before end of B` | `A.start <= B.end` |
+| `DifferenceInDays(Start, End)` | `date_diff('day', Start, End)` |
+
+### 3. Vectorized FHIRPath Extraction
+
+Instead of converting entire JSON documents into SQL structs or relational columns ahead of time, `fhir4ds` utilizes native DuckDB C++ extensions (`fhirpath()` and `fhirpath_text()`). The database query engine extracts only the fields required by the active predicates directly from raw NDJSON or Parquet storage.
+
+---
+
+## Evaluating Measures in Python
+
+Evaluating a standard CMS quality measure or custom CQL library takes four lines of Python:
+
+```python
+import fhir4ds
+
+# 1. Connect to DuckDB
+con = fhir4ds.create_connection()
+
+# 2. Ingest patient resources
+loader = fhir4ds.FHIRDataLoader(con)
+loader.load_ndjson("patients.ndjson")
+
+# 3. Evaluate the measure over the cohort
+result = fhir4ds.evaluate_measure(
+    library_path="./CMS125.cql",
+    conn=con,
+    parameters={"Measurement Period": ("2025-01-01", "2025-12-31")}
+)
+
+# 4. Extract results as a Pandas DataFrame
+df = result.df()
+print(df[["patient_id", "Initial Population", "Denominator", "Numerator"]])
+```
+
+For batch processing across millions of patients, the `compile_measure()` API parses the CQL once and executes the pre-compiled physical plan across successive batches with zero recompilation overhead.
+
+---
+
+## What the Numbers Show: Scaling Characteristics
+
+In profiling runs over synthetic patient cohorts (Synthea) comparing the SQL-native compilation against a standard per-patient Java baseline across the **2025 CMS QI-Core benchmark suite**:
+
+- **Per-patient cost falls as cohort size grows:** Because the fixed cost of query planning, CTE evaluation, and the patient roster is amortized across more rows, execution time per patient drops significantly (e.g. from 0.70 ms/patient at 100 patients to 0.09 ms/patient at 5,000 patients on CMS68).
+- **Execution throughput:** Leveraged across columnar storage, median execution speedup reached **~83×** compared to sequential row-by-row interpretation.
+- **Resource bounds:** Query execution stays inside DuckDB's configured memory limits without JVM heap exhaustion.
+
+---
+
+## Testing CQL to SQL in Your Browser
+
+Both DuckDB and the `fhir4ds` translation engine compile to WebAssembly, enabling zero-server clinical analytics:
+
+- **[CQL Cleanroom](/docs/examples/cql-cleanroom/):** Author CQL, inspect the generated SQL in real time, and evaluate patient cohorts directly in a browser tab with zero data exfiltration.
+- **[Interactive CQL Clinic](/docs/examples/cql-clinic/):** A twelve-lesson hands-on guide covering temporal intervals, choice types, and cohort definitions.
+- **[CQL Documentation](/docs/user-guide/analytics/cql/):** Comprehensive reference for syntax, supported operations, and DQM integration.
