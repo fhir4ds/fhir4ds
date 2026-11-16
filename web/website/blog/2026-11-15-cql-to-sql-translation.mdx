@@ -23,32 +23,12 @@ A clinical quality measure expressed in CQL defines a series of logical definiti
 
 In the standard Java execution model, the engine iterates over the cohort sequentially. In contrast, compiling CQL to SQL evaluates the entire population in a single set-based query:
 
-<div className="row" style={{ margin: '1.5rem 0' }}>
-  <div className="col col--6" style={{ marginBottom: '1rem' }}>
-    <div style={{ border: '1px solid #334155', borderRadius: '8px', padding: '1.25rem', background: '#0f172a', height: '100%' }}>
-      <div style={{ color: '#94a3b8', fontWeight: 600, fontSize: '1rem', marginBottom: '0.5rem' }}>Traditional Java Engine (CQF / HAPI)</div>
-      <div style={{ color: '#64748b', fontSize: '0.85rem', marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Imperative &bull; Row-by-Row</div>
-      <ul style={{ margin: 0, paddingLeft: '1.2rem', color: '#cbd5e1', fontSize: '0.9rem', lineHeight: 1.6 }}>
-        <li>Deserializes FHIR JSON per patient into JVM heap memory</li>
-        <li>Iterates clinical definitions sequentially in application code</li>
-        <li>High garbage collection overhead on cohorts &gt;1,000 patients</li>
-        <li>Emits N individual evaluation bundles</li>
-      </ul>
-    </div>
-  </div>
-  <div className="col col--6" style={{ marginBottom: '1rem' }}>
-    <div style={{ border: '1px solid #0284c7', borderRadius: '8px', padding: '1.25rem', background: '#0f172a', height: '100%' }}>
-      <div style={{ color: '#38bdf8', fontWeight: 600, fontSize: '1rem', marginBottom: '0.5rem' }}>FHIR4DS (SQL on DuckDB)</div>
-      <div style={{ color: '#38bdf8', fontSize: '0.85rem', marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Declarative &bull; Set-Based</div>
-      <ul style={{ margin: 0, paddingLeft: '1.2rem', color: '#cbd5e1', fontSize: '0.9rem', lineHeight: 1.6 }}>
-        <li>Parses CQL once at deploy time into a single SQL plan</li>
-        <li>Scans columnar Parquet or DuckDB tables directly</li>
-        <li>Executes with SIMD vectorization across all CPU cores</li>
-        <li>Emits one unified population roster (~83&times; faster)</li>
-      </ul>
-    </div>
-  </div>
-</div>
+| | Traditional Java Engine (CQF / HAPI) | FHIR4DS (SQL on DuckDB) |
+|---|---|---|
+| Execution model | Imperative, row-by-row | Declarative, set-based |
+| Deserialization | Every patient bundle parsed into JVM heap as Java POJOs | Columnar scans over raw NDJSON / Parquet — no per-patient objects |
+| Vectorization | None — sequential interpretation in application code | SIMD vectorized across all CPU cores |
+| Output | N individual evaluation bundles | One unified population roster |
 
 For 100 patients, this is fast enough. At 5,000 to 50,000 patients, two bottlenecks emerge:
 1. **Redundant deserialization:** Every patient bundle is parsed into JVM heap memory as thousands of Java POJOs (`Encounter`, `Observation`, `Condition`). In large cohorts, garbage collection overhead dominates total runtime.
@@ -65,7 +45,7 @@ flowchart LR
     A["<b>1. CQL Source</b><br/>Definitions, Intervals & ValueSets"] 
     --> B["<b>2. Relational Compiler</b><br/>CTEs, Date Math & FHIRPath UDFs"] 
     --> C["<b>3. Unified SQL Query</b><br/>Topologically Ordered Plan"] 
-    --> D["<b>4. Vectorized Execution</b><br/>Instant DuckDB Population Roster"]
+    --> D["<b>4. Vectorized Execution</b><br/>One Population Roster Query"]
 
     classDef default fill:#1e293b,stroke:#38bdf8,color:#cbd5e1,stroke-width:1px
     classDef highlight fill:#0f172a,stroke:#38bdf8,color:#f8fafc,stroke-width:2px
@@ -96,44 +76,44 @@ define "Denominator Exclusion":
   exists "Bilateral Mastectomy"
 ```
 
-The compiler translates these definitions into chained CTEs that resolve dependencies in topological order:
+The compiler translates these definitions into chained `MATERIALIZED` CTEs that resolve dependencies in topological order. This is the actual generated SQL (excerpted):
 
 ```sql
-WITH "Measurement Period" AS (
-  SELECT make_interval(start := '2025-01-01', end := '2025-12-31') AS val
+-- Actual fhir4ds output for the library above (DuckDB dialect, excerpt):
+WITH _patients AS MATERIALIZED (
+  SELECT DISTINCT ON (p.id) p.id AS patient_id, p.resource AS patient_resource,
+         CAST(fhirpath_date(p.resource, 'birthDate') AS VARCHAR) AS birth_date
+  FROM resources AS p WHERE p.id IS NOT NULL AND p.resourceType = 'Patient'
 ),
-"In Age Demographic" AS (
-  SELECT 
-    p.id AS patient_id,
-    (fhirpath_text(p.resource, 'gender') = 'female'
-      AND date_diff('year', TRY_CAST(fhirpath_text(p.resource, 'birthDate') AS DATE), '2025-01-01'::DATE) BETWEEN 50 AND 74
-    ) AS val
-  FROM resources p
-  WHERE p.resourceType = 'Patient'
+"Procedure: Bilateral Mastectomy Procedure" AS (
+  SELECT DISTINCT r.patient_ref AS patient_id, r.resource,
+         fhirpath_text(r.resource, 'performed') AS performed,
+         COALESCE(json_extract_string(r.resource, '$.performedPeriod.start'),
+                  json_extract_string(r.resource, '$.performedDateTime'),
+                  json_extract_string(r.resource, '$.performedDate'),
+                  json_extract_string(r.resource, '$.performedInstant')) AS performed_start,
+         fhirpath_text(r.resource, 'status') AS status
+  FROM resources r
+  WHERE r.resourceType = 'Procedure'
+    AND in_valueset(r.resource, 'code',
+        'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.198.12.1005')
+    -- negation-profile guard: a "not done" Procedure is not positive evidence
+    AND (json_extract(r.resource, '$.meta.profile') IS NULL OR NOT (
+         list_contains(from_json(json_extract(r.resource, '$.meta.profile'), '["VARCHAR"]'),
+             'http://fhir.org/guides/astp/us-quality-core/StructureDefinition/us-quality-core-procedurenotdone')))
 ),
-"Bilateral Mastectomy" AS (
-  SELECT 
-    proc.patient_id,
-    bool_or(
-      fhirpath_text(proc.resource, 'status') = 'completed'
-      AND fhirpath_date(proc.resource, 'performedDateTime') <= '2025-12-31'
-    ) AS val
-  FROM resources proc
-  JOIN valueset_codes vc 
-    ON vc.code = fhirpath_text(proc.resource, 'code.coding[0].code')
-   AND vc.valueset_id = 'http://cts.nlm.nih.gov/fhir/ValueSet/2.16.840.1.113883.3.464.1003.198.12.1005'
-  WHERE proc.resourceType = 'Procedure'
-    AND proc.patient_id IS NOT NULL
-  GROUP BY proc.patient_id
+"Bilateral Mastectomy" AS MATERIALIZED (
+  SELECT * FROM "Procedure: Bilateral Mastectomy Procedure" AS P
+  WHERE P.status = 'completed'
+    AND LEFT(CAST(COALESCE(P.performed_start, '0001-01-01') AS VARCHAR), 10)
+        <= LEFT(CAST(CAST('2025-12-31T23:59:59.999' AS VARCHAR) AS VARCHAR), 10)
 ),
-"Denominator Exclusion" AS (
-  SELECT 
-    p.patient_id,
-    COALESCE(bm.val, FALSE) AS val
-  FROM "In Age Demographic" p
-  LEFT JOIN "Bilateral Mastectomy" bm ON p.patient_id = bm.patient_id
+"Denominator Exclusion" AS MATERIALIZED (
+  SELECT _pt.patient_id FROM _patients AS _pt
+  WHERE EXISTS (SELECT 1 FROM "Bilateral Mastectomy" AS sub
+                WHERE sub.patient_id = _pt.patient_id)
 )
-SELECT patient_id, val FROM "Denominator Exclusion";
+SELECT _pt.patient_id, ...
 ```
 
 ### 2. Temporal Interval Arithmetic
@@ -179,17 +159,17 @@ df = result.df()
 print(df[["patient_id", "Initial Population", "Denominator", "Numerator"]])
 ```
 
-For batch processing across millions of patients, the `compile_measure()` API parses the CQL once and executes the pre-compiled physical plan across successive batches with zero recompilation overhead.
+For batch processing, translate once with `fhir4ds.translate_cql(...)` (or `translate_library_to_population_sql`): the result is a plain SQL string you can `PREPARE` and execute repeatedly across successive data loads — same plan, zero re-translation.
 
 ---
 
 ## What the Numbers Show: Scaling Characteristics
 
-In profiling runs over synthetic patient cohorts (Synthea) comparing the SQL-native compilation against a standard per-patient Java baseline across the **2025 CMS QI-Core benchmark suite**:
+Two published benchmarks frame the speedup (both against the reference Java clinical-reasoning engine, on the current DuckDB 2.0.0-primary numbers):
 
-- **Per-patient cost falls as cohort size grows:** Because the fixed cost of query planning, CTE evaluation, and the patient roster is amortized across more rows, execution time per patient drops significantly (e.g. from 0.70 ms/patient at 100 patients to 0.09 ms/patient at 5,000 patients on CMS68).
-- **Execution throughput:** Leveraged across columnar storage, median execution speedup reached **~83×** compared to sequential row-by-row interpretation.
-- **Resource bounds:** Query execution stays inside DuckDB's configured memory limits without JVM heap exhaustion.
+- **Per-patient cost falls as cohort size grows (Synthea synthetic patients):** the fixed cost of planning and the patient roster is amortized across more rows — CMS68 drops from 0.45 ms/patient at 100 patients to 0.045 ms/patient at 5,000.
+- **Per-measure execution (cqframework 2025 QI-Core test bundles):** median **~83× faster** per patient than the Java engine (mean ~31×).
+- **At full scale, the gap widens (Synthea synthetic patients @5,000):** from ~23× to ~16,000× per measure depending on shape — and execution stays inside DuckDB's configured memory limits, with no JVM heap exhaustion.
 
 ---
 
