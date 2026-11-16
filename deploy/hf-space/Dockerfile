@@ -30,7 +30,7 @@ RUN apt-get update \
 
 ARG DUCKDB_VERSION=1.5.5
 RUN python -m pip install --no-cache-dir \
-        "fhir4ds-v2[serve,hf]==0.0.23" \
+        "fhir4ds-v2[serve,hf]==0.0.24" \
         "duckdb==${DUCKDB_VERSION}"
 # Hugging Face runs the container as UID 1000; create it before any COPY so
 # the application files are owned by the runtime user.
