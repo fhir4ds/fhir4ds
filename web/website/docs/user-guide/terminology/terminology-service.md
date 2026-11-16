@@ -118,7 +118,7 @@ stored-ValueSet lookup by canonical URL**. It resolves three forms only:
 - a text **`filter`**
 
 So asking a medterm4ds backend to expand a canonical URL answers HTTP 400. Since
-0.0.23 that surfaces as a `TerminologyCapabilityError` naming the cause and the
+0.0.24 that surfaces as a `TerminologyCapabilityError` naming the cause and the
 remedies, and **it is not swallowed**: `DependencyResolver.resolve_valueset()`
 escalates capability mismatches so the failure reaches whoever is running the
 measure. Load the ValueSet locally, POST its definition via

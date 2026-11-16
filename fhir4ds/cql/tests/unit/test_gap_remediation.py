@@ -773,7 +773,7 @@ class TestGap1StatusFilters:
         fft = FluentFunctionTranslator(ctx)
         # Pre-populate dynamic filters for this test
         fft._dynamic_status_filters = {
-            "isEncounterPerformed": {"status_field": "status", "allowed": ["finished"]},
+            "isEncounterPerformed": [{"status_field": "status", "allowed": ["finished"]}],
         }
         fft._dynamic_extraction_done = True
         # Use a quoted identifier (table-level CTE) to trigger WHERE clause path
@@ -1162,7 +1162,7 @@ class TestGap17UnionFluentFilters:
         fft = FluentFunctionTranslator(ctx)
         # Pre-populate dynamic filters for this test
         fft._dynamic_status_filters = {
-            "isProcedurePerformed": {"status_field": "status", "allowed": ["completed"]},
+            "isProcedurePerformed": [{"status_field": "status", "allowed": ["completed"]}],
         }
         fft._dynamic_extraction_done = True
 
@@ -1195,7 +1195,7 @@ class TestGap17UnionFluentFilters:
         fft = FluentFunctionTranslator(ctx)
         # Pre-populate dynamic filters for this test
         fft._dynamic_status_filters = {
-            "isEncounterPerformed": {"status_field": "status", "allowed": ["finished"]},
+            "isEncounterPerformed": [{"status_field": "status", "allowed": ["finished"]}],
         }
         fft._dynamic_extraction_done = True
         source = SQLIdentifier(name="encounter_inpatient", quoted=True)

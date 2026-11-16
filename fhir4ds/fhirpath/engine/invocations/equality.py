@@ -58,7 +58,18 @@ def equality(ctx, x, y):
             return None
         return all(results)
 
+    # v0.0.24 it4 (SKEPTIC): complex-vs-temporal equality (either side) is
+    # definitively FALSE — same it2 doctrine as complex-vs-primitive
+    # (testEquality29/30). Without this guard the temporal dispatch below
+    # swallowed the mismatch as uncertain (code = @2020-01-01 -> empty,
+    # native -> false).
     if type(x[0]) in DATETIME_NODES_LIST or type(y[0]) in DATETIME_NODES_LIST:
+        _a_early = util.get_data(x[0]) if hasattr(x[0], "data") else x[0]
+        _b_early = util.get_data(y[0]) if hasattr(y[0], "data") else y[0]
+        _a_cx = isinstance(_a_early, (abc.Mapping, list))
+        _b_cx = isinstance(_b_early, (abc.Mapping, list))
+        if _a_cx != _b_cx:
+            return False
         return datetime_equality(ctx, x, y)
 
     a = util.parse_value(x[0])
@@ -120,12 +131,47 @@ def equality(ctx, x, y):
     a_type = type(a_raw)
     b_type = type(b_raw)
     if a_type != b_type:
+        # v0.0.24 it2 (HISTORIAN, upstream corpus 2026-11): complex-vs-primitive
+        # equality is definitively FALSE ("different types are not equal"),
+        # pinned by official tests testEquality29/30 + testNEquality25/26
+        # (name.first() = 'Peter' // false). Primitive-vs-primitive type
+        # mismatches (Boolean = 1, 1 = '1') remain EMPTY per the older
+        # fixture-pinned uncertainty doctrine.
+        a_complex = isinstance(a_raw, (abc.Mapping, list))
+        b_complex = isinstance(b_raw, (abc.Mapping, list))
+        if a_complex != b_complex:
+            # Carve-out (official testQuantityUnitVsNoUnitEqual // empty): a
+            # Quantity-shaped payload on either side keeps the UNCERTAIN
+            # quantity semantics — a unit-carrying Quantity vs a unitless
+            # quantity object is empty, not false.
+            def _quantity_shaped(v):
+                return (
+                    isinstance(v, abc.Mapping)
+                    and "value" in v
+                    and any(k in v for k in ("unit", "code", "system"))
+                )
+
+            def _value_payload(v):
+                return isinstance(v, abc.Mapping) and "value" in v
+
+            other_numeric = lambda v: isinstance(v, (int, float, Decimal)) and not isinstance(v, bool)
+            if (
+                _quantity_shaped(a_raw)
+                or _quantity_shaped(b_raw)
+                or isinstance(a, nodes.FP_Quantity)
+                or isinstance(b, nodes.FP_Quantity)
+                # Bare unitless quantity payloads vs numerics stay UNCERTAIN
+                # (FP-12 milestone-4 pin: {"value":120} = 120 // empty).
+                or ((_value_payload(a_raw) and other_numeric(b_raw)) or (_value_payload(b_raw) and other_numeric(a_raw)))
+            ):
+                return None
+            return False
         # Allow numeric type mixing (int/float/Decimal)
         numeric = (int, float, Decimal)
         a_numeric = isinstance(a_raw, numeric) and not isinstance(a_raw, bool)
         b_numeric = isinstance(b_raw, numeric) and not isinstance(b_raw, bool)
         if not (a_numeric and b_numeric):
-            return None  # incompatible types → empty
+            return None  # incompatible primitives → empty
 
     # Compare the unwrapped values, not the original ResourceNode-wrapped
     # operands. ``util.get_data`` materializes raw JSON floats to ``Decimal``
@@ -218,11 +264,16 @@ def _quantities_equivalent(left, right):
     l_base = _quantity_base(left)
     r_base = _quantity_base(right)
     if l_base is None or r_base is None:
-        return None
+        # v0.0.24 it2 (HISTORIAN): quantities that can't be compared are NOT
+        # equivalent — official testEquivalent28 (`1 'x' ~ 1 year` // false)
+        # and testEquivalent29 (`1 year ~ 1 'kg'` // false). Supersedes the
+        # FP-13 SKEPTIC QA-003 empty-doctrine pin for `~` (equality `=`
+        # keeps empty for uncertainty cases).
+        return False
     l_value, l_unit = l_base
     r_value, r_unit = r_base
     if l_unit != r_unit:
-        return None
+        return False
 
     tolerance = max(
         _quantity_equivalence_half_width(left, l_value),
@@ -251,11 +302,31 @@ def _is_implicitly_equivalent_pair(a, b):
     # precision mismatch). Time is NOT compatible with Date/DateTime.
     a_is_temporal = isinstance(a_raw, DATETIME_NODES_LIST)
     b_is_temporal = isinstance(b_raw, DATETIME_NODES_LIST)
+    # v0.0.24 it6 (EXPLORER): ResourceNode-wrapped strings participate in
+    # temporal comparison when their peer is temporal (datetime_equality's
+    # ResourceNode guard materializes them via get_match_data). The §6.1.2
+    # gate must classify them as temporal too, or typed FHIR `time` fields
+    # lose ~ comparisons: `valueTime ~ @T10:30:00` returned False because
+    # the raw str was classified non-time against the FP_Time literal
+    # (while `=` worked). Only the FP_Time peer needs this — Date/DateTime
+    # typed fields already pass (neither side is FP_Time).
+    if not a_is_temporal and b_is_temporal and isinstance(a_raw, str) \
+            and isinstance(a, nodes.ResourceNode):
+        a_is_temporal = True
+    if not b_is_temporal and a_is_temporal and isinstance(b_raw, str) \
+            and isinstance(b, nodes.ResourceNode):
+        b_is_temporal = True
     if a_is_temporal or b_is_temporal:
         # Time vs Date/DateTime is not implicitly convertible (no
         # conversion path in §5.5 table between Time and Date/DateTime).
         a_is_time = isinstance(a_raw, nodes.FP_Time)
         b_is_time = isinstance(b_raw, nodes.FP_Time)
+        if not a_is_time and b_is_time and isinstance(a_raw, str) \
+                and isinstance(a, nodes.ResourceNode):
+            a_is_time = nodes.FP_TimeBase.get_match_data(a_raw) is not None
+        if not b_is_time and a_is_time and isinstance(b_raw, str) \
+                and isinstance(b, nodes.ResourceNode):
+            b_is_time = nodes.FP_TimeBase.get_match_data(b_raw) is not None
         if a_is_time != b_is_time:
             return False
         return True

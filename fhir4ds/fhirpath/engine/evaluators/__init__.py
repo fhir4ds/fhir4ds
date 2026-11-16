@@ -7,7 +7,7 @@ import json
 from ... import engine as engine
 from ...engine import util as util
 from ...engine import nodes as nodes
-from ..errors import FHIRPathError
+from ..errors import FHIRPathError, FHIRPathSyntaxError
 
 
 def boolean_literal(ctx, parentData, node):
@@ -293,8 +293,15 @@ def _unescape_fhirpath_string(value):
                 result.append(chr(code_unit))
                 i += 6
             else:
-                result.append("u")
-                i += 2
+                # v0.0.24 it2 (HISTORIAN, upstream corpus refresh): \u MUST
+                # be followed by exactly 4 hex digits — official pin
+                # testLiteralUnicodeInvalid ('\u+041' invalid="syntax").
+                # Supersedes the FP-10 tolerant corner that dropped the
+                # backslash (both engines tighten together; parity holds).
+                raise FHIRPathSyntaxError(
+                    "Invalid Unicode escape in string literal: "
+                    "\\u must be followed by 4 hex digits"
+                )
             continue
 
         result.append(escapes.get(escaped, escaped))

@@ -150,13 +150,20 @@ def _node_extra(node: dict) -> str:
 
 
 def _walk(node: dict, out: list[dict]) -> None:
-    op = node.get("operator_name") or ""
+    # DuckDB 1.5 profile nodes carry operator_name/operator_timing/
+    # operator_cardinality; DuckDB 2.0 EXPLAIN-ANALYZE JSON uses type/timing
+    # (children trees under a top-level "operator" list). Normalize both.
+    op = node.get("operator_name") or node.get("type") or ""
     timing = node.get("operator_timing")
+    if timing is None:
+        timing = node.get("timing")
     children = node.get("children") or []
+    if node.get("operator_cardinality") is None and "intermediate_rows" in node:
+        node = dict(node, operator_cardinality=node.get("intermediate_rows"))
     if isinstance(timing, (int, float)):
         child_sum = sum(c.get("operator_timing") or 0 for c in children)
         extra = _node_extra(node)
-        if op == "SEQ_SCAN":
+        if op in ("SEQ_SCAN", "TABLE_SCAN"):
             bucket = "resource_scans" if "resources" in extra else "other_scans"
         elif op in ("PROJECTION", "FILTER", "EXPRESSION_SCAN"):
             bucket = "expression_eval" if EXPR_HINTS.search(extra) else "expression_other"
@@ -180,7 +187,12 @@ def _walk(node: dict, out: list[dict]) -> None:
 
 def operator_attribution(profile: dict) -> dict:
     nodes: list[dict] = []
-    _walk(profile, nodes)
+    if isinstance(profile.get("operator"), list):
+        # DuckDB 2.0 shape: list of root operator trees.
+        for root in profile["operator"]:
+            _walk(root, nodes)
+    else:
+        _walk(profile, nodes)
     total = max((n["inclusive_s"] for n in nodes), default=0.0)
     buckets: dict[str, float] = {}
     for n in nodes:

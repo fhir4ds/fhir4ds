@@ -14,11 +14,11 @@ FHIR4DS achieves **100% spec compliance** across all test suites — 2,943 total
 
 | Metric | Result |
 |--------|-----------------|
-| **Spec Compliance (CQL)** | **100%** (1,706 / 1,706 tests) |
-| **Spec Compliance (FHIRPath)** | **100%** (935 / 935 tests) |
-| **Spec Compliance (SQL-on-FHIR)** | **100%** (144 / 144 tests) |
-| **eCQM Measures (QI-Core 2025)** | **100% pass rate** (47 / 47) |
-| **eCQM Measures (US-Core 2025)** | **100% pass rate** (73 / 73) |
+| **CQL** | **100%** (1,706 / 1,706 tests) |
+| **FHIRPath** | **100%** (935 / 935 tests) |
+| **SQL-on-FHIR** | **100%** (144 / 144 tests) |
+| **eCQMs (2025 QI-Core suite)** | **100% pass rate** (47 / 47) |
+| **DQMs (2025 US-Core suite)** | **100% pass rate** (73 / 73) |
 
 ### Known Upstream Accuracy Gaps
 4 measures have documented accuracy gaps caused by bugs in the official CMS test bundles, not by FHIR4DS implementation errors. These measures fail equally in all conformant engines.
@@ -37,21 +37,44 @@ FHIR4DS achieves **100% spec compliance** across all test suites — 2,943 total
 By leveraging a SQL-native, vectorized architecture, FHIR4DS provides a transformative performance advantage over traditional engines.
 
 ### Head-to-Head: FHIR4DS vs. Java Reference Engine
-We compared FHIR4DS against the industry-standard [Java Clinical Reasoning](https://github.com/cqframework/clinical-reasoning) engine using 12 shared measures that achieved 100% execution success in both environments.
 
-| Metric | Traditional Engine (Java) | FHIR4DS (SQL Native) | Speedup |
-|--------|---------------------------|----------------------|---------|
-| **Mean Execution/Patient** | ~936ms | **~6.9ms** | **~137×** |
-| **Median Execution/Patient** | ~819ms | **~1.9ms** | **~425×** |
+We compared FHIR4DS against the industry-standard [Java Clinical Reasoning](https://github.com/cqframework/clinical-reasoning) engine on the **cqframework 2025 QI-Core test bundles**. 46 of 47 measures succeed in both engines; the head-to-head below covers that shared set of 46 measures (per-patient execution time only).
+
+| Metric | Traditional Engine (Java) | FHIR4DS (DuckDB 2.0.0) | Speedup |
+|--------|---------------------------|-------------------------|---------|
+| **Median Execution/Patient** | ~575ms | **~6.9ms** | **~83×** |
+
+Across all 47 measures of the 2025 QI-Core suite, FHIR4DS executes at a median of ~6.9ms per patient on DuckDB 2.0.0 (the recommended engine; `fhir4ds.register()` automatically applies the validated `delim_join_as_cte=false` planner tuning on DuckDB 2.x). We report the median rather than the mean because a small heavy tail inflates the mean (~15ms) — the three most expensive measures (CMS117 ~92ms, CMS128 ~89ms, CMS0334 ~70ms per patient) run well above the typical measure on these small test cohorts. Compile phases are one-time diagnostics at deploy (not included in the per-patient figures): ~15ms parse and ~476ms SQL translation per library.
+
+> **DuckDB 1.5.6 footnote:** on the same per-patient test cohorts (tens to low hundreds of patients), DuckDB 1.5.6 measured a median of ~4.5ms (mean ~11.9ms), i.e. ~131× median / ~39× mean vs Java. On these tiny cohorts, DuckDB 2.0's per-query overhead makes it slightly slower than 1.5.6; the tables turn decisively at population scale (see the scaling ladder below, where 2.0 is ~10× faster on CMS130/CMS133 at 5,000 patients).
 
 ### Scalability
-The speedup reflects the architectural difference: traditional engines evaluate each patient sequentially, whereas FHIR4DS runs a single columnar SQL query that processes the entire population simultaneously. This results in **near-zero marginal cost** for adding additional patients to a cohort.
+
+The speedup reflects the architectural difference: traditional engines evaluate each patient sequentially, whereas FHIR4DS runs a single columnar SQL query that processes the entire population simultaneously. The per-patient cost is dominated by correctness and audit machinery, and the marginal per-patient cost falls as the cohort grows.
+
+Java baseline numbers at scale are a per-patient linear extrapolation from the head-to-head measurement above, unchanged from the prior measurement.
+
+### Scaling Ladder (Synthea synthetic patients)
+
+Measured on **Synthea synthetic patients** (distinct from the cqframework 2025 QI-Core test bundles used for the head-to-head above), with nested deterministic prefixes, measurement period 2026, in-memory **DuckDB 2.0.0** with the automatic planner tuning, median of 3 runs. The top rung covers 6.28M resources.
+
+| Measure | 100 patients | 1,000 patients | 5,000 patients |
+|---------|-------------|----------------|----------------|
+| **CMS68** | 45ms | 88ms | 225ms |
+| **CMS22** | 948ms | 1,863ms | 5,074ms |
+| **CMS2** | 1,118ms | 1,377ms | 2,706ms |
+| **CMS130** | 816ms | 1,654ms | 5,576ms |
+| **CMS133** | 606ms | 1,287ms | 5,166ms |
+
+Peak RSS at 5,000 patients: ~20 GB. CMS68 at 5,000 patients runs at **0.045ms per patient** — evidence of population-level amortization: a single scan's fixed cost is spread across the whole cohort.
+
+> **DuckDB 1.5.6 footnote (@5,000 patients):** CMS68 474ms, CMS22 4,630ms, CMS2 2,773ms, CMS130 57,357ms, CMS133 46,428ms. DuckDB 2.0.0 is roughly **10× faster on CMS130 and CMS133** at this rung — the planner improvements in 2.0 compound with population scale.
 
 ---
 
 ## 3. Measures Tested
 
-The 47 CMS eCQMs from the QI-Core 2025 content package included in our standard benchmark suite include:
+The 47 CMS eCQMs from the 2025 QI-Core content package included in our standard benchmark suite include:
 
 - **CMS74** — Primary Caries Prevention
 - **CMS75** — Children with Dental Decay

@@ -216,6 +216,10 @@ class CQLParser:
         # Parse library declaration
         self.expect(TokenType.LIBRARY, "Expected 'library' declaration")
         identifier = self._parse_identifier_name()
+        # PAR-008: the grammar's libraryIdentifier is a qualifiedIdentifier —
+        # `library a.b.C` is valid. Join dotted parts.
+        while self.match_and_advance(TokenType.DOT):
+            identifier += "." + self._parse_identifier_name()
         version = None
 
         # Optional version
@@ -334,6 +338,24 @@ class CQLParser:
         """Parse a define statement (expression or function)."""
         self.expect(TokenType.DEFINE, "Expected 'define'")
 
+        # PAR-008: accessModifier — `define private X: ...` / `define public
+        # X: ...`. 'private'/'public' are not lexer keywords; treat an
+        # IDENTIFIER with exactly that spelling as the modifier. Per the
+        # grammar the modifier also precedes function definitions
+        # (`define private fluent function F(...)`) and comes BEFORE 'fluent'.
+        access_level = None
+        if (
+            self.match(TokenType.IDENTIFIER)
+            and self.current().value in ("private", "public")
+            and self.peek(1).type in (
+                TokenType.IDENTIFIER,
+                TokenType.QUOTED_IDENTIFIER,
+                TokenType.FUNCTION,
+                TokenType.FLUENT,
+            )
+        ):
+            access_level = self.advance().value
+
         # Check for fluent function definition
         is_fluent = self.match(TokenType.FLUENT)
         if is_fluent:
@@ -341,19 +363,24 @@ class CQLParser:
 
         # Check for function definition
         if self.match_and_advance(TokenType.FUNCTION):
-            return self._parse_function_definition(fluent=is_fluent)
+            return self._parse_function_definition(
+                fluent=is_fluent, access_level=access_level
+            )
 
         name = self._parse_identifier_name()
         self.expect(TokenType.COLON, "Expected ':' after definition name")
 
         expression = self.parse_expression()
-        return Definition(name=name, expression=expression)
+        return Definition(name=name, expression=expression, access_level=access_level)
 
-    def _parse_function_definition(self, fluent: bool = False) -> FunctionDefinition:
+    def _parse_function_definition(
+        self, fluent: bool = False, access_level: Optional[str] = None
+    ) -> FunctionDefinition:
         """Parse a function definition.
 
         Args:
             fluent: Whether this is a fluent function definition.
+            access_level: Optional 'public'/'private' access modifier.
         """
         name = self._parse_identifier_name()
         self.expect(TokenType.LPAREN, "Expected '(' after function name")
@@ -380,6 +407,7 @@ class CQLParser:
             parameters=parameters,
             return_type=return_type,
             expression=expression,
+            access_level=access_level,
             fluent=fluent,
         )
 
@@ -744,6 +772,7 @@ class CQLParser:
                              or self.peek().type in (
                                  TokenType.YEAR, TokenType.MONTH, TokenType.DAY, TokenType.HOUR,
                                  TokenType.MINUTE, TokenType.SECOND, TokenType.MILLISECOND, TokenType.WEEK)):
+                    same_pos = self.pos
                     self.advance()  # consume 'same'
                     # Optionally consume precision unit (e.g. "day" in "same day as")
                     precision = ""
@@ -757,9 +786,16 @@ class CQLParser:
                         qualifier = " or after"
                     elif self.match_and_advance(TokenType.OR_BEFORE):
                         qualifier = " or before"
-                    right = self.parse_type_expression()
-                    left = BinaryExpression(
-                        operator=f"starts same{precision}{qualifier}", left=left, right=right)
+                    if not qualifier:
+                        # Grammar (concurrentWithIntervalOperatorPhrase) requires
+                        # a qualifier or 'as' after the optional precision. Consume
+                        # nothing and surface the leftover tokens instead of
+                        # embedding them in the operator string.
+                        self.pos = same_pos
+                    else:
+                        right = self.parse_type_expression()
+                        left = BinaryExpression(
+                            operator=f"starts same{precision}{qualifier}", left=left, right=right)
                 # Handle "starts before or on EXPR" = "starts on or before EXPR"
                 elif self.match(TokenType.BEFORE) and self.peek().type == TokenType.OR and \
                         self.peek(2).type == TokenType.IDENTIFIER and self.peek(2).value.lower() == "on":
@@ -778,28 +814,26 @@ class CQLParser:
                     left = BinaryExpression(operator=f"starts {op}", left=left, right=right)
                 # Handle "starts within N unit of EXPR" timing operator
                 elif self.match(TokenType.IDENTIFIER) and self.current().value.lower() == "within":
+                    # Grammar (withinIntervalOperatorPhrase) requires
+                    # `within <quantity> <unit> of`; anything less must
+                    # surface the leftover tokens, not silently consume them.
+                    saved_pos = self.pos
                     self.advance()  # consume 'within'
-                    if self.match(TokenType.INTEGER, TokenType.DECIMAL):
+                    if self.match(TokenType.INTEGER, TokenType.DECIMAL) and self._within_unit_follows():
                         quantity_value = self.advance().value
-                        if self.match(TokenType.YEAR, TokenType.MONTH, TokenType.DAY,
-                                      TokenType.HOUR, TokenType.MINUTE, TokenType.SECOND,
-                                      TokenType.MILLISECOND, TokenType.WEEK, TokenType.YEARS,
-                                      TokenType.MONTHS, TokenType.DAYS, TokenType.HOURS,
-                                      TokenType.MINUTES, TokenType.SECONDS, TokenType.MILLISECONDS,
-                                      TokenType.WEEKS):
-                            unit = self.advance().value
-                            self.expect(TokenType.OF, "Expected 'of' after unit in 'starts within N unit of'")
-                            right = self.parse_type_expression()
-                            left = BinaryExpression(
-                                operator=f"starts within {quantity_value} {unit} of",
-                                left=left,
-                                right=right,
-                            )
-                        else:
-                            right = self.parse_type_expression()
-                            left = BinaryExpression(operator="starts", left=left, right=right)
-                    else:
+                        unit = self.advance().value
+                        self.expect(TokenType.OF, "Expected 'of' after unit in 'starts within N unit of'")
                         right = self.parse_type_expression()
+                        left = BinaryExpression(
+                            operator=f"starts within {quantity_value} {unit} of",
+                            left=left,
+                            right=right,
+                        )
+                    else:
+                        self.pos = saved_pos
+                        right = self._try_parse_complex_interval_comparison("starts")
+                        if right is None:
+                            right = self.parse_type_expression()
                         left = BinaryExpression(operator="starts", left=left, right=right)
                 else:
                     # Check for complex temporal comparison pattern:
@@ -817,6 +851,7 @@ class CQLParser:
                              or self.peek().type in (
                                  TokenType.YEAR, TokenType.MONTH, TokenType.DAY, TokenType.HOUR,
                                  TokenType.MINUTE, TokenType.SECOND, TokenType.MILLISECOND, TokenType.WEEK)):
+                    same_pos = self.pos
                     self.advance()  # consume 'same'
                     # Optionally consume precision unit (e.g. "day" in "same day as")
                     precision = ""
@@ -830,9 +865,16 @@ class CQLParser:
                         qualifier = " or after"
                     elif self.match_and_advance(TokenType.OR_BEFORE):
                         qualifier = " or before"
-                    right = self.parse_type_expression()
-                    left = BinaryExpression(
-                        operator=f"ends same{precision}{qualifier}", left=left, right=right)
+                    if not qualifier:
+                        # Grammar (concurrentWithIntervalOperatorPhrase) requires
+                        # a qualifier or 'as' after the optional precision. Consume
+                        # nothing and surface the leftover tokens instead of
+                        # embedding them in the operator string.
+                        self.pos = same_pos
+                    else:
+                        right = self.parse_type_expression()
+                        left = BinaryExpression(
+                            operator=f"ends same{precision}{qualifier}", left=left, right=right)
                 # Handle "ends before or on EXPR" = "ends on or before EXPR"
                 elif self.match(TokenType.BEFORE) and self.peek().type == TokenType.OR and \
                         self.peek(2).type == TokenType.IDENTIFIER and self.peek(2).value.lower() == "on":
@@ -851,28 +893,23 @@ class CQLParser:
                     left = BinaryExpression(operator=f"ends {op}", left=left, right=right)
                 # Handle "ends within N unit of EXPR" timing operator
                 elif self.match(TokenType.IDENTIFIER) and self.current().value.lower() == "within":
+                    saved_pos = self.pos
                     self.advance()  # consume 'within'
-                    if self.match(TokenType.INTEGER, TokenType.DECIMAL):
+                    if self.match(TokenType.INTEGER, TokenType.DECIMAL) and self._within_unit_follows():
                         quantity_value = self.advance().value
-                        if self.match(TokenType.YEAR, TokenType.MONTH, TokenType.DAY,
-                                      TokenType.HOUR, TokenType.MINUTE, TokenType.SECOND,
-                                      TokenType.MILLISECOND, TokenType.WEEK, TokenType.YEARS,
-                                      TokenType.MONTHS, TokenType.DAYS, TokenType.HOURS,
-                                      TokenType.MINUTES, TokenType.SECONDS, TokenType.MILLISECONDS,
-                                      TokenType.WEEKS):
-                            unit = self.advance().value
-                            self.expect(TokenType.OF, "Expected 'of' after unit in 'ends within N unit of'")
-                            right = self.parse_type_expression()
-                            left = BinaryExpression(
-                                operator=f"ends within {quantity_value} {unit} of",
-                                left=left,
-                                right=right,
-                            )
-                        else:
-                            right = self.parse_type_expression()
-                            left = BinaryExpression(operator="ends", left=left, right=right)
-                    else:
+                        unit = self.advance().value
+                        self.expect(TokenType.OF, "Expected 'of' after unit in 'ends within N unit of'")
                         right = self.parse_type_expression()
+                        left = BinaryExpression(
+                            operator=f"ends within {quantity_value} {unit} of",
+                            left=left,
+                            right=right,
+                        )
+                    else:
+                        self.pos = saved_pos
+                        right = self._try_parse_complex_interval_comparison("ends")
+                        if right is None:
+                            right = self.parse_type_expression()
                         left = BinaryExpression(operator="ends", left=left, right=right)
                 else:
                     # Same pattern for ends
@@ -898,8 +935,14 @@ class CQLParser:
                 right = self.parse_type_expression()
                 left = BinaryExpression(operator="properly included in", left=left, right=right)
             # Properly modifier for various operators (when properly is separate token)
-            elif self.match_and_advance(TokenType.PROPERLY):
-                # Handle "properly includes", "properly contains", "properly included in"
+            elif self.match(TokenType.PROPERLY):
+                # `properly` is only valid inside an intervalOperatorPhrase
+                # (CQL 1.5 grammar). If nothing recognizable follows, restore
+                # pos so the token surfaces as an unexpected/trailing token
+                # instead of being silently discarded (parse_expression("true
+                # properly") used to return Literal(True)).
+                saved_pos = self.pos
+                self.advance()
                 if self.match_and_advance(TokenType.INCLUDES):
                     right = self.parse_type_expression()
                     left = BinaryExpression(operator="properly includes", left=left, right=right)
@@ -918,6 +961,7 @@ class CQLParser:
                     left = BinaryExpression(operator="properly included in", left=left, right=right)
                 else:
                     # Unknown properly combination
+                    self.pos = saved_pos
                     break
             # Between operator (ternary): X between Y and Z
             elif self.match_and_advance(TokenType.BETWEEN):
@@ -931,17 +975,15 @@ class CQLParser:
                 self.advance()
             # "within N days/weeks/... of EXPR" timing operator
             elif self.match(TokenType.IDENTIFIER) and self.current().value.lower() == "within":
+                saved_pos = self.pos
                 self.advance()  # consume 'within'
-                if not self.match(TokenType.INTEGER, TokenType.DECIMAL):
+                if not (self.match(TokenType.INTEGER, TokenType.DECIMAL) and self._within_unit_follows()):
+                    # Incomplete `within` phrase: restore so the token
+                    # surfaces (trailing-token ParseError) instead of being
+                    # silently dropped with the loop's break.
+                    self.pos = saved_pos
                     break
                 quantity_value = self.advance().value
-                if not self.match(TokenType.YEAR, TokenType.MONTH, TokenType.DAY,
-                                  TokenType.HOUR, TokenType.MINUTE, TokenType.SECOND,
-                                  TokenType.MILLISECOND, TokenType.WEEK, TokenType.YEARS,
-                                  TokenType.MONTHS, TokenType.DAYS, TokenType.HOURS,
-                                  TokenType.MINUTES, TokenType.SECONDS, TokenType.MILLISECONDS,
-                                  TokenType.WEEKS):
-                    break
                 unit = self.advance().value
                 self.expect(TokenType.OF, "Expected 'of' after unit in 'within N unit of'")
                 right = self.parse_type_expression()
@@ -1241,6 +1283,14 @@ class CQLParser:
             operand = self.parse_unary_expression()
             return DistinctExpression(source=operand)
 
+        # PAR-007: bare `flatten X` (grammar: `('distinct'|'flatten') expression`
+        # aggregateExpressionTerm). Without this branch the FLATTEN token
+        # degraded to a plain Identifier and `flatten X` misparsed as a Query
+        # with source=Identifier('flatten') and alias=X.
+        if self.match_and_advance(TokenType.FLATTEN):
+            operand = self.parse_unary_expression()
+            return FunctionRef(name="flatten", arguments=[operand])
+
         # Interval operators: start of, end of, point from
         if self.match(TokenType.START):
             if self.peek().type == TokenType.OF:
@@ -1373,6 +1423,21 @@ class CQLParser:
                                        TokenType.EOF, TokenType.DEFINE, TokenType.RPAREN,
                                        TokenType.AGGREGATE, TokenType.COMMA, TokenType.RBRACKET, TokenType.RBRACE,
                                        TokenType.UNION, TokenType.INTERSECT, TokenType.EXCEPT):
+                    if isinstance(expr, Literal) and not getattr(
+                        expr, "_parenthesized", False
+                    ):
+                        # PAR-007: `1 foo` is INVALID grammar — a query source
+                        # is a retrieve, a (qualified) identifier, or a
+                        # parenthesized expression; a bare literal followed by
+                        # an identifier is a trailing-token error, not a Query
+                        # with a literal source and an alias.
+                        _tok = self.current()
+                        raise ParseError(
+                            "Invalid query source: a bare literal cannot be "
+                            "aliased (expected a retrieve, identifier, or "
+                            "parenthesized expression)",
+                            position=(_tok.line, _tok.column),
+                        )
                     # This is a query with an alias
                     alias = self._parse_identifier_name()
                     source = QuerySource(alias=alias, expression=expr)
@@ -1460,6 +1525,24 @@ class CQLParser:
         if self.match(TokenType.IDENTIFIER) and token.value.lower() == "difference":
             return self._parse_difference_between()
 
+        # Duration between (keyword form): duration in years between X and Y.
+        # Guard on peek(3) == BETWEEN so the duration-extraction form
+        # `duration in days of X` keeps its existing parse (Identifier +
+        # `in` + precision-of), which the translator special-cases.
+        if (
+            self.match(TokenType.IDENTIFIER)
+            and token.value.lower() == "duration"
+            and self.peek().type == TokenType.IN
+            and self.peek(2).type in (
+                TokenType.YEAR, TokenType.YEARS, TokenType.MONTH, TokenType.MONTHS,
+                TokenType.WEEK, TokenType.WEEKS, TokenType.DAY, TokenType.DAYS,
+                TokenType.HOUR, TokenType.HOURS, TokenType.MINUTE, TokenType.MINUTES,
+                TokenType.SECOND, TokenType.SECONDS, TokenType.MILLISECOND, TokenType.MILLISECONDS,
+            )
+            and self.peek(3).type == TokenType.BETWEEN
+        ):
+            return self._parse_duration_in_between()
+
         # Literals
         if self.match(TokenType.INTEGER, TokenType.LONG, TokenType.DECIMAL):
             return self.parse_literal()
@@ -1481,6 +1564,19 @@ class CQLParser:
             next_type = self.peek().type
             if next_type == TokenType.STRING:
                 return self.parse_code_selector()
+
+        # Concept selector: Concept { Code 'x' from "CS", ... } or
+        # Concept { "NamedCode", ... }   (grammar conceptSelector)
+        if self.match(TokenType.CONCEPT_TYPE) and self.peek().type == TokenType.LBRACE:
+            return self._parse_concept_selector()
+
+        # Typed list selector: List<T>{ ... } or List{ ... }
+        # (grammar: `('List' ('<' typeSpecifier '>')?)? '{' ... '}'`)
+        if self.match(TokenType.LIST_TYPE) and self.peek().type in (
+            TokenType.LESS_THAN,
+            TokenType.LBRACE,
+        ):
+            return self._parse_typed_list_selector()
 
         # Interval literal: only if followed by a bracket/paren delimiter
         if self.match(TokenType.INTERVAL):
@@ -1643,12 +1739,12 @@ class CQLParser:
                 unit_token = self.advance()
                 # Normalize to singular form
                 unit = unit_token.value.lower().rstrip('s')
-                return self._maybe_parse_ratio_literal(Quantity(value=value, unit=unit))
+                return self._maybe_parse_ratio_literal(Quantity(value=value, raw_text=token.value, unit=unit))
             # Check for UCUM unit string (e.g., 1 'ml', 10 'cm', 19.99 '[lb_av]')
             if self.match(TokenType.STRING):
                 unit_token = self.advance()
                 unit = unit_token.value
-                return self._maybe_parse_ratio_literal(Quantity(value=value, unit=unit))
+                return self._maybe_parse_ratio_literal(Quantity(value=value, raw_text=token.value, unit=unit))
             # CQL §Types/Ratio: bare numeric ratio literal (e.g. `1:8`).
             # A bare numeric with no unit is treated as a Quantity with the
             # default UCUM unit '1' (CQL §Types/Quantity) so that the ratio
@@ -1660,7 +1756,7 @@ class CQLParser:
             # `starting 1: <body>`), fall back to the plain Integer Literal
             # so the caller's context-specific parser handles the COLON.
             if self.match(TokenType.COLON):
-                ratio = self._maybe_parse_ratio_literal(Quantity(value=value, unit="1"))
+                ratio = self._maybe_parse_ratio_literal(Quantity(value=value, raw_text=token.value, unit="1"))
                 if isinstance(ratio, FunctionRef):
                     return ratio
                 return Literal(value=value, type="Integer")
@@ -1669,7 +1765,7 @@ class CQLParser:
             value = int(token.value)
             # CQL §Types/Ratio: bare numeric ratio literal.
             if self.match(TokenType.COLON):
-                ratio = self._maybe_parse_ratio_literal(Quantity(value=value, unit="1"))
+                ratio = self._maybe_parse_ratio_literal(Quantity(value=value, raw_text=token.value, unit="1"))
                 if isinstance(ratio, FunctionRef):
                     return ratio
                 return Literal(value=value, type="Long")
@@ -1684,12 +1780,12 @@ class CQLParser:
                           TokenType.SECOND, TokenType.SECONDS, TokenType.MILLISECOND, TokenType.MILLISECONDS):
                 unit_token = self.advance()
                 unit = unit_token.value.lower().rstrip('s')
-                return self._maybe_parse_ratio_literal(Quantity(value=value, unit=unit))
+                return self._maybe_parse_ratio_literal(Quantity(value=value, raw_text=token.value, unit=unit))
             # Check for UCUM unit string (e.g., 1.5 'ml', 19.99 '[lb_av]')
             if self.match(TokenType.STRING):
                 unit_token = self.advance()
                 unit = unit_token.value
-                return self._maybe_parse_ratio_literal(Quantity(value=value, unit=unit))
+                return self._maybe_parse_ratio_literal(Quantity(value=value, raw_text=token.value, unit=unit))
             # CQL §2.3: standalone Decimal has max 28 integer digits and 8 fractional digits.
             # Validation only applies to Decimal literals, not Quantity values.
             raw_decimal = token.value.lstrip('+').lstrip('-')
@@ -1718,7 +1814,7 @@ class CQLParser:
                     raw_str_override = format(limited, 'f')
             # CQL §Types/Ratio: bare numeric ratio literal.
             if self.match(TokenType.COLON):
-                ratio = self._maybe_parse_ratio_literal(Quantity(value=value, unit="1"))
+                ratio = self._maybe_parse_ratio_literal(Quantity(value=value, raw_text=token.value, unit="1"))
                 if isinstance(ratio, FunctionRef):
                     return ratio
                 return Literal(value=value, type="Decimal", raw_str=raw_str_override or token.value)
@@ -1778,15 +1874,33 @@ class CQLParser:
         # A bare numeric Literal denominator is valid as a Ratio component
         # (spec example `1:8`). Promote it to a default-unit Quantity.
         if isinstance(denominator, Literal) and isinstance(denominator.value, (int, float)):
-            denominator = Quantity(value=denominator.value * sign, unit="1")
+            denominator = Quantity(
+                value=denominator.value * sign,
+                unit="1",
+                raw_text=denominator.raw_str,
+            )
         elif sign == -1 and isinstance(denominator, Quantity):
             # Signed Quantity literal denominator (e.g., `-8 'mg'`).
-            denominator = Quantity(value=denominator.value * sign, unit=denominator.unit)
+            denominator = Quantity(value=denominator.value * sign, unit=denominator.unit,
+                                   raw_text=("-" + denominator.raw_text)
+                                   if denominator.raw_text else None)
         if not isinstance(denominator, Quantity):
             raise ParseError("Expected Quantity after ':' in Ratio literal")
 
         def _quantity_text(quantity: Quantity) -> str:
-            return f"{quantity.value} '{quantity.unit}'"
+            # PAR-005: preserve the AUTHORED decimal text. `str(float)` emits
+            # scientific notation for small magnitudes (`1e-05`), which
+            # corrupts the ToRatio argument and breaks decimal exactness.
+            text = quantity.raw_text
+            if text is None:
+                v = quantity.value
+                if isinstance(v, float):
+                    from decimal import Decimal
+
+                    text = format(Decimal(str(v)), "f")
+                else:
+                    text = str(v)
+            return f"{text} '{quantity.unit}'"
 
         return FunctionRef(
             name="ToRatio",
@@ -1825,7 +1939,11 @@ class CQLParser:
         code_value = code_token.value
 
         self.expect(TokenType.FROM, "Expected 'from' after code value")
+        # PAR-008: codesystemIdentifier allows a library-qualified reference
+        # (`Code 'x' from Lib.CS`). Join dotted parts into the system name.
         system_name = self._parse_identifier_name()
+        while self.match_and_advance(TokenType.DOT):
+            system_name += "." + self._parse_identifier_name()
 
         display = None
         if self.match_and_advance(TokenType.DISPLAY):
@@ -1833,6 +1951,105 @@ class CQLParser:
             display = display_token.value
 
         return CodeSelector(code=code_value, system=system_name, display=display)
+
+    def _parse_concept_selector(self) -> "InstanceExpression":
+        """Parse a Concept selector: ``Concept { <code>, ... }``.
+
+        Grammar (CQL 1.5 conceptSelector): members are either inline Code
+        selectors (``Code 'x' from "CS"``) or references to named codes
+        declared in the library header. Lowered to an InstanceExpression of
+        Concept with a ``codes`` list, the same shape the generic instance
+        path produces for ``Concept { codes: { ... } }`` (which the
+        translator folds via _fold_static_concept_instance).
+        """
+        self.expect(TokenType.CONCEPT_TYPE, "Expected 'Concept'")
+        self.expect(TokenType.LBRACE, "Expected '{' after 'Concept'")
+
+        # Named-field instance form (`Concept { codes: { ... }, display: ... }`)
+        # is NOT a concept selector — delegate to the generic type-constructor
+        # parser by rewinding to before the 'Concept' token.
+        if self.match(
+            TokenType.IDENTIFIER, TokenType.QUOTED_IDENTIFIER
+        ) and self.peek().type == TokenType.COLON:
+            self.pos -= 2  # back before LBRACE and 'Concept'
+            return self._parse_type_constructor()
+
+        codes = []
+        while not self.match(TokenType.RBRACE):
+            if self.match(TokenType.CODE_TYPE):
+                code_token = self.peek(1)
+                if code_token.type != TokenType.STRING:
+                    _tok = self.current()
+                    raise ParseError(
+                        "Expected a code string in Concept selector",
+                        position=(_tok.line, _tok.column),
+                    )
+                codes.append(self.parse_code_selector())
+            else:
+                # Reference to a named code declared in the library header.
+                # Emit a quoted Identifier — the same element shape the
+                # named-field form `Concept { codes: { "N" } }` produces,
+                # which the translator's concept folding resolves against
+                # the library code table.
+                codes.append(
+                    Identifier(name=self._parse_identifier_name(), quoted=True)
+                )
+            if not self.match_and_advance(TokenType.COMMA):
+                break
+
+        self.expect(TokenType.RBRACE, "Expected '}' to close Concept selector")
+
+        # Grammar conceptSelector carries an optional whole-selector display
+        # clause after the closing brace.
+        display = None
+        if self.match_and_advance(TokenType.DISPLAY):
+            display_token = self.expect(
+                TokenType.STRING, "Expected display string after 'display'"
+            )
+            display = display_token.value
+
+        from .ast_nodes import InstanceExpression, TupleElement, ListExpression
+
+        codes_list = ListExpression(elements=codes)
+        elements = [TupleElement(name="codes", type=codes_list)]
+        if display is not None:
+            elements.append(
+                TupleElement(name="display", type=Literal(value=display, type="String"))
+            )
+        return InstanceExpression(type="Concept", elements=elements)
+
+    def _parse_typed_list_selector(self) -> "BinaryExpression":
+        """Parse a typed list selector: ``List<T>{ ... }`` or ``List{ ... }``.
+
+        Grammar: ``('List' ('<' typeSpecifier '>')?)? '{' (query|expression)? '}'``.
+        Lowered to ``<list literal> as List<T>`` — the established typed-list
+        mechanism (typed empty arrays, Case 6a union eligibility, etc.), so
+        ``List<Integer>{}`` behaves like ``{} as List<Integer>``.
+        """
+        self.expect(TokenType.LIST_TYPE, "Expected 'List'")
+        element_type = None
+        if self.match_and_advance(TokenType.LESS_THAN):
+            element_type = self.parse_type_specifier()
+            self.expect(TokenType.GREATER_THAN, "Expected '>' to close List type")
+
+        if not self.match(TokenType.LBRACE):
+            _tok = self.current()
+            raise ParseError(
+                "Expected '{' after List type specifier",
+                position=(_tok.line, _tok.column),
+            )
+        list_expr = self._parse_brace_expression()
+
+        if element_type is None:
+            return list_expr
+
+        from .ast_nodes import ListTypeSpecifier
+
+        return BinaryExpression(
+            operator="as",
+            left=list_expr,
+            right=ListTypeSpecifier(element_type=element_type),
+        )
 
     def parse_interval(self) -> Interval:
         """Parse an interval expression."""
@@ -2074,6 +2291,14 @@ class CQLParser:
             return ListExpression(elements=elements)
 
         self.expect(TokenType.RPAREN, "Expected ')'")
+        # Grammar querySource admits '(' expression ')' — a parenthesized
+        # bare literal IS a valid query source, so mark it to exempt it from
+        # the bare-literal alias rejection in parse_postfix_expression.
+        if isinstance(expr, Literal):
+            try:
+                setattr(expr, "_parenthesized", True)
+            except Exception:  # pragma: no cover - frozen/slots variants
+                pass
         return expr
 
     def _parse_duration_between(self) -> DurationBetween:
@@ -2081,27 +2306,41 @@ class CQLParser:
         precision_token = self.advance()
         precision = precision_token.value.lower().rstrip('s')
 
-        self.expect(TokenType.BETWEEN, "Expected 'between'")
-        left = self.parse_equality_expression()
-        self.expect(TokenType.AND, "Expected 'and'")
-        right = self.parse_implies_expression()
+        return self._finish_duration_between(precision)
 
-        # Same trailing-`in`-Interval restructure as _parse_difference_between.
-        from .ast_nodes import Interval as _CqlInterval
-        if (
-            isinstance(right, BinaryExpression)
-            and right.operator == "in"
-            and isinstance(right.right, _CqlInterval)
-        ):
-            return BinaryExpression(
-                operator="in",
-                left=DurationBetween(
-                    precision=precision,
-                    operand_left=left,
-                    operand_right=right.left,
-                ),
-                right=right.right,
-            )
+    def _parse_duration_in_between(self) -> DurationBetween:
+        """Parse `duration in <precision> between X and Y` (grammar's
+        durationBetweenExpression keyword form)."""
+        self.expect(TokenType.IDENTIFIER, "Expected 'duration'")
+        self.expect(TokenType.IN, "Expected 'in'")
+
+        precision_token = self.advance()
+        precision = precision_token.value.lower().rstrip('s')
+
+        return self._finish_duration_between(precision)
+
+    def _finish_duration_between(self, precision: str) -> DurationBetween:
+        """Parse `between X and Y` operands at the addition tier.
+
+        CQL 1.5 grammar: durationBetweenExpression operands are
+        expressionTerm, which includes addition/subtraction but NOT the
+        expression-level operators (inequality, equality, membership `in`,
+        and/or/xor/implies). Those must bind OUTSIDE the duration-between so
+        `years between A and B >= 18` parses as
+        `(years between A and B) >= 18`, not `years between A and (B >= 18)`.
+
+        Two deliberate deviations, both matching HEAD behavior:
+        - union/intersect/except bind INSIDE the operand (the addition tier
+          consumes set operators); the strict grammar would bind them
+          outside, but no eCQM content relies on either reading.
+        - unparenthesized `X as DateTime` operands are rejected (strict
+          grammar: typeExpression is above expressionTerm) — use
+          `(X as DateTime)`.
+        """
+        self.expect(TokenType.BETWEEN, "Expected 'between'")
+        left = self.parse_addition_expression()
+        self.expect(TokenType.AND, "Expected 'and'")
+        right = self.parse_addition_expression()
 
         return DurationBetween(precision=precision, operand_left=left, operand_right=right)
 
@@ -2114,30 +2353,9 @@ class CQLParser:
         precision = precision_token.value.lower().rstrip('s')
 
         self.expect(TokenType.BETWEEN, "Expected 'between'")
-        left = self.parse_equality_expression()
+        left = self.parse_addition_expression()
         self.expect(TokenType.AND, "Expected 'and'")
-        right = self.parse_implies_expression()
-
-        # CMS2025 (CMS771): `difference in months between A and B in Interval[6, 12]`
-        # — the official content means (difference) in Interval; the loose
-        # right-operand parse absorbs the trailing `in` clause into B.
-        # Restructure when the right operand is exactly a membership `in`
-        # over an Interval literal.
-        from .ast_nodes import Interval as _CqlInterval
-        if (
-            isinstance(right, BinaryExpression)
-            and right.operator == "in"
-            and isinstance(right.right, _CqlInterval)
-        ):
-            return BinaryExpression(
-                operator="in",
-                left=DifferenceBetween(
-                    precision=precision,
-                    operand_left=left,
-                    operand_right=right.left,
-                ),
-                right=right.right,
-            )
+        right = self.parse_addition_expression()
 
         return DifferenceBetween(precision=precision, operand_left=left, operand_right=right)
 
@@ -2152,6 +2370,19 @@ class CQLParser:
         operand = self.parse_addition_expression()
 
         return DateComponent(component=component, operand=operand)
+
+    _WITHIN_UNIT_TYPES = (
+        TokenType.YEAR, TokenType.MONTH, TokenType.DAY,
+        TokenType.HOUR, TokenType.MINUTE, TokenType.SECOND,
+        TokenType.MILLISECOND, TokenType.WEEK, TokenType.YEARS,
+        TokenType.MONTHS, TokenType.DAYS, TokenType.HOURS,
+        TokenType.MINUTES, TokenType.SECONDS, TokenType.MILLISECONDS,
+        TokenType.WEEKS,
+    )
+
+    def _within_unit_follows(self) -> bool:
+        """True when the token after a `within <number>` is a temporal unit."""
+        return self.peek().type in self._WITHIN_UNIT_TYPES
 
     def _try_parse_precision_of(self) -> Optional[str]:
         """
@@ -2385,8 +2616,12 @@ class CQLParser:
 
     def _parse_identifier_or_function(self) -> Expression:
         """Parse an identifier that may be a function call."""
-        prev_token = self.peek()
-        is_quoted = prev_token and prev_token.type == TokenType.QUOTED_IDENTIFIER
+        # `quoted` must describe the token being consumed NOW. peek() looks at
+        # pos+1, so the old `self.peek()` read the token AFTER the identifier
+        # and inverted the flag: '"My Def"' parsed as quoted=False while
+        # `Source "P"` parsed Source as quoted=True.
+        current_token = self.current()
+        is_quoted = current_token.type == TokenType.QUOTED_IDENTIFIER
         name = self._parse_identifier_name()
 
         # Check for function call with parentheses
@@ -2794,19 +3029,23 @@ class CQLParser:
             clauses.append(LetClause(alias=alias, expression=expression))
 
             # Check for comma-separated additional bindings
+            pos_before_comma = self.pos
             if self.match_and_advance(TokenType.COMMA):
                 # Check if next token is an identifier (or keyword-as-identifier)
-                # followed by colon (another binding)
-                # Use lookahead: save position, try consuming identifier, check for ':'
-                saved_pos = self.pos
+                # followed by colon (another binding).
+                # Use lookahead: try consuming identifier, check for ':'
+                pos_after_comma = self.pos
                 try:
                     self._parse_identifier_name()
                     if self.match(TokenType.COLON):
-                        self.pos = saved_pos  # restore, let the loop re-parse
+                        self.pos = pos_after_comma  # loop re-parses the binding
                         continue  # Parse another binding
                 except Exception as e:
                     _logger.warning("Lookahead for let binding failed: %s", e)
-                self.pos = saved_pos
+                # Not another binding: restore to BEFORE the comma so an
+                # invalid trailing comma surfaces as an unexpected token
+                # (previously the comma was consumed and silently dropped).
+                self.pos = pos_before_comma
             break
 
         return clauses

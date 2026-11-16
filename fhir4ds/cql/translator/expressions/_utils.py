@@ -463,20 +463,27 @@ UNARY_OPERATOR_MAP = {
 def _resolve_library_code_constant(library_name: str, constant_name: str, context=None) -> Optional[str]:
     """Resolve a library code constant to its literal value.
 
-    Uses context.codes (populated from parsed library ASTs) when available.
-    Returns None if not found — caller must handle non-code references (e.g., definitions).
+    Resolves against the OWNING library's parsed AST first — the global
+    ``context.codes`` table is populated by copying included-library codes
+    under their bare names, so with two included libraries declaring the
+    same code NAME (e.g. Status and FHIRCommon both declare "confirmed"),
+    the global table holds whichever registered last and a qualified
+    ``A."shared"`` could silently resolve to library B's code value.
+    Falls back to the global table only when the library's AST is
+    unavailable. Returns None if not found — caller must handle non-code
+    references (e.g., definitions).
     """
-    if context is not None and hasattr(context, 'codes'):
-        code_info = context.codes.get(constant_name)
-        if code_info is not None:
-            return code_info.get("code")
-
     if context is not None and hasattr(context, 'includes'):
         lib_info = context.includes.get(library_name)
         if lib_info and hasattr(lib_info, 'library_ast') and lib_info.library_ast:
             for code_def in lib_info.library_ast.codes:
                 if code_def.name == constant_name:
                     return code_def.code
+
+    if context is not None and hasattr(context, 'codes'):
+        code_info = context.codes.get(constant_name)
+        if code_info is not None:
+            return code_info.get("code")
 
     return None
 

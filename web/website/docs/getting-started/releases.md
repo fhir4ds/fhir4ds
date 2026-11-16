@@ -11,6 +11,62 @@ entry follows the same format: **highlights**, **breaking changes** (always
 listed, even when there are none), topic sections, **conformance** (where
 recorded), **known issues**, and **upgrade** notes.
 
+## Version 0.0.24
+*November 2026*
+
+### Highlights
+
+- **Upstream FHIRPath R4 corpus refresh — 935 → 1,191 official tests.** The
+  bundled conformance corpus was synced with the upstream `tests-fhir-r4.xml`
+  (+256 tests) and **49 core semantic gaps** were closed **in both engines**
+  (native C++ and Python fallback) in the same pass. The new FHIRPath
+  conformance baseline is **1038/1038**, and the master gate rises to
+  **3046/3046**.
+- **Dual-engine semantics aligned with the refreshed corpus**: complex-vs-
+  primitive equality, `~` on incomparable quantities, calendar-year ordering,
+  `hasValue()` on complex objects, `join()` strictness, strict `\u` string
+  escapes, and exact E-notation Decimal boundaries (half-unit
+  `0.5 × 10^exponent`) all now match the official fixtures on both engines.
+- **Model-typed temporal FHIR fields** (`valueTime`, `valueDate`,
+  `effectiveDateTime`, …) now compare as their FHIR type on both engines —
+  previously the native engine treated them as plain strings for ordering
+  and some equality dispatch sites.
+- **CQL translation fixes**: stored-list defines used as query sources now
+  unnest per element (a `where` clause no longer compares the whole list),
+  and interval/quantity operators over query-alias elements route by element
+  type (unit-aware `2000 'mg' = 2 'g'` inside `where`).
+- **All three fhirpath native ABI slots** (DuckDB 1.5.5 / 1.5.6 / 2.0.0) are
+  rebuilt from one verified source tree; the wheel ships six stamped
+  binaries.
+
+### Breaking changes
+
+- None at the public API level. Behavior changes are conformance-driven:
+  strict `\uXXXX` escape validation now raises on malformed escapes
+  (previously the backslash was silently dropped), and `join()` rejects
+  non-String items per the spec ("takes a collection of strings").
+
+### Conformance
+
+ViewDefinition 144/144 · FHIRPath **1038/1038** (new baseline) · CQL
+1706/1706 · DQM QI-Core 2025 47/47 · DQM US-Core 2025 73/73 · OMOP 38/38 —
+**3046/3046** overall.
+
+### Known issues
+
+- The upstream `isSemanticChecks` fixture group (38 tests) is excluded as a
+  named deferred gap — it requires static-typing engine features that are
+  not yet implemented; `documentFunctions` (115 tests) is excluded as a
+  non-FHIRPath custom upstream group. Both are documented in the corpus
+  runner.
+- `distinct()`/`subsetOf()` over model-typed temporal fields still compare
+  lexically on the native engine (fixture-unpinned; same-family follow-up).
+
+### Upgrade
+
+`pip install fhir4ds-v2==0.0.24`. DuckDB 1.5.5 → 2.0.0 are supported; the
+correct native extension for your DuckDB version loads automatically.
+
 ## Version 0.0.23
 *November 2026*
 

@@ -4360,6 +4360,11 @@ class FunctionsMixin:
     def _translate_singletonfrom(self, args: list) -> SQLExpression:
         """Translate CQL SingletonFrom."""
         if args:
+            # B14 follow-up: the method-form guard ('abc'.singletonFrom())
+            # existed but the keyword form (`singleton from 'abc'`) fell
+            # through to array_length(STRING_LITERAL, ...) — an opaque DuckDB
+            # BinderException instead of a typed error.
+            self._reject_scalar_string_list_function_arg(args, "SingletonFrom")
             return self._apply_singleton_from(args[0])
         return SQLNull()
 
@@ -4734,7 +4739,8 @@ class FunctionsMixin:
         elif isinstance(node, SQLUnaryOp):
             node.operand = FunctionsMixin._promote_fhirpath_text_deep(node.operand)
         elif isinstance(node, SQLCast):
-            node.operand = FunctionsMixin._promote_fhirpath_text_deep(node.operand)
+            # EXP1-002: SQLCast's field is `expression` (not `operand`).
+            node.expression = FunctionsMixin._promote_fhirpath_text_deep(node.expression)
         elif isinstance(node, SQLCase):
             node.when_clauses = [
                 (
@@ -4748,8 +4754,11 @@ class FunctionsMixin:
                     node.else_clause
                 )
         elif isinstance(node, SQLUnion):
-            node.left = FunctionsMixin._promote_fhirpath_text_deep(node.left)
-            node.right = FunctionsMixin._promote_fhirpath_text_deep(node.right)
+            # EXP1-002: SQLUnion carries `operands` (not left/right).
+            node.operands = [
+                FunctionsMixin._promote_fhirpath_text_deep(op)
+                for op in node.operands
+            ]
         return node
 
     def _translate_precision_pre(self, func, translator) -> "Optional[SQLExpression]":
@@ -5050,10 +5059,20 @@ class FunctionsMixin:
             # ToString(Quantity): CQL §22.31 — format as "<value> '<unit>'"
             if name_lower == "tostring":
                 arg = args[0]
-                arg_sql = arg.to_sql() if hasattr(arg, 'to_sql') else str(arg)
-                if _is_ratio_expression(arg) or 'ToRatio' in arg_sql:
+                # EXP1-003: route on SQL AST SHAPE, never on rendered SQL
+                # text — the old `'Quantity' in arg.to_sql()` sniff (a)
+                # crashed on placeholder-bearing args and (b) misrouted any
+                # string literal containing the word "Quantity" (e.g.
+                # ToString('Order Quantity')) into QuantityToString.
+                if _is_ratio_expression(arg):
                     return SQLFunctionCall("RatioToString", args)
-                if 'parse_quantity' in arg_sql or 'Quantity' in arg_sql:
+                if (
+                    isinstance(arg, SQLFunctionCall)
+                    and arg.name
+                    and arg.name.lower() in ("parse_quantity", "quantityadd",
+                                             "quantitysubtract", "quantitymultiply",
+                                             "quantitydivide", "quantityconvert")
+                ):
                     return SQLFunctionCall("QuantityToString", args)
                 return SQLFunctionCall("ToString", args)
             if name_lower in ('todatetime', 'todate'):

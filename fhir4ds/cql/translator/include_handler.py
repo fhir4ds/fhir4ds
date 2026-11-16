@@ -399,17 +399,25 @@ class IncludeHandlerMixin:
             for def_name, marker in _child_ppdefs.items():
                 _parent_ppdefs.setdefault(f"{alias}.{def_name}", marker)
 
-        # Copy codes, codesystems, and valuesets from included library to main context
+        # Copy codes, codesystems, and valuesets from included library to main
+        # context. NON-CLOBBERING: the caller's own declarations (registered
+        # by _setup_context, which runs before _process_includes) must always
+        # win over an included library's same-named declaration, and when two
+        # included libraries declare the same name (Status and FHIRCommon both
+        # declare "confirmed"), the FIRST registration wins instead of
+        # whichever include was processed last. Qualified references resolve
+        # per-library through the owning library's AST (scoped-first), so this
+        # bare-name table is only a fallback for unqualified lookups.
         for code_name, code_info in included_translator._context.codes.items():
-            self._context.codes[code_name] = code_info
+            self._context.codes.setdefault(code_name, code_info)
         for cs_name, cs_url in included_translator._context.codesystems.items():
-            self._context.codesystems[cs_name] = cs_url
+            self._context.codesystems.setdefault(cs_name, cs_url)
         for cs_name, version in included_translator._context.codesystem_versions.items():
-            self._context.codesystem_versions[cs_name] = version
+            self._context.codesystem_versions.setdefault(cs_name, version)
         for vs_name, vs_url in included_translator._context.valuesets.items():
-            self._context.valuesets[vs_name] = vs_url
+            self._context.valuesets.setdefault(vs_name, vs_url)
         for vs_name, cs_names in included_translator._context.valueset_codesystems.items():
-            self._context.valueset_codesystems[vs_name] = list(cs_names)
+            self._context.valueset_codesystems.setdefault(vs_name, list(cs_names))
 
         # Store retrieve CTEs from included library
         for cte_name, (cte_ast, col_info) in phase2_ctes.items():

@@ -39,11 +39,12 @@ def _decimal_low_boundary(value, precision_param):
     with localcontext() as ctx:
         ctx.prec = max(CONTEXT_PRECISION_MIN, output_precision + 10)
 
-        # The half-unit is ALWAYS based on the input's decimal places
-        decimal_places = _count_decimal_places(value)
-
-        # Calculate half-unit at the input's precision
-        half_unit = Decimal("0.5") * (Decimal("10") ** (-decimal_places))
+        # The half-unit is ALWAYS based on the input's precision. For plain
+        # decimals this is the written decimal places; for E-notation values
+        # (Decimal('9.5e2'), official fixtures parameters-example-decimals)
+        # the precision lives in the MANTISSA — the unified rule is
+        # half_unit = 0.5 * 10^exponent of the Decimal tuple (v0.0.24 it2).
+        half_unit = Decimal("0.5") * (Decimal("10") ** value.as_tuple().exponent)
 
         # For both positive and negative, lowBoundary goes down
         result = value - half_unit
@@ -93,11 +94,12 @@ def _decimal_high_boundary(value, precision_param):
     with localcontext() as ctx:
         ctx.prec = max(CONTEXT_PRECISION_MIN, output_precision + 10)
 
-        # The half-unit is ALWAYS based on the input's decimal places
-        decimal_places = _count_decimal_places(value)
-
-        # Calculate half-unit at the input's precision
-        half_unit = Decimal("0.5") * (Decimal("10") ** (-decimal_places))
+        # The half-unit is ALWAYS based on the input's precision. For plain
+        # decimals this is the written decimal places; for E-notation values
+        # (Decimal('9.5e2'), official fixtures parameters-example-decimals)
+        # the precision lives in the MANTISSA — the unified rule is
+        # half_unit = 0.5 * 10^exponent of the Decimal tuple (v0.0.24 it2).
+        half_unit = Decimal("0.5") * (Decimal("10") ** value.as_tuple().exponent)
 
         # For both positive and negative, highBoundary goes up
         result = value + half_unit
@@ -283,8 +285,11 @@ def _datetime_boundary(data, precision, fill, is_high):
         return [result]
     else:
         result = f"{year}-{month}-{day}T{hour}:{minute}:{second}.{ms}"
-        if tz:
-            result += tz
+        # v0.0.24 it5 (HISTORIAN): default-precision boundaries carry the
+        # default timezone when none was authored (+14:00 low / -12:00
+        # high), matching the precision>14 branch, native formatDateTime
+        # Boundary, and the official boundary fixtures' tz convention.
+        result += tz if tz else fill.get("tz_default", "")
         return [FP_DateTime(result)]
 
 

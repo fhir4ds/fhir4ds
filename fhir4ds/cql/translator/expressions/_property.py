@@ -913,12 +913,15 @@ class PropertyMixin:
                             elif self.context.is_alias(source_ast.name):
                                 source_ast = SQLQualifiedIdentifier(parts=[source_ast.name, "resource"])
 
-                        # CRITICAL: Check if source_sql already is a fhirpath call (AST-based check)
-                        if isinstance(source_sql, SQLFunctionCall) and source_sql.name and source_sql.name.startswith('fhirpath_'):
-                            existing_func_type = ast_utils.infer_fhirpath_type_from_ast(source_sql)
-                            existing_resource = source_sql.args[0] if source_sql.args and len(source_sql.args) >= 2 else None
-                            existing_path = source_sql.args[1].value if (source_sql.args and len(source_sql.args) >= 2
-                                                                          and hasattr(source_sql.args[1], 'value')) else None
+                        # CRITICAL: Check if the source is already a fhirpath call (AST-based
+                        # check). EXP1-001: `source_sql` is UNBOUND on this path (assigned only
+                        # in the raw-source branch below / in other callers) — reading it
+                        # raised UnboundLocalError. `source_ast` IS the source expression here.
+                        if isinstance(source_ast, SQLFunctionCall) and source_ast.name and source_ast.name.startswith('fhirpath_'):
+                            existing_func_type = ast_utils.infer_fhirpath_type_from_ast(source_ast)
+                            existing_resource = source_ast.args[0] if source_ast.args and len(source_ast.args) >= 2 else None
+                            existing_path = source_ast.args[1].value if (source_ast.args and len(source_ast.args) >= 2
+                                                                        and hasattr(source_ast.args[1], 'value')) else None
                             new_path = _strip_primitive_value_segments(
                                 self._current_resource_type(),
                                 f"{existing_path}.{path}" if existing_path else path,
@@ -958,12 +961,14 @@ class PropertyMixin:
                             cte_name = sql_expr_val.strip('"')
                             raw_source = SQLQualifiedIdentifier(parts=[cte_name, "resource"])
 
-                        # CRITICAL: Check if source_sql already is a fhirpath call (AST-based check)
-                        if isinstance(source_sql, SQLFunctionCall) and source_sql.name and source_sql.name.startswith('fhirpath_'):
-                            existing_func_type = ast_utils.infer_fhirpath_type_from_ast(source_sql)
-                            existing_resource = source_sql.args[0] if source_sql.args and len(source_sql.args) >= 2 else None
-                            existing_path = source_sql.args[1].value if (source_sql.args and len(source_sql.args) >= 2
-                                                                          and hasattr(source_sql.args[1], 'value')) else None
+                        # CRITICAL: Check if the source is already a fhirpath call (AST-based
+                        # check). EXP1-001: `source_sql` is assigned from `raw_source` only
+                        # AFTER this check on this path — use `raw_source` directly.
+                        if isinstance(raw_source, SQLFunctionCall) and raw_source.name and raw_source.name.startswith('fhirpath_'):
+                            existing_func_type = ast_utils.infer_fhirpath_type_from_ast(raw_source)
+                            existing_resource = raw_source.args[0] if raw_source.args and len(raw_source.args) >= 2 else None
+                            existing_path = raw_source.args[1].value if (raw_source.args and len(raw_source.args) >= 2
+                                                                        and hasattr(raw_source.args[1], 'value')) else None
                             new_path = _strip_primitive_value_segments(
                                 self._current_resource_type(),
                                 f"{existing_path}.{path}" if existing_path else path,

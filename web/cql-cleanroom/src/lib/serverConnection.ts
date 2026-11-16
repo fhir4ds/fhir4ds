@@ -3,9 +3,11 @@
  *
  * Detects `fhir4ds dev` via the additive /api/mode handshake. STANDALONE
  * GUARANTEE: when the handshake fails, no further server calls are made
- * (the automated e2e asserts zero /api/* requests in standalone). The
- * in-browser engine remains the executor; the server is a terminology /
- * workspace / big-data provider only (FDD §3).
+ * (the automated e2e asserts zero /api/* requests in standalone). This
+ * module only DETECTS the server and carries terminology/workspace
+ * traffic — EXECUTION ROUTING lives in App.runCells: connected cell runs
+ * POST /api/evaluate (server-side kernel.evaluate on native DuckDB);
+ * standalone runs execute in-browser via the cleanroom worker.
  */
 
 export type ServerMode =

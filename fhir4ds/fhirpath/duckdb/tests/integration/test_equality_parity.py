@@ -200,8 +200,11 @@ def test_calendar_duration_equality_shape_in_forced_python_fallback(monkeypatch)
         "1 month != 1 'mo'": None,
         "1 year ~ 1 'a'": True,
         "1 year !~ 1 'a'": False,
-        "1 'cm' ~ 1 's'": None,
-        "1 'cm' !~ 1 's'": None,
+        # v0.0.24 it2: quantities that can't be compared are NOT
+        # equivalent (official testEquivalent28/29) — supersedes the
+        # FP-13 QA-003 empty pin for ~.
+        "1 'cm' ~ 1 's'": False,
+        "1 'cm' !~ 1 's'": True,
         "1 year = 12 months": True,
         "1 'a' = 12 'mo'": True,
         "1 week = 1 'wk'": True,
@@ -596,8 +599,11 @@ def test_complex_equality_recurses_into_decimal_and_quantity_children(monkeypatc
         "rangeA !~ rangeB": False,
         "rangeA = rangeBad": None,
         "rangeA != rangeBad": None,
-        "rangeA ~ rangeBad": None,
-        "rangeA !~ rangeBad": None,
+        # v0.0.24 it2: quantities that can't be compared are NOT
+        # equivalent, including nested inside complex values (official
+        # testEquivalent28/29 rule) — supersedes the old empty pin.
+        "rangeA ~ rangeBad": False,
+        "rangeA !~ rangeBad": True,
         "nestedA ~ nestedB": True,
         "nestedA !~ nestedB": False,
     }
@@ -718,12 +724,16 @@ def test_cross_unit_temperature_equality_returns_empty_in_both_backends_fp13_his
     """
     resource = json.dumps({"resourceType": "Patient", "id": "p1"})
     cases = [
-        # All cross-unit temperature equality/equivalence operators return empty
+        # Cross-unit temperature EQUALITY operators return empty (affine
+        # conversion unimplemented; FP-13 HISTORIAN doctrine).
         ("1 'Cel' = 33.8 '[degF]'", None),
-        ("1 'Cel' ~ 33.8 '[degF]'", None),
         ("1 'Cel' != 33.8 '[degF]'", None),
-        ("1 'Cel' !~ 33.8 '[degF]'", None),
         ("100 '[degF]' = 37.8 'Cel'", None),
+        # v0.0.24 it2: ~ on quantities that can't be compared is FALSE
+        # (official testEquivalent28/29 "quantities that can't be compared
+        # are not equivalent") — supersedes the old empty pin.
+        ("1 'Cel' ~ 33.8 '[degF]'", False),
+        ("1 'Cel' !~ 33.8 '[degF]'", True),
         ("1 'Cel' != 1 'Cel'", False),  # same-unit sanity
         ("1 'Cel' = 1 'Cel'", True),     # same-unit sanity
         # Kelvin is also an offset temperature unit

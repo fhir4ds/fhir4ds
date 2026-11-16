@@ -7,7 +7,7 @@ test.describe("Landing page", () => {
     await page.goto(".");
     await expect(page).toHaveTitle(/FHIR for Data Science/);
     await expect(page.getByRole("heading", { level: 1, name: "FHIR for Data Science" })).toBeVisible();
-    await expect(page.getByText("v0.0.23")).toBeVisible();
+    await expect(page.getByText("v0.0.24")).toBeVisible();
 
     // Hero secondary line
     await expect(page.getByText("Production-Scale FHIR Analytics. Running Anywhere.")).toBeVisible();
@@ -19,8 +19,8 @@ test.describe("Landing page", () => {
     await expect(subtitle).toContainText("auditable", { ignoreCase: true });
 
     // Stats bar — mean per-patient timing
-    await expect(page.getByText("~3.9ms").first()).toBeVisible();
-    await expect(page.getByText("SQL mean / patient").first()).toBeVisible();
+    await expect(page.getByText("~6.9ms").first()).toBeVisible();
+    await expect(page.getByText("SQL median / patient").first()).toBeVisible();
     await expect(page.getByText("Zero").first()).toBeVisible();
     await expect(page.getByText("Audit Evidence").first()).toBeVisible();
   });
@@ -50,9 +50,9 @@ test.describe("Landing page", () => {
     await page.goto(".");
     await expect(page.getByRole("heading", { level: 2 }).filter({ hasText: "FHIR4DS vs" })).toBeVisible();
     // Per-patient metric row in table (mean)
-    await expect(page.getByRole("cell", { name: "SQL execution per patient (all 47 measures)" })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "SQL execution per patient, median (all 47 measures)" })).toBeVisible();
     // Speedup row
-    await expect(page.getByRole("cell", { name: /137×/ })).toBeVisible();
+    await expect(page.getByRole("cell", { name: /83×/ })).toBeVisible();
     // Benchmarking report link is present
     await expect(page.getByRole("link", { name: /View Full Benchmarking Report/ })).toBeVisible();
   });

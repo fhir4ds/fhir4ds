@@ -92,6 +92,12 @@
         }
       },
       {
+        "name": "testBasics/testEscapedIdentifierUnicode",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "testBasics/testSimpleBackTick1",
         "result": {
           "passed": true
@@ -626,6 +632,12 @@
         }
       },
       {
+        "name": "testLiterals/testLiteralUnicodeInvalid",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "testLiterals/testCollectionNotEmpty",
         "result": {
           "passed": true
@@ -1107,6 +1119,18 @@
       },
       {
         "name": "testTypes/testStringQuantityYearLiteralToQuantity",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testTypes/testStringQuantityMonthToQuantityEquivalent",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testTypes/testStringQuantityYearToQuantityEquivalent",
         "result": {
           "passed": true
         }
@@ -1646,6 +1670,12 @@
         }
       },
       {
+        "name": "testIndexer/testIndexer3",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "testSingle/testSingle1",
         "result": {
           "passed": true
@@ -1706,6 +1736,30 @@
         }
       },
       {
+        "name": "testSkip/testSkip5",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testSkip/testSkip6",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testSkip/testSkip7",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testSkip/testSkip8",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "testTake/testTake1",
         "result": {
           "passed": true
@@ -1743,6 +1797,18 @@
       },
       {
         "name": "testTake/testTake7",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testTake/testTake8",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testTake/testTake9",
         "result": {
           "passed": true
         }
@@ -2013,6 +2079,54 @@
       },
       {
         "name": "testSubstring/testSubstring9",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testSubstring/testSubstring11",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testSubstring/testSubstring12",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testSubstring/testSubstring13",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testSubstring/testSubstring14",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testSubstring/testSubstring15",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testSubstring/testSubstring16",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testSubstring/testSubstring17",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testSubstring/testSubstring18",
         "result": {
           "passed": true
         }
@@ -2492,6 +2606,24 @@
         }
       },
       {
+        "name": "testEscapeUnescape/testUnescapeJson2",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testEscapeUnescape/testUnescapeJson3",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testEscapeUnescape/testUnescapeJson4",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "testTrim/testTrim1",
         "result": {
           "passed": true
@@ -2552,7 +2684,37 @@
         }
       },
       {
+        "name": "testSplit/testSplit5",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testSplit/testSplit6",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testSplit/testSplit7",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testSplit/testSplit8",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "testJoin/testJoin",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testJoin/testJoinEmpty",
         "result": {
           "passed": true
         }
@@ -2822,6 +2984,78 @@
         }
       },
       {
+        "name": "testEquality/testEquality29",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testEquality/testEquality30",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testEquality/testEquality31",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testEquality/testEquality32",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testEquality/testEquality33",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testEquality/testEquality34",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testEquality/testEquality35",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testEquality/testEquality36",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testEquality/testEquality37",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testEquality/testEquality38",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testEquality/testEquality39",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testEquality/testEquality40",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "testNEquality/testNEquality1",
         "result": {
           "passed": true
@@ -2961,6 +3195,42 @@
       },
       {
         "name": "testNEquality/testNEquality24",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testNEquality/testNEquality25",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testNEquality/testNEquality26",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testNEquality/testNEquality27",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testHasValue/testHasCodingValue1",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testHasValue/testHasCodingValue2",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testHasValue/testHasCodingValue3",
         "result": {
           "passed": true
         }
@@ -3110,6 +3380,48 @@
         }
       },
       {
+        "name": "testEquivalent/testEquivalent24",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testEquivalent/testEquivalent25",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testEquivalent/testEquivalent26",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testEquivalent/testEquivalent27",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testEquivalent/testEquivalent28",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testEquivalent/testEquivalent29",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testEquivalent/testEquivalent30",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "testNotEquivalent/testNotEquivalent1",
         "result": {
           "passed": true
@@ -3237,6 +3549,18 @@
       },
       {
         "name": "testNotEquivalent/testNotEquivalent22",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testNotEquivalent/testNotEquivalent23",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testNotEquivalent/testNotEquivalent24",
         "result": {
           "passed": true
         }
@@ -3404,6 +3728,90 @@
         }
       },
       {
+        "name": "testLessThan/testLessThan28",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testLessThan/testLessThan29",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testLessThan/testLessThan30",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testLessThan/testLessThan31",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testLessThan/testLessThan32",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testLessThan/testLessThan33",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testQuantityUnitComparison/testQuantityNoUnitEqual",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testQuantityUnitComparison/testQuantityNoUnitEquivalent",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testQuantityUnitComparison/testQuantityUnitTextEqual",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testQuantityUnitComparison/testQuantityUnitTextEquivalent",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testQuantityUnitComparison/testQuantityUnitVsNoUnitEqual",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testQuantityUnitComparison/testQuantityNoUnitVsUnitEqual",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testQuantityUnitComparison/testQuantityUnitVsNoUnitEquivalent",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testQuantityUnitComparison/testQuantityNoUnitVsUnitEquivalent",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "testLessOrEqual/testLessOrEqual1",
         "result": {
           "passed": true
@@ -3561,6 +3969,24 @@
       },
       {
         "name": "testLessOrEqual/testLessOrEqual27",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testLessOrEqual/testLessOrEqual28",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testLessOrEqual/testLessOrEqual29",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testLessOrEqual/testLessOrEqual30",
         "result": {
           "passed": true
         }
@@ -3728,6 +4154,18 @@
         }
       },
       {
+        "name": "testGreatorOrEqual/testGreatorOrEqual28",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testGreatorOrEqual/testGreatorOrEqual29",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "testGreaterThan/testGreaterThan1",
         "result": {
           "passed": true
@@ -3890,6 +4328,24 @@
         }
       },
       {
+        "name": "testGreaterThan/testGreaterThan28",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testGreaterThan/testGreaterThan29",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testGreaterThan/testGreaterThan30",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "testCombine()/testCombine1",
         "result": {
           "passed": true
@@ -3969,6 +4425,12 @@
       },
       {
         "name": "testUnion/testUnion11",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testUnion/testUnion12",
         "result": {
           "passed": true
         }
@@ -4448,6 +4910,18 @@
         }
       },
       {
+        "name": "testPlus/testPlusDate23",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testPlus/testPlusDate24",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "testConcatenate/testConcatenate1",
         "result": {
           "passed": true
@@ -4508,6 +4982,12 @@
         }
       },
       {
+        "name": "testMinus/testMinus7",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "testMultiply/testMultiply1",
         "result": {
           "passed": true
@@ -4562,6 +5042,12 @@
         }
       },
       {
+        "name": "testDivide/testDivide7",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "testDiv/testDiv1",
         "result": {
           "passed": true
@@ -4592,6 +5078,12 @@
         }
       },
       {
+        "name": "testDiv/testDiv6",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "testMod/testMod1",
         "result": {
           "passed": true
@@ -4617,6 +5109,24 @@
       },
       {
         "name": "testMod/testMod5",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testMod/testMod6",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testMod/testMod7",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "testMod/testMod8",
         "result": {
           "passed": true
         }
@@ -5186,6 +5696,60 @@
         }
       },
       {
+        "name": "LowBoundary/LowBoundaryDecimalCarry1",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "LowBoundary/LowBoundaryDecimalCarry2",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "LowBoundary/LowBoundaryDecimalCarry3",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "LowBoundary/LowBoundaryDecimalBorrow1",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "LowBoundary/LowBoundaryDecimalBorrow2",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "LowBoundary/LowBoundaryDecimalExponent1",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "LowBoundary/LowBoundaryDecimalExponent2",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "LowBoundary/LowBoundaryDecimalExponent3",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "LowBoundary/LowBoundaryDecimalExponent4",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "LowBoundary/LowBoundaryQuantity",
         "result": {
           "passed": true
@@ -5325,6 +5889,60 @@
       },
       {
         "name": "HighBoundary/HighBoundaryDecimal",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "HighBoundary/HighBoundaryDecimalCarry1",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "HighBoundary/HighBoundaryDecimalCarry2",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "HighBoundary/HighBoundaryDecimalCarry3",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "HighBoundary/HighBoundaryDecimalCarry4",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "HighBoundary/HighBoundaryDecimalExponent1",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "HighBoundary/HighBoundaryDecimalExponent2",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "HighBoundary/HighBoundaryDecimalExponent3",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "HighBoundary/HighBoundaryDecimalExponent4",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "HighBoundary/HighBoundaryDecimalExponent5",
         "result": {
           "passed": true
         }

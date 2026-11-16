@@ -12,13 +12,20 @@ from datetime import datetime
 from typing import TYPE_CHECKING, List, Any
 
 import duckdb
-from duckdb import sqltypes
+
+try:
+    from duckdb import sqltypes
+except ImportError:  # pragma: no cover
+    # The Pyodide/WASM duckdb build does not ship the ``sqltypes`` module.
+    # The browser path is translation-only (UDFs are never registered), so a
+    # None placeholder keeps the module importable there (viewing-room boot).
+    sqltypes = None  # type: ignore[assignment]
 
 if TYPE_CHECKING:
     import duckdb
 
 
-_COALESCE_RETURN_TYPE = getattr(sqltypes, "VARIANT", "VARCHAR")
+_COALESCE_RETURN_TYPE = "VARCHAR" if sqltypes is None else getattr(sqltypes, "VARIANT", "VARCHAR")
 
 
 def _coalesce_return_value(value: Any) -> Any:

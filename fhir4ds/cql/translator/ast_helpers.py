@@ -799,7 +799,11 @@ class ASTHelpersMixin:
             # Ensure inner SELECT includes patient_id for the outer reference
             has_pid = any(
                 (isinstance(c, SQLIdentifier) and c.name == "patient_id")
-                or (isinstance(c, SQLQualifiedIdentifier) and c.column == "patient_id")
+                # CORE-001: SQLQualifiedIdentifier has `.parts`, not `.column`
+                # — the old attribute access raised AttributeError whenever a
+                # RESOURCE_ROWS query wrap met a qualified column.
+                or (isinstance(c, SQLQualifiedIdentifier)
+                    and c.parts and c.parts[-1] == "patient_id")
                 or (isinstance(c, SQLAlias) and c.alias == "patient_id")
                 for c in new_cols
             )

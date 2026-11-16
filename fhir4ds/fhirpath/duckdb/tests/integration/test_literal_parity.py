@@ -897,10 +897,14 @@ def test_month_year_vs_days_ordering_parity_fp01_skeptic() -> None:
         ("1 month > 30 days", False),
         ("1 month > 31 days", False),
         ("1 month >= 30 days", True),
-        ("1 year > 364 days", True),
-        ("1 year > 365 days", False),
-        ("1 year > 366 days", False),
-        ("1 year < 366 days", True),
+        # v0.0.24 it2 (upstream corpus refresh): a calendar YEAR keyword no
+        # longer orders against days — official testLessOrEqual28
+        # (`1 year <= 2 days` // empty) supersedes the FP-01 factor rule
+        # for the year-vs-day family. Month-vs-day ordering is unchanged.
+        ("1 year > 364 days", None),
+        ("1 year > 365 days", None),
+        ("1 year > 366 days", None),
+        ("1 year < 366 days", None),
         ("2 months > 59 days", True),
         ("2 months > 60 days", False),
         ("1 month > 29 'd'", True),

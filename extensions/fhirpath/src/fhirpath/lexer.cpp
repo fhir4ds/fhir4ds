@@ -543,6 +543,26 @@ Token Lexer::readString() {
 					for (int i = 0; i < 4 && !isAtEnd() && peek() != '\''; ++i) {
 						hex += advance();
 					}
+					// v0.0.24 it2 (upstream corpus refresh): \u MUST be
+					// followed by exactly 4 hex digits — official pin
+					// testLiteralUnicodeInvalid ('\u+041' invalid="syntax").
+					// Supersedes the FP-10 tolerant corner; the Python
+					// fallback tightens identically (parity holds).
+					if (hex.size() != 4) {
+						error_ = true;
+						break;
+					}
+					bool hex_ok = true;
+					for (char h : hex) {
+						if (!std::isxdigit(static_cast<unsigned char>(h))) {
+							hex_ok = false;
+							break;
+						}
+					}
+					if (!hex_ok) {
+						error_ = true;
+						break;
+					}
 					if (!appendUnicodeEscape(value, input_, pos_, hex)) {
 						error_ = true;
 					}

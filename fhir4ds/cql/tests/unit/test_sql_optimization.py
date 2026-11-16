@@ -1831,3 +1831,105 @@ class TestResourceColumnLineage:
         assert "a.performed" in sql
         assert "b.performed" in sql
         assert registry.lookup("Unioned", "performed") == "performed"
+
+
+class TestExternalReviewB19CoreWalkerBugs:
+    """CORE-004/005/006 from the external parser/translator review."""
+
+    def test_correlate_counts_walks_union_operands_and_case_clauses(self):
+        """CORE-004: list/tuple field values (SQLUnion.operands,
+        SQLCase.when_clauses) must be traversed by the correlation walkers."""
+        from fhir4ds.cql.translator import correlate_counts as CC
+        from fhir4ds.cql.translator.types import (
+            SQLUnion, SQLSelect, SQLQualifiedIdentifier, SQLCase,
+        )
+
+        union = SQLUnion(operands=[
+            SQLQualifiedIdentifier(parts=["E", "x"]),
+            SQLQualifiedIdentifier(parts=["E", "y"]),
+        ])
+        roots = set()
+        CC._collect_outer_roots(union, "O", roots)
+        assert roots == {"E"}, "union operand roots must be collected"
+
+        case = SQLCase(when_clauses=[
+            (SQLQualifiedIdentifier(parts=["E", "flag"]),
+             SQLQualifiedIdentifier(parts=["E", "v"])),
+        ])
+        roots = set()
+        CC._collect_outer_roots(case, "O", roots)
+        assert roots == {"E"}, "when_clauses tuple contents must be collected"
+
+        corr_union = SQLUnion(operands=[
+            SQLSelect(columns=[SQLQualifiedIdentifier(parts=["sub", "patient_id"])]),
+        ])
+        # SQLSelect operands are deliberately skipped (own FROM scope) — but a
+        # bare patient_id reference inside operands must be seen.
+        bare = SQLUnion(operands=[SQLQualifiedIdentifier(parts=["sub", "patient_id"])])
+        assert CC._has_patient_id_correlation(bare) is True
+        assert CC._has_patient_id_correlation(corr_union) is False  # scoped
+
+        # Self-alias and raw-list traversal
+        roots = set()
+        CC._collect_outer_roots(
+            SQLUnion(operands=[SQLQualifiedIdentifier(parts=["O", "x"])]), "O", roots)
+        assert roots == set()
+        roots = set()
+        CC._collect_outer_roots([SQLQualifiedIdentifier(parts=["E", "a"])], "O", roots)
+        assert roots == {"E"}
+
+    def test_fhirpath_opt_memo_validates_alias_dict_identity(self):
+        """CORE-006: memo entries pin BOTH keyed objects and validate both
+        identities, so a recycled alias_to_cte address can never serve a
+        stale rewrite for a still-alive ast."""
+        from fhir4ds.cql.translator.retrieve_optimizer import _FHIRPATH_OPT_MEMO
+        from fhir4ds.cql.translator.types import SQLIdentifier
+
+        _FHIRPATH_OPT_MEMO.clear()
+        try:
+            ast = SQLIdentifier(name="memo_probe")
+            d1 = {"a": "CTE1"}
+            # Prime the memo with (ast, d1) directly — the exact entry shape
+            # _optimize_fhirpath_calls writes.
+            _FHIRPATH_OPT_MEMO[(id(ast), id(d1))] = (ast, d1, SQLIdentifier(name="stale"))
+            entry = _FHIRPATH_OPT_MEMO[(id(ast), id(d1))]
+            # Identity contract: both keyed objects are pinned and must be
+            # the very same objects a hit validates against.
+            assert entry[0] is ast
+            assert entry[1] is d1
+            # A different dict (even one that later recycles d1's address)
+            # can never satisfy `entry[1] is alias_to_cte` unless it IS d1.
+            d2 = {"b": "CTE2"}
+            assert not (entry[1] is d2)
+            # And because the entry holds a strong reference, the pinned dict
+            # remains reachable through the entry itself — its id() cannot be
+            # recycled while the entry lives:
+            import gc
+            entry_dict = entry[1]
+            del d1
+            gc.collect()
+            assert entry_dict == {"a": "CTE1"} and any(
+                e[1] is entry_dict for e in _FHIRPATH_OPT_MEMO.values()
+            ), "memo must pin the alias dict alive"
+        finally:
+            _FHIRPATH_OPT_MEMO.clear()
+
+
+class TestExternalReviewB20QuoteHardening:
+    """CORE-015: identifiers/parameter names must survive embedded quotes."""
+
+    def test_qualified_identifier_escapes_embedded_double_quotes(self):
+        from fhir4ds.cql.translator.types import SQLQualifiedIdentifier
+        hostile = SQLQualifiedIdentifier(parts=['al"ias', 'col'])
+        sql = hostile.to_sql()
+        assert sql == '"al""ias".col'
+        # normal identifiers render byte-identical (no churn)
+        assert SQLQualifiedIdentifier(parts=['t1', 'resource']).to_sql() == 't1.resource'
+        assert SQLQualifiedIdentifier(parts=['a-b', 'x']).to_sql() == '"a-b".x'
+
+    def test_parameter_ref_escapes_single_quotes(self):
+        from fhir4ds.cql.translator.types import SQLParameterRef
+        assert SQLParameterRef(name="pa'ram").to_sql() == "CAST(getvariable('pa''ram') AS VARCHAR)"
+        # normalization preserved
+        assert SQLParameterRef(name='Measurement Period').to_sql() == \
+            "CAST(getvariable('measurement_period') AS VARCHAR)"

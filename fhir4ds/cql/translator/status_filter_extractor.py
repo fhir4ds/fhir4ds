@@ -32,6 +32,47 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _param_resource_type(type_spec) -> Optional[str]:
+    """Normalize a parameter TypeSpecifier to a bare resource type name.
+
+    ``List<FHIR.Condition>`` and ``FHIR.Condition`` both normalize to
+    ``Condition``; anything else returns None.
+    """
+    from ..parser.ast_nodes import ListTypeSpecifier, NamedTypeSpecifier
+
+    t = type_spec
+    if isinstance(t, ListTypeSpecifier):
+        t = t.element_type
+    if isinstance(t, NamedTypeSpecifier) and t.name:
+        name = t.name
+        if name.startswith("FHIR."):
+            name = name[len("FHIR."):]
+        return name or None
+    return None
+
+
+def _func_def_param_type(func_def) -> Optional[str]:
+    """First-parameter resource type of a parser FunctionDefinition or an
+    inliner FunctionDef (parameters as ``(name, type)`` tuples where type may
+    already be a string)."""
+    params = getattr(func_def, "parameters", None) or []
+    if not params:
+        return None
+    first = params[0]
+    if isinstance(first, tuple):
+        t = first[1] if len(first) > 1 else None
+        if isinstance(t, str):
+            name = t
+            if name.startswith("List<"):
+                name = name[5:-1]
+            if name.startswith("FHIR."):
+                name = name[len("FHIR."):]
+            return name or None
+        return _param_resource_type(t)
+    ptype = getattr(first, "type", None)
+    return _param_resource_type(ptype)
+
+
 def extract_status_filter(func_def: FunctionDefinition, codes: Optional[Dict] = None) -> Optional[dict]:
     """Extract a status filter config from a fluent function definition.
 
@@ -120,10 +161,19 @@ def _extract_and_compound(expr: BinaryExpression, codes: Optional[Dict] = None) 
     right_filter = _extract_single_filter(expr.right, codes)
 
     if not left_filter or not right_filter:
-        # Could be AND with exists() for category — skip those for now
-        # Try just the left side as a simple status filter
-        if left_filter and not right_filter:
-            return {"status_field": left_filter["field"], "allowed": left_filter["values"]}
+        # Decline partial extraction. Returning a left-only config would make
+        # the fluent dispatcher REPLACE the whole call with a status-only
+        # WHERE, silently dropping the un-extracted right predicate (e.g.
+        # `status in {...} and verificationStatus ~ "confirmed"` would lose
+        # the verification check). Returning None falls the call through to
+        # the general inlining path, which evaluates the full body.
+        if (left_filter and not right_filter) or (right_filter and not left_filter):
+            logger.warning(
+                "Declining partial status-filter extraction for AND with an "
+                "unrecognized operand (%s side); falling back to full-body "
+                "translation",
+                "right" if left_filter else "left",
+            )
         return None
 
     # Determine which is status and which is intent/category
@@ -266,7 +316,7 @@ def _resolve_value(node, codes: Optional[Dict] = None) -> Optional[str]:
     return None
 
 
-def extract_all_status_filters(library, codes: Optional[Dict] = None) -> Dict[str, dict]:
+def extract_all_status_filters(library, codes: Optional[Dict] = None) -> Dict[str, List[dict]]:
     """Extract status filter configs from all fluent functions in a parsed library.
 
     Args:
@@ -274,13 +324,21 @@ def extract_all_status_filters(library, codes: Optional[Dict] = None) -> Dict[st
         codes: Optional dict mapping code names to their info.
 
     Returns:
-        Dict mapping function name to status filter config.
+        Dict mapping function name to the LIST of configs extracted for that
+        name, one per overload. Fluent functions are overloaded by parameter
+        resource type (e.g. FHIRCommon declares ``verified`` for both
+        ``List<FHIR.Condition>`` and ``List<FHIR.AllergyIntolerance>`` with
+        DIFFERENT value sets); keeping every overload keyed with its
+        ``param_type`` lets the dispatcher pick the right one instead of
+        silently using whichever registered last.
     """
-    filters = {}
+    filters: Dict[str, List[dict]] = {}
     for stmt in library.statements:
         if isinstance(stmt, FunctionDefinition) and stmt.fluent:
             config = extract_status_filter(stmt, codes)
             if config is not None:
-                filters[stmt.name] = config
+                config = dict(config)
+                config["param_type"] = _func_def_param_type(stmt)
+                filters.setdefault(stmt.name, []).append(config)
                 logger.debug(f"Extracted status filter for {stmt.name}: {config}")
     return filters

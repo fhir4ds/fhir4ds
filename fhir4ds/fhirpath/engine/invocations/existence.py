@@ -139,6 +139,10 @@ def has_value_fn(ctx, x):
     For FHIR primitives with extensions but no value (e.g., from _given array
     where the corresponding given element is null), hasValue() should return
     false since there is no actual value, only an extension.
+
+    v0.0.24 it2 (HISTORIAN, upstream corpus refresh): complex nodes (e.g. a
+    HumanName from name.first()) carry no primitive value — official pin
+    testHasCodingValue2 (`name.first().hasValue()` // false).
     """
     if len(x) != 1:
         return [False]
@@ -155,13 +159,14 @@ def has_value_fn(ctx, x):
         if x[0].data is None:
             return [False]
 
-        # Handle FHIR primitives with extensions but no value
-        # When a primitive has only an extension (no actual value), the data
-        # is a dict with 'extension' key but no 'value' key
         if isinstance(x[0].data, abc.Mapping):
-            # If it has extension but no value key, it's an extension-only primitive
-            if 'extension' in x[0].data and 'value' not in x[0].data:
-                return [False]
+            # v0.0.24 it3 (EXPLORER): ANY mapping is a complex node — no
+            # primitive value. A quantity-shaped {"value":..,"unit":..} is a
+            # FHIR Quantity (complex datatype), not a primitive; native
+            # fn_hasValue returns false for every JSON object. The old
+            # "'value' in data" carve-out made the fallback diverge
+            # (valueQuantity.hasValue() true vs native false).
+            return [False]
 
     return [True]
 

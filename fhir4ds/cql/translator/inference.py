@@ -112,7 +112,8 @@ class InferenceMixin:
         # Build dependency graph: name -> set of names it depends on
         dependencies: Dict[str, Set[str]] = {}
         for defn in definitions:
-            deps = self._extract_definition_dependencies(defn.expression, def_names)
+            deps = self._extract_definition_dependencies(
+                defn.expression, def_names, _current_name=defn.name)
             dependencies[defn.name] = deps
 
         # Kahn's algorithm for topological sort
@@ -195,6 +196,7 @@ class InferenceMixin:
                 deps = self._extract_definition_dependencies(
                     statement.expression, definition_names,
                     function_bodies=function_bodies,
+                    _current_name=name,
                 )
                 dependencies[name] = deps
 
@@ -243,6 +245,7 @@ class InferenceMixin:
         self, expr: Expression, definition_names: Set[str],
         function_bodies: Optional[Dict[str, Expression]] = None,
         _visited_functions: Optional[Set[str]] = None,
+        _current_name: Optional[str] = None,
     ) -> Set[str]:
         """
         Extract definition names referenced in an expression.
@@ -256,6 +259,9 @@ class InferenceMixin:
             definition_names: Set of all valid definition names.
             function_bodies: Map of function names to their body expressions.
             _visited_functions: Guard against infinite recursion in function bodies.
+            _current_name: Name of the definition being analyzed (if any) —
+                qualified ``Lib."X"`` refs matching it are excluded as
+                self-dependencies (they target the included library's CTE).
 
         Returns:
             Set of definition names referenced in the expression.
@@ -276,8 +282,14 @@ class InferenceMixin:
             if len(expr.parts) == 1 and expr.parts[0] in definition_names:
                 deps.add(expr.parts[0])
             elif len(expr.parts) == 2 and expr.parts[1] in definition_names:
-                # Library.Definition reference
-                deps.add(expr.parts[1])
+                # Library.Definition reference. A qualified reference always
+                # targets the INCLUDED library's CTE ("Alias.Name"), never the
+                # local definition of the same name — treating it as a local
+                # dependency made a local define that shadows an included
+                # definition look like a self-cycle ("Cyclic dependency
+                # detected").
+                if expr.parts[1] != _current_name:
+                    deps.add(expr.parts[1])
 
         # Trace through function bodies for transitive dependencies
         if isinstance(expr, FunctionRef) and function_bodies:
@@ -290,6 +302,7 @@ class InferenceMixin:
                 _visited_functions.add(func_name)
                 deps.update(self._extract_definition_dependencies(
                     body, definition_names, function_bodies, _visited_functions,
+                    _current_name,
                 ))
 
         # Also trace fluent function calls (MethodInvocation)
@@ -300,12 +313,14 @@ class InferenceMixin:
                 _visited_functions.add(method_name)
                 deps.update(self._extract_definition_dependencies(
                     body, definition_names, function_bodies, _visited_functions,
+                    _current_name,
                 ))
 
         # Recursively check child expressions
         for child in self._get_child_expressions(expr):
             deps.update(self._extract_definition_dependencies(
                 child, definition_names, function_bodies, _visited_functions,
+                _current_name,
             ))
 
         return deps
@@ -335,6 +350,7 @@ class InferenceMixin:
             'initializer',  # AggregateExpression initializer
             'index',  # IndexerExpression index
             'count',  # Skip/TakeExpression count
+            'comparand',  # CaseExpression comparand (case X when...)
         ]
 
         for attr in expr_attrs:
@@ -354,6 +370,7 @@ class InferenceMixin:
         list_attrs = [
             'arguments', 'elements',  # Function arguments, list elements
             'with_clauses', 'let_clauses', 'relationships',  # Query clauses
+            'case_items',  # CaseExpression items (CaseItem when/then)
         ]
 
         for attr in list_attrs:
@@ -376,6 +393,10 @@ class InferenceMixin:
                                 item_value = getattr(item, "type")
                                 if item_value is not None and isinstance(item_value, Expression):
                                     children.append(item_value)
+                            if hasattr(item, 'when') and hasattr(item, 'then'):
+                                # CaseItem: when/then are Expressions
+                                children.append(item.when)
+                                children.append(item.then)
                             if hasattr(item, 'expression'):
                                 # Handle AST nodes like QuerySource, WithClause, LetClause
                                 child_expr = getattr(item, 'expression')

@@ -404,7 +404,15 @@ class CoreMixin:
         return SQLLiteral(value=value)
 
     def _translate_time_literal(self, t: TimeLiteral, boolean_context: bool = False) -> SQLExpression:
-        """Translate a CQL Time literal to SQL TIME."""
+        """Translate a CQL Time literal to transport VARCHAR carrying 'T'.
+
+        Transport doctrine (AGENTS / TimeOfDay precedent): Time values move
+        through SQL as VARCHAR with the leading 'T' marker so precision-aware
+        UDFs parse Date/DateTime/Time uniformly. NOTE: the lexer only
+        produces TIME tokens with a 'T' prefix for validated input (the
+        ':'-only fallback branch is unreachable past
+        `_validate_datetime_literal`).
+        """
         value = t.value
         # CQL format: @T12:30:00 or @T14:00
 
@@ -438,12 +446,14 @@ class CoreMixin:
                             f"Invalid time literal: millisecond value {ms_val} exceeds 999"
                         )
 
-        return SQLFunctionCall(
-            name="CAST",
-            args=[
-                SQLLiteral(value=value),
-            ],
-        )
+        # Transport doctrine (AGENTS / TimeOfDay precedent): CQL Time values
+        # are transported as VARCHAR carrying the leading 'T' marker, so
+        # downstream precision-aware UDFs (cqlSameAsP, dateComponent, ...)
+        # parse them uniformly. This also matches what the DateTimeLiteral
+        # path emitted for `@T...` literals before the lexer typed them as
+        # TimeLiteral. The previous `CAST(<literal>)` emission was an
+        # incomplete CAST that DuckDB rejected at parse time.
+        return SQLLiteral(value=t.value)
 
     def _translate_quantity(self, qty: Quantity, boolean_context: bool = False) -> SQLExpression:
         """Translate a CQL Quantity to SQL (as JSON or UDF call)."""
@@ -1386,10 +1396,16 @@ class CoreMixin:
         # Generate deterministic CTE name (must match _build_function_promotion_cte)
         from ...translator.cte_manager import generate_function_cte_name
         fn_cte_name = generate_function_cte_name(bare_name, cql_def_name)
-        source_alias = (
+        _src_name = (
             source_expr.name
             if isinstance(source_expr, Identifier)
-            else self.context.resource_alias or "E"
+            else None
         )
+        source_alias = _src_name or self.context.resource_alias or "E"
+        if _src_name:
+            _src_sym = self.context.lookup_symbol(_src_name)
+            # Prefer the SQL table alias in scope (inside promotion CTE
+            # builds the CQL alias is rebound to _fns; CMS156 fix).
+            source_alias = getattr(_src_sym, "table_alias", None) or source_alias
 
         return self._make_function_cte_lookup(fn_cte_name, source_alias, func_name=func_name)

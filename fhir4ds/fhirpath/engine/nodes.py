@@ -1101,6 +1101,20 @@ class FP_Quantity(FP_Type):
         ):
             return None
 
+        # v0.0.24 it2 (HISTORIAN, upstream corpus refresh): a calendar YEAR
+        # keyword does not order against any non-year unit — official pins
+        # testLessThan29 (`1 year < 2 months` // empty), testLessOrEqual28
+        # (`1 year <= 2 days` // empty), testGreaterThan29 (`1 year > 2
+        # months` // empty): "calendar durations in different units are not
+        # compared by their values" / "a calendar year and a duration in
+        # days can't be compared". Month↔day-family ordering (§5.5.7
+        # factors, `1 month > 29 days` // true) is unchanged.
+        _year_kw = ("year", "years")
+        if (self.unit in _year_kw or other.unit in _year_kw) and not (
+            self.unit in _year_kw and other.unit in _year_kw
+        ):
+            return None
+
         # Handle years and months comparison
         if self.unit in self._years_and_months and other.unit in self._years_and_months:
             self_value_in_months = self.value

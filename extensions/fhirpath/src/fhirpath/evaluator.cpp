@@ -821,6 +821,25 @@ static FPValue::Type effectiveType(const FPValue &v) {
 	return v.type;
 }
 
+// v0.0.24 it5 (HISTORIAN): model-typed temporal fields (valueTime,
+// effectiveDate, ...) carry fhir_type metadata from member access; consult
+// it so they compare/order as their FHIR type instead of plain strings.
+// Plain string LITERALS have no fhir_type and keep the lexical-shape-only
+// route (FP-03 SKEPTIC QA-002 pin: '10:00' < @T10:30 stays empty).
+static FPValue::Type temporalValueType(const FPValue &v) {
+	auto t = effectiveType(v);
+	if (t == FPValue::Type::String && !v.fhir_type.empty()) {
+		std::string ft = v.fhir_type;
+		std::transform(ft.begin(), ft.end(), ft.begin(), [](unsigned char c) {
+			return static_cast<char>(std::tolower(c));
+		});
+		if (ft == "time") return FPValue::Type::Time;
+		if (ft == "date") return FPValue::Type::Date;
+		if (ft == "datetime" || ft == "instant") return FPValue::Type::DateTime;
+	}
+	return t;
+}
+
 static bool extractStrictInteger(const FPValue &v, int64_t &out) {
 	if (v.type == FPValue::Type::Integer) {
 		out = v.int_val;
@@ -1314,7 +1333,7 @@ static bool isNumericType(const FPValue &v) {
 }
 
 static bool isDateTimeType(const FPValue &v) {
-	auto t = effectiveType(v);
+	auto t = temporalValueType(v);
 	if (t == FPValue::Type::Date || t == FPValue::Type::DateTime || t == FPValue::Type::Time) return true;
 	// Check for date-like strings (from JSON)
 	if (t == FPValue::Type::String) {
@@ -1840,12 +1859,15 @@ static int leastPrecisionDecimalPlaces(const FPValue &val) {
 }
 
 static int quantityEquivalentState(const FPValue &left, const FPValue &right) {
-	// FP-13 HISTORIAN (2026-06-29): Mirror the offset-temperature guard
-	// from quantityEqualState for the ~ operator (see comment there).
+	// v0.0.24 it2 (upstream corpus refresh): quantities that can't be
+	// compared are NOT equivalent — official testEquivalent28 (`1 'x' ~ 1
+	// year` // false) and testEquivalent29 (`1 year ~ 1 'kg'` // false).
+	// Supersedes the FP-13 empty-doctrine for `~` (equality `=` keeps
+	// empty for these pairs).
 	if (left.quantity_unit != right.quantity_unit &&
 	    (isOffsetTemperatureUnit(left.quantity_unit) ||
 	     isOffsetTemperatureUnit(right.quantity_unit))) {
-		return -1;
+		return 0;
 	}
 	// FP-01 SKEPTIC QA-003 (2026-08-16): year↔month pairs compare in
 	// months (§5.5.7 "1 year = 12 months"); other time pairs convert with
@@ -1868,7 +1890,9 @@ static int quantityEquivalentState(const FPValue &left, const FPValue &right) {
 	    unanchoredDurationSeconds(left.quantity_value, left.quantity_unit, left_base);
 	double right_conv =
 	    unanchoredDurationSeconds(right.quantity_value, right.quantity_unit, right_base);
-	if (left_base != right_base) return -1;
+	// v0.0.24 it2: incomparable units (unknown codes, dimensional mismatch)
+	// are NOT equivalent (testEquivalent28/29) — was -1/empty.
+	if (left_base != right_base) return 0;
 	int left_dp = leastPrecisionDecimalPlaces(left);
 	int right_dp = leastPrecisionDecimalPlaces(right);
 	double left_scale = (left.quantity_value != 0) ? left_conv / left.quantity_value : 1.0;
@@ -1945,7 +1969,31 @@ static int jsonValuesEqualState(yyjson_val *left, yyjson_val *right) {
 		if (yyjson_is_obj(v) || yyjson_is_arr(v)) return 2; // structural
 		return 1;                                            // scalar
 	};
-	if (jsonKindClass(left) != jsonKindClass(right)) return -1;
+	if (jsonKindClass(left) != jsonKindClass(right)) {
+		// v0.0.24 it2 (upstream corpus refresh): complex-vs-primitive is
+		// definitively NOT equal (testEquality29/30). The unitless
+		// quantity payload vs number carve-out above already returned -1.
+		return 0;
+	}
+	// v0.0.24 it2: a quantity-carrying object vs a unitless value object
+	// is UNCERTAIN (official testQuantityUnitVsNoUnitEqual // empty) —
+	// do not fall into the deep obj compare that would say false.
+	{
+		auto objHasQuantityMarker = [](yyjson_val *v) -> bool {
+			return v && yyjson_is_obj(v) &&
+			       (yyjson_obj_get(v, "unit") != nullptr || yyjson_obj_get(v, "code") != nullptr);
+		};
+		if (yyjson_is_obj(left) && yyjson_is_obj(right) &&
+		    objHasQuantityMarker(left) != objHasQuantityMarker(right) &&
+		    jsonValueIsUnitlessQuantityShape(left) != jsonValueIsUnitlessQuantityShape(right)) {
+			return -1;
+		}
+		if (yyjson_is_obj(left) && yyjson_is_obj(right) &&
+		    objHasQuantityMarker(left) != objHasQuantityMarker(right) &&
+		    (jsonValueIsUnitlessQuantityShape(left) || jsonValueIsUnitlessQuantityShape(right))) {
+			return -1;
+		}
+	}
 	if (yyjson_is_bool(left) || yyjson_is_bool(right)) {
 		return (yyjson_is_bool(left) && yyjson_is_bool(right) &&
 		        yyjson_get_bool(left) == yyjson_get_bool(right)) ? 1 : 0;
@@ -2328,8 +2376,8 @@ static bool fpValuesEqual(const FPValue &a, const FPValue &b) {
 
 	// Both date/time types: compare string values
 	if (isDateTimeType(a) && isDateTimeType(b)) {
-		auto at = effectiveType(a);
-		auto bt = effectiveType(b);
+		auto at = temporalValueType(a);
+		auto bt = temporalValueType(b);
 		if (isDateVsDateTimePair(at, bt)) return false;
 		bool a_is_time = (at == FPValue::Type::Time);
 		bool b_is_time = (bt == FPValue::Type::Time);
@@ -5665,11 +5713,28 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 			}
 		}
 		if (name == "join") {
+			// v0.0.24 it2 (upstream corpus refresh): join of an empty
+			// collection is EMPTY, not '' — official pin testJoinEmpty
+			// (`name.prefix.join(',')` // {}).
+			if (input.empty()) {
+				return {};
+			}
+			// v0.0.24 it4 (SKEPTIC): N1 §join "takes a collection of
+			// strings" — non-String items signal an error (empty at the
+			// UDF boundary), they are NOT coerced via toString.
 			std::string separator = toString(arg[0]);
 			std::string result;
 			for (size_t i = 0; i < input.size(); i++) {
+				const auto &item = input[i];
+				bool is_string = item.type == FPValue::Type::String ||
+				                 (item.type == FPValue::Type::JsonVal &&
+				                  item.json_val && yyjson_is_str(item.json_val));
+				if (!is_string) {
+					throw FHIRPathSpecError(
+					    "join() requires a collection of strings");
+				}
 				if (i > 0) result += separator;
-				result += toString(input[i]);
+				result += toString(item);
 			}
 			return {FPValue::FromString(result)};
 		}
@@ -9438,8 +9503,8 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 				return jsonNumbersEquivalent(lv.json_val, rv.json_val) ? 1 : 0;
 			}
 			if (isDateTimeType(lv) && isDateTimeType(rv)) {
-				auto lt = effectiveType(lv);
-				auto rt = effectiveType(rv);
+				auto lt = temporalValueType(lv);
+				auto rt = temporalValueType(rv);
 				if (isDateVsDateTimePair(lt, rt)) return 0;
 				bool l_is_time = (lt == FPValue::Type::Time);
 				bool r_is_time = (rt == FPValue::Type::Time);
@@ -9508,8 +9573,8 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 		auto valuesEqualState = [this](const FPValue &lv, const FPValue &rv) -> int {
 			// Return 1 for true, 0 for false, and -1 for empty/indeterminate.
 			if (isDateTimeType(lv) && isDateTimeType(rv)) {
-				auto lt = effectiveType(lv);
-				auto rt = effectiveType(rv);
+				auto lt = temporalValueType(lv);
+				auto rt = temporalValueType(rv);
 				if (isDateVsDateTimePair(lt, rt)) return -1;
 				bool l_is_time = (lt == FPValue::Type::Time);
 				bool r_is_time = (rt == FPValue::Type::Time);
@@ -9552,6 +9617,29 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 			    ((lv.json_val && (yyjson_is_obj(lv.json_val) || yyjson_is_arr(lv.json_val))) ||
 			     (rv.json_val && (yyjson_is_obj(rv.json_val) || yyjson_is_arr(rv.json_val))))) {
 				return jsonValuesEqualState(lv.json_val, rv.json_val);
+			}
+
+			// v0.0.24 it2 (upstream corpus refresh): complex-vs-primitive
+			// equality is definitively FALSE — official testEquality29/30
+			// (`name.first() = 'Peter'` // false). Carve-out: a bare
+			// {"value": ...}-shaped payload vs a numeric keeps the
+			// UNCERTAIN semantics (FP-12 milestone-4 pin:
+			// `{"value":120} = 120` // empty).
+			{
+				bool lv_complex = lv.type == FPValue::Type::JsonVal && lv.json_val &&
+				                  yyjson_is_obj(lv.json_val);
+				bool rv_complex = rv.type == FPValue::Type::JsonVal && rv.json_val &&
+				                  yyjson_is_obj(rv.json_val);
+				if (lv_complex != rv_complex && !isDateTimeType(lv) && !isDateTimeType(rv)) {
+					yyjson_val *obj = lv_complex ? lv.json_val : rv.json_val;
+					const FPValue &prim = lv_complex ? rv : lv;
+					yyjson_val *vfield = yyjson_obj_get(obj, "value");
+					bool numeric_prim = isNumericType(prim);
+					if (vfield && numeric_prim) {
+						return -1; // unitless quantity payload vs number: uncertain
+					}
+					return 0; // complex vs primitive: not equal
+				}
 			}
 
 			if (effectiveType(lv) != effectiveType(rv)) return -1;
@@ -9612,8 +9700,8 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 
 		// Date/time equality with precision
 		if (isDateTimeType(lv) && isDateTimeType(rv)) {
-			auto lt = effectiveType(lv);
-			auto rt = effectiveType(rv);
+			auto lt = temporalValueType(lv);
+			auto rt = temporalValueType(rv);
 			if (isDateVsDateTimePair(lt, rt)) {
 				if (op == "=" || op == "!=") return {};
 				is_eq = false;
@@ -9755,7 +9843,31 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 			// Incompatible types
 			auto lt = effectiveType(lv);
 			auto rt = effectiveType(rv);
+			// v0.0.24 it2 (upstream corpus refresh): complex-vs-primitive
+			// equality is definitively FALSE — official testEquality29/30
+			// (`name.first() = 'Peter'` // false). Carve-out: a bare
+			// {"value": ...}-shaped payload vs a numeric stays UNCERTAIN
+			// (FP-12 milestone-4 pin: `{"value":120} = 120` // empty).
 			if (lt != rt) {
+				bool lv_complex =
+				    lv.type == FPValue::Type::JsonVal && lv.json_val && yyjson_is_obj(lv.json_val);
+				bool rv_complex =
+				    rv.type == FPValue::Type::JsonVal && rv.json_val && yyjson_is_obj(rv.json_val);
+				if (lv_complex != rv_complex) {
+					yyjson_val *obj = lv_complex ? lv.json_val : rv.json_val;
+					const FPValue &prim = lv_complex ? rv : lv;
+					yyjson_val *vfield = yyjson_obj_get(obj, "value");
+					bool numeric_prim = (prim.type == FPValue::Type::Integer ||
+					                    prim.type == FPValue::Type::Decimal ||
+					                    prim.type == FPValue::Type::Quantity ||
+					                    (prim.type == FPValue::Type::JsonVal && prim.json_val &&
+					                     yyjson_is_num(prim.json_val)));
+					if (!(vfield && numeric_prim)) {
+						// complex vs primitive: not equal (definitive)
+						if (op == "=" || op == "~") return {FPValue::FromBoolean(false)};
+						return {FPValue::FromBoolean(true)};
+					}
+				}
 				// FHIRPath §6.1: = between incompatible types returns empty
 				if (op == "=" || op == "!=") return {};
 				// Equivalence (~) between incompatible types returns false
@@ -9779,7 +9891,7 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 
 		// Date/time comparison
 		if (isDateTimeType(lv) && isDateTimeType(rv)) {
-			int cmp = compareDateTimes(toString(lv), toString(rv), effectiveType(lv), effectiveType(rv));
+			int cmp = compareDateTimes(toString(lv), toString(rv), temporalValueType(lv), temporalValueType(rv));
 			if (cmp == INT_MIN) return {};
 			if (op == "<") return {FPValue::FromBoolean(cmp < 0)};
 			if (op == ">") return {FPValue::FromBoolean(cmp > 0)};
@@ -9790,6 +9902,18 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 		// Quantity comparison with unit conversion
 		if (lv.type == FPValue::Type::Quantity && rv.type == FPValue::Type::Quantity) {
 			if (isMixedCalendarUcumDurationAboveSeconds(lv.quantity_unit, rv.quantity_unit)) return {};
+			// v0.0.24 it2 (upstream corpus refresh): a calendar YEAR
+			// keyword does not order against any non-year unit — official
+			// pins testLessThan29 (`1 year < 2 months` // {}), testLessOrEqual28
+			// (`1 year <= 2 days` // {}), testGreaterThan29 (`1 year > 2
+			// months` // {}): "calendar durations in different units are
+			// not compared by their values". Month↔day-family ordering
+			// (§5.5.7 factors) is unchanged.
+			{
+				bool l_year = (lv.quantity_unit == "year" || lv.quantity_unit == "years");
+				bool r_year = (rv.quantity_unit == "year" || rv.quantity_unit == "years");
+				if (l_year != r_year) return {};
+			}
 			// FP-14 SKEPTIC (2026-06-29): Offset-temperature cross-unit
 			// conversion (Cel <-> [degF], Cel <-> K, etc.) is undefined for
 			// the multiplicative-only convertQuantityToBase path. UCUM marks
@@ -11440,6 +11564,130 @@ static int countDigits(const std::string &s) {
 	return count;
 }
 
+// v0.0.24 it4 (SKEPTIC): exact string-arithmetic decimal boundaries,
+// mirroring the Python Decimal authority (invocations/datetime.py).
+// Unified half-unit rule (it2): half = 0.5 * 10^Decimal-exponent, where
+// the exponent is mantissa-fraction-length minus e-notation exponent and
+// mantissa trailing zeros are PRESERVED ("12.500" -> 0.0005, "9.5e2" -> 5).
+// The previous double floor/ceil produced last-digit noise
+// (-2.5e-3.lowBoundary(8) -> -0.00255001) and the near-zero early return
+// skipped precision padding (highBoundary(2) -> "0.0" not "0.00").
+static bool _pj_parse_decimal_text(std::string text, bool &negative,
+                                   std::string &digits, int &e10) {
+	negative = false;
+	if (!text.empty() && (text[0] == '+' || text[0] == '-')) {
+		negative = text[0] == '-';
+		text = text.substr(1);
+	}
+	size_t exp_pos = text.find_first_of("eE");
+	int exp = 0;
+	if (exp_pos != std::string::npos) {
+		try {
+			exp = std::stoi(text.substr(exp_pos + 1));
+		} catch (const std::exception &) {
+			return false;
+		}
+		text = text.substr(0, exp_pos);
+	}
+	size_t dot = text.find('.');
+	std::string int_part = dot == std::string::npos ? text : text.substr(0, dot);
+	std::string frac_part = dot == std::string::npos ? std::string() : text.substr(dot + 1);
+	digits = int_part + frac_part;
+	// strip leading zeros (keep at least one digit)
+	size_t fnz = digits.find_first_not_of('0');
+	digits = fnz == std::string::npos ? "0" : digits.substr(fnz);
+	// Decimal-as_tuple exponent: e-notation exponent minus mantissa
+	// fraction length ("9.5e2" -> 2-1 = +1; "-2.5e-3" -> -3-1 = -4;
+	// "12.500" -> 0-3 = -3).
+	e10 = exp - static_cast<int>(frac_part.size());
+	return !digits.empty() &&
+	       digits.find_first_not_of("0123456789") == std::string::npos;
+}
+
+static bool _pj_str_add1(std::string &d) { // decimal digit string += 1
+	int carry = 1;
+	for (int i = static_cast<int>(d.size()) - 1; i >= 0 && carry; --i) {
+		if (d[static_cast<size_t>(i)] == '9') {
+			d[static_cast<size_t>(i)] = '0';
+		} else {
+			d[static_cast<size_t>(i)]++;
+			carry = 0;
+		}
+	}
+	if (carry) d.insert(d.begin(), '1');
+	return true;
+}
+
+static void _pj_str_add_small(std::string &d, const std::string &small) {
+	// d += small (non-negative decimal strings)
+	int carry = 0;
+	int sj = static_cast<int>(small.size()) - 1;
+	for (int i = static_cast<int>(d.size()) - 1; i >= 0 || carry || sj >= 0; --i) {
+		int a = i >= 0 ? d[static_cast<size_t>(i)] - '0' : 0;
+		int b = sj >= 0 ? small[static_cast<size_t>(sj--)] - '0' : 0;
+		int v = a + b + carry;
+		carry = v / 10;
+		v %= 10;
+		if (i >= 0) d[static_cast<size_t>(i)] = static_cast<char>('0' + v);
+		else d.insert(d.begin(), static_cast<char>('0' + v));
+	}
+	size_t fnz = d.find_first_not_of('0');
+	d = fnz == std::string::npos ? "0" : d.substr(fnz);
+}
+
+static bool _pj_str_sub_small(std::string &d, const std::string &small) {
+	// d -= small (both non-negative decimal strings, d >= small)
+	int borrow = 0;
+	int sj = static_cast<int>(small.size()) - 1;
+	for (int i = static_cast<int>(d.size()) - 1; i >= 0; --i) {
+		int a = d[static_cast<size_t>(i)] - '0';
+		int b = sj >= 0 ? small[static_cast<size_t>(sj--)] - '0' : 0;
+		int v = a - b - borrow;
+		if (v < 0) { v += 10; borrow = 1; } else { borrow = 0; }
+		d[static_cast<size_t>(i)] = static_cast<char>('0' + v);
+	}
+	size_t fnz = d.find_first_not_of('0');
+	d = fnz == std::string::npos ? "0" : d.substr(fnz);
+	return true;
+}
+
+static int _pj_str_cmp(const std::string &a, const std::string &b) {
+	// compare non-negative decimal strings numerically
+	std::string x = a, y = b;
+	size_t fx = x.find_first_not_of('0'); x = fx == std::string::npos ? "0" : x.substr(fx);
+	size_t fy = y.find_first_not_of('0'); y = fy == std::string::npos ? "0" : y.substr(fy);
+	if (x.size() != y.size()) return x.size() < y.size() ? -1 : 1;
+	return x < y ? -1 : (x > y ? 1 : 0);
+}
+
+static std::string _pj_format_at_scale(const std::string &q_magnitude, bool q_negative, int P) {
+	// render |q| (integer string) at scale P with sign; keeps P fractional
+	// digits; negative zero is rendered signed only when magnitude is zero
+	// AND q_negative is set by the caller (near-zero spelling "-0.00").
+	std::string mag = q_magnitude;
+	size_t fnz = mag.find_first_not_of('0');
+	mag = fnz == std::string::npos ? "0" : mag.substr(fnz);
+	bool zero = (mag == "0");
+	std::string int_part, frac_part;
+	if (P <= 0) {
+		int_part = mag;
+		frac_part = "";
+	} else {
+		if (static_cast<int>(mag.size()) <= P) {
+			int_part = "0";
+			frac_part = std::string(static_cast<size_t>(P) - mag.size(), '0') + mag;
+		} else {
+			int_part = mag.substr(0, mag.size() - static_cast<size_t>(P));
+			frac_part = mag.substr(mag.size() - static_cast<size_t>(P));
+		}
+	}
+	std::string out = P > 0 ? int_part + "." + frac_part : int_part;
+	if (q_negative && !zero) {
+		out.insert(out.begin(), '-');
+	}
+	return out;
+}
+
 static FPCollection decimalBoundary(const FPValue &val, const FPCollection *precision_arg, bool is_high) {
 	int out_prec = 8;
 	if (precision_arg && !precision_arg->empty()) {
@@ -11448,6 +11696,108 @@ static FPCollection decimalBoundary(const FPValue &val, const FPCollection *prec
 	}
 	if (out_prec < 0 || out_prec > 28) return {};
 
+	// Preferred: exact text path (source text, incl. e-notation spellings).
+	std::string text = val.source_text;
+	bool parsed_ok = false, negative = false;
+	std::string digits;
+	int e10 = 0;
+	if (!text.empty()) {
+		parsed_ok = _pj_parse_decimal_text(text, negative, digits, e10);
+	} else if (val.type == FPValue::Type::Integer) {
+		digits = std::to_string(val.int_val);
+		negative = val.int_val < 0;
+		if (negative) digits.erase(0, 1);
+		e10 = 0;
+		parsed_ok = true;
+	} else if (val.type == FPValue::Type::JsonVal && val.json_val && yyjson_is_int(val.json_val)) {
+		long long iv = yyjson_get_sint(val.json_val);
+		digits = std::to_string(llabs(iv));
+		negative = iv < 0;
+		e10 = 0;
+		parsed_ok = true;
+	}
+	if (parsed_ok) {
+		// boundary = B * 10^(e10-1) where B = coeff*10 +/- 5 exactly:
+		//   high, value >= 0 :  B =  coeff*10 + 5   (positive)
+		//   high, value < 0  :  B = -(coeff*10 - 5) (negative; coeff==0 -> +5)
+		//   low,  value >= 0 :  B =  coeff*10 - 5   (positive; coeff==0 -> -5)
+		//   low,  value < 0  :  B = -(coeff*10 + 5) (negative)
+		int S = e10 - 1; // scale of B
+		bool b_negative;
+		std::string b_mag = digits + "0"; // coeff * 10 (>= 10 when coeff >= 1)
+		if (is_high && !negative) {
+			_pj_str_add_small(b_mag, std::string("5"));
+			b_negative = false;
+		} else if (is_high && negative) {
+			if (digits == "0") { b_mag = "5"; b_negative = false; }
+			else { _pj_str_sub_small(b_mag, std::string("5")); b_negative = true; }
+		} else if (!is_high && !negative) {
+			if (digits == "0") { b_mag = "5"; b_negative = true; }
+			else { _pj_str_sub_small(b_mag, std::string("5")); b_negative = false; }
+		} else { // low, negative
+			_pj_str_add_small(b_mag, std::string("5"));
+			b_negative = true;
+		}
+		// near-zero: |boundary| <= 0.5 * 10^-P  <=>  |B| <= 5 * 10^(-P-1-S)
+		int t = -out_prec - 1 - S;
+		bool near_zero = false;
+		if (_pj_str_cmp(b_mag, "0") == 0) {
+			near_zero = true;
+		} else if (t >= 0) {
+			std::string threshold = "5" + std::string(static_cast<size_t>(t), '0');
+			near_zero = _pj_str_cmp(b_mag, threshold) <= 0;
+		} else {
+			// threshold fractional (< 5): only exact zero qualifies (handled)
+			near_zero = false;
+		}
+		if (near_zero) {
+			// fb doctrine: high -> 0.00 (either side); low from below -> -0.00
+			std::string out;
+			if (!is_high && b_negative) {
+				out = out_prec > 0 ? "-0." + std::string(static_cast<size_t>(out_prec), '0')
+				                   : std::string("0");
+			} else {
+				out = out_prec > 0 ? "0." + std::string(static_cast<size_t>(out_prec), '0')
+				                   : std::string("0");
+			}
+			FPValue rv = FPValue::FromDecimal(std::strtod(out.c_str(), nullptr));
+			rv.source_text = out;
+			return {rv};
+		}
+		// q at scale P: q = B * 10^(S+P)
+		int k = S + out_prec;
+		std::string q_mag = b_mag;
+		bool q_negative = b_negative;
+		if (k >= 0) {
+			q_mag += std::string(static_cast<size_t>(k), '0');
+		} else {
+			int shift = -k;
+			if (static_cast<int>(q_mag.size()) > shift) {
+				std::string rem = q_mag.substr(q_mag.size() - static_cast<size_t>(shift));
+				q_mag = q_mag.substr(0, q_mag.size() - static_cast<size_t>(shift));
+				bool has_rem = rem.find_first_not_of('0') != std::string::npos;
+				if (has_rem) {
+					if (is_high && !q_negative) _pj_str_add1(q_mag);        // ceil toward +inf
+					if (!is_high && q_negative) _pj_str_add1(q_mag);        // floor toward -inf
+				}
+			} else {
+				// everything shifts out; boundary magnitude < 10^-P
+				bool has_rem = q_mag.find_first_not_of('0') != std::string::npos;
+				q_mag = "0";
+				if (has_rem) {
+					if (is_high && !q_negative) q_mag = "1";
+					if (!is_high && q_negative) { q_mag = "1"; }
+					// otherwise rounds to signed zero -> near-zero handled above
+				}
+			}
+		}
+		std::string out = _pj_format_at_scale(q_mag, q_negative, out_prec);
+		FPValue rv = FPValue::FromDecimal(std::strtod(out.c_str(), nullptr));
+		rv.source_text = out;
+		return {rv};
+	}
+
+	// Fallback (no usable text): legacy double path, unchanged.
 	double d;
 	if (val.type == FPValue::Type::Integer) {
 		d = static_cast<double>(val.int_val);
@@ -11458,33 +11808,21 @@ static FPCollection decimalBoundary(const FPValue &val, const FPCollection *prec
 	}
 	int decimal_places = countDecimalPlaces(val);
 	double half_unit = 0.5 * std::pow(10.0, -decimal_places);
-
 	double boundary = is_high ? (d + half_unit) : (d - half_unit);
-
-	// Special case near zero
 	double out_half = 0.5 * std::pow(10.0, -(out_prec > 0 ? out_prec : 0));
-	if (is_high && boundary > 0 && boundary <= out_half) {
-		return {FPValue::FromDecimal(0.0)};
+	if (std::abs(boundary) <= out_half) {
+		FPValue rv = FPValue::FromDecimal(is_high ? 0.0 : (!is_high && boundary < 0 ? -0.0 : 0.0));
+		if (out_prec > 0) {
+			std::ostringstream pad_oss;
+			pad_oss << std::fixed << std::setprecision(out_prec) << 0.0;
+			rv.source_text = pad_oss.str();
+		}
+		return {rv};
 	}
-	if (is_high && boundary < 0 && std::abs(boundary) <= out_half) {
-		return {FPValue::FromDecimal(0.0)};
-	}
-	if (!is_high && boundary < 0 && std::abs(boundary) <= out_half) {
-		return {FPValue::FromDecimal(-0.0)};
-	}
-	if (!is_high && boundary > 0 && boundary <= out_half) {
-		return {FPValue::FromDecimal(0.0)};
-	}
-
 	double factor = std::pow(10.0, out_prec);
-	double result;
-	if (is_high) {
-		result = std::ceil(boundary * factor) / factor;
-	} else {
-		result = std::floor(boundary * factor) / factor;
-	}
+	double result = is_high ? (std::ceil(boundary * factor) / factor)
+	                        : (std::floor(boundary * factor) / factor);
 	FPValue rv = FPValue::FromDecimal(result);
-	// Store source_text with padded precision for proper formatting
 	if (out_prec > 0) {
 		std::ostringstream pad_oss;
 		pad_oss << std::fixed << std::setprecision(out_prec) << result;
@@ -11521,11 +11859,21 @@ static std::string formatDateTimeBoundary(const DateTimeParts &p, int digit_prec
 	oss << ":" << std::setfill('0') << std::setw(2)
 	    << ((p.precision >= 5) ? p.minute : (is_high ? 59 : 0));
 	if (digit_prec <= (is_time ? 4 : 12)) return oss.str();
+	// v0.0.24 it6 (EXPLORER): for Time inputs, preserve components at the
+	// input's precision and fill only components below it (§G-5 doctrine,
+	// mirroring the Python fallback _time_boundary): highBoundary(12:34:00)
+	// = 12:34:00.999; highBoundary(12:34:00.5) = 12:34:00.5 (authored
+	// fraction preserved verbatim). DateTime keeps the historical shared
+	// fill-from-template behavior (both engines agree; fixture-unpinned).
 	oss << ":" << std::setfill('0') << std::setw(2)
-	    << (is_high ? 59 : 0);
+	    << ((is_time && p.precision >= 6) ? p.second : (is_high ? 59 : 0));
 	if (digit_prec <= (is_time ? 6 : 14)) return oss.str();
-	oss << "." << std::setfill('0') << std::setw(3)
-	    << (is_high ? 999 : 0);
+	if (is_time && p.precision >= 7 && !p.frac_digits.empty()) {
+		oss << "." << p.frac_digits;
+	} else {
+		oss << "." << std::setfill('0') << std::setw(3)
+		    << (is_high ? 999 : 0);
+	}
 
 	// Add timezone for high precision
 	if (!is_time) {

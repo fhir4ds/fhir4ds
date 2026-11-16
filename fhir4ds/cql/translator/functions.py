@@ -397,20 +397,24 @@ class FunctionTranslator:
         if name == "second":
             return SQLFunctionCall(name="SECOND", args=args)
 
-        # Duration between functions
+        # Duration between functions. EXP1-005: these emit the REGISTERED
+        # CQL duration UDFs (whole-period §22.21 semantics, uncertainty-
+        # aware) — the previous `date_diff(unit, a, b)` emission bound-failed
+        # on VARCHAR operands ("Could not choose a best candidate") and, had
+        # it bound, would have counted boundary crossings instead of whole
+        # periods. Spellings must match the registration casing exactly.
         duration_funcs = {
-            "yearsbetween": "year",
-            "monthsbetween": "month",
-            "weeksbetween": "week",
-            "daysbetween": "day",
-            "hoursbetween": "hour",
-            "minutesbetween": "minute",
-            "secondsbetween": "second",
-            "millisecondsbetween": "millisecond",
+            "yearsbetween": "YearsBetween",
+            "monthsbetween": "MonthsBetween",
+            "weeksbetween": "weeksBetween",
+            "daysbetween": "DaysBetween",
+            "hoursbetween": "HoursBetween",
+            "minutesbetween": "MinutesBetween",
+            "secondsbetween": "SecondsBetween",
+            "millisecondsbetween": "millisecondsBetween",
         }
         if name in duration_funcs and len(args) >= 2:
-            unit = SQLLiteral(value=duration_funcs[name])
-            return SQLFunctionCall(name="date_diff", args=[unit, args[0], args[1]])
+            return SQLFunctionCall(name=duration_funcs[name], args=[args[0], args[1]])
 
         # Difference functions (boundary crossings)
         diff_funcs = {
@@ -423,8 +427,18 @@ class FunctionTranslator:
         }
         if name in diff_funcs and len(args) >= 2:
             unit = SQLLiteral(value=diff_funcs[name])
-            # Difference counts boundary crossings
-            return SQLFunctionCall(name="date_diff", args=[unit, args[0], args[1]])
+            # Difference counts boundary crossings — DuckDB's date_diff has
+            # exactly those semantics. EXP1-005: operands must be cast;
+            # VARCHAR literals bind-fail ("Could not choose a best
+            # candidate").
+            return SQLFunctionCall(
+                name="date_diff",
+                args=[
+                    unit,
+                    SQLCast(expression=args[0], target_type="TIMESTAMP", try_cast=True),
+                    SQLCast(expression=args[1], target_type="TIMESTAMP", try_cast=True),
+                ],
+            )
 
         # Fallback
         return SQLFunctionCall(name=name, args=args)

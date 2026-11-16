@@ -641,3 +641,58 @@ def test_time_string_ordering_not_coerced_parity_fp03_skeptic(monkeypatch) -> No
         fallback.close()
         fallback.close()
 
+
+
+class TestHasValueComplexParityV0024It3:
+    """v0.0.24 it3 (EXPLORER): hasValue() on JSON objects must be FALSE on
+    both engines — a quantity-shaped {"value":..,"unit":..} is a FHIR
+    Quantity (complex datatype), not a primitive. The fallback's old
+    "'value' in data" carve-out diverged from native fn_hasValue."""
+
+    OBS = json.dumps(
+        {
+            "resourceType": "Observation",
+            "id": "o1",
+            "status": "final",
+            "code": {"text": "t"},
+            "valueQuantity": {"value": 180, "unit": "cm"},
+        }
+    )
+
+    def test_has_value_complex_and_primitive_parity_v0024_it3(self):
+        native = _connection()
+        try:
+            cases = [
+                ("valueQuantity.hasValue()", ["false"]),
+                ("valueQuantity.value.hasValue()", ["true"]),
+                ("code.hasValue()", ["false"]),
+                ("code.text.hasValue()", ["true"]),
+                ("status.hasValue()", ["true"]),
+            ]
+            for expression, expected in cases:
+                got = native.execute(
+                    "SELECT fhirpath(?::JSON, ?)", [self.OBS, expression]
+                ).fetchone()[0]
+                assert got == expected, (expression, got)
+        finally:
+            native.close()
+
+    def test_has_value_complex_parity_fallback_v0024_it3(self, monkeypatch):
+        native = _connection()
+        fallback = _python_fallback_connection(monkeypatch)
+        try:
+            for expression in (
+                "valueQuantity.hasValue()",
+                "code.hasValue()",
+                "valueQuantity.value.hasValue()",
+            ):
+                cpp = native.execute(
+                    "SELECT fhirpath(?::JSON, ?)", [self.OBS, expression]
+                ).fetchone()[0]
+                py = fallback.execute(
+                    "SELECT fhirpath(?::JSON, ?)", [self.OBS, expression]
+                ).fetchone()[0]
+                assert cpp == py, (expression, cpp, py)
+        finally:
+            native.close()
+            fallback.close()
