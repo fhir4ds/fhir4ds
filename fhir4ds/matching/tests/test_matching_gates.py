@@ -123,6 +123,35 @@ def test_ambiguous_outcomes_are_not_false_positives():
     assert metrics.true_positives == 60
 
 
+def test_labeled_non_duplicate_predicted_counts_as_false_positive():
+    """AMUX-134 review: diagnostics must count explicitly-labeled
+    non-duplicates that the engine still links as false positives."""
+    patient_a = {
+        "resourceType": "Patient",
+        "id": "fp-a",
+        "name": [{"use": "official", "family": "Vela", "given": ["Rosa"]}],
+        "birthDate": "1985-03-03",
+        "telecom": [{"system": "phone", "value": "212-555-0131"}],
+    }
+    patient_b = dict(patient_a, id="fp-b")
+    conn = _indexed_conn([patient_a, patient_b])
+    corpus = {
+        "patients": [patient_a, patient_b],
+        "pairs": [
+            # the engine CANNOT distinguish these; the label says wrong link
+            {"a": "fp-a", "b": "fp-b", "kind": "synthetic_fp", "label": "non_duplicate"}
+        ],
+    }
+    metrics = evaluate_golden(conn, corpus)
+    assert metrics.predicted_pair_count == 1
+    assert metrics.true_positives == 0
+    assert metrics.false_positive_count == 1
+    assert metrics.false_positives == [
+        {"pair": ["fp-a", "fp-b"], "label": "non_duplicate"}
+    ]
+    assert metrics.precision == 0.0
+
+
 # ---------------------------------------------------------------------------
 # Gate 2: exploratory — every labeled duplicate catchable by >= 1 rule
 # ---------------------------------------------------------------------------
@@ -253,5 +282,57 @@ def test_scale_smoke_2000_patients_under_30s():
     start = time.monotonic()
     result = match_patient(conn, probe, exclude=frozenset({"scale-probe"}))
     elapsed = time.monotonic() - start
-    assert result.outcome in ("match", "no_match", "ambiguous")
+    # The query must actually have run over the indexed corpus (candidates
+    # were evaluated), not merely returned a default.
+    assert result is not None
+    assert result.evaluated_rules, "match_patient evaluated no rules"
     assert elapsed < 30.0, f"scale smoke tripped: match_patient took {elapsed:.1f}s"
+
+
+@pytest.mark.slow
+def test_scale_corpus_pass_300_patients_under_120s():
+    """Real corpus-pass tripwire at modest N: index 300 patients (with
+    genuine duplicate clusters so rules fire) and run the full
+    ``match_corpus`` pass under a generous ceiling."""
+    import datetime as dt
+
+    conn = duckdb.connect()
+    create_matching_tables(conn)
+    create_linkage_tables(conn)
+    create_audit_tables(conn)
+    rng = random.Random(300)
+    base = dt.date(1940, 1, 1)
+    for i in range(300):
+        # Every 10th patient duplicates the previous one with a transposed
+        # dob/phone digit -> fuzzy rules see real work.
+        family = LASTS[i % len(LASTS)]
+        given = FIRSTS[(i // 7) % len(FIRSTS)]
+        dob = (base + dt.timedelta(days=rng.randrange(20000))).isoformat()
+        if i % 10 == 0 and i > 0:
+            prev_dob = conn.execute(
+                "SELECT value FROM field_values WHERE patient_id = ? AND field_name = 'dob'",
+                [f"scale3-{i - 1:05d}"],
+            ).fetchone()
+            dob = prev_dob[0] if prev_dob else dob
+            family = LASTS[(i - 1) % len(LASTS)]
+            given = FIRSTS[((i - 1) // 7) % len(FIRSTS)]
+        resource = {
+            "resourceType": "Patient",
+            "id": f"scale3-{i:05d}",
+            "name": [{"use": "official", "family": family, "given": [given]}],
+            "birthDate": dob,
+            "telecom": [{"system": "phone", "value": f"{200 + i % 700}{i % 900:03d}{i % 9999:04d}"}],
+            "address": [{"line": [f"{i} Main Street"]}],
+            "identifier": [
+                {"system": "http://hl7.org/fhir/sid/us-ssn", "value": f"123-45-{i % 10000:04d}"}
+            ],
+        }
+        index_patient(conn, resource)
+
+    start = time.monotonic()
+    report = match_corpus(conn, "scale-corpus-300")
+    elapsed = time.monotonic() - start
+    assert report.patients_evaluated == 300
+    assert elapsed < 120.0, (
+        f"corpus-pass tripwire tripped: match_corpus over 300 patients took {elapsed:.1f}s"
+    )

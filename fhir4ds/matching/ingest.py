@@ -51,9 +51,10 @@ def match_on_ingest(
 
     Patients are matched BEFORE being indexed (new patient vs existing
     corpus), with their own id excluded so re-running an ingest against an
-    already-indexed corpus never self-matches. Linkage resources are only
-    created for outcomes in ``link_threshold`` (default: approved matches
-    only).
+    already-indexed corpus never self-matches. Linkage resources are
+    created for every outcome in ``link_threshold`` (default: approved
+    matches only; ``{"match", "ambiguous"}`` also links ambiguous pairs for
+    human-review workflows).
     """
     if not isinstance(run_id, str) or not run_id:
         raise ValueError("run_id must be a non-empty string")
@@ -80,7 +81,7 @@ def match_on_ingest(
             report.ambiguous += 1
         else:
             report.no_match += 1
-        if result.outcome in threshold and result.outcome == "match":
+        if result.outcome in threshold:
             for candidate_id in result.matched_ids:
                 outcome = upsert_linkage(conn, result, patient_id, candidate_id)
                 if outcome["action"] == "created":

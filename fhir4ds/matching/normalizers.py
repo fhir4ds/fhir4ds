@@ -101,15 +101,22 @@ _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _MAX_AGE_DAYS = 120 * 366
 
 
-def norm_date(value: Optional[str]) -> Optional[str]:
-    """Strict YYYY-MM-DD only. Rejects future dates and ages > 120 years."""
+def norm_date(value: Optional[str], as_of: Optional[_dt.date] = None) -> Optional[str]:
+    """Strict YYYY-MM-DD only. Rejects future dates and ages > 120 years.
+
+    ``as_of`` overrides the wall-clock reference date (default
+    ``date.today()``). DETERMINISM CARVE-OUT: indexed content depends on the
+    evaluation date ONLY through the future-date and >120-year rejections —
+    a fixed ``as_of`` makes the normalization fully deterministic; absent
+    it, a date near "today" can flip as the calendar advances.
+    """
     if value is None or not isinstance(value, str) or not _DATE_RE.match(value):
         return None
     try:
         d = _dt.date.fromisoformat(value)
     except ValueError:
         return None
-    today = _dt.date.today()
+    today = as_of if as_of is not None else _dt.date.today()
     if d > today:
         return None
     if (today - d).days > _MAX_AGE_DAYS:
@@ -296,12 +303,17 @@ def extract_patient_fields(patient_resource: dict) -> dict[str, list[str]]:
     # Names: prefer use=official, fall back to all names. Multiple values per
     # field are legal (multiple given tokens, multiple historical names).
     names = patient_resource.get("name") or []
-    official = [n for n in names if n.get("use") == "official"] or names
+    official = [n for n in names if isinstance(n, dict) and n.get("use") == "official"] or [
+        n for n in names if isinstance(n, dict)
+    ]
     for name in official:
         family = name.get("family")
         given = name.get("given") or []
         if isinstance(given, str):
             given = [given]
+        # Pathological-resource guard: non-string given entries (e.g. a bare
+        # number) are skipped, not crashed on.
+        given = [g for g in given if isinstance(g, str)]
         # Name-level placeholder detection (john doe / test patient etc.)
         full_name = " ".join([given[0] if given else "", family if isinstance(family, str) else ""])
         if norm_text(full_name) in _PLACEHOLDER_NAMES:
@@ -327,6 +339,8 @@ def extract_patient_fields(patient_resource: dict) -> dict[str, list[str]]:
         lines = address.get("line") or []
         if isinstance(lines, str):
             lines = [lines]
+        # Pathological-resource guard: non-string line entries are skipped.
+        lines = [ln for ln in lines if isinstance(ln, str)]
         if lines:
             # v1: norm_text of the raw first line (USPS standardization v2).
             add("street_line", norm_text(lines[0]))

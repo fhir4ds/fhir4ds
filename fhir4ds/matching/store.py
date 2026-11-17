@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import duckdb
 
 from .normalizers import extract_patient_fields
@@ -18,6 +20,10 @@ CREATE TABLE IF NOT EXISTS field_values (
 
 _INDEX_DDL = "CREATE INDEX IF NOT EXISTS idx_field_values_field_value ON field_values (field_name, value)"
 
+# FHIR R4 id pattern (same doctrine as FHIRDataLoader): also protects the
+# "|" pair-key used by the linkage table from separator injection.
+_FHIR_ID_RE = re.compile(r"^[A-Za-z0-9-.]{1,64}$")
+
 
 def create_matching_tables(conn: duckdb.DuckDBPyConnection) -> None:
     conn.execute(FIELD_VALUES_DDL)
@@ -33,6 +39,11 @@ def index_patient(conn: duckdb.DuckDBPyConnection, patient_resource: dict) -> in
     patient_id = patient_resource.get("id")
     if not isinstance(patient_id, str) or not patient_id:
         raise ValueError("Patient resource must carry a non-empty string 'id'")
+    if not _FHIR_ID_RE.fullmatch(patient_id):
+        raise ValueError(
+            f"Patient id {patient_id!r} does not match the FHIR id pattern "
+            "^[A-Za-z0-9-.]{1,64}$"
+        )
     fields = extract_patient_fields(patient_resource)
     conn.execute("DELETE FROM field_values WHERE patient_id = ?", [patient_id])
     rows = [(patient_id, name, value) for name, values in fields.items() for value in values]

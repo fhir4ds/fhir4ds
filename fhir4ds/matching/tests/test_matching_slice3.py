@@ -145,6 +145,43 @@ class TestUpsertLinkage:
         assert row[0] == "12"
         assert json.loads(row[1])["extension"][0]["extension"][0]["valueString"] == "12"
 
+    def test_same_rule_changed_evidence_overwrites(self):
+        """AMUX-134 review: same rule + changed evidence is NOT a noop."""
+        conn = _conn()
+        upsert_linkage(conn, _match_result(evidence={"first": "alice"}), "pat-a2", "pat-a1")
+        changed = upsert_linkage(
+            conn, _match_result(evidence={"first": "alicia"}), "pat-a2", "pat-a1"
+        )
+        assert changed["action"] == "overwritten"
+        assert changed["resource"] is not None
+        stored = json.loads(
+            conn.execute(
+                "SELECT resource FROM linkage WHERE linkage_id = ?",
+                [canonical_pair_key("pat-a1", "pat-a2")],
+            ).fetchone()[0]
+        )
+        evidence_ext = [
+            e for e in stored["extension"][0]["extension"] if e["url"] == "evidence"
+        ][0]["extension"]
+        assert {e["url"]: e["valueString"] for e in evidence_ext} == {"first": "alicia"}
+
+    def test_same_rule_changed_match_type_overwrites(self):
+        conn = _conn()
+        upsert_linkage(conn, _match_result(), "pat-a2", "pat-a1")
+        fuzzy = MatchResult(
+            outcome="match",
+            rule_id="11",
+            confidence=1.0 - 1e-8,
+            matched_ids=("pat-a1",),
+            evidence={"first": "alice", "dob": "1990-01-01", "phone": "2125550100"},
+            match_type="fuzzy",
+        )
+        changed = upsert_linkage(conn, fuzzy, "pat-a2", "pat-a1")
+        assert changed["action"] == "overwritten"
+        assert (
+            conn.execute("SELECT match_type FROM linkage").fetchone()[0] == "fuzzy"
+        )
+
     def test_extracted_columns(self):
         conn = _conn()
         upsert_linkage(conn, _match_result(), "pat-a2", "pat-a1")
@@ -299,6 +336,24 @@ class TestMatchOnIngest:
         conn = _conn()
         with pytest.raises(ValueError):
             match_on_ingest(conn, [A1], "run-1", link_threshold={"match", "bogus"})
+
+    def test_link_threshold_ambiguous_also_links(self):
+        """AMUX-134 review: link_threshold must actually be honored —
+        {"match", "ambiguous"} links ambiguous outcomes too."""
+        conn = _conn()
+        report = match_on_ingest(
+            conn, [A1, A2, A3], "run-1", link_threshold={"match", "ambiguous"}
+        )
+        assert report.ambiguous == 1  # A3 saw {A1, A2} -> ambiguous
+        # linkage rows: A1~A2 (match) + A1~A3 and A2~A3 (ambiguous)
+        assert conn.execute("SELECT COUNT(*) FROM linkage").fetchone()[0] == 3
+
+    def test_link_threshold_default_match_only(self):
+        conn = _conn()
+        report = match_on_ingest(conn, [A1, A2, A3], "run-1")
+        assert report.ambiguous == 1
+        # default {"match"}: only the A1~A2 link exists
+        assert conn.execute("SELECT COUNT(*) FROM linkage").fetchone()[0] == 1
 
     def test_run_id_validated(self):
         conn = _conn()

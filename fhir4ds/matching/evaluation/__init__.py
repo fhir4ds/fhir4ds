@@ -160,7 +160,10 @@ def evaluate_golden(
     predicted = _linkage_pairs(conn)
 
     tp = len(predicted & duplicates)
-    fp_pairs = sorted(predicted - set(labeled))
+    # A predicted pair is a false positive unless it is a labeled duplicate:
+    # explicitly-labeled non-duplicates count (they are reviewed evidence of
+    # a wrong link), as do pairs with no label at all.
+    fp_pairs = sorted(predicted - duplicates)
     fn_pairs = sorted(duplicates - predicted)
 
     precision = (tp / len(predicted)) if predicted else 1.0

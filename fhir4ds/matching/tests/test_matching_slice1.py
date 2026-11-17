@@ -97,6 +97,23 @@ class TestNormDate:
     def test_over_120y_rejected(self):
         assert norm_date("1890-01-01") is None
 
+    def test_as_of_determinism_carve_out(self):
+        """AMUX-134 review: ``as_of`` pins the wall-clock reference so the
+        future/>120y rejections are deterministic."""
+        import datetime as dt
+
+        pinned = dt.date(2030, 6, 1)
+        # future relative to the pinned date, valid relative to today
+        assert norm_date("2030-06-02", as_of=pinned) is None
+        assert norm_date("2030-06-01", as_of=pinned) == "2030-06-01"
+        # past relative to the pinned date
+        assert norm_date("2030-05-31", as_of=pinned) == "2030-05-31"
+        # >120y relative to the pinned date only
+        assert norm_date("1920-06-01", as_of=pinned) == "1920-06-01"
+        assert norm_date("1920-06-01", as_of=dt.date(2050, 1, 1)) is None
+        # default still works (today's wall clock)
+        assert norm_date("1980-02-29") == "1980-02-29"
+
 
 # ---------------------------------------------------------------------------
 # names, suffixes, nicknames
@@ -189,6 +206,34 @@ class TestExtraction:
         assert "first" not in extract_patient_fields(p)
         assert "last" not in extract_patient_fields(p)
 
+    def test_pathological_given_entry_skipped(self):
+        """AMUX-134 review: ``given: 5`` is skipped, not crashed on."""
+        p = {"name": [{"family": "Smith", "given": [5, "Alice"]}]}
+        assert extract_patient_fields(p)["first"] == ["alice"]
+        p_all_bad = {"name": [{"family": "Smith", "given": [5, None]}]}
+        assert "first" not in extract_patient_fields(p_all_bad)
+
+    def test_pathological_address_line_skipped(self):
+        """AMUX-134 review: ``line: 42`` is skipped, not crashed on."""
+        p = {"address": [{"line": [42, "123 Main St"]}]}
+        assert extract_patient_fields(p)["street_line"] == ["123 main st"]
+        p_all_bad = {"address": [{"line": [42]}]}
+        assert "street_line" not in extract_patient_fields(p_all_bad)
+
+    def test_pathological_non_dict_name_entry_skipped(self):
+        """AMUX-134 review: non-dict name entries are skipped, not crashed on."""
+        p = {
+            "name": [
+                "not-a-name",
+                5,
+                {"use": "official", "family": "Smith", "given": ["Alice"]},
+            ]
+        }
+        fields = extract_patient_fields(p)
+        assert fields["first"] == ["alice"]
+        assert fields["last"] == ["smith"]
+
+
     def test_empty_resource(self):
         assert extract_patient_fields({}) == {}
 
@@ -276,6 +321,18 @@ class TestStore:
     def test_requires_id(self):
         with pytest.raises(ValueError):
             index_patient(_conn(), {"resourceType": "Patient"})
+
+    def test_rejects_non_fhir_id(self):
+        """AMUX-134 review: ids must match the FHIR id pattern — protects
+        the '|' pair-key used by the linkage table from injection."""
+        conn = _conn()
+        for bad in ("a|b", "a|Patient/x", "sp ace", "sl/ash", "", "x" * 65, "café"):
+            with pytest.raises(ValueError):
+                index_patient(
+                    conn, {"resourceType": "Patient", "id": bad, "birthDate": "1990-01-01"}
+                )
+        # legal ids (including all FHIR id punctuation) still index
+        assert index_patient(_conn(), DUP_A) > 0
 
 
 class TestEngine:

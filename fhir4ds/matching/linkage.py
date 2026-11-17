@@ -123,10 +123,10 @@ def upsert_linkage(
     """Insert or update the Linkage row for one matched pair.
 
     Returns ``{"action": "created" | "noop" | "overwritten", "linkage_id":
-    ..., "resource": ...}``. Same pair + same rule is a no-op (the stored
-    resource is deterministic, so there is nothing to refresh); same pair +
-    a different rule overwrites, keeping decision history in the audit
-    table.
+    ..., "resource": ...}``. Same pair + same rule + identical resource is a
+    no-op; same pair with a changed resource (different rule, or the same
+    rule firing with new evidence/match_type/confidence after a corpus
+    change) overwrites, keeping decision history in the audit table.
     """
     create_linkage_tables(conn)
     linkage_id = canonical_pair_key(new_patient_id, existing_patient_id)
@@ -137,16 +137,23 @@ def upsert_linkage(
     ).fetchone()
     if row is not None:
         existing_rule = row[0]
+    action: str
     if existing_rule == match_result.rule_id:
         stored = conn.execute(
             "SELECT resource FROM linkage WHERE linkage_id = ?", [linkage_id]
         ).fetchone()
-        return {
-            "action": "noop",
-            "linkage_id": linkage_id,
-            "resource": json.loads(stored[0]),
-        }
-    action = "overwritten" if existing_rule is not None else "created"
+        stored_resource = json.loads(stored[0])
+        if stored_resource == resource:
+            return {
+                "action": "noop",
+                "linkage_id": linkage_id,
+                "resource": stored_resource,
+            }
+        # Same rule but the resource changed (evidence / match_type /
+        # confidence drifted with the corpus) -> refresh the stored row.
+        action = "overwritten"
+    else:
+        action = "overwritten" if existing_rule is not None else "created"
     conn.execute(
         "INSERT OR REPLACE INTO linkage VALUES (?, ?, ?, ?, ?)",
         [
