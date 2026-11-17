@@ -27,7 +27,7 @@ from .normalizers import extract_patient_fields, suffix_conflict
 from .rules import CATEGORY1_RULES, EXACT, MatchRule
 from .store import create_matching_tables, exact_candidates, index_patient  # noqa: F401
 
-__all__ = ["MatchResult", "match_patient", "evaluate_rule"]
+__all__ = ["MatchResult", "match_patient", "match_fields", "evaluate_rule"]
 
 _NAME_FIELDS = frozenset({"first", "last"})
 
@@ -175,7 +175,25 @@ def match_patient(
     doctrine, design doc §4).
     """
     create_matching_tables(conn)
-    fields = extract_patient_fields(patient_resource)
+    return match_fields(
+        conn, extract_patient_fields(patient_resource), exclude=exclude
+    )
+
+
+def match_fields(
+    conn: duckdb.DuckDBPyConnection,
+    fields: dict[str, list[str]],
+    exclude: frozenset[str] = frozenset(),
+) -> MatchResult:
+    """Match a normalized field map against the indexed corpus (slice 4).
+
+    Same semantics as :func:`match_patient` but takes the normalized
+    ``field_name -> values`` map directly, so corpus-mode matching can
+    evaluate a patient whose fields are read back from the ``field_values``
+    index (decisions then depend only on indexed state, not on holding the
+    original resource).
+    """
+    create_matching_tables(conn)
     candidate_suffixes = fields.get("suffix", [])
 
     skipped: list[str] = []

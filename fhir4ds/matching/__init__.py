@@ -9,6 +9,9 @@ Slice 3: FHIR R4 Linkage writer (canonical pair keys, deterministic — no
 timestamps), match-decision audit table (caller-supplied run_id), and the
 flag-gated ingest hook. See
 fhir4ds-private/docs/architecture/plans/FEATURE_PATIENT_MATCHING.md.
+Slice 4: corpus pass (every indexed patient vs the full corpus), connected
+components -> patient_membership / individual-context views, and
+hard-contradiction surfacing (v1: never auto-splits).
 """
 
 from __future__ import annotations
@@ -16,6 +19,14 @@ from __future__ import annotations
 import duckdb
 
 from .audit import create_audit_tables, record_match_audit
+from .corpus import (
+    CorpusReport,
+    build_membership,
+    find_contradictions,
+    individual_context_patients,
+    individual_patients_view,
+    match_corpus,
+)
 from .engine import MatchResult, match_patient
 from .ingest import IngestReport, maybe_match_on_ingest, match_on_ingest
 from .linkage import (
@@ -89,6 +100,12 @@ __all__ = [
     "IngestReport",
     "match_on_ingest",
     "maybe_match_on_ingest",
+    "CorpusReport",
+    "match_corpus",
+    "build_membership",
+    "individual_context_patients",
+    "find_contradictions",
+    "individual_patients_view",
     "__version__",
 ]
 
