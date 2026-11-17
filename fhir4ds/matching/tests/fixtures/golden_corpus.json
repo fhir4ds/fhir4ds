@@ -1,0 +1,9129 @@
+{
+  "description": "AMUX-134 patient-matching golden corpus v1 — synthetic labeled pairs (duplicate / non-duplicate) with realistic variation. Regenerate with scripts/gen_matching_golden.py.",
+  "generator": "scripts/gen_matching_golden.py --seed 1340",
+  "pairs": [
+    {
+      "a": "dup-001",
+      "b": "dup-002",
+      "kind": "id_format",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-003",
+      "b": "dup-004",
+      "kind": "id_format",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-005",
+      "b": "dup-006",
+      "kind": "id_format",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-007",
+      "b": "dup-008",
+      "kind": "id_format",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-009",
+      "b": "dup-010",
+      "kind": "id_format",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-011",
+      "b": "dup-012",
+      "kind": "id_format",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-013",
+      "b": "dup-014",
+      "kind": "id_format",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-015",
+      "b": "dup-016",
+      "kind": "id_format",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-017",
+      "b": "dup-018",
+      "kind": "id_format",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-019",
+      "b": "dup-020",
+      "kind": "id_format",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-021",
+      "b": "dup-022",
+      "kind": "nickname_swap",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-023",
+      "b": "dup-024",
+      "kind": "nickname_swap",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-025",
+      "b": "dup-026",
+      "kind": "nickname_swap",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-027",
+      "b": "dup-028",
+      "kind": "nickname_swap",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-029",
+      "b": "dup-030",
+      "kind": "nickname_swap",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-031",
+      "b": "dup-032",
+      "kind": "nickname_swap",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-033",
+      "b": "dup-034",
+      "kind": "nickname_swap",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-035",
+      "b": "dup-036",
+      "kind": "nickname_swap",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-037",
+      "b": "dup-038",
+      "kind": "nickname_swap",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-039",
+      "b": "dup-040",
+      "kind": "nickname_swap",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-041",
+      "b": "dup-042",
+      "kind": "name_transposition",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-043",
+      "b": "dup-044",
+      "kind": "name_transposition",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-045",
+      "b": "dup-046",
+      "kind": "name_transposition",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-047",
+      "b": "dup-048",
+      "kind": "name_transposition",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-049",
+      "b": "dup-050",
+      "kind": "name_transposition",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-051",
+      "b": "dup-052",
+      "kind": "name_transposition",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-053",
+      "b": "dup-054",
+      "kind": "name_transposition",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-055",
+      "b": "dup-056",
+      "kind": "name_transposition",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-057",
+      "b": "dup-058",
+      "kind": "name_transposition",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-059",
+      "b": "dup-060",
+      "kind": "name_transposition",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-061",
+      "b": "dup-062",
+      "kind": "dob_off_by_one",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-063",
+      "b": "dup-064",
+      "kind": "dob_off_by_one",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-065",
+      "b": "dup-066",
+      "kind": "dob_off_by_one",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-067",
+      "b": "dup-068",
+      "kind": "dob_off_by_one",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-069",
+      "b": "dup-070",
+      "kind": "dob_off_by_one",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-071",
+      "b": "dup-072",
+      "kind": "dob_off_by_one",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-073",
+      "b": "dup-074",
+      "kind": "dob_off_by_one",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-075",
+      "b": "dup-076",
+      "kind": "dob_off_by_one",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-077",
+      "b": "dup-078",
+      "kind": "dob_off_by_one",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-079",
+      "b": "dup-080",
+      "kind": "dob_off_by_one",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-081",
+      "b": "dup-082",
+      "kind": "email_case",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-083",
+      "b": "dup-084",
+      "kind": "email_case",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-085",
+      "b": "dup-086",
+      "kind": "email_case",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-087",
+      "b": "dup-088",
+      "kind": "email_case",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-089",
+      "b": "dup-090",
+      "kind": "email_case",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-091",
+      "b": "dup-092",
+      "kind": "email_case",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-093",
+      "b": "dup-094",
+      "kind": "email_case",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-095",
+      "b": "dup-096",
+      "kind": "email_case",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-097",
+      "b": "dup-098",
+      "kind": "email_case",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-099",
+      "b": "dup-100",
+      "kind": "email_case",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-101",
+      "b": "dup-102",
+      "kind": "phone_placeholder",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-103",
+      "b": "dup-104",
+      "kind": "phone_placeholder",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-105",
+      "b": "dup-106",
+      "kind": "phone_placeholder",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-107",
+      "b": "dup-108",
+      "kind": "phone_placeholder",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-109",
+      "b": "dup-110",
+      "kind": "phone_placeholder",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-111",
+      "b": "dup-112",
+      "kind": "phone_placeholder",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-113",
+      "b": "dup-114",
+      "kind": "phone_placeholder",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-115",
+      "b": "dup-116",
+      "kind": "phone_placeholder",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-117",
+      "b": "dup-118",
+      "kind": "phone_placeholder",
+      "label": "duplicate"
+    },
+    {
+      "a": "dup-119",
+      "b": "dup-120",
+      "kind": "phone_placeholder",
+      "label": "duplicate"
+    },
+    {
+      "a": "sib-001",
+      "b": "sib-002",
+      "kind": "sibling_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "sib-003",
+      "b": "sib-004",
+      "kind": "sibling_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "sib-005",
+      "b": "sib-006",
+      "kind": "sibling_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "sib-007",
+      "b": "sib-008",
+      "kind": "sibling_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "sib-009",
+      "b": "sib-010",
+      "kind": "sibling_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "sib-011",
+      "b": "sib-012",
+      "kind": "sibling_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "sib-013",
+      "b": "sib-014",
+      "kind": "sibling_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "sib-015",
+      "b": "sib-016",
+      "kind": "sibling_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "sib-017",
+      "b": "sib-018",
+      "kind": "sibling_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "sib-019",
+      "b": "sib-020",
+      "kind": "sibling_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "sib-021",
+      "b": "sib-022",
+      "kind": "sibling_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "sib-023",
+      "b": "sib-024",
+      "kind": "sibling_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "sib-025",
+      "b": "sib-026",
+      "kind": "sibling_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "sib-027",
+      "b": "sib-028",
+      "kind": "sibling_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "sib-029",
+      "b": "sib-030",
+      "kind": "sibling_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "sib-031",
+      "b": "sib-032",
+      "kind": "sibling_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "sib-033",
+      "b": "sib-034",
+      "kind": "sibling_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "sib-035",
+      "b": "sib-036",
+      "kind": "sibling_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "sib-037",
+      "b": "sib-038",
+      "kind": "sibling_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "sib-039",
+      "b": "sib-040",
+      "kind": "sibling_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "twin-001",
+      "b": "twin-002",
+      "kind": "twin_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "twin-003",
+      "b": "twin-004",
+      "kind": "twin_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "twin-005",
+      "b": "twin-006",
+      "kind": "twin_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "twin-007",
+      "b": "twin-008",
+      "kind": "twin_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "twin-009",
+      "b": "twin-010",
+      "kind": "twin_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "twin-011",
+      "b": "twin-012",
+      "kind": "twin_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "twin-013",
+      "b": "twin-014",
+      "kind": "twin_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "twin-015",
+      "b": "twin-016",
+      "kind": "twin_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "twin-017",
+      "b": "twin-018",
+      "kind": "twin_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "twin-019",
+      "b": "twin-020",
+      "kind": "twin_hard",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-001",
+      "b": "neg-002",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-003",
+      "b": "neg-004",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-005",
+      "b": "neg-006",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-007",
+      "b": "neg-008",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-009",
+      "b": "neg-010",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-011",
+      "b": "neg-012",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-013",
+      "b": "neg-014",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-015",
+      "b": "neg-016",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-017",
+      "b": "neg-018",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-019",
+      "b": "neg-020",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-021",
+      "b": "neg-022",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-023",
+      "b": "neg-024",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-025",
+      "b": "neg-026",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-027",
+      "b": "neg-028",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-029",
+      "b": "neg-030",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-031",
+      "b": "neg-032",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-033",
+      "b": "neg-034",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-035",
+      "b": "neg-036",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-037",
+      "b": "neg-038",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-039",
+      "b": "neg-040",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-041",
+      "b": "neg-042",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-043",
+      "b": "neg-044",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-045",
+      "b": "neg-046",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-047",
+      "b": "neg-048",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-049",
+      "b": "neg-050",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-051",
+      "b": "neg-052",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-053",
+      "b": "neg-054",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-055",
+      "b": "neg-056",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-057",
+      "b": "neg-058",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    },
+    {
+      "a": "neg-059",
+      "b": "neg-060",
+      "kind": "unrelated",
+      "label": "non_duplicate"
+    }
+  ],
+  "patients": [
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "100  Maple  Street"
+          ],
+          "postalCode": "20652",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1960-01-01",
+      "gender": "female",
+      "id": "dup-001",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "486-40-2093"
+        }
+      ],
+      "name": [
+        {
+          "family": "Thompson",
+          "given": [
+            "Marcus"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "582.401.8185"
+        },
+        {
+          "system": "email",
+          "value": "marcus.thompson@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "100 MAPLE STREET"
+          ],
+          "postalCode": "76293",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1960-01-01",
+      "gender": "female",
+      "id": "dup-002",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "486402093"
+        }
+      ],
+      "name": [
+        {
+          "family": "Thompson",
+          "given": [
+            "Marcus"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(582) 401-8185"
+        },
+        {
+          "system": "email",
+          "value": "Marcus.Thompson@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "101 BIRCHWOOD AVENUE"
+          ],
+          "postalCode": "35717",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "1961-02-02",
+      "gender": "male",
+      "id": "dup-003",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "982-97-2789"
+        }
+      ],
+      "name": [
+        {
+          "family": "Vasquez",
+          "given": [
+            "Adriana"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "640-115-7669"
+        },
+        {
+          "system": "email",
+          "value": "Adriana.Vasquez@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "101  Birchwood  Avenue"
+          ],
+          "postalCode": "28904",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1961-02-02",
+      "gender": "female",
+      "id": "dup-004",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "982972789"
+        }
+      ],
+      "name": [
+        {
+          "family": "Vasquez",
+          "given": [
+            "Adriana"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "640-115-7669"
+        },
+        {
+          "system": "email",
+          "value": "Adriana.Vasquez@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "102 Harborview Lane"
+          ],
+          "postalCode": "94718",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1962-03-03",
+      "gender": "male",
+      "id": "dup-005",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "124-57-0154"
+        }
+      ],
+      "name": [
+        {
+          "family": "Okafor",
+          "given": [
+            "Sofia"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "798.771.7773"
+        },
+        {
+          "system": "email",
+          "value": "SOFIA.OKAFOR@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "102  Harborview  Lane"
+          ],
+          "postalCode": "27093",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1962-03-03",
+      "gender": "female",
+      "id": "dup-006",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "124570154"
+        }
+      ],
+      "name": [
+        {
+          "family": "Okafor",
+          "given": [
+            "Sofia"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "798.771.7773"
+        },
+        {
+          "system": "email",
+          "value": "SOFIA.OKAFOR@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "103  Cedar  Court"
+          ],
+          "postalCode": "54416",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "1963-04-04",
+      "gender": "female",
+      "id": "dup-007",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "214-60-0603"
+        }
+      ],
+      "name": [
+        {
+          "family": "Kowalski",
+          "given": [
+            "Lucas"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "5917671819"
+        },
+        {
+          "system": "email",
+          "value": "Lucas.Kowalski@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "103  Cedar  Court"
+          ],
+          "postalCode": "42418",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1963-04-04",
+      "gender": "male",
+      "id": "dup-008",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "214600603"
+        }
+      ],
+      "name": [
+        {
+          "family": "Kowalski",
+          "given": [
+            "Lucas"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "591.767.1819"
+        },
+        {
+          "system": "email",
+          "value": "lucas.kowalski@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "104 Lakeshore Drive"
+          ],
+          "postalCode": "87236",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "1964-05-05",
+      "gender": "male",
+      "id": "dup-009",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "927-19-5185"
+        }
+      ],
+      "name": [
+        {
+          "family": "Nakamura",
+          "given": [
+            "Elena"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "1195155334"
+        },
+        {
+          "system": "email",
+          "value": "ELENA.NAKAMURA@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "104 Lakeshore Drive"
+          ],
+          "postalCode": "84858",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1964-05-05",
+      "gender": "male",
+      "id": "dup-010",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "927195185"
+        }
+      ],
+      "name": [
+        {
+          "family": "Nakamura",
+          "given": [
+            "Elena"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "1195155334"
+        },
+        {
+          "system": "email",
+          "value": "Elena.Nakamura@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "105  Quarry  Road"
+          ],
+          "postalCode": "18621",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "1965-06-06",
+      "gender": "female",
+      "id": "dup-011",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "045-33-5581"
+        }
+      ],
+      "name": [
+        {
+          "family": "Fitzgerald",
+          "given": [
+            "Mateo"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(158) 561-3603"
+        },
+        {
+          "system": "email",
+          "value": "MATEO.FITZGERALD@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "105  Quarry  Road"
+          ],
+          "postalCode": "27923",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "1965-06-06",
+      "gender": "male",
+      "id": "dup-012",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "045335581"
+        }
+      ],
+      "name": [
+        {
+          "family": "Fitzgerald",
+          "given": [
+            "Matéo"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "158-561-3603"
+        },
+        {
+          "system": "email",
+          "value": "Mateo.Fitzgerald@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "106  Sycamore  Bend"
+          ],
+          "postalCode": "69621",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "1966-07-07",
+      "gender": "male",
+      "id": "dup-013",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "063-64-7249"
+        }
+      ],
+      "name": [
+        {
+          "family": "Delacroix",
+          "given": [
+            "Nadia"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "279.140.6490"
+        },
+        {
+          "system": "email",
+          "value": "Nadia.Delacroix@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "106 Sycamore Bend"
+          ],
+          "postalCode": "48010",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "1966-07-07",
+      "gender": "female",
+      "id": "dup-014",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "063647249"
+        }
+      ],
+      "name": [
+        {
+          "family": "Delacroix",
+          "given": [
+            "Nadia"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "279.140.6490"
+        },
+        {
+          "system": "email",
+          "value": "Nadia.Delacroix@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "107 Windmere Way"
+          ],
+          "postalCode": "69983",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1967-08-08",
+      "gender": "male",
+      "id": "dup-015",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "295-76-8463"
+        }
+      ],
+      "name": [
+        {
+          "family": "Brennan",
+          "given": [
+            "Victor"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "510.000.0097"
+        },
+        {
+          "system": "email",
+          "value": "Victor.Brennan@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "107 Windmere Way"
+          ],
+          "postalCode": "38582",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1967-08-08",
+      "gender": "female",
+      "id": "dup-016",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "295768463"
+        }
+      ],
+      "name": [
+        {
+          "family": "Brennan",
+          "given": [
+            "Victor"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "5100000097"
+        },
+        {
+          "system": "email",
+          "value": "Victor.Brennan@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "108 FOXGLOVE TERRACE"
+          ],
+          "postalCode": "79143",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "1968-09-09",
+      "gender": "male",
+      "id": "dup-017",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "597-28-6695"
+        }
+      ],
+      "name": [
+        {
+          "family": "Charleston",
+          "given": [
+            "Camila"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "438-148-8578"
+        },
+        {
+          "system": "email",
+          "value": "Camila.Charleston@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "108 Foxglove Terrace"
+          ],
+          "postalCode": "58784",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "1968-09-09",
+      "gender": "female",
+      "id": "dup-018",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "597286695"
+        }
+      ],
+      "name": [
+        {
+          "family": "Charleston",
+          "given": [
+            "Camila"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(438) 148-8578"
+        },
+        {
+          "system": "email",
+          "value": "CAMILA.CHARLESTON@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "109 Bellweather Circle"
+          ],
+          "postalCode": "66479",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1969-10-10",
+      "gender": "male",
+      "id": "dup-019",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "338-62-5979"
+        }
+      ],
+      "name": [
+        {
+          "family": "Wolfeschlegel",
+          "given": [
+            "Andre"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "5185102466"
+        },
+        {
+          "system": "email",
+          "value": "ANDRE.WOLFESCHLEGEL@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "109 Bellweather Circle"
+          ],
+          "postalCode": "62199",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1969-10-10",
+      "gender": "male",
+      "id": "dup-020",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "338625979"
+        }
+      ],
+      "name": [
+        {
+          "family": "Wolfeschlegel",
+          "given": [
+            "André"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+15185102466"
+        },
+        {
+          "system": "email",
+          "value": "Andre.Wolfeschlegel@Example.Org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1955-01-01",
+      "gender": "female",
+      "id": "dup-021",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "865-54-2059"
+        }
+      ],
+      "name": [
+        {
+          "family": "Ivanovich",
+          "given": [
+            "Robert"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "982-669-5923"
+        }
+      ]
+    },
+    {
+      "birthDate": "1955-01-01",
+      "gender": "female",
+      "id": "dup-022",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "865-54-2059"
+        }
+      ],
+      "name": [
+        {
+          "family": "Ivanovich",
+          "given": [
+            "Bob"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "9826695923"
+        }
+      ]
+    },
+    {
+      "birthDate": "1956-02-02",
+      "gender": "male",
+      "id": "dup-023",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "438-05-5659"
+        }
+      ],
+      "name": [
+        {
+          "family": "Montenegro",
+          "given": [
+            "William"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+10181119071"
+        }
+      ]
+    },
+    {
+      "birthDate": "1956-02-02",
+      "gender": "female",
+      "id": "dup-024",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "438-05-5659"
+        }
+      ],
+      "name": [
+        {
+          "family": "Montenegro",
+          "given": [
+            "Bill"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+10181119071"
+        }
+      ]
+    },
+    {
+      "birthDate": "1957-03-03",
+      "gender": "female",
+      "id": "dup-025",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "796-62-6177"
+        }
+      ],
+      "name": [
+        {
+          "family": "Silverstein",
+          "given": [
+            "Elizabeth"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(356) 267-8300"
+        }
+      ]
+    },
+    {
+      "birthDate": "1957-03-03",
+      "gender": "female",
+      "id": "dup-026",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "796-62-6177"
+        }
+      ],
+      "name": [
+        {
+          "family": "Silverstein",
+          "given": [
+            "Liz"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "356.267.8300"
+        }
+      ]
+    },
+    {
+      "birthDate": "1958-04-04",
+      "gender": "male",
+      "id": "dup-027",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "934-56-2321"
+        }
+      ],
+      "name": [
+        {
+          "family": "Harrington",
+          "given": [
+            "James"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+12752269510"
+        }
+      ]
+    },
+    {
+      "birthDate": "1958-04-04",
+      "gender": "male",
+      "id": "dup-028",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "934-56-2321"
+        }
+      ],
+      "name": [
+        {
+          "family": "Harrington",
+          "given": [
+            "Jim"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "275-226-9510"
+        }
+      ]
+    },
+    {
+      "birthDate": "1959-05-05",
+      "gender": "male",
+      "id": "dup-029",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "762-73-3232"
+        }
+      ],
+      "name": [
+        {
+          "family": "Castellanos",
+          "given": [
+            "Margaret"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "1358193552"
+        }
+      ]
+    },
+    {
+      "birthDate": "1959-05-05",
+      "gender": "female",
+      "id": "dup-030",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "762-73-3232"
+        }
+      ],
+      "name": [
+        {
+          "family": "Castellanos",
+          "given": [
+            "Maggie"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "1358193552"
+        }
+      ]
+    },
+    {
+      "birthDate": "1960-06-06",
+      "gender": "male",
+      "id": "dup-031",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "338-25-1032"
+        }
+      ],
+      "name": [
+        {
+          "family": "Rasmussen",
+          "given": [
+            "Katherine"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(633) 506-3947"
+        }
+      ]
+    },
+    {
+      "birthDate": "1960-06-06",
+      "gender": "male",
+      "id": "dup-032",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "338-25-1032"
+        }
+      ],
+      "name": [
+        {
+          "family": "Rasmussen",
+          "given": [
+            "Kate"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(633) 506-3947"
+        }
+      ]
+    },
+    {
+      "birthDate": "1961-07-07",
+      "gender": "female",
+      "id": "dup-033",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "697-63-2179"
+        }
+      ],
+      "name": [
+        {
+          "family": "Ferreira",
+          "given": [
+            "Richard"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+13613128714"
+        }
+      ]
+    },
+    {
+      "birthDate": "1961-07-07",
+      "gender": "female",
+      "id": "dup-034",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "697-63-2179"
+        }
+      ],
+      "name": [
+        {
+          "family": "Ferreira",
+          "given": [
+            "Rick"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+13613128714"
+        }
+      ]
+    },
+    {
+      "birthDate": "1962-08-08",
+      "gender": "female",
+      "id": "dup-035",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "290-92-2558"
+        }
+      ],
+      "name": [
+        {
+          "family": "Lindqvist",
+          "given": [
+            "Thomas"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "178.509.7554"
+        }
+      ]
+    },
+    {
+      "birthDate": "1962-08-08",
+      "gender": "male",
+      "id": "dup-036",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "290-92-2558"
+        }
+      ],
+      "name": [
+        {
+          "family": "Lindqvist",
+          "given": [
+            "Tom"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "178-509-7554"
+        }
+      ]
+    },
+    {
+      "birthDate": "1963-09-09",
+      "gender": "female",
+      "id": "dup-037",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "534-71-1941"
+        }
+      ],
+      "name": [
+        {
+          "family": "Abioye",
+          "given": [
+            "Daniel"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "1790035147"
+        }
+      ]
+    },
+    {
+      "birthDate": "1963-09-09",
+      "gender": "male",
+      "id": "dup-038",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "534-71-1941"
+        }
+      ],
+      "name": [
+        {
+          "family": "Abioye",
+          "given": [
+            "Dan"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "1790035147"
+        }
+      ]
+    },
+    {
+      "birthDate": "1964-10-10",
+      "gender": "male",
+      "id": "dup-039",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "584-30-7610"
+        }
+      ],
+      "name": [
+        {
+          "family": "Petrovitch",
+          "given": [
+            "Jennifer"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "9226373440"
+        }
+      ]
+    },
+    {
+      "birthDate": "1964-10-10",
+      "gender": "female",
+      "id": "dup-040",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "584-30-7610"
+        }
+      ],
+      "name": [
+        {
+          "family": "Petrovitch",
+          "given": [
+            "Jen"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+19226373440"
+        }
+      ]
+    },
+    {
+      "birthDate": "1970-01-01",
+      "gender": "male",
+      "id": "dup-041",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "552-83-3517"
+        }
+      ],
+      "name": [
+        {
+          "family": "Vandermeer",
+          "given": [
+            "Bianca"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "1193214200"
+        }
+      ]
+    },
+    {
+      "birthDate": "1970-01-01",
+      "gender": "female",
+      "id": "dup-042",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "552-83-3517"
+        }
+      ],
+      "name": [
+        {
+          "family": "Vandermere",
+          "given": [
+            "Bianca"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(119) 321-4200"
+        }
+      ]
+    },
+    {
+      "birthDate": "1971-02-02",
+      "gender": "male",
+      "id": "dup-043",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "872-79-3084"
+        }
+      ],
+      "name": [
+        {
+          "family": "Zielinski",
+          "given": [
+            "Stefan"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(435) 176-7999"
+        }
+      ]
+    },
+    {
+      "birthDate": "1971-02-02",
+      "gender": "male",
+      "id": "dup-044",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "872-79-3084"
+        }
+      ],
+      "name": [
+        {
+          "family": "Zeilinski",
+          "given": [
+            "Stefan"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "435-176-7999"
+        }
+      ]
+    },
+    {
+      "birthDate": "1972-03-03",
+      "gender": "male",
+      "id": "dup-045",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "608-94-6560"
+        }
+      ],
+      "name": [
+        {
+          "family": "Cardoza",
+          "given": [
+            "Monica"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "356-836-0845"
+        }
+      ]
+    },
+    {
+      "birthDate": "1972-03-03",
+      "gender": "female",
+      "id": "dup-046",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "608-94-6560"
+        }
+      ],
+      "name": [
+        {
+          "family": "Cardzoa",
+          "given": [
+            "Monica"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "356-836-0845"
+        }
+      ]
+    },
+    {
+      "birthDate": "1973-04-04",
+      "gender": "male",
+      "id": "dup-047",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "796-82-1520"
+        }
+      ],
+      "name": [
+        {
+          "family": "Menendez",
+          "given": [
+            "Felipe"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "099-908-0526"
+        }
+      ]
+    },
+    {
+      "birthDate": "1973-04-04",
+      "gender": "female",
+      "id": "dup-048",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "796-82-1520"
+        }
+      ],
+      "name": [
+        {
+          "family": "Menednez",
+          "given": [
+            "Felipe"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(099) 908-0526"
+        }
+      ]
+    },
+    {
+      "birthDate": "1974-05-05",
+      "gender": "male",
+      "id": "dup-049",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "686-64-0175"
+        }
+      ],
+      "name": [
+        {
+          "family": "Ostrander",
+          "given": [
+            "Ingrid"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+11531800810"
+        }
+      ]
+    },
+    {
+      "birthDate": "1974-05-05",
+      "gender": "male",
+      "id": "dup-050",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "686-64-0175"
+        }
+      ],
+      "name": [
+        {
+          "family": "Ostrnader",
+          "given": [
+            "Ingrid"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "153.180.0810"
+        }
+      ]
+    },
+    {
+      "birthDate": "1975-06-06",
+      "gender": "male",
+      "id": "dup-051",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "207-98-9863"
+        }
+      ],
+      "name": [
+        {
+          "family": "Bienvenue",
+          "given": [
+            "Darius"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "971-023-3442"
+        }
+      ]
+    },
+    {
+      "birthDate": "1975-06-06",
+      "gender": "male",
+      "id": "dup-052",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "207-98-9863"
+        }
+      ],
+      "name": [
+        {
+          "family": "Bienveune",
+          "given": [
+            "Darius"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "971.023.3442"
+        }
+      ]
+    },
+    {
+      "birthDate": "1976-07-07",
+      "gender": "male",
+      "id": "dup-053",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "228-13-6736"
+        }
+      ],
+      "name": [
+        {
+          "family": "Kalogeropoulos",
+          "given": [
+            "Rosalba"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "0851031623"
+        }
+      ]
+    },
+    {
+      "birthDate": "1976-07-07",
+      "gender": "male",
+      "id": "dup-054",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "228-13-6736"
+        }
+      ],
+      "name": [
+        {
+          "family": "Kalogerpooulos",
+          "given": [
+            "Rosalba"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "085-103-1623"
+        }
+      ]
+    },
+    {
+      "birthDate": "1977-08-08",
+      "gender": "male",
+      "id": "dup-055",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "540-63-5469"
+        }
+      ],
+      "name": [
+        {
+          "family": "Wetherbee",
+          "given": [
+            "Emilio"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(970) 185-3229"
+        }
+      ]
+    },
+    {
+      "birthDate": "1977-08-08",
+      "gender": "male",
+      "id": "dup-056",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "540-63-5469"
+        }
+      ],
+      "name": [
+        {
+          "family": "Wehterbee",
+          "given": [
+            "Emilio"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "970.185.3229"
+        }
+      ]
+    },
+    {
+      "birthDate": "1978-09-09",
+      "gender": "male",
+      "id": "dup-057",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "166-23-3141"
+        }
+      ],
+      "name": [
+        {
+          "family": "Salazar",
+          "given": [
+            "Clara"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "864.821.9773"
+        }
+      ]
+    },
+    {
+      "birthDate": "1978-09-09",
+      "gender": "female",
+      "id": "dup-058",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "166-23-3141"
+        }
+      ],
+      "name": [
+        {
+          "family": "Slaazar",
+          "given": [
+            "Clara"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+18648219773"
+        }
+      ]
+    },
+    {
+      "birthDate": "1979-10-10",
+      "gender": "male",
+      "id": "dup-059",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "022-39-4757"
+        }
+      ],
+      "name": [
+        {
+          "family": "Thorvaldsen",
+          "given": [
+            "Hugo"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "778.418.4962"
+        }
+      ]
+    },
+    {
+      "birthDate": "1979-10-10",
+      "gender": "female",
+      "id": "dup-060",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "022-39-4757"
+        }
+      ],
+      "name": [
+        {
+          "family": "Thoravldsen",
+          "given": [
+            "Hugo"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "778-418-4962"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "200  Cedar  Court"
+          ],
+          "postalCode": "65053",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1980-01-01",
+      "gender": "male",
+      "id": "dup-061",
+      "name": [
+        {
+          "family": "Thompson",
+          "given": [
+            "Patricia"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+19754153846"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "200 Cedar Court"
+          ],
+          "postalCode": "44449",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "1980-01-02",
+      "gender": "female",
+      "id": "dup-062",
+      "name": [
+        {
+          "family": "Thompson",
+          "given": [
+            "Patricia"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "9754153846"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "201  Lakeshore  Drive"
+          ],
+          "postalCode": "41767",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1981-02-02",
+      "gender": "female",
+      "id": "dup-063",
+      "name": [
+        {
+          "family": "Vasquez",
+          "given": [
+            "Gabriel"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "769-092-4724"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "201  Lakeshore  Drive"
+          ],
+          "postalCode": "27893",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "1981-02-03",
+      "gender": "male",
+      "id": "dup-064",
+      "name": [
+        {
+          "family": "Vasquez",
+          "given": [
+            "Gabriel"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "769-092-4724"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "202  Quarry  Road"
+          ],
+          "postalCode": "58099",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1982-03-03",
+      "gender": "female",
+      "id": "dup-065",
+      "name": [
+        {
+          "family": "Okafor",
+          "given": [
+            "Valentina"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(069) 993-5467"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "202 QUARRY ROAD"
+          ],
+          "postalCode": "23302",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "1982-03-02",
+      "gender": "male",
+      "id": "dup-066",
+      "name": [
+        {
+          "family": "Okafor",
+          "given": [
+            "Valentina"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(069) 993-5467"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "203  Sycamore  Bend"
+          ],
+          "postalCode": "21715",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "1983-04-04",
+      "gender": "male",
+      "id": "dup-067",
+      "name": [
+        {
+          "family": "Kowalski",
+          "given": [
+            "Sebastian"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "231-994-9699"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "203 SYCAMORE BEND"
+          ],
+          "postalCode": "66352",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1983-04-05",
+      "gender": "male",
+      "id": "dup-068",
+      "name": [
+        {
+          "family": "Kowalski",
+          "given": [
+            "Sebastian"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(231) 994-9699"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "204 WINDMERE WAY"
+          ],
+          "postalCode": "47356",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "1984-05-05",
+      "gender": "male",
+      "id": "dup-069",
+      "name": [
+        {
+          "family": "Nakamura",
+          "given": [
+            "Daniela"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+11263315164"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "204  Windmere  Way"
+          ],
+          "postalCode": "75309",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1984-05-04",
+      "gender": "female",
+      "id": "dup-070",
+      "name": [
+        {
+          "family": "Nakamura",
+          "given": [
+            "Daniela"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(126) 331-5164"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "205 FOXGLOVE TERRACE"
+          ],
+          "postalCode": "33674",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "1985-06-06",
+      "gender": "female",
+      "id": "dup-071",
+      "name": [
+        {
+          "family": "Fitzgerald",
+          "given": [
+            "Fernando"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "433-184-8759"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "205 FOXGLOVE TERRACE"
+          ],
+          "postalCode": "36503",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1985-06-05",
+      "gender": "female",
+      "id": "dup-072",
+      "name": [
+        {
+          "family": "Fitzgerald",
+          "given": [
+            "Fernando"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "433-184-8759"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "206 Bellweather Circle"
+          ],
+          "postalCode": "70762",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "1986-07-07",
+      "gender": "male",
+      "id": "dup-073",
+      "name": [
+        {
+          "family": "Delacroix",
+          "given": [
+            "Carolina"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+14455527058"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "206 BELLWEATHER CIRCLE"
+          ],
+          "postalCode": "54540",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "1986-07-06",
+      "gender": "female",
+      "id": "dup-074",
+      "name": [
+        {
+          "family": "Delacroix",
+          "given": [
+            "Carolina"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "445-552-7058"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "207  Juniper  Crossing"
+          ],
+          "postalCode": "51164",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "1987-08-08",
+      "gender": "female",
+      "id": "dup-075",
+      "name": [
+        {
+          "family": "Brennan",
+          "given": [
+            "Theodore"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "914.691.9972"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "207  Juniper  Crossing"
+          ],
+          "postalCode": "23013",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1987-08-07",
+      "gender": "female",
+      "id": "dup-076",
+      "name": [
+        {
+          "family": "Brennan",
+          "given": [
+            "Theodore"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "9146919972"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "208  Aldergate  Row"
+          ],
+          "postalCode": "51033",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "1988-09-09",
+      "gender": "male",
+      "id": "dup-077",
+      "name": [
+        {
+          "family": "Charleston",
+          "given": [
+            "Josephine"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(121) 121-4724"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "208 ALDERGATE ROW"
+          ],
+          "postalCode": "44464",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1988-09-08",
+      "gender": "female",
+      "id": "dup-078",
+      "name": [
+        {
+          "family": "Charleston",
+          "given": [
+            "Josephine"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+11211214724"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "209  Pembrook  Place"
+          ],
+          "postalCode": "48740",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "1989-10-10",
+      "gender": "male",
+      "id": "dup-079",
+      "name": [
+        {
+          "family": "Wolfeschlegel",
+          "given": [
+            "Maximilian"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "954.487.8635"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "209  Pembrook  Place"
+          ],
+          "postalCode": "68675",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "1989-10-11",
+      "gender": "male",
+      "id": "dup-080",
+      "name": [
+        {
+          "family": "Wolfeschlegel",
+          "given": [
+            "Maximilian"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "954-487-8635"
+        }
+      ]
+    },
+    {
+      "birthDate": "1975-01-01",
+      "gender": "male",
+      "id": "dup-081",
+      "name": [
+        {
+          "family": "Fitzgerald",
+          "given": [
+            "Marcus"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "email",
+          "value": "Marcus.Fitzgerald@Example.Org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1975-01-02",
+      "gender": "male",
+      "id": "dup-082",
+      "name": [
+        {
+          "family": "Fitzgerald",
+          "given": [
+            "Marcus"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "email",
+          "value": "Marcus.Fitzgerald@Example.Org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1976-02-02",
+      "gender": "male",
+      "id": "dup-083",
+      "name": [
+        {
+          "family": "Delacroix",
+          "given": [
+            "Adriana"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "email",
+          "value": "ADRIANA.DELACROIX@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "birthDate": "1976-02-01",
+      "gender": "female",
+      "id": "dup-084",
+      "name": [
+        {
+          "family": "Delacroix",
+          "given": [
+            "Adriana"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "email",
+          "value": "ADRIANA.DELACROIX@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "birthDate": "1977-03-03",
+      "gender": "male",
+      "id": "dup-085",
+      "name": [
+        {
+          "family": "Brennan",
+          "given": [
+            "Sofia"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "email",
+          "value": "SOFIA.BRENNAN@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "birthDate": "1977-03-04",
+      "gender": "female",
+      "id": "dup-086",
+      "name": [
+        {
+          "family": "Brennan",
+          "given": [
+            "Sofia"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "email",
+          "value": "Sofia.Brennan@Example.Org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1978-04-04",
+      "gender": "female",
+      "id": "dup-087",
+      "name": [
+        {
+          "family": "Charleston",
+          "given": [
+            "Lucas"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "email",
+          "value": "lucas.charleston@example.org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1978-04-03",
+      "gender": "female",
+      "id": "dup-088",
+      "name": [
+        {
+          "family": "Charleston",
+          "given": [
+            "Lucas"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "email",
+          "value": "LUCAS.CHARLESTON@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "birthDate": "1979-05-05",
+      "gender": "female",
+      "id": "dup-089",
+      "name": [
+        {
+          "family": "Wolfeschlegel",
+          "given": [
+            "Elena"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "email",
+          "value": "Elena.Wolfeschlegel@Example.Org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1979-05-06",
+      "gender": "male",
+      "id": "dup-090",
+      "name": [
+        {
+          "family": "Wolfeschlegel",
+          "given": [
+            "Elena"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "email",
+          "value": "ÉLENA.WOLFESCHLEGEL@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "birthDate": "1980-06-06",
+      "gender": "male",
+      "id": "dup-091",
+      "name": [
+        {
+          "family": "Ivanovich",
+          "given": [
+            "Mateo"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "email",
+          "value": "Mateo.Ivanovich@Example.Org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1980-06-07",
+      "gender": "female",
+      "id": "dup-092",
+      "name": [
+        {
+          "family": "Ivanovich",
+          "given": [
+            "Matéo"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "email",
+          "value": "MATÉO.IVANOVICH@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "birthDate": "1981-07-07",
+      "gender": "female",
+      "id": "dup-093",
+      "name": [
+        {
+          "family": "Montenegro",
+          "given": [
+            "Nadia"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "email",
+          "value": "Nadia.Montenegro@Example.Org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1981-07-08",
+      "gender": "male",
+      "id": "dup-094",
+      "name": [
+        {
+          "family": "Montenegro",
+          "given": [
+            "Nadia"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "email",
+          "value": "nadia.montenegro@example.org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1982-08-08",
+      "gender": "female",
+      "id": "dup-095",
+      "name": [
+        {
+          "family": "Silverstein",
+          "given": [
+            "Victor"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "email",
+          "value": "Victor.Silverstein@Example.Org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1982-08-09",
+      "gender": "female",
+      "id": "dup-096",
+      "name": [
+        {
+          "family": "Silverstein",
+          "given": [
+            "Victor"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "email",
+          "value": "victor.silverstein@example.org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1983-09-09",
+      "gender": "female",
+      "id": "dup-097",
+      "name": [
+        {
+          "family": "Harrington",
+          "given": [
+            "Camila"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "email",
+          "value": "Camila.Harrington@Example.Org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1983-09-09",
+      "gender": "female",
+      "id": "dup-098",
+      "name": [
+        {
+          "family": "Harrington",
+          "given": [
+            "Camila"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "email",
+          "value": "Camila.Harrington@Example.Org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1984-10-10",
+      "gender": "male",
+      "id": "dup-099",
+      "name": [
+        {
+          "family": "Castellanos",
+          "given": [
+            "Andre"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "email",
+          "value": "ANDRE.CASTELLANOS@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "birthDate": "1984-10-11",
+      "gender": "male",
+      "id": "dup-100",
+      "name": [
+        {
+          "family": "Castellanos",
+          "given": [
+            "André"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "email",
+          "value": "ANDRÉ.CASTELLANOS@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "birthDate": "1965-01-01",
+      "gender": "male",
+      "id": "dup-101",
+      "name": [
+        {
+          "family": "Ivanovich",
+          "given": [
+            "Darius"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+12216093108"
+        },
+        {
+          "system": "email",
+          "value": "darius.ivanovich@example.org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1965-01-01",
+      "gender": "male",
+      "id": "dup-102",
+      "name": [
+        {
+          "family": "Ivanovich",
+          "given": [
+            "Darius"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "555-555-5555"
+        },
+        {
+          "system": "phone",
+          "value": "2216093108"
+        },
+        {
+          "system": "email",
+          "value": "darius.ivanovich@example.org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1966-02-02",
+      "gender": "female",
+      "id": "dup-103",
+      "name": [
+        {
+          "family": "Montenegro",
+          "given": [
+            "Rosalba"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "771-624-8311"
+        },
+        {
+          "system": "email",
+          "value": "ROSALBA.MONTENEGRO@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "birthDate": "1966-02-02",
+      "gender": "female",
+      "id": "dup-104",
+      "name": [
+        {
+          "family": "Montenegro",
+          "given": [
+            "Rosalba"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "555-555-5555"
+        },
+        {
+          "system": "phone",
+          "value": "771.624.8311"
+        },
+        {
+          "system": "email",
+          "value": "Rosalba.Montenegro@Example.Org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1967-03-03",
+      "gender": "male",
+      "id": "dup-105",
+      "name": [
+        {
+          "family": "Silverstein",
+          "given": [
+            "Emilio"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+16749115763"
+        },
+        {
+          "system": "email",
+          "value": "emilio.silverstein@example.org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1967-03-03",
+      "gender": "male",
+      "id": "dup-106",
+      "name": [
+        {
+          "family": "Silverstein",
+          "given": [
+            "Emilio"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "555-555-5555"
+        },
+        {
+          "system": "phone",
+          "value": "6749115763"
+        },
+        {
+          "system": "email",
+          "value": "Emilio.Silverstein@Example.Org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1968-04-04",
+      "gender": "female",
+      "id": "dup-107",
+      "name": [
+        {
+          "family": "Harrington",
+          "given": [
+            "Clara"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "4800120256"
+        },
+        {
+          "system": "email",
+          "value": "CLARA.HARRINGTON@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "birthDate": "1968-04-04",
+      "gender": "female",
+      "id": "dup-108",
+      "name": [
+        {
+          "family": "Harrington",
+          "given": [
+            "Clara"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "555-555-5555"
+        },
+        {
+          "system": "phone",
+          "value": "480-012-0256"
+        },
+        {
+          "system": "email",
+          "value": "clara.harrington@example.org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1969-05-05",
+      "gender": "male",
+      "id": "dup-109",
+      "name": [
+        {
+          "family": "Castellanos",
+          "given": [
+            "Hugo"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "037.164.1581"
+        },
+        {
+          "system": "email",
+          "value": "hugo.castellanos@example.org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1969-05-05",
+      "gender": "female",
+      "id": "dup-110",
+      "name": [
+        {
+          "family": "Castellanos",
+          "given": [
+            "Hugo"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "555-555-5555"
+        },
+        {
+          "system": "phone",
+          "value": "(037) 164-1581"
+        },
+        {
+          "system": "email",
+          "value": "HUGO.CASTELLANOS@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "birthDate": "1970-06-06",
+      "gender": "female",
+      "id": "dup-111",
+      "name": [
+        {
+          "family": "Rasmussen",
+          "given": [
+            "Patricia"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "857-633-0334"
+        },
+        {
+          "system": "email",
+          "value": "PATRICIA.RASMUSSEN@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "birthDate": "1970-06-06",
+      "gender": "male",
+      "id": "dup-112",
+      "name": [
+        {
+          "family": "Rasmussen",
+          "given": [
+            "Patricia"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "555-555-5555"
+        },
+        {
+          "system": "phone",
+          "value": "857-633-0334"
+        },
+        {
+          "system": "email",
+          "value": "Patricia.Rasmussen@Example.Org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1971-07-07",
+      "gender": "male",
+      "id": "dup-113",
+      "name": [
+        {
+          "family": "Ferreira",
+          "given": [
+            "Gabriel"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "770.735.9987"
+        },
+        {
+          "system": "email",
+          "value": "gabriel.ferreira@example.org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1971-07-07",
+      "gender": "female",
+      "id": "dup-114",
+      "name": [
+        {
+          "family": "Ferreira",
+          "given": [
+            "Gabriel"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "555-555-5555"
+        },
+        {
+          "system": "phone",
+          "value": "+17707359987"
+        },
+        {
+          "system": "email",
+          "value": "gabriel.ferreira@example.org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1972-08-08",
+      "gender": "female",
+      "id": "dup-115",
+      "name": [
+        {
+          "family": "Lindqvist",
+          "given": [
+            "Valentina"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "4828596629"
+        },
+        {
+          "system": "email",
+          "value": "valentina.lindqvist@example.org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1972-08-08",
+      "gender": "male",
+      "id": "dup-116",
+      "name": [
+        {
+          "family": "Lindqvist",
+          "given": [
+            "Valentina"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "555-555-5555"
+        },
+        {
+          "system": "phone",
+          "value": "+14828596629"
+        },
+        {
+          "system": "email",
+          "value": "valentina.lindqvist@example.org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1973-09-09",
+      "gender": "female",
+      "id": "dup-117",
+      "name": [
+        {
+          "family": "Abioye",
+          "given": [
+            "Sebastian"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "276.497.6038"
+        },
+        {
+          "system": "email",
+          "value": "SEBASTIAN.ABIOYE@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "birthDate": "1973-09-09",
+      "gender": "male",
+      "id": "dup-118",
+      "name": [
+        {
+          "family": "Abioye",
+          "given": [
+            "Sebastian"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "555-555-5555"
+        },
+        {
+          "system": "phone",
+          "value": "+12764976038"
+        },
+        {
+          "system": "email",
+          "value": "sebastian.abioye@example.org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1974-10-10",
+      "gender": "male",
+      "id": "dup-119",
+      "name": [
+        {
+          "family": "Petrovitch",
+          "given": [
+            "Daniela"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "8130234948"
+        },
+        {
+          "system": "email",
+          "value": "daniela.petrovitch@example.org"
+        }
+      ]
+    },
+    {
+      "birthDate": "1974-10-10",
+      "gender": "female",
+      "id": "dup-120",
+      "name": [
+        {
+          "family": "Petrovitch",
+          "given": [
+            "Daniela"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "555-555-5555"
+        },
+        {
+          "system": "phone",
+          "value": "+18130234948"
+        },
+        {
+          "system": "email",
+          "value": "DANIELA.PETROVITCH@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "300  Maple  Street"
+          ],
+          "postalCode": "73140",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1990-01-01",
+      "gender": "male",
+      "id": "sib-001",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "994-21-6013"
+        }
+      ],
+      "name": [
+        {
+          "family": "Thompson",
+          "given": [
+            "Jasmine"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(105) 833-5574"
+        },
+        {
+          "system": "email",
+          "value": "Jasmine.Thompson@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "300  Maple  Street"
+          ],
+          "postalCode": "27483",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1990-01-01",
+      "gender": "female",
+      "id": "sib-002",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "703-86-6440"
+        }
+      ],
+      "name": [
+        {
+          "family": "Thompson",
+          "given": [
+            "Leandra"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "513-649-9724"
+        },
+        {
+          "system": "email",
+          "value": "leandra.thompson@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "301 BIRCHWOOD AVENUE"
+          ],
+          "postalCode": "83385",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "1991-02-02",
+      "gender": "female",
+      "id": "sib-003",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "507-80-4895"
+        }
+      ],
+      "name": [
+        {
+          "family": "Vasquez",
+          "given": [
+            "Barnaby"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "880.098.4341"
+        },
+        {
+          "system": "email",
+          "value": "BARNABY.VASQUEZ@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "301 BIRCHWOOD AVENUE"
+          ],
+          "postalCode": "58499",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "1991-02-02",
+      "gender": "female",
+      "id": "sib-004",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "077-22-7211"
+        }
+      ],
+      "name": [
+        {
+          "family": "Vasquez",
+          "given": [
+            "Alexander"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "255-700-7185"
+        },
+        {
+          "system": "email",
+          "value": "ALEXANDER.VASQUEZ@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "302 Harborview Lane"
+          ],
+          "postalCode": "36198",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "1992-03-03",
+      "gender": "male",
+      "id": "sib-005",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "088-76-9443"
+        }
+      ],
+      "name": [
+        {
+          "family": "Okafor",
+          "given": [
+            "Caspian"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "796.514.7142"
+        },
+        {
+          "system": "email",
+          "value": "CASPIAN.OKAFOR@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "302 Harborview Lane"
+          ],
+          "postalCode": "67851",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "1992-03-03",
+      "gender": "male",
+      "id": "sib-006",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "909-80-5108"
+        }
+      ],
+      "name": [
+        {
+          "family": "Okafor",
+          "given": [
+            "Humberto"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+13963129922"
+        },
+        {
+          "system": "email",
+          "value": "Humberto.Okafor@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "303  Cedar  Court"
+          ],
+          "postalCode": "11726",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1993-04-04",
+      "gender": "male",
+      "id": "sib-007",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "850-53-1013"
+        }
+      ],
+      "name": [
+        {
+          "family": "Kowalski",
+          "given": [
+            "Fitzgerald"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+15322768555"
+        },
+        {
+          "system": "email",
+          "value": "FITZGERALD.KOWALSKI@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "303  Cedar  Court"
+          ],
+          "postalCode": "22844",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1993-04-04",
+      "gender": "male",
+      "id": "sib-008",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "467-85-9533"
+        }
+      ],
+      "name": [
+        {
+          "family": "Kowalski",
+          "given": [
+            "Marisol"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(769) 546-7172"
+        },
+        {
+          "system": "email",
+          "value": "MARISOL.KOWALSKI@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "304 Lakeshore Drive"
+          ],
+          "postalCode": "98433",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "1994-05-05",
+      "gender": "male",
+      "id": "sib-009",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "504-62-4074"
+        }
+      ],
+      "name": [
+        {
+          "family": "Nakamura",
+          "given": [
+            "Percival"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "6230701017"
+        },
+        {
+          "system": "email",
+          "value": "percival.nakamura@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "304 Lakeshore Drive"
+          ],
+          "postalCode": "51066",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "1994-05-05",
+      "gender": "female",
+      "id": "sib-010",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "815-84-1531"
+        }
+      ],
+      "name": [
+        {
+          "family": "Nakamura",
+          "given": [
+            "Antonia"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(344) 731-6269"
+        },
+        {
+          "system": "email",
+          "value": "antonia.nakamura@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "305 QUARRY ROAD"
+          ],
+          "postalCode": "63502",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "1995-06-06",
+      "gender": "female",
+      "id": "sib-011",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "045-31-0545"
+        }
+      ],
+      "name": [
+        {
+          "family": "Fitzgerald",
+          "given": [
+            "Dmitri"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "217.443.2980"
+        },
+        {
+          "system": "email",
+          "value": "Dmitri.Fitzgerald@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "305 Quarry Road"
+          ],
+          "postalCode": "46035",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "1995-06-06",
+      "gender": "female",
+      "id": "sib-012",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "091-44-3583"
+        }
+      ],
+      "name": [
+        {
+          "family": "Fitzgerald",
+          "given": [
+            "Antonia"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+10574278451"
+        },
+        {
+          "system": "email",
+          "value": "antonia.fitzgerald@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "306 Sycamore Bend"
+          ],
+          "postalCode": "69491",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "1996-07-07",
+      "gender": "male",
+      "id": "sib-013",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "581-52-6890"
+        }
+      ],
+      "name": [
+        {
+          "family": "Delacroix",
+          "given": [
+            "Miriam"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "101.690.0443"
+        },
+        {
+          "system": "email",
+          "value": "Miriam.Delacroix@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "306  Sycamore  Bend"
+          ],
+          "postalCode": "77178",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "1996-07-07",
+      "gender": "female",
+      "id": "sib-014",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "604-90-5363"
+        }
+      ],
+      "name": [
+        {
+          "family": "Delacroix",
+          "given": [
+            "Dmitri"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+10171825066"
+        },
+        {
+          "system": "email",
+          "value": "Dmitri.Delacroix@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "307 Windmere Way"
+          ],
+          "postalCode": "98932",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "1997-08-08",
+      "gender": "female",
+      "id": "sib-015",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "440-78-5753"
+        }
+      ],
+      "name": [
+        {
+          "family": "Brennan",
+          "given": [
+            "Humberto"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "166.820.0419"
+        },
+        {
+          "system": "email",
+          "value": "HUMBERTO.BRENNAN@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "307  Windmere  Way"
+          ],
+          "postalCode": "59973",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1997-08-08",
+      "gender": "female",
+      "id": "sib-016",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "058-14-0140"
+        }
+      ],
+      "name": [
+        {
+          "family": "Brennan",
+          "given": [
+            "Percival"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(474) 454-6757"
+        },
+        {
+          "system": "email",
+          "value": "Percival.Brennan@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "308 FOXGLOVE TERRACE"
+          ],
+          "postalCode": "14675",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "1998-09-09",
+      "gender": "male",
+      "id": "sib-017",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "885-01-7729"
+        }
+      ],
+      "name": [
+        {
+          "family": "Charleston",
+          "given": [
+            "Isolde"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(385) 441-1029"
+        },
+        {
+          "system": "email",
+          "value": "isolde.charleston@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "308  Foxglove  Terrace"
+          ],
+          "postalCode": "23179",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "1998-09-09",
+      "gender": "male",
+      "id": "sib-018",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "452-14-2869"
+        }
+      ],
+      "name": [
+        {
+          "family": "Charleston",
+          "given": [
+            "Anwen"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "8157761657"
+        },
+        {
+          "system": "email",
+          "value": "anwen.charleston@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "309 BELLWEATHER CIRCLE"
+          ],
+          "postalCode": "27272",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "1999-10-10",
+      "gender": "male",
+      "id": "sib-019",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "247-37-1034"
+        }
+      ],
+      "name": [
+        {
+          "family": "Wolfeschlegel",
+          "given": [
+            "Antonia"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "756-059-4955"
+        },
+        {
+          "system": "email",
+          "value": "Antonia.Wolfeschlegel@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "309 Bellweather Circle"
+          ],
+          "postalCode": "25096",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "1999-10-10",
+      "gender": "male",
+      "id": "sib-020",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "816-04-2826"
+        }
+      ],
+      "name": [
+        {
+          "family": "Wolfeschlegel",
+          "given": [
+            "Rosalind"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(086) 190-6668"
+        },
+        {
+          "system": "email",
+          "value": "ROSALIND.WOLFESCHLEGEL@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "310  Juniper  Crossing"
+          ],
+          "postalCode": "73517",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1990-11-11",
+      "gender": "male",
+      "id": "sib-021",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "933-07-7372"
+        }
+      ],
+      "name": [
+        {
+          "family": "Ivanovich",
+          "given": [
+            "Rosalind"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "747-781-4064"
+        },
+        {
+          "system": "email",
+          "value": "ROSALIND.IVANOVICH@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "310 JUNIPER CROSSING"
+          ],
+          "postalCode": "36745",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "1990-11-11",
+      "gender": "female",
+      "id": "sib-022",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "811-35-4755"
+        }
+      ],
+      "name": [
+        {
+          "family": "Ivanovich",
+          "given": [
+            "Maximilian"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "2500937564"
+        },
+        {
+          "system": "email",
+          "value": "MAXIMILIAN.IVANOVICH@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "311  Aldergate  Row"
+          ],
+          "postalCode": "26799",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1991-12-12",
+      "gender": "female",
+      "id": "sib-023",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "834-68-4119"
+        }
+      ],
+      "name": [
+        {
+          "family": "Montenegro",
+          "given": [
+            "Marisol"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "865-633-8625"
+        },
+        {
+          "system": "email",
+          "value": "Marisol.Montenegro@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "311 Aldergate Row"
+          ],
+          "postalCode": "63500",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1991-12-12",
+      "gender": "female",
+      "id": "sib-024",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "491-31-5651"
+        }
+      ],
+      "name": [
+        {
+          "family": "Montenegro",
+          "given": [
+            "Winston"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "9765380920"
+        },
+        {
+          "system": "email",
+          "value": "WINSTON.MONTENEGRO@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "312 Pembrook Place"
+          ],
+          "postalCode": "87838",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1992-01-13",
+      "gender": "male",
+      "id": "sib-025",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "324-72-9215"
+        }
+      ],
+      "name": [
+        {
+          "family": "Silverstein",
+          "given": [
+            "Seraphina"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(821) 724-5015"
+        },
+        {
+          "system": "email",
+          "value": "seraphina.silverstein@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "312  Pembrook  Place"
+          ],
+          "postalCode": "60450",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "1992-01-13",
+      "gender": "female",
+      "id": "sib-026",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "160-75-1523"
+        }
+      ],
+      "name": [
+        {
+          "family": "Silverstein",
+          "given": [
+            "Esperanza"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "714-998-4186"
+        },
+        {
+          "system": "email",
+          "value": "esperanza.silverstein@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "313  Stonehedge  Path"
+          ],
+          "postalCode": "81474",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1993-02-14",
+      "gender": "male",
+      "id": "sib-027",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "716-39-9644"
+        }
+      ],
+      "name": [
+        {
+          "family": "Harrington",
+          "given": [
+            "Maximilian"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+17646217485"
+        },
+        {
+          "system": "email",
+          "value": "maximilian.harrington@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "313 STONEHEDGE PATH"
+          ],
+          "postalCode": "82128",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1993-02-14",
+      "gender": "male",
+      "id": "sib-028",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "163-04-5441"
+        }
+      ],
+      "name": [
+        {
+          "family": "Harrington",
+          "given": [
+            "Theodore"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "9638372876"
+        },
+        {
+          "system": "email",
+          "value": "theodore.harrington@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "314 Copperline Alley"
+          ],
+          "postalCode": "28310",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "1994-03-15",
+      "gender": "female",
+      "id": "sib-029",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "940-88-1101"
+        }
+      ],
+      "name": [
+        {
+          "family": "Castellanos",
+          "given": [
+            "Antonia"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(795) 439-7094"
+        },
+        {
+          "system": "email",
+          "value": "antonia.castellanos@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "314  Copperline  Alley"
+          ],
+          "postalCode": "84926",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "1994-03-15",
+      "gender": "male",
+      "id": "sib-030",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "461-91-0796"
+        }
+      ],
+      "name": [
+        {
+          "family": "Castellanos",
+          "given": [
+            "Humberto"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(156) 673-0328"
+        },
+        {
+          "system": "email",
+          "value": "Humberto.Castellanos@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "315  Maple  Street"
+          ],
+          "postalCode": "56360",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1995-04-16",
+      "gender": "female",
+      "id": "sib-031",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "311-84-6410"
+        }
+      ],
+      "name": [
+        {
+          "family": "Rasmussen",
+          "given": [
+            "Jasmine"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(546) 358-6651"
+        },
+        {
+          "system": "email",
+          "value": "Jasmine.Rasmussen@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "315 Maple Street"
+          ],
+          "postalCode": "44808",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "1995-04-16",
+      "gender": "male",
+      "id": "sib-032",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "370-23-9398"
+        }
+      ],
+      "name": [
+        {
+          "family": "Rasmussen",
+          "given": [
+            "Rosalind"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "6763942627"
+        },
+        {
+          "system": "email",
+          "value": "ROSALIND.RASMUSSEN@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "316  Birchwood  Avenue"
+          ],
+          "postalCode": "17176",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1996-05-17",
+      "gender": "male",
+      "id": "sib-033",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "243-67-0505"
+        }
+      ],
+      "name": [
+        {
+          "family": "Ferreira",
+          "given": [
+            "Maximilian"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+14009494977"
+        },
+        {
+          "system": "email",
+          "value": "maximilian.ferreira@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "316 Birchwood Avenue"
+          ],
+          "postalCode": "34765",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "1996-05-17",
+      "gender": "male",
+      "id": "sib-034",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "249-12-1444"
+        }
+      ],
+      "name": [
+        {
+          "family": "Ferreira",
+          "given": [
+            "Fitzgerald"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+11855697569"
+        },
+        {
+          "system": "email",
+          "value": "FITZGERALD.FERREIRA@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "317 Harborview Lane"
+          ],
+          "postalCode": "92989",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "1997-06-18",
+      "gender": "female",
+      "id": "sib-035",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "799-88-0497"
+        }
+      ],
+      "name": [
+        {
+          "family": "Lindqvist",
+          "given": [
+            "Gregor"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(928) 458-9981"
+        },
+        {
+          "system": "email",
+          "value": "Gregor.Lindqvist@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "317 HARBORVIEW LANE"
+          ],
+          "postalCode": "88191",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1997-06-18",
+      "gender": "female",
+      "id": "sib-036",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "233-50-1476"
+        }
+      ],
+      "name": [
+        {
+          "family": "Lindqvist",
+          "given": [
+            "Winston"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "399.621.7896"
+        },
+        {
+          "system": "email",
+          "value": "WINSTON.LINDQVIST@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "318 Cedar Court"
+          ],
+          "postalCode": "70229",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "1998-07-19",
+      "gender": "male",
+      "id": "sib-037",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "596-80-6987"
+        }
+      ],
+      "name": [
+        {
+          "family": "Abioye",
+          "given": [
+            "Leandra"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(051) 207-1216"
+        },
+        {
+          "system": "email",
+          "value": "LEANDRA.ABIOYE@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "318  Cedar  Court"
+          ],
+          "postalCode": "73562",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "1998-07-19",
+      "gender": "male",
+      "id": "sib-038",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "496-75-3017"
+        }
+      ],
+      "name": [
+        {
+          "family": "Abioye",
+          "given": [
+            "Percival"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+11173930068"
+        },
+        {
+          "system": "email",
+          "value": "PERCIVAL.ABIOYE@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "319  Lakeshore  Drive"
+          ],
+          "postalCode": "67746",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "1999-08-20",
+      "gender": "male",
+      "id": "sib-039",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "172-67-4514"
+        }
+      ],
+      "name": [
+        {
+          "family": "Petrovitch",
+          "given": [
+            "Iolanda"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "857-394-2077"
+        },
+        {
+          "system": "email",
+          "value": "iolanda.petrovitch@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "319  Lakeshore  Drive"
+          ],
+          "postalCode": "26260",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1999-08-20",
+      "gender": "male",
+      "id": "sib-040",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "482-42-4062"
+        }
+      ],
+      "name": [
+        {
+          "family": "Petrovitch",
+          "given": [
+            "Dmitri"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "5850712590"
+        },
+        {
+          "system": "email",
+          "value": "Dmitri.Petrovitch@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "400 Quarry Road"
+          ],
+          "postalCode": "18362",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "2000-01-01",
+      "gender": "male",
+      "id": "twin-001",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "114-19-7834"
+        }
+      ],
+      "name": [
+        {
+          "family": "Ivanovich",
+          "given": [
+            "Winston"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "849.342.0119"
+        },
+        {
+          "system": "email",
+          "value": "WINSTON.IVANOVICH@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "400 Quarry Road"
+          ],
+          "postalCode": "69198",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "2000-01-01",
+      "gender": "male",
+      "id": "twin-002",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "276-28-4025"
+        }
+      ],
+      "name": [
+        {
+          "family": "Ivanovich",
+          "given": [
+            "Fitzgerald"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(353) 210-6133"
+        },
+        {
+          "system": "email",
+          "value": "FITZGERALD.IVANOVICH@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "401 Sycamore Bend"
+          ],
+          "postalCode": "83781",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "2001-02-02",
+      "gender": "female",
+      "id": "twin-003",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "054-74-3828"
+        }
+      ],
+      "name": [
+        {
+          "family": "Montenegro",
+          "given": [
+            "Dmitri"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+16649182037"
+        },
+        {
+          "system": "email",
+          "value": "DMITRI.MONTENEGRO@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "401  Sycamore  Bend"
+          ],
+          "postalCode": "74850",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "2001-02-02",
+      "gender": "female",
+      "id": "twin-004",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "757-94-7164"
+        }
+      ],
+      "name": [
+        {
+          "family": "Montenegro",
+          "given": [
+            "Iolanda"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+17467204995"
+        },
+        {
+          "system": "email",
+          "value": "IOLANDA.MONTENEGRO@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "402  Windmere  Way"
+          ],
+          "postalCode": "57459",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "2002-03-03",
+      "gender": "male",
+      "id": "twin-005",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "455-21-4758"
+        }
+      ],
+      "name": [
+        {
+          "family": "Silverstein",
+          "given": [
+            "Alexander"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(819) 435-4751"
+        },
+        {
+          "system": "email",
+          "value": "alexander.silverstein@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "402 Windmere Way"
+          ],
+          "postalCode": "67151",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "2002-03-03",
+      "gender": "female",
+      "id": "twin-006",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "700-87-9552"
+        }
+      ],
+      "name": [
+        {
+          "family": "Silverstein",
+          "given": [
+            "Percival"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(209) 338-4112"
+        },
+        {
+          "system": "email",
+          "value": "PERCIVAL.SILVERSTEIN@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "403  Foxglove  Terrace"
+          ],
+          "postalCode": "28521",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "2003-04-04",
+      "gender": "female",
+      "id": "twin-007",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "132-21-0876"
+        }
+      ],
+      "name": [
+        {
+          "family": "Harrington",
+          "given": [
+            "Antonia"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "860-488-7980"
+        },
+        {
+          "system": "email",
+          "value": "Antonia.Harrington@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "403 Foxglove Terrace"
+          ],
+          "postalCode": "92895",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "2003-04-04",
+      "gender": "male",
+      "id": "twin-008",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "845-55-7228"
+        }
+      ],
+      "name": [
+        {
+          "family": "Harrington",
+          "given": [
+            "Marisol"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "651.017.4092"
+        },
+        {
+          "system": "email",
+          "value": "MARISOL.HARRINGTON@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "404 BELLWEATHER CIRCLE"
+          ],
+          "postalCode": "82247",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "2004-05-05",
+      "gender": "female",
+      "id": "twin-009",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "041-12-1904"
+        }
+      ],
+      "name": [
+        {
+          "family": "Castellanos",
+          "given": [
+            "Marisol"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "480.840.5145"
+        },
+        {
+          "system": "email",
+          "value": "marisol.castellanos@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "404 Bellweather Circle"
+          ],
+          "postalCode": "48921",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "2004-05-05",
+      "gender": "female",
+      "id": "twin-010",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "879-39-7957"
+        }
+      ],
+      "name": [
+        {
+          "family": "Castellanos",
+          "given": [
+            "Maximilian"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+13271543922"
+        },
+        {
+          "system": "email",
+          "value": "MAXIMILIAN.CASTELLANOS@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "405 Juniper Crossing"
+          ],
+          "postalCode": "40091",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "2000-06-06",
+      "gender": "male",
+      "id": "twin-011",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "802-53-2830"
+        }
+      ],
+      "name": [
+        {
+          "family": "Rasmussen",
+          "given": [
+            "Seraphina"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "451-960-6431"
+        },
+        {
+          "system": "email",
+          "value": "Seraphina.Rasmussen@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "405 JUNIPER CROSSING"
+          ],
+          "postalCode": "40365",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "2000-06-06",
+      "gender": "male",
+      "id": "twin-012",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "508-05-8746"
+        }
+      ],
+      "name": [
+        {
+          "family": "Rasmussen",
+          "given": [
+            "Fitzgerald"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+16435484233"
+        },
+        {
+          "system": "email",
+          "value": "Fitzgerald.Rasmussen@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "406  Aldergate  Row"
+          ],
+          "postalCode": "40160",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "2001-07-07",
+      "gender": "male",
+      "id": "twin-013",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "956-38-7114"
+        }
+      ],
+      "name": [
+        {
+          "family": "Ferreira",
+          "given": [
+            "Miriam"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+16981367063"
+        },
+        {
+          "system": "email",
+          "value": "miriam.ferreira@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "406  Aldergate  Row"
+          ],
+          "postalCode": "15846",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "2001-07-07",
+      "gender": "female",
+      "id": "twin-014",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "964-25-3427"
+        }
+      ],
+      "name": [
+        {
+          "family": "Ferreira",
+          "given": [
+            "Lucian"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "2202101244"
+        },
+        {
+          "system": "email",
+          "value": "LUCIAN.FERREIRA@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "407 PEMBROOK PLACE"
+          ],
+          "postalCode": "17922",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "2002-08-08",
+      "gender": "male",
+      "id": "twin-015",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "203-24-7470"
+        }
+      ],
+      "name": [
+        {
+          "family": "Lindqvist",
+          "given": [
+            "Iolanda"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "124.379.0094"
+        },
+        {
+          "system": "email",
+          "value": "IOLANDA.LINDQVIST@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "407  Pembrook  Place"
+          ],
+          "postalCode": "15831",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "2002-08-08",
+      "gender": "male",
+      "id": "twin-016",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "062-15-5876"
+        }
+      ],
+      "name": [
+        {
+          "family": "Lindqvist",
+          "given": [
+            "Theodore"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "021.073.8625"
+        },
+        {
+          "system": "email",
+          "value": "theodore.lindqvist@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "408 STONEHEDGE PATH"
+          ],
+          "postalCode": "98200",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "2003-09-09",
+      "gender": "female",
+      "id": "twin-017",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "604-37-8486"
+        }
+      ],
+      "name": [
+        {
+          "family": "Abioye",
+          "given": [
+            "Caspian"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+17324335709"
+        },
+        {
+          "system": "email",
+          "value": "Caspian.Abioye@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "408 STONEHEDGE PATH"
+          ],
+          "postalCode": "14222",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "2003-09-09",
+      "gender": "female",
+      "id": "twin-018",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "111-31-6469"
+        }
+      ],
+      "name": [
+        {
+          "family": "Abioye",
+          "given": [
+            "Anwen"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(422) 003-6807"
+        },
+        {
+          "system": "email",
+          "value": "Anwen.Abioye@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "409 Copperline Alley"
+          ],
+          "postalCode": "55453",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "2004-10-10",
+      "gender": "male",
+      "id": "twin-019",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "074-53-4050"
+        }
+      ],
+      "name": [
+        {
+          "family": "Petrovitch",
+          "given": [
+            "Gregor"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "8475144853"
+        },
+        {
+          "system": "email",
+          "value": "GREGOR.PETROVITCH@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "409 Copperline Alley"
+          ],
+          "postalCode": "36143",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "2004-10-10",
+      "gender": "male",
+      "id": "twin-020",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "125-38-9927"
+        }
+      ],
+      "name": [
+        {
+          "family": "Petrovitch",
+          "given": [
+            "Dmitri"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(986) 421-9483"
+        },
+        {
+          "system": "email",
+          "value": "dmitri.petrovitch2@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "500  Windmere  Way"
+          ],
+          "postalCode": "79860",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1950-01-01",
+      "gender": "male",
+      "id": "neg-001",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "398-40-4171"
+        }
+      ],
+      "name": [
+        {
+          "family": "Thompson",
+          "given": [
+            "Marcus"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+14413664192"
+        },
+        {
+          "system": "email",
+          "value": "marcus.thompson2@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "500 Windmere Way"
+          ],
+          "postalCode": "31097",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1995-04-12",
+      "gender": "female",
+      "id": "neg-002",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "198-26-8443"
+        }
+      ],
+      "name": [
+        {
+          "family": "Brennan",
+          "given": [
+            "Mateo"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+19778624510"
+        },
+        {
+          "system": "email",
+          "value": "MATEO.BRENNAN@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "601  Birchwood  Avenue"
+          ],
+          "postalCode": "97109",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1953-02-02",
+      "gender": "male",
+      "id": "neg-003",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "592-02-5613"
+        }
+      ],
+      "name": [
+        {
+          "family": "Okafor",
+          "given": [
+            "Lucas"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "842-021-4610"
+        },
+        {
+          "system": "email",
+          "value": "lucas.okafor@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "701 Cedar Court"
+          ],
+          "postalCode": "59491",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "2000-05-13",
+      "gender": "male",
+      "id": "neg-004",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "071-67-4055"
+        }
+      ],
+      "name": [
+        {
+          "family": "Ivanovich",
+          "given": [
+            "Monica"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(649) 200-7983"
+        },
+        {
+          "system": "email",
+          "value": "MONICA.IVANOVICH@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "502  Bellweather  Circle"
+          ],
+          "postalCode": "51817",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "1956-03-03",
+      "gender": "female",
+      "id": "neg-005",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "958-61-4606"
+        }
+      ],
+      "name": [
+        {
+          "family": "Nakamura",
+          "given": [
+            "Nadia"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(739) 792-7373"
+        },
+        {
+          "system": "email",
+          "value": "Nadia.Nakamura@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "502 Bellweather Circle"
+          ],
+          "postalCode": "84824",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "2005-06-14",
+      "gender": "male",
+      "id": "neg-006",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "173-83-7943"
+        }
+      ],
+      "name": [
+        {
+          "family": "Harrington",
+          "given": [
+            "Hugo"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "897-601-5759"
+        },
+        {
+          "system": "email",
+          "value": "hugo.harrington@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "603 Cedar Court"
+          ],
+          "postalCode": "19358",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "1959-04-04",
+      "gender": "male",
+      "id": "neg-007",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "421-70-8560"
+        }
+      ],
+      "name": [
+        {
+          "family": "Delacroix",
+          "given": [
+            "Andre"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "173.470.0748"
+        },
+        {
+          "system": "email",
+          "value": "andre.delacroix@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "703 Quarry Road"
+          ],
+          "postalCode": "44520",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "1950-07-15",
+      "gender": "female",
+      "id": "neg-008",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "217-26-9360"
+        }
+      ],
+      "name": [
+        {
+          "family": "Ferreira",
+          "given": [
+            "Carolina"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "156.902.8555"
+        },
+        {
+          "system": "email",
+          "value": "CAROLINA.FERREIRA@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "504 Aldergate Row"
+          ],
+          "postalCode": "73848",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1962-05-05",
+      "gender": "female",
+      "id": "neg-009",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "711-24-5426"
+        }
+      ],
+      "name": [
+        {
+          "family": "Charleston",
+          "given": [
+            "Monica"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+15152847793"
+        },
+        {
+          "system": "email",
+          "value": "monica.charleston@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "504  Aldergate  Row"
+          ],
+          "postalCode": "58511",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1955-08-16",
+      "gender": "male",
+      "id": "neg-010",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "689-76-7454"
+        }
+      ],
+      "name": [
+        {
+          "family": "Petrovitch",
+          "given": [
+            "Bartholomew"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "1221349381"
+        },
+        {
+          "system": "email",
+          "value": "bartholomew.petrovitch@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "605  Quarry  Road"
+          ],
+          "postalCode": "37125",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1965-06-06",
+      "gender": "male",
+      "id": "neg-011",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "833-01-2844"
+        }
+      ],
+      "name": [
+        {
+          "family": "Ivanovich",
+          "given": [
+            "Darius"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "2215198414"
+        },
+        {
+          "system": "email",
+          "value": "DARIUS.IVANOVICH2@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "705 WINDMERE WAY"
+          ],
+          "postalCode": "86150",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1960-09-17",
+      "gender": "male",
+      "id": "neg-012",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "960-03-8694"
+        }
+      ],
+      "name": [
+        {
+          "family": "Cardoza",
+          "given": [
+            "Marcus"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "923-011-3254"
+        },
+        {
+          "system": "email",
+          "value": "MARCUS.CARDOZA@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "506 STONEHEDGE PATH"
+          ],
+          "postalCode": "54260",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "1968-07-07",
+      "gender": "female",
+      "id": "neg-013",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "486-69-7060"
+        }
+      ],
+      "name": [
+        {
+          "family": "Silverstein",
+          "given": [
+            "Clara"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "5186711965"
+        },
+        {
+          "system": "email",
+          "value": "CLARA.SILVERSTEIN@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "506  Stonehedge  Path"
+          ],
+          "postalCode": "57836",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "1965-10-18",
+      "gender": "female",
+      "id": "neg-014",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "806-82-2257"
+        }
+      ],
+      "name": [
+        {
+          "family": "Bienvenue",
+          "given": [
+            "Victor"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(782) 158-5296"
+        },
+        {
+          "system": "email",
+          "value": "victor.bienvenue@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "607 WINDMERE WAY"
+          ],
+          "postalCode": "38512",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1971-08-08",
+      "gender": "female",
+      "id": "neg-015",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "765-46-1451"
+        }
+      ],
+      "name": [
+        {
+          "family": "Castellanos",
+          "given": [
+            "Gabriel"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "6605612207"
+        },
+        {
+          "system": "email",
+          "value": "Gabriel.Castellanos@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "707 Bellweather Circle"
+          ],
+          "postalCode": "82733",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "1970-11-19",
+      "gender": "male",
+      "id": "neg-016",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "096-85-1769"
+        }
+      ],
+      "name": [
+        {
+          "family": "Salazar",
+          "given": [
+            "Ingrid"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "372-762-4089"
+        },
+        {
+          "system": "email",
+          "value": "Ingrid.Salazar@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "508 MAPLE STREET"
+          ],
+          "postalCode": "55888",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "1974-09-09",
+      "gender": "female",
+      "id": "neg-017",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "951-82-6867"
+        }
+      ],
+      "name": [
+        {
+          "family": "Ferreira",
+          "given": [
+            "Daniela"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "987-695-1687"
+        },
+        {
+          "system": "email",
+          "value": "Daniela.Ferreira@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "508 Maple Street"
+          ],
+          "postalCode": "24975",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1975-12-20",
+      "gender": "male",
+      "id": "neg-018",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "113-20-6406"
+        }
+      ],
+      "name": [
+        {
+          "family": "Vasquez",
+          "given": [
+            "Gabriel"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+12869229774"
+        },
+        {
+          "system": "email",
+          "value": "Gabriel.Vasquez@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "609 Bellweather Circle"
+          ],
+          "postalCode": "92219",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1977-10-10",
+      "gender": "female",
+      "id": "neg-019",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "350-99-2550"
+        }
+      ],
+      "name": [
+        {
+          "family": "Abioye",
+          "given": [
+            "Theodore"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "904-781-5272"
+        },
+        {
+          "system": "email",
+          "value": "Theodore.Abioye@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "709  Aldergate  Row"
+          ],
+          "postalCode": "29719",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1980-01-21",
+      "gender": "male",
+      "id": "neg-020",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "634-93-1149"
+        }
+      ],
+      "name": [
+        {
+          "family": "Nakamura",
+          "given": [
+            "Josephine"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(229) 310-4365"
+        },
+        {
+          "system": "email",
+          "value": "josephine.nakamura@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "510  Harborview  Lane"
+          ],
+          "postalCode": "41599",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1980-11-11",
+      "gender": "male",
+      "id": "neg-021",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "258-32-0870"
+        }
+      ],
+      "name": [
+        {
+          "family": "Vandermeer",
+          "given": [
+            "Charlotte"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(777) 735-1654"
+        },
+        {
+          "system": "email",
+          "value": "Charlotte.Vandermeer@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "510 HARBORVIEW LANE"
+          ],
+          "postalCode": "16771",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1985-02-22",
+      "gender": "female",
+      "id": "neg-022",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "142-21-2942"
+        }
+      ],
+      "name": [
+        {
+          "family": "Brennan",
+          "given": [
+            "Anastasia"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "522-339-3781"
+        },
+        {
+          "system": "email",
+          "value": "ANASTASIA.BRENNAN@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "611  Aldergate  Row"
+          ],
+          "postalCode": "13600",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1983-12-12",
+      "gender": "male",
+      "id": "neg-023",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "514-63-8689"
+        }
+      ],
+      "name": [
+        {
+          "family": "Cardoza",
+          "given": [
+            "Bartholomew"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "676-232-0005"
+        },
+        {
+          "system": "email",
+          "value": "BARTHOLOMEW.CARDOZA@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "711 Stonehedge Path"
+          ],
+          "postalCode": "59654",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "1990-03-23",
+      "gender": "female",
+      "id": "neg-024",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "828-58-5054"
+        }
+      ],
+      "name": [
+        {
+          "family": "Ivanovich",
+          "given": [
+            "Sofia"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "393-923-7508"
+        },
+        {
+          "system": "email",
+          "value": "SOFIA.IVANOVICH@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "512 LAKESHORE DRIVE"
+          ],
+          "postalCode": "80771",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "1986-01-13",
+      "gender": "male",
+      "id": "neg-025",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "079-94-0408"
+        }
+      ],
+      "name": [
+        {
+          "family": "Ostrander",
+          "given": [
+            "Konstantin"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+18447494427"
+        },
+        {
+          "system": "email",
+          "value": "Konstantin.Ostrander@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "512 Lakeshore Drive"
+          ],
+          "postalCode": "39162",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "1995-04-24",
+      "gender": "male",
+      "id": "neg-026",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "896-35-4694"
+        }
+      ],
+      "name": [
+        {
+          "family": "Harrington",
+          "given": [
+            "Andre"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(290) 864-9185"
+        },
+        {
+          "system": "email",
+          "value": "andre.harrington@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "613 STONEHEDGE PATH"
+          ],
+          "postalCode": "18756",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1989-02-14",
+      "gender": "male",
+      "id": "neg-027",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "655-22-3333"
+        }
+      ],
+      "name": [
+        {
+          "family": "Kalogeropoulos",
+          "given": [
+            "Seraphina"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(097) 487-7555"
+        },
+        {
+          "system": "email",
+          "value": "Seraphina.Kalogeropoulos@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "713 MAPLE STREET"
+          ],
+          "postalCode": "94627",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "2000-05-25",
+      "gender": "male",
+      "id": "neg-028",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "397-63-3597"
+        }
+      ],
+      "name": [
+        {
+          "family": "Ferreira",
+          "given": [
+            "Rosalba"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "6088704126"
+        },
+        {
+          "system": "email",
+          "value": "Rosalba.Ferreira@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "514 Sycamore Bend"
+          ],
+          "postalCode": "47909",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "1992-03-15",
+      "gender": "female",
+      "id": "neg-029",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "014-80-8810"
+        }
+      ],
+      "name": [
+        {
+          "family": "Salazar",
+          "given": [
+            "Sofia"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(887) 772-7566"
+        },
+        {
+          "system": "email",
+          "value": "sofia.salazar@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "514  Sycamore  Bend"
+          ],
+          "postalCode": "68152",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "2005-06-26",
+      "gender": "male",
+      "id": "neg-030",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "633-44-5788"
+        }
+      ],
+      "name": [
+        {
+          "family": "Petrovitch",
+          "given": [
+            "Sebastian"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "6336481660"
+        },
+        {
+          "system": "email",
+          "value": "Sebastian.Petrovitch@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "615  Maple  Street"
+          ],
+          "postalCode": "22854",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "1995-04-16",
+      "gender": "female",
+      "id": "neg-031",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "490-87-0768"
+        }
+      ],
+      "name": [
+        {
+          "family": "Thompson",
+          "given": [
+            "Mateo"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+11104859245"
+        },
+        {
+          "system": "email",
+          "value": "Mateo.Thompson@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "715 Harborview Lane"
+          ],
+          "postalCode": "96640",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "1950-07-27",
+      "gender": "female",
+      "id": "neg-032",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "349-06-7785"
+        }
+      ],
+      "name": [
+        {
+          "family": "Cardoza",
+          "given": [
+            "Charlotte"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "169.210.6325"
+        },
+        {
+          "system": "email",
+          "value": "CHARLOTTE.CARDOZA@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "516  Foxglove  Terrace"
+          ],
+          "postalCode": "38877",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "1998-05-17",
+      "gender": "male",
+      "id": "neg-033",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "794-07-9408"
+        }
+      ],
+      "name": [
+        {
+          "family": "Okafor",
+          "given": [
+            "Camila"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "820-493-4859"
+        },
+        {
+          "system": "email",
+          "value": "camila.okafor@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "516  Foxglove  Terrace"
+          ],
+          "postalCode": "10389",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "1955-08-01",
+      "gender": "female",
+      "id": "neg-034",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "634-14-0695"
+        }
+      ],
+      "name": [
+        {
+          "family": "Bienvenue",
+          "given": [
+            "Rafaela"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "116.193.0399"
+        },
+        {
+          "system": "email",
+          "value": "RAFAELA.BIENVENUE@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "617  Harborview  Lane"
+          ],
+          "postalCode": "43381",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "2001-06-18",
+      "gender": "male",
+      "id": "neg-035",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "994-24-2882"
+        }
+      ],
+      "name": [
+        {
+          "family": "Nakamura",
+          "given": [
+            "Stefan"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "210-696-6727"
+        },
+        {
+          "system": "email",
+          "value": "stefan.nakamura@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "717  Lakeshore  Drive"
+          ],
+          "postalCode": "67865",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "1960-09-02",
+      "gender": "male",
+      "id": "neg-036",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "145-42-2559"
+        }
+      ],
+      "name": [
+        {
+          "family": "Salazar",
+          "given": [
+            "Elena"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+18459848891"
+        },
+        {
+          "system": "email",
+          "value": "ELENA.SALAZAR@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "518 Juniper Crossing"
+          ],
+          "postalCode": "57739",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "2004-07-19",
+      "gender": "male",
+      "id": "neg-037",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "192-14-2792"
+        }
+      ],
+      "name": [
+        {
+          "family": "Delacroix",
+          "given": [
+            "Ingrid"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+14953450433"
+        },
+        {
+          "system": "email",
+          "value": "INGRID.DELACROIX@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "518 Juniper Crossing"
+          ],
+          "postalCode": "31738",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1965-10-03",
+      "gender": "female",
+      "id": "neg-038",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "209-32-3914"
+        }
+      ],
+      "name": [
+        {
+          "family": "Vasquez",
+          "given": [
+            "Stefan"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "9890254900"
+        },
+        {
+          "system": "email",
+          "value": "Stefan.Vasquez@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "619  Lakeshore  Drive"
+          ],
+          "postalCode": "30867",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "2007-08-20",
+      "gender": "male",
+      "id": "neg-039",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "150-96-8235"
+        }
+      ],
+      "name": [
+        {
+          "family": "Charleston",
+          "given": [
+            "Emilio"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "266-284-3250"
+        },
+        {
+          "system": "email",
+          "value": "Emilio.Charleston@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "719  Sycamore  Bend"
+          ],
+          "postalCode": "87840",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "1970-11-04",
+      "gender": "male",
+      "id": "neg-040",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "372-73-5375"
+        }
+      ],
+      "name": [
+        {
+          "family": "Nakamura",
+          "given": [
+            "Clara"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(055) 917-4333"
+        },
+        {
+          "system": "email",
+          "value": "CLARA.NAKAMURA@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "520  Pembrook  Place"
+          ],
+          "postalCode": "49451",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "1950-09-21",
+      "gender": "female",
+      "id": "neg-041",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "250-32-0831"
+        }
+      ],
+      "name": [
+        {
+          "family": "Ivanovich",
+          "given": [
+            "Patricia"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "391.639.8885"
+        },
+        {
+          "system": "email",
+          "value": "patricia.ivanovich@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "520 PEMBROOK PLACE"
+          ],
+          "postalCode": "40802",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "1975-12-05",
+      "gender": "male",
+      "id": "neg-042",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "009-97-6482"
+        }
+      ],
+      "name": [
+        {
+          "family": "Brennan",
+          "given": [
+            "Fernando"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+17381401282"
+        },
+        {
+          "system": "email",
+          "value": "FERNANDO.BRENNAN@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "621 SYCAMORE BEND"
+          ],
+          "postalCode": "90542",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1953-10-22",
+      "gender": "female",
+      "id": "neg-043",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "053-75-4190"
+        }
+      ],
+      "name": [
+        {
+          "family": "Silverstein",
+          "given": [
+            "Sebastian"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(733) 795-5907"
+        },
+        {
+          "system": "email",
+          "value": "sebastian.silverstein@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "721  Foxglove  Terrace"
+          ],
+          "postalCode": "82709",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1980-01-06",
+      "gender": "female",
+      "id": "neg-044",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "916-23-8787"
+        }
+      ],
+      "name": [
+        {
+          "family": "Ivanovich",
+          "given": [
+            "Evangelina"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "290.152.8107"
+        },
+        {
+          "system": "email",
+          "value": "evangelina.ivanovich@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "522 Copperline Alley"
+          ],
+          "postalCode": "81824",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1956-11-23",
+      "gender": "female",
+      "id": "neg-045",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "518-36-2514"
+        }
+      ],
+      "name": [
+        {
+          "family": "Castellanos",
+          "given": [
+            "Carolina"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(901) 852-9542"
+        },
+        {
+          "system": "email",
+          "value": "Carolina.Castellanos@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "522 Copperline Alley"
+          ],
+          "postalCode": "67677",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1985-02-07",
+      "gender": "male",
+      "id": "neg-046",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "268-38-5252"
+        }
+      ],
+      "name": [
+        {
+          "family": "Harrington",
+          "given": [
+            "Seraphina"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "9078233540"
+        },
+        {
+          "system": "email",
+          "value": "SERAPHINA.HARRINGTON@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "623  Foxglove  Terrace"
+          ],
+          "postalCode": "18408",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "1959-12-24",
+      "gender": "male",
+      "id": "neg-047",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "923-25-7219"
+        }
+      ],
+      "name": [
+        {
+          "family": "Ferreira",
+          "given": [
+            "Maximilian"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "722.806.2950"
+        },
+        {
+          "system": "email",
+          "value": "MAXIMILIAN.FERREIRA2@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "723 JUNIPER CROSSING"
+          ],
+          "postalCode": "97042",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1990-03-08",
+      "gender": "male",
+      "id": "neg-048",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "345-22-9006"
+        }
+      ],
+      "name": [
+        {
+          "family": "Vandermeer",
+          "given": [
+            "Nadia"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "225-164-2454"
+        },
+        {
+          "system": "email",
+          "value": "Nadia.Vandermeer@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "524 BIRCHWOOD AVENUE"
+          ],
+          "postalCode": "73858",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "1962-01-25",
+      "gender": "female",
+      "id": "neg-049",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "267-57-0565"
+        }
+      ],
+      "name": [
+        {
+          "family": "Abioye",
+          "given": [
+            "Evangelina"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "769-919-8334"
+        },
+        {
+          "system": "email",
+          "value": "Evangelina.Abioye@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "524  Birchwood  Avenue"
+          ],
+          "postalCode": "13095",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "1995-04-09",
+      "gender": "female",
+      "id": "neg-050",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "577-93-9212"
+        }
+      ],
+      "name": [
+        {
+          "family": "Petrovitch",
+          "given": [
+            "Felipe"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "639-305-1025"
+        },
+        {
+          "system": "email",
+          "value": "Felipe.Petrovitch@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": " Georgetown",
+          "line": [
+            "625 Juniper Crossing"
+          ],
+          "postalCode": "18966",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "1965-02-26",
+      "gender": "female",
+      "id": "neg-051",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "720-95-8550"
+        }
+      ],
+      "name": [
+        {
+          "family": "Vandermeer",
+          "given": [
+            "Anastasia"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+18440616243"
+        },
+        {
+          "system": "email",
+          "value": "anastasia.vandermeer@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "725  Pembrook  Place"
+          ],
+          "postalCode": "35469",
+          "state": "WA"
+        }
+      ],
+      "birthDate": "2000-05-10",
+      "gender": "female",
+      "id": "neg-052",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "738-97-3372"
+        }
+      ],
+      "name": [
+        {
+          "family": "Cardoza",
+          "given": [
+            "Patricia"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "7586601149"
+        },
+        {
+          "system": "email",
+          "value": "patricia.cardoza@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "526 CEDAR COURT"
+          ],
+          "postalCode": "50090",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1968-03-27",
+      "gender": "male",
+      "id": "neg-053",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "724-65-5744"
+        }
+      ],
+      "name": [
+        {
+          "family": "Cardoza",
+          "given": [
+            "Montgomery"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+14202311191"
+        },
+        {
+          "system": "email",
+          "value": "MONTGOMERY.CARDOZA@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "526 Cedar Court"
+          ],
+          "postalCode": "23976",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "2005-06-11",
+      "gender": "female",
+      "id": "neg-054",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "477-66-1177"
+        }
+      ],
+      "name": [
+        {
+          "family": "Bienvenue",
+          "given": [
+            "Theodore"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "4371714260"
+        },
+        {
+          "system": "email",
+          "value": "theodore.bienvenue@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Lakewood",
+          "line": [
+            "627 Pembrook Place"
+          ],
+          "postalCode": "57324",
+          "state": "TX"
+        }
+      ],
+      "birthDate": "1971-04-01",
+      "gender": "male",
+      "id": "neg-055",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "293-77-1755"
+        }
+      ],
+      "name": [
+        {
+          "family": "Ostrander",
+          "given": [
+            "Adriana"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "8514286960"
+        },
+        {
+          "system": "email",
+          "value": "Adriana.Ostrander@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Springfield",
+          "line": [
+            "727 COPPERLINE ALLEY"
+          ],
+          "postalCode": "93686",
+          "state": "GA"
+        }
+      ],
+      "birthDate": "1950-07-12",
+      "gender": "female",
+      "id": "neg-056",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "781-94-8183"
+        }
+      ],
+      "name": [
+        {
+          "family": "Salazar",
+          "given": [
+            "Perpetua"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "1420584090"
+        },
+        {
+          "system": "email",
+          "value": "PERPETUA.SALAZAR@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "528 QUARRY ROAD"
+          ],
+          "postalCode": "92195",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1974-05-02",
+      "gender": "male",
+      "id": "neg-057",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "596-94-7996"
+        }
+      ],
+      "name": [
+        {
+          "family": "Kalogeropoulos",
+          "given": [
+            "Elena"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+13274529006"
+        },
+        {
+          "system": "email",
+          "value": "ELENA.KALOGEROPOULOS@EXAMPLE.ORG"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "528 QUARRY ROAD"
+          ],
+          "postalCode": "35870",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1955-08-13",
+      "gender": "female",
+      "id": "neg-058",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "730-53-0493"
+        }
+      ],
+      "name": [
+        {
+          "family": "Vasquez",
+          "given": [
+            "Adriana"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(804) 395-2610"
+        },
+        {
+          "system": "email",
+          "value": "Adriana.Vasquez2@Example.Org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Fairview",
+          "line": [
+            "629 Copperline Alley"
+          ],
+          "postalCode": "79903",
+          "state": "IL"
+        }
+      ],
+      "birthDate": "1977-06-03",
+      "gender": "female",
+      "id": "neg-059",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "265-63-7771"
+        }
+      ],
+      "name": [
+        {
+          "family": "Salazar",
+          "given": [
+            "Victor"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "+19831252898"
+        },
+        {
+          "system": "email",
+          "value": "victor.salazar@example.org"
+        }
+      ]
+    },
+    {
+      "address": [
+        {
+          "city": "Riverton",
+          "line": [
+            "729 BIRCHWOOD AVENUE"
+          ],
+          "postalCode": "26910",
+          "state": "OH"
+        }
+      ],
+      "birthDate": "1960-09-14",
+      "gender": "female",
+      "id": "neg-060",
+      "identifier": [
+        {
+          "system": "http://hl7.org/fhir/sid/us-ssn",
+          "value": "006-48-0077"
+        }
+      ],
+      "name": [
+        {
+          "family": "Nakamura",
+          "given": [
+            "Camila"
+          ],
+          "use": "official"
+        }
+      ],
+      "resourceType": "Patient",
+      "telecom": [
+        {
+          "system": "phone",
+          "value": "(815) 756-1520"
+        },
+        {
+          "system": "email",
+          "value": "camila.nakamura@example.org"
+        }
+      ]
+    }
+  ],
+  "seed": 1340
+}

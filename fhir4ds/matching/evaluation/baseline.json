@@ -1,0 +1,14 @@
+{
+  "ambiguous_pair_count": 0,
+  "corpus": "fhir4ds/matching/tests/fixtures/golden_corpus.json",
+  "duplicate_pairs": 60,
+  "f1": 1.0,
+  "false_negative_count": 0,
+  "false_positive_count": 0,
+  "non_duplicate_pairs": 60,
+  "note": "Recorded by scripts/gen_matching_golden.py self-check / gate run; regression floor = max(these values, PRECISION_FLOOR/RECALL_FLOOR).",
+  "precision": 1.0,
+  "predicted_pair_count": 60,
+  "recall": 1.0,
+  "true_positives": 60
+}
