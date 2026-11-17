@@ -350,37 +350,49 @@ static bool calendar_month_factor(const std::string &unit, double &factor) {
 	return false;
 }
 
+// Duration magnitudes are INTEGRAL milliseconds-per-unit (not fractional
+// days): value*factor products for common cases (1 h vs 60 min, 1 d vs
+// 24 h) are then exact in binary64. The old 1.0/24.0-style fractional-day
+// factors made 1*(1/24) != 60*(1/1440) by 1 ULP, flipping exact
+// conversions to false (cql-tests TestHourEqualMinutes family).
+#define DUR_MS_PER_DAY 86400000.0
+#define DUR_MS_PER_HOUR 3600000.0
+#define DUR_MS_PER_MINUTE 60000.0
+#define DUR_MS_PER_SECOND 1000.0
+#define DUR_MS_PER_WEEK 604800000.0
+#define DUR_MS_PER_YEAR_EQ 31536000000.0
+#define DUR_MS_PER_MONTH_EQ 2592000000.0
 static bool equivalent_duration_day_factor(const std::string &unit, double &factor) {
 	if (unit == "year" || unit == "years" || unit == "a") {
-		factor = 365.0;
+		factor = DUR_MS_PER_YEAR_EQ;
 		return true;
 	}
 	if (unit == "month" || unit == "months" || unit == "mo") {
-		factor = 30.0;
+		factor = DUR_MS_PER_MONTH_EQ;
 		return true;
 	}
 	if (unit == "week" || unit == "weeks" || unit == "wk") {
-		factor = 7.0;
+		factor = DUR_MS_PER_WEEK;
 		return true;
 	}
 	if (unit == "day" || unit == "days" || unit == "d") {
-		factor = 1.0;
+		factor = DUR_MS_PER_DAY;
 		return true;
 	}
 	if (unit == "hour" || unit == "hours" || unit == "h") {
-		factor = 1.0 / 24.0;
+		factor = DUR_MS_PER_HOUR;
 		return true;
 	}
 	if (unit == "minute" || unit == "minutes" || unit == "min") {
-		factor = 1.0 / 1440.0;
+		factor = DUR_MS_PER_MINUTE;
 		return true;
 	}
 	if (unit == "second" || unit == "seconds" || unit == "s") {
-		factor = 1.0 / 86400.0;
+		factor = DUR_MS_PER_SECOND;
 		return true;
 	}
 	if (unit == "millisecond" || unit == "milliseconds" || unit == "ms") {
-		factor = 1.0 / 86400000.0;
+		factor = 1.0;
 		return true;
 	}
 	return false;
