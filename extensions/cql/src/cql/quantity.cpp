@@ -962,7 +962,10 @@ Optional<std::string> quantity_truncated_divide(const std::string &q1_json, cons
 	double quotient = q1->value / q2_value_in_q1_units;
 	ParsedQuantity result;
 	result.value = (quotient >= 0) ? std::floor(quotient) : std::ceil(quotient);
-	result.code = code1;
+	// Quantity / Quantity cancels units: same-unit (or converted-compatible)
+	// division yields the dimensionless '1' quantity (cql-tests
+	// TruncatedDivide10By5DQuantity: 10 'g' div 5 'g' -> {value:2, unit:'1'}).
+	result.code = "1";
 	result.system = q1->system;
 	return format_quantity_json(result);
 }

@@ -1280,9 +1280,10 @@ def quantityTruncatedDivide(q1_json: str | None, q2_json: str | None) -> str | N
         pint_q2_converted = pint_q2.to(pint_q1.units)
         import math
         truncated_mag = float(math.trunc(pint_q1.magnitude / pint_q2_converted.magnitude))
-        # Preserve the left operand's unit
+        # Quantity / Quantity cancels units: the truncated quotient is the
+        # dimensionless '1' quantity (cql-tests TruncatedDivide10By5DQuantity).
         ureg = _get_ureg()
-        truncated = truncated_mag * pint_q1.units
+        truncated = truncated_mag * ureg.dimensionless
         return _format_quantity(truncated)
     except (DimensionalityError, Exception) as e:
         _logger.warning("UDF quantityTruncatedDivide failed: %s", e)
