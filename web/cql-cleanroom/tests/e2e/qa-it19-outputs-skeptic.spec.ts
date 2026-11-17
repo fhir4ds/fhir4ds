@@ -28,41 +28,54 @@ async function bootReady(page: import("@playwright/test").Page) {
   await page.waitForFunction(() => Boolean((window as any).__cleanroom));
 }
 
-async function waitForRunCount(page: import("@playwright/test").Page, n: number) {
-  await page.waitForFunction(
-    (target) =>
-      document.querySelectorAll("[data-testid=console-run-select] option").length >= target,
-    n,
-    { timeout: 60_000 },
-  );
+async function selectIppBody(page: import("@playwright/test").Page) {
+  // marker-agnostic selection walk (pattern from console.spec)
+  const target = "exists(";
+  await page.click("[data-testid=cql-editor] .monaco-editor");
+  await page.keyboard.press("Control+Home");
+  for (let i = 0; i < 15; i++) {
+    const onTarget = await page.evaluate((needle) => {
+      const ta = document.querySelector("[data-testid=cql-editor] textarea") as HTMLTextAreaElement | null;
+      if (!ta) return false;
+      const pos = ta.selectionStart ?? 0;
+      const before = ta.value.slice(0, pos);
+      const lineStart = before.lastIndexOf("\n") + 1;
+      const line = ta.value.slice(lineStart, ta.value.indexOf("\n", lineStart) === -1 ? ta.value.length : ta.value.indexOf("\n", lineStart));
+      return line.includes(needle);
+    }, target);
+    if (onTarget) {
+      await page.keyboard.press("Home");
+      await page.keyboard.press("Shift+End");
+      return;
+    }
+    await page.keyboard.press("ArrowDown");
+  }
+  throw new Error("expression body line not found");
 }
 
-test("H1: run-replay restores the selected run's output shape", async ({ page }) => {
+test("H1: run-replay restores the selected run's output (not the latest)", async ({ page }) => {
   await bootReady(page);
-  await expect(page.locator("[data-testid=results-console]")).toBeVisible();
-  // run 1: full library run (auto-run may already exist — make it explicit)
-  const prior = await page.locator("[data-testid=console-run-select] option").count();
+  // run A: FULL library run (all columns)
   await page.click("[data-testid=editor-run]");
-  await waitForRunCount(page, prior + 1);
-  await expect(page.locator("[data-testid=results-table]")).toBeVisible({ timeout: 60_000 });
+  await page.locator("[data-testid=results-table]").waitFor({ timeout: 60_000 });
   const fullHeader = (await page.locator("[data-testid=results-table] th").allTextContents()).join(",");
-  expect(fullHeader.length).toBeGreaterThan(0);
-
-  // run 2: a fresh full run again (identical shape) then verify switching
-  // between the last two options keeps the SAME header (same shape, no
-  // phantom narrowing), and that the switcher itself advertises replay
-  const sel = page.locator("[data-testid=console-run-select]");
-  const title = await sel.getAttribute("title");
-  expect(title).toContain("replay");
-  const opts = await sel.locator("option").allTextContents();
-  expect(opts.length).toBeGreaterThanOrEqual(2);
-  await sel.selectOption({ index: opts.length - 2 });
-  await page.waitForTimeout(1_000);
-  const olderHeader = (await page.locator("[data-testid=results-table] th").allTextContents()).join(",");
-  await sel.selectOption({ index: opts.length - 1 });
-  await page.waitForTimeout(1_000);
-  const newerHeader = (await page.locator("[data-testid=results-table] th").allTextContents()).join(",");
-  expect(olderHeader).toBe(newerHeader); // identical library => identical shape
+  // run B: SELECTION run over one expression (narrowed columns)
+  await selectIppBody(page);
+  await page.click("[data-testid=editor-run]");
+  await page.waitForTimeout(4_000);
+  const narrowHeader = (await page.locator("[data-testid=results-table] th").allTextContents()).join(",");
+  expect(narrowHeader).not.toBe(fullHeader); // the shapes genuinely differ
+  // replay the FULL library run: options are newest-first and library
+  // runs carry the '· library' label suffix (canonical selection pattern)
+  const libRunValue = await page.evaluate(() => {
+    const sel = document.querySelector("[data-testid=console-run-select]") as HTMLSelectElement | null;
+    const opt = [...(sel?.options ?? [])].find((o) => (o.textContent ?? "").includes("· library"));
+    return opt?.value ?? "";
+  });
+  if (!libRunValue) throw new Error("no library run in the switcher");
+  await page.selectOption("[data-testid=console-run-select]", libRunValue);
+  await expect(page.locator("[data-testid=results-table]")).toContainText(
+    "Initial Population", { timeout: 15_000 });
 });
 
 test("H2: back-to-back identical runs show zero diff chips", async ({ page }) => {
