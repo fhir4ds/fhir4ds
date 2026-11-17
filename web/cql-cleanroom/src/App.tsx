@@ -4690,7 +4690,9 @@ export default function App() {
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
                           resource,
-                          replace: builderPrefill?.sourceIndex === undefined,
+                          // F4b (QA it16): REPLACE only when editing a
+                          // known source row; a NEW resource appends.
+                          replace: builderPrefill?.sourceIndex !== undefined,
                         }),
                       }).catch(() => undefined);
                       setBuilderPrefill(null);

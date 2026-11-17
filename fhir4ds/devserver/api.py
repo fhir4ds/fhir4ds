@@ -3550,19 +3550,43 @@ class _Handler(BaseHTTPRequestHandler):
             self._route_resource_replace(resource)
             return
         raw_path = str(body.get("dataset_path") or "")
-        if not raw_path:
-            self._write_json(
-                200,
-                _envelope(ok=False, diagnostics=[_diag("dataset_path is required")]),
-            )
-            return
         snap = self.server.watcher.snapshot
+        if not raw_path:
+            # F4 (QA it16): the resource-builder UI saves NEW resources
+            # without a dataset_path — default it instead of rejecting:
+            # the first existing dataset when one exists, else a canonical
+            # patients.ndjson inside the first configured data dir (or
+            # <workspace>/data).
+            if getattr(snap, "datasets", None):
+                raw_path = str(snap.datasets[0])
+            else:
+                _cfg = getattr(self.server.watcher, "_cfg", None)
+                cfg_dirs = list(getattr(_cfg, "data_dirs", None) or [])
+                base = next(
+                    (str(p) for p in cfg_dirs if _Path(str(p)).exists()), None
+                )
+                if base is None:
+                    roots = self._workspace_roots()
+                    if roots:
+                        base = str(_Path(str(roots[0])) / "data")
+                        _Path(base).mkdir(parents=True, exist_ok=True)
+                if base is None:
+                    self._write_json(
+                        200,
+                        _envelope(
+                            ok=False,
+                            diagnostics=[_diag("dataset_path is required (no workspace data dir found)")],
+                        ),
+                    )
+                    return
+                raw_path = str(_Path(base) / "patients.ndjson")
         data_roots = [str(_Path(str(p)).parent.resolve()) for p in snap.datasets]
         default_root = next((r for r in data_roots if _Path(r).exists()), None)
         target = _Path(raw_path).resolve()
         allowed = any(str(target).startswith(root + os.sep) or str(target) == root for root in data_roots)
         if default_root is None:
-            cfg_dirs = getattr(self.server.watcher.cfg, "data_dirs", None) or []
+            _cfg2 = getattr(self.server.watcher, "_cfg", None)
+            cfg_dirs = list(getattr(_cfg2, "data_dirs", None) or [])
             cfg_roots = [str(_Path(str(p)).resolve()) for p in cfg_dirs]
             allowed = allowed or any(
                 str(target).startswith(root + os.sep) or str(target) == root
@@ -3683,6 +3707,9 @@ class _Handler(BaseHTTPRequestHandler):
                 return
 
         # 2. ndjson monolith line rewrite.
+        # F4b (QA it16): a workspace with no datasets must fall through to
+        # the canonical placement below, not crash on unbound `lines`.
+        lines: list[str] = []
         for p in snap.datasets:
             if p.suffix.lower() != ".ndjson":
                 continue
