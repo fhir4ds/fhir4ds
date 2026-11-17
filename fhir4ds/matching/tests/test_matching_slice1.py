@@ -1,0 +1,371 @@
+"""Slice-1 tests: normalizers, extraction, store, rule table, exact engine."""
+
+from __future__ import annotations
+
+import duckdb
+import pytest
+
+from fhir4ds.matching import (
+    CATEGORY1_RULES,
+    MatchResult,
+    create_matching_tables,
+    exact_candidates,
+    extract_patient_fields,
+    index_patient,
+    match_patient,
+    nickname_set,
+    norm_date,
+    norm_name_parts,
+    norm_phone,
+    norm_text,
+    parse_suffix,
+    register_matching_macros,
+    suffix_conflict,
+)
+from fhir4ds.matching import __version__ as matching_version
+
+
+# ---------------------------------------------------------------------------
+# norm_text
+# ---------------------------------------------------------------------------
+
+
+class TestNormText:
+    def test_diacritic_fold(self):
+        assert norm_text("Müller") == "muller"
+
+    def test_punctuation_and_case(self):
+        assert norm_text("O'Brien-Smith, Jr.") == "obriensmith jr"
+        assert norm_text("  St.   Louis ") == "st louis"
+
+    def test_empty_and_none(self):
+        assert norm_text(None) is None
+        assert norm_text("   ") is None
+        assert norm_text("!!!") is None
+
+    def test_unicode_fullwidth(self):
+        # NFKD also folds fullwidth forms
+        assert norm_text("ＡＢＣ") == "abc"
+
+
+# ---------------------------------------------------------------------------
+# norm_phone
+# ---------------------------------------------------------------------------
+
+
+class TestNormPhone:
+    def test_basic_formatting(self):
+        assert norm_phone("(206) 555-0123") == "2065550123"
+        assert norm_phone("206-555-0123") == "2065550123"
+
+    def test_leading_country_code(self):
+        assert norm_phone("1-206-555-0123") == "2065550123"
+        assert norm_phone("+12065550123") == "2065550123"
+
+    def test_placeholders_rejected(self):
+        assert norm_phone("555-555-5555") is None
+        assert norm_phone("000-000-0000") is None
+        assert norm_phone("111-111-1111") is None  # all same digit
+        assert norm_phone("9999999999") is None
+
+    def test_invalid_lengths(self):
+        assert norm_phone("206555012") is None  # 9 digits
+        assert norm_phone("20655501234") is None  # 11 not starting with 1
+        assert norm_phone("") is None
+        assert norm_phone(None) is None
+
+
+# ---------------------------------------------------------------------------
+# norm_date
+# ---------------------------------------------------------------------------
+
+
+class TestNormDate:
+    def test_valid(self):
+        assert norm_date("1980-02-29") == "1980-02-29"
+
+    def test_partial_and_malformed(self):
+        assert norm_date("1980-02") is None
+        assert norm_date("1980/02/01") is None
+        assert norm_date("1980-13-01") is None
+        assert norm_date("1980-02-30") is None
+        assert norm_date(None) is None
+
+    def test_future_rejected(self):
+        assert norm_date("2099-01-01") is None
+
+    def test_over_120y_rejected(self):
+        assert norm_date("1890-01-01") is None
+
+
+# ---------------------------------------------------------------------------
+# names, suffixes, nicknames
+# ---------------------------------------------------------------------------
+
+
+class TestNames:
+    def test_suffix_split(self):
+        assert norm_name_parts("Smith Jr.") == (["smith"], ["jr"])
+        assert norm_name_parts("John Smith III") == (["john", "smith"], ["iii"])
+
+    def test_parse_suffix(self):
+        assert parse_suffix("Jr.") == "jr"
+        assert parse_suffix("SR") == "sr"
+        assert parse_suffix("IV") == "iv"
+        assert parse_suffix("V.") == "v"
+        assert parse_suffix("Smith") is None
+
+    def test_placeholders(self):
+        assert norm_name_parts("John Doe") is None
+        assert norm_name_parts("Test Patient") is None
+        assert norm_name_parts("Baby Boy") is None
+        assert norm_name_parts("Baby Girl") is None
+        assert norm_name_parts("Jane Doe") is None
+
+    def test_suffix_conflict(self):
+        assert suffix_conflict(["jr"], ["sr"]) is True
+        assert suffix_conflict(["jr"], ["jr"]) is False
+        assert suffix_conflict([], ["sr"]) is False
+        assert suffix_conflict(["ii"], []) is False
+
+    def test_nickname_sets(self):
+        assert "bob" in nickname_set("Robert")
+        assert "robert" in nickname_set("Bob")
+        assert nickname_set("Robert") is nickname_set("Bob")
+        # unknown names are singletons containing themselves
+        assert nickname_set("Xyzzy") == frozenset({"xyzzy"})
+        assert len(nickname_set("Elizabeth")) >= 4
+
+
+# ---------------------------------------------------------------------------
+# extraction
+# ---------------------------------------------------------------------------
+
+PATIENT = {
+    "resourceType": "Patient",
+    "id": "p1",
+    "name": [{"use": "official", "family": "Müller", "given": ["Robert", "Jr."]}],
+    "birthDate": "1955-05-05",
+    "telecom": [
+        {"system": "phone", "value": "(206) 555-0123"},
+        {"system": "email", "value": "Bob.Müller@Example.COM"},
+    ],
+    "address": [{"line": ["123 Main St., Apt 4"]}],
+    "identifier": [
+        {"system": "http://hl7.org/fhir/sid/us-ssn", "value": "123-45-6789"},
+        {"system": "http://example.org/mbi", "value": "1EG4-TE5-MK73"},
+        {"system": "https://payer.example.org/member-id", "value": "M-99881"},
+        {"system": "urn:example:driver-license", "value": "WDL-ABC-123"},
+    ],
+}
+
+
+class TestExtraction:
+    def test_full_fixture(self):
+        f = extract_patient_fields(PATIENT)
+        assert f["first"] == ["robert"]
+        assert f["last"] == ["muller"]
+        assert f["suffix"] == ["jr"]
+        assert f["dob"] == ["1955-05-05"]
+        assert f["phone"] == ["2065550123"]
+        assert f["email"] == ["bob.muller@example.com"]
+        assert f["street_line"] == ["123 main st apt 4"]
+        assert f["ssn4"] == ["6789"]
+        assert f["mbi"] == ["1eg4te5mk73"]
+        assert f["member_id"] == ["m99881"]
+        # unclassified system-scoped identifier -> namespace_id pair
+        assert f["namespace_id"] == ["urn:example:driver-license::wdlabc123"]
+
+    def test_itin_last4(self):
+        p = {"identifier": [{"system": "http://example.org/itin", "value": "912-88-9999"}]}
+        assert extract_patient_fields(p)["itin4"] == ["9999"]
+
+    def test_subscriber(self):
+        p = {"identifier": [{"system": "https://payer.example.org/subscriberId", "value": "S-1"}]}
+        assert extract_patient_fields(p)["subscriber_id"] == ["s1"]
+
+    def test_placeholder_name_dropped(self):
+        p = {"name": [{"family": "Doe", "given": ["John"]}], "birthDate": "1990-01-01"}
+        assert "first" not in extract_patient_fields(p)
+        assert "last" not in extract_patient_fields(p)
+
+    def test_empty_resource(self):
+        assert extract_patient_fields({}) == {}
+
+
+# ---------------------------------------------------------------------------
+# rule table
+# ---------------------------------------------------------------------------
+
+
+class TestRuleTable:
+    def test_29_rules_ordered(self):
+        assert len(CATEGORY1_RULES) == 29
+        keys = [(r.p_collision, r.rule_id) for r in CATEGORY1_RULES]
+        assert keys == sorted(keys)
+
+    def test_anchors(self):
+        by_id = {r.rule_id: r for r in CATEGORY1_RULES}
+        assert by_id["01"].p_collision == 3.0e-13
+        assert by_id["04"].p_collision == 1.0e-12
+        assert by_id["05"].p_collision == 1.0e-12
+        assert by_id["22"].p_collision == 1.0e-15
+        assert by_id["30"].p_collision == 5.0e-13
+        assert not by_id["22"].p_estimated
+
+    def test_first_rule_is_namespace(self):
+        # lowest P -> evaluated first
+        assert CATEGORY1_RULES[0].rule_id == "22"
+
+
+# ---------------------------------------------------------------------------
+# store + engine end-to-end
+# ---------------------------------------------------------------------------
+
+
+def _conn():
+    conn = duckdb.connect()
+    create_matching_tables(conn)
+    register_matching_macros(conn)
+    return conn
+
+
+DUP_A = {
+    "resourceType": "Patient",
+    "id": "dup-a",
+    "name": [{"use": "official", "family": "Müller", "given": ["Robert"]}],
+    "birthDate": "1955-05-05",
+    "telecom": [{"system": "phone", "value": "(206) 555-0123"}],
+    "address": [{"line": ["123 Main St."]}],
+}
+DUP_B = {
+    "resourceType": "Patient",
+    "id": "dup-b",
+    "name": [{"use": "official", "family": "Muller", "given": ["Robert"]}],
+    "birthDate": "1955-05-05",
+    "telecom": [{"system": "phone", "value": "206-555-0123"}],
+    "address": [{"line": ["123 MAIN STREET"]}],
+}
+UNRELATED = {
+    "resourceType": "Patient",
+    "id": "other",
+    "name": [{"use": "official", "family": "Nguyen", "given": ["Thi"]}],
+    "birthDate": "1990-11-11",
+    "telecom": [{"system": "phone", "value": "212-555-9898"}],
+    "address": [{"line": ["99 Oak Rd"]}],
+}
+
+
+class TestStore:
+    def test_index_and_candidates(self):
+        conn = _conn()
+        assert index_patient(conn, DUP_A) > 0
+        assert exact_candidates(conn, "last", "muller") == ["dup-a"]
+        assert exact_candidates(conn, "phone", "2065550123") == ["dup-a"]
+        assert exact_candidates(conn, "first", "nope") == []
+
+    def test_index_idempotent(self):
+        conn = _conn()
+        index_patient(conn, DUP_A)
+        n = conn.execute("SELECT COUNT(*) FROM field_values").fetchone()[0]
+        index_patient(conn, DUP_A)
+        assert conn.execute("SELECT COUNT(*) FROM field_values").fetchone()[0] == n
+
+    def test_requires_id(self):
+        with pytest.raises(ValueError):
+            index_patient(_conn(), {"resourceType": "Patient"})
+
+
+class TestEngine:
+    def test_match_finds_duplicate(self):
+        conn = _conn()
+        for p in (DUP_A, UNRELATED):
+            index_patient(conn, p)
+        result = match_patient(conn, DUP_B)
+        assert result.outcome == "match"
+        assert result.matched_ids == ("dup-a",)
+        # fuzzy-only rules audited as skipped
+        assert "01" in result.skipped_rules
+        assert result.rule_id not in result.skipped_rules
+        assert result.confidence is not None and 0 < result.confidence <= 1
+
+    def test_no_match(self):
+        conn = _conn()
+        for p in (DUP_A, DUP_B):
+            index_patient(conn, p)
+        result = match_patient(conn, UNRELATED)
+        assert result.outcome == "no_match"
+        assert result.matched_ids == ()
+        assert result.rule_id is None
+
+    def test_determinism(self):
+        conn = _conn()
+        for p in (DUP_A, DUP_B, UNRELATED):
+            index_patient(conn, p)
+        r1 = match_patient(conn, DUP_B)
+        r2 = match_patient(conn, DUP_B)
+        assert r1 == r2  # frozen dataclass equality
+
+    def test_ambiguous(self):
+        conn = _conn()
+        # two corpus patients sharing first+last+dob -> rule 28 ambiguity
+        a = dict(DUP_A)
+        b = {
+            "resourceType": "Patient",
+            "id": "dup-c",
+            "name": [{"family": "Muller", "given": ["Robert"]}],
+            "birthDate": "1955-05-05",
+        }
+        for p in (a, b):
+            index_patient(conn, p)
+        cand = {
+            "resourceType": "Patient",
+            "id": "cand",
+            "name": [{"family": "Müller", "given": ["Robert"]}],
+            "birthDate": "1955-05-05",
+        }
+        result = match_patient(conn, cand)
+        assert result.outcome == "ambiguous"
+        assert result.matched_ids == ("dup-a", "dup-c")
+
+    def test_suffix_conflict_negates(self):
+        conn = _conn()
+        jr = {
+            "resourceType": "Patient",
+            "id": "jr",
+            "name": [{"family": "Smith", "given": ["John", "Jr."]}],
+            "birthDate": "1960-01-01",
+        }
+        index_patient(conn, jr)
+        # same first+last+dob but Sr -> suffix conflict must negate rule 28
+        sr = {
+            "resourceType": "Patient",
+            "id": "sr-cand",
+            "name": [{"family": "Smith", "given": ["John", "Sr."]}],
+            "birthDate": "1960-01-01",
+        }
+        result = match_patient(conn, sr)
+        assert result.outcome == "no_match"
+
+    def test_namespace_rule_fires_first(self):
+        conn = _conn()
+        ns = {
+            "resourceType": "Patient",
+            "id": "ns-a",
+            "identifier": [{"system": "urn:x:dl", "value": "WDL-1"}],
+        }
+        index_patient(conn, ns)
+        cand = {
+            "resourceType": "Patient",
+            "id": "ns-cand",
+            "identifier": [{"system": "urn:X:DL", "value": "WDL 1"}],
+        }
+        result = match_patient(conn, cand)
+        assert result.outcome == "match"
+        assert result.rule_id == "22"
+        assert result.confidence == 1.0 - 1.0e-15
+        assert "namespace_id" in result.evidence
+
+
+def test_version():
+    assert matching_version == "0.0.1"

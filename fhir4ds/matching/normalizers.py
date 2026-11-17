@@ -1,0 +1,386 @@
+"""CMS A-D field normalizers for patient matching (slice 1, pure Python).
+
+Port of the deterministic normalization layer studied from
+icanbwell/cms-hte-patient-matching (CMS Patient Matching Proposal v3.4.0,
+Apache-2.0). No third-party dependencies: diacritic folding via unicodedata,
+phones via digit extraction, dates via strict calendar validation, USPS
+address standardization deferred to v2 (v1 = norm_text of the raw line).
+"""
+
+from __future__ import annotations
+
+import datetime as _dt
+import re
+import unicodedata
+from typing import Optional
+
+__all__ = [
+    "norm_text",
+    "norm_text_keep_dots",
+    "norm_phone",
+    "norm_date",
+    "norm_name_parts",
+    "parse_suffix",
+    "nickname_set",
+    "extract_patient_fields",
+    "suffix_conflict",
+]
+
+_PUNCT_TABLE = str.maketrans("", "", "".join(chr(c) for c in range(0x21, 0x7F) if not chr(c).isalnum()))
+_WS_RE = re.compile(r"\s+")
+
+_KEEP_DOT_AT = set(" .@-_")
+
+
+def norm_text_keep_dots(value: Optional[str]) -> Optional[str]:
+    """Email-style normalization: NFKD diacritic fold + lowercase, keep
+    email-meaningful punctuation ( . @ - _ ), drop the rest."""
+    if value is None:
+        return None
+    decomposed = unicodedata.normalize("NFKD", value)
+    folded = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    lowered = folded.lower()
+    kept = "".join(ch if (ch.isalnum() or ch in _KEEP_DOT_AT) else " " for ch in lowered)
+    collapsed = _WS_RE.sub("", kept).strip()
+    return collapsed or None
+
+# ---------------------------------------------------------------------------
+# A. Text normalization
+# ---------------------------------------------------------------------------
+
+
+def norm_text(value: Optional[str]) -> Optional[str]:
+    """Lowercase, NFKD diacritic fold, strip punctuation, collapse whitespace.
+
+    Returns None for empty/None input.
+    """
+    if value is None:
+        return None
+    decomposed = unicodedata.normalize("NFKD", value)
+    folded = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    lowered = folded.lower()
+    stripped = lowered.translate(_PUNCT_TABLE)
+    collapsed = _WS_RE.sub(" ", stripped).strip()
+    return collapsed or None
+
+
+# ---------------------------------------------------------------------------
+# B. Phone normalization (E.164 digits, placeholder removal)
+# ---------------------------------------------------------------------------
+
+_PHONE_PLACEHOLDERS = {"5555555555", "0000000000"}
+
+
+def norm_phone(value: Optional[str]) -> Optional[str]:
+    """Normalize to 10 dialable digits ( NANP centric).
+
+    - strips all non-digits
+    - strips a leading country code 1 from 11-digit numbers
+    - rejects (returns None) anything that is not exactly 10 digits afterwards
+    - rejects placeholders: all-same-digit, 555-555-5555, 0000000000
+    """
+    if value is None:
+        return None
+    digits = re.sub(r"\D", "", value)
+    if len(digits) == 11 and digits.startswith("1"):
+        digits = digits[1:]
+    if len(digits) != 10:
+        return None
+    if len(set(digits)) == 1:
+        return None
+    if digits in _PHONE_PLACEHOLDERS:
+        return None
+    return digits
+
+
+# ---------------------------------------------------------------------------
+# C. Date normalization (strict YYYY-MM-DD, v1 = full DOB only)
+# ---------------------------------------------------------------------------
+
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_MAX_AGE_DAYS = 120 * 366
+
+
+def norm_date(value: Optional[str]) -> Optional[str]:
+    """Strict YYYY-MM-DD only. Rejects future dates and ages > 120 years."""
+    if value is None or not isinstance(value, str) or not _DATE_RE.match(value):
+        return None
+    try:
+        d = _dt.date.fromisoformat(value)
+    except ValueError:
+        return None
+    today = _dt.date.today()
+    if d > today:
+        return None
+    if (today - d).days > _MAX_AGE_DAYS:
+        return None
+    return value
+
+
+# ---------------------------------------------------------------------------
+# D. Name parts / suffixes / placeholders
+# ---------------------------------------------------------------------------
+
+_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
+
+_PLACEHOLDER_NAMES = {
+    "test patient",
+    "testpatient",
+    "baby boy",
+    "babyboy",
+    "baby girl",
+    "babygirl",
+    "john doe",
+    "johndoe",
+    "jane doe",
+    "janedoe",
+}
+
+
+def parse_suffix(token: str) -> Optional[str]:
+    """Return the canonical suffix for a token (jr/sr/ii/iii/iv/v) else None."""
+    t = norm_text(token)
+    if t is None:
+        return None
+    t = t.replace(".", "")
+    if t in _SUFFIXES:
+        return t
+    return None
+
+
+def norm_name_parts(value: Optional[str]) -> Optional[tuple[list[str], list[str]]]:
+    """Split a display-name string into (given/family parts, suffixes).
+
+    Placeholder names (test patient, baby boy/girl, john/jane doe) return None.
+    Parts are norm_text-normalized; suffix tokens are stripped from the parts.
+    """
+    normalized = norm_text(value)
+    if normalized is None:
+        return None
+    if normalized in _PLACEHOLDER_NAMES:
+        return None
+    tokens = normalized.split()
+    parts: list[str] = []
+    suffixes: list[str] = []
+    for tok in tokens:
+        tok_clean = tok.replace(".", "")
+        suffix = parse_suffix(tok_clean)
+        if suffix is not None:
+            suffixes.append(suffix)
+        else:
+            parts.append(tok_clean)
+    if not parts and not suffixes:
+        return None
+    return parts, suffixes
+
+
+# ---------------------------------------------------------------------------
+# Nickname equivalence expansion (~50 most common English nickname sets)
+# ---------------------------------------------------------------------------
+
+_NICKNAME_GROUPS: list[frozenset[str]] = [
+    frozenset(g)
+    for g in [
+        {"robert", "bob", "rob", "bobby"},
+        {"william", "bill", "will", "billy", "liam"},
+        {"richard", "rick", "dick", "richie"},
+        {"james", "jim", "jimmy", "jamie"},
+        {"john", "jack", "johnny"},
+        {"joseph", "joe", "joey"},
+        {"charles", "charlie", "chuck"},
+        {"thomas", "tom", "tommy"},
+        {"michael", "mike", "mikey"},
+        {"edward", "ed", "eddie", "ted"},
+        {"daniel", "dan", "danny"},
+        {"matthew", "matt"},
+        {"anthony", "tony"},
+        {"donald", "don", "donnie"},
+        {"kenneth", "ken", "kenny"},
+        {"steven", "steve", "stevie"},
+        {"george", "georgie"},
+        {"ronald", "ron", "ronnie"},
+        {"jeffrey", "jeff"},
+        {"jacob", "jake"},
+        {"gregory", "greg"},
+        {"gerald", "jerry"},
+        {"nicholas", "nick"},
+        {"eugene", "gene"},
+        {"lawrence", "larry"},
+        {"benjamin", "ben", "benny"},
+        {"samuel", "sam", "sammy"},
+        {"raymond", "ray"},
+        {"timothy", "tim", "timmy"},
+        {"joshua", "josh"},
+        {"christopher", "chris"},
+        {"alexander", "alex"},
+        {"andrew", "andy", "drew"},
+        {"elizabeth", "liz", "beth", "betsy", "eliza"},
+        {"margaret", "maggie", "peggy", "meg"},
+        {"jennifer", "jen", "jenny"},
+        {"patricia", "pat", "patty", "trish"},
+        {"barbara", "barb", "babs"},
+        {"susan", "sue", "susie"},
+        {"deborah", "deb", "debbie"},
+        {"katherine", "kathy", "kate", "katie", "kitty"},
+        {"christine", "chris", "christina", "tina"},
+        {"victoria", "vicky", "tori"},
+        {"kimberly", "kim"},
+        {"cynthia", "cindy"},
+        {"angela", "angie"},
+        {"anna", "ann", "annie", "nancy"},
+        {"isabella", "bella", "isa"},
+        {"charlotte", "lottie", "charlie"},
+        {"amelia", "mia", "millie"},
+        {"eleanor", "ellie", "nora"},
+    ]
+]
+
+_NICKNAME_INDEX: dict[str, frozenset[str]] = {}
+for _group in _NICKNAME_GROUPS:
+    for _name in _group:
+        _NICKNAME_INDEX.setdefault(_name, _group)
+
+
+def nickname_set(name: Optional[str]) -> frozenset[str]:
+    """Equivalence-expanded set for a normalized given name (contains the
+    name itself when known; a singleton of the name otherwise)."""
+    n = norm_text(name)
+    if n is None:
+        return frozenset()
+    return _NICKNAME_INDEX.get(n, frozenset({n}))
+
+
+# ---------------------------------------------------------------------------
+# Field extraction from a FHIR R4 Patient resource
+# ---------------------------------------------------------------------------
+
+_SSN_SYSTEMS = ("us-ssn", "2.16.840.1.113883.4.1")
+_ITIN_SYSTEMS = ("itin", "2.16.840.1.113883.4.23")
+
+
+def _dedup(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for v in values:
+        if v is not None and v not in seen:
+            seen.add(v)
+            out.append(v)
+    return out
+
+
+def _norm_ident(value: str) -> Optional[str]:
+    """Identifier value normalization: norm_text without whitespace."""
+    n = norm_text(value)
+    if n is None:
+        return None
+    return n.replace(" ", "") or None
+
+
+def extract_patient_fields(patient_resource: dict) -> dict[str, list[str]]:
+    """Extract the CMS match-field vocabulary from a Patient resource.
+
+    Returns a dict of field_name -> list of normalized values (deduped,
+    order-preserving). Fields with no data are absent from the dict.
+
+    Field list: first, last, dob, street_line, phone, email, ssn4, itin4,
+    mbi, legal_id, member_id, subscriber_id, namespace_id, suffix (internal,
+    consumed by the suffix-conflict negation, never referenced by a rule).
+    """
+    out: dict[str, list[str]] = {}
+
+    def add(field: str, value: Optional[str]) -> None:
+        if value is None:
+            return
+        out.setdefault(field, []).append(value)
+
+    # Names: prefer use=official, fall back to all names. Multiple values per
+    # field are legal (multiple given tokens, multiple historical names).
+    names = patient_resource.get("name") or []
+    official = [n for n in names if n.get("use") == "official"] or names
+    for name in official:
+        family = name.get("family")
+        given = name.get("given") or []
+        if isinstance(given, str):
+            given = [given]
+        # Name-level placeholder detection (john doe / test patient etc.)
+        full_name = " ".join([given[0] if given else "", family if isinstance(family, str) else ""])
+        if norm_text(full_name) in _PLACEHOLDER_NAMES:
+            continue
+        if isinstance(family, str):
+            parsed = norm_name_parts(family)
+            if parsed is not None:
+                if parsed[0]:
+                    add("last", " ".join(parsed[0]))
+                for suf in parsed[1]:
+                    add("suffix", suf)
+        for g in given:
+            parsed = norm_name_parts(g)
+            if parsed is not None:
+                if parsed[0]:
+                    add("first", " ".join(parsed[0]))
+                for suf in parsed[1]:
+                    add("suffix", suf)
+
+    add("dob", norm_date(patient_resource.get("birthDate")))
+
+    for address in patient_resource.get("address") or []:
+        lines = address.get("line") or []
+        if isinstance(lines, str):
+            lines = [lines]
+        if lines:
+            # v1: norm_text of the raw first line (USPS standardization v2).
+            add("street_line", norm_text(lines[0]))
+
+    for telecom in patient_resource.get("telecom") or []:
+        system = telecom.get("system")
+        value = telecom.get("value")
+        if system == "phone":
+            add("phone", norm_phone(value))
+        elif system == "email":
+            # emails keep their @ and . — diacritic-fold + lowercase only
+            if isinstance(value, str) and value.strip():
+                add("email", norm_text_keep_dots(value))
+
+    for ident in patient_resource.get("identifier") or []:
+        system = ident.get("system") or ""
+        system_l = system.lower()
+        value = ident.get("value")
+        if not isinstance(value, str) or not value.strip():
+            continue
+        if any(k in system_l for k in _SSN_SYSTEMS):
+            digits = re.sub(r"\D", "", value)
+            if len(digits) >= 4:
+                add("ssn4", digits[-4:])
+            continue
+        if any(k in system_l for k in _ITIN_SYSTEMS):
+            digits = re.sub(r"\D", "", value)
+            if len(digits) >= 4:
+                add("itin4", digits[-4:])
+            continue
+        if "mbi" in system_l:
+            add("mbi", _norm_ident(value))
+            continue
+        if "member" in system_l:
+            add("member_id", _norm_ident(value))
+            continue
+        if "subscriber" in system_l:
+            add("subscriber_id", _norm_ident(value))
+            continue
+        if "legal" in system_l:
+            add("legal_id", _norm_ident(value))
+            continue
+        # Unclassified but system-scoped identifiers become namespace-id
+        # pairs (system + value) — the rule-22 "Namespace-ID alone" surface.
+        if system:
+            ns_value = _norm_ident(value)
+            if ns_value is not None:
+                add("namespace_id", f"{system_l}::{ns_value}")
+
+    return {k: _dedup(v) for k, v in out.items() if _dedup(v)}
+
+
+def suffix_conflict(a_suffixes: list[str], b_suffixes: list[str]) -> bool:
+    """True when both suffix sets are non-empty AND disjoint (e.g. Jr vs Sr)."""
+    if not a_suffixes or not b_suffixes:
+        return False
+    return not (set(a_suffixes) & set(b_suffixes))

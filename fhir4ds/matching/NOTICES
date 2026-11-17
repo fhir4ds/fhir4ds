@@ -1,0 +1,13 @@
+This module adapts deterministic patient-matching rule design and normalization
+logic studied from:
+
+    icanbwell/cms-hte-patient-matching
+    https://github.com/icanbwell/cms-hte-patient-matching
+    (CMS Patient Matching Proposal v3.4.0)
+
+Upstream license: Apache License 2.0.
+
+The rule table (rule ids, field combinations, P(collision) anchors), the
+normalization vocabulary (CMS A-D), and the deterministic rule-ordering design
+are adapted from that work. This implementation is an independent port in
+pure Python + DuckDB with no dependency on the upstream package.
