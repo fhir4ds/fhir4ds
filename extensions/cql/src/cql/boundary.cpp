@@ -99,6 +99,8 @@ static Optional<bool> quantity_value_uses_decimal_step(const std::string &json) 
 	return Optional<bool>(decimal_step);
 }
 
+static Optional<int64_t> decimal_text_precision(const std::string &s);
+
 static Optional<std::string> step_quantity_json(const std::string &value, int direction) {
 	auto decimal_step = quantity_value_uses_decimal_step(value);
 	if (!decimal_step) return NullOpt<std::string>();
