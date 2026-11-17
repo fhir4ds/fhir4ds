@@ -449,18 +449,25 @@ static Optional<bool> compare_cql_duration_quantities(const ParsedQuantity &q1, 
 		return NullOpt<bool>();
 	}
 
-	if (op == "~" || op == "!~") {
-		return apply_quantity_compare(q1, q1.value * f1, q2, q2.value * f2, op);
-	}
-
+	// Calendar year/month pairs (both sides in the year-month family)
+	// compare in MONTHS for EVERY operator — including equivalence:
+	// `1 year ~ 12 months` is 12 vs 12 (true), not 365d vs 360d (the
+	// day-based equivalence reading returns false and is wrong for the
+	// calendar pair per the CQL-09 month-space doctrine). The day-based
+	// path remains for month-vs-day-and-below mixed pairs.
 	double m1 = 0.0;
 	double m2 = 0.0;
 	bool c1 = calendar_month_factor(code1, m1);
 	bool c2 = calendar_month_factor(code2, m2);
+	if (c1 && c2) {
+		return apply_quantity_compare(q1, q1.value * m1, q2, q2.value * m2, op);
+	}
+
+	if (op == "~" || op == "!~") {
+		return apply_quantity_compare(q1, q1.value * f1, q2, q2.value * f2, op);
+	}
+
 	if (c1 || c2) {
-		if (c1 && c2) {
-			return apply_quantity_compare(q1, q1.value * m1, q2, q2.value * m2, op);
-		}
 		return NullOpt<bool>();
 	}
 
