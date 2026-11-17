@@ -3891,9 +3891,12 @@ class FunctionsMixin:
             else:
                 substr = SQLFunctionCall(name="system.substring", args=[args[0], start_index])
             invalid_start = SQLBinaryOp(left=args[1], operator="<", right=SQLLiteral(value=0))
+            # CQL 1.5 §17.16: only start > Length is null; start ==
+            # Length yields the empty string (Substring('', 0) -> '',
+            # fixture-pinned; supersedes the older >= boundary).
             past_end = SQLBinaryOp(
                 left=args[1],
-                operator=">=",
+                operator=">",
                 right=SQLFunctionCall(name="system.length", args=[args[0]]),
             )
             condition = SQLBinaryOp(operator="OR", left=invalid_start, right=past_end)

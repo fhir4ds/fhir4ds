@@ -2107,10 +2107,32 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             # First(X) character-slices the JSON text (CQL 1.5 §10.x
             # stored-list consumer doctrine; CQL-18 HISTORIAN family).
             from ..parser.ast_nodes import FunctionRef as _DefFunctionRef
+            from ..parser.ast_nodes import Query as _DefQuery
+            from ..parser.ast_nodes import QuerySource as _DefQuerySource
+            from ..parser.ast_nodes import Identifier as _DefIdentifier2
             if isinstance(_uexpr, _DefFunctionRef) and (
                 _uexpr.name or ""
             ).lower() in ("expand", "collapse"):
                 _definition_is_navigation_list = True
+
+            # Engine-backlog (QA-107 debt): a QUERY define over a list
+            # source (`({1,2,3,4,5}) N where N > 3`) lowers to a multi-row
+            # subquery; as a define value it MUST be one row holding the
+            # element LIST. Without this, the value column is a multi-row
+            # scalar subquery (runtime 'More than one row returned').
+            # Aggregate queries return scalars; retrieves keep rows.
+            _definition_is_query_list = False
+            if isinstance(_uexpr, _DefQuery) and _uexpr.aggregate is None:
+                _qs = _uexpr.source
+                _srcs = [_qs] if isinstance(_qs, _DefQuerySource) else list(_qs)
+                if len(_srcs) == 1:
+                    _se = getattr(_srcs[0], "expression", None)
+                    if isinstance(_se, _DefListExpr):
+                        _definition_is_query_list = True
+                    elif isinstance(_se, _DefIdentifier2):
+                        _sm = self._context.definition_meta.get(_se.name)
+                        if _sm is not None and getattr(_sm, "stores_list_value", False):
+                            _definition_is_query_list = True
 
             # Populate DefinitionMeta for this definition
             shape = self._infer_row_shape(definition.expression)
@@ -2141,7 +2163,10 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                         )
                     from .context import RowShape as _AliasRowShape
                     shape = _AliasRowShape.PATIENT_SCALAR
-            if _definition_is_dynamic_list:
+            if _definition_is_dynamic_list or _definition_is_query_list:
+                if _definition_is_query_list and not _definition_is_dynamic_list:
+                    from .expressions._utils import _coerce_query_rows_to_list
+                    result = _coerce_query_rows_to_list(result)
                 from .expressions._utils import _promote_fhirpath_text_list
                 from ..translator.context import RowShape as _RowShape
                 result = _promote_fhirpath_text_list(result)

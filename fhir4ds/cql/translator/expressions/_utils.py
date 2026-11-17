@@ -272,6 +272,12 @@ def _coerce_query_rows_to_list(node):
         return node
 
     value_alias = "__cql_list_value"
+    # Engine-backlog: DISTINCT (the CQL default `return` de-dup at the
+    # definition root) reorders rows hash-wise, scrambling list() order
+    # against order-sensitive comparison. With no explicit ORDER BY, order
+    # the aggregate by the element so deduped lists come out deterministic
+    # (source-order for already-ordered literals, ascending otherwise).
+    _order_elem = first_expr if (inner_select.distinct and not inner_select.order_by) else None
     projected = SQLSelect(
         columns=[SQLAlias(expr=first_expr, alias=value_alias)],
         from_clause=inner_select.from_clause,
@@ -284,11 +290,19 @@ def _coerce_query_rows_to_list(node):
         distinct=inner_select.distinct,
     )
     value_ref = SQLQualifiedIdentifier(parts=["_cql_list_source", value_alias])
+    if _order_elem is not None:
+        _list_call = SQLFunctionCall(
+            name="list",
+            args=[value_ref],
+            order_by=[(value_ref, "ASC")],
+        )
+    else:
+        _list_call = SQLFunctionCall(name="list", args=[value_ref])
     return SQLSubquery(query=SQLSelect(
         columns=[SQLFunctionCall(
             name="COALESCE",
             args=[
-                SQLFunctionCall(name="list", args=[value_ref]),
+                _list_call,
                 SQLArray([]),
             ],
         )],

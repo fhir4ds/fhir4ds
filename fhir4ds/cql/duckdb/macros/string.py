@@ -78,7 +78,7 @@ def registerStringMacros(con: "duckdb.DuckDBPyConnection") -> None:
     # use a sentinel outside CQL Integer range for the optional length.
     con.execute(
         "CREATE OR REPLACE MACRO Substring(s, start, len := -2147483649) AS "
-        "CASE WHEN s IS NULL OR start IS NULL OR start < 0 OR start >= system.length(s) THEN NULL "
+        "CASE WHEN s IS NULL OR start IS NULL OR start < 0 OR start > system.length(s) THEN NULL "
         "WHEN len = -2147483649 THEN system.substring(s, start + 1) "
         "WHEN len IS NULL OR len < 0 THEN NULL "
         "ELSE system.substring(s, start + 1, len) END"
@@ -112,6 +112,14 @@ def registerStringMacros(con: "duckdb.DuckDBPyConnection") -> None:
     con.execute(
         "CREATE MACRO IF NOT EXISTS Matches(s, pattern) AS "
         "cqlRegexMatches(s, pattern)"
+    )
+
+    # CQL 2.0 MatchesFull: full-string regex match; null if either
+    # argument is null (same null contract as Matches).
+    con.execute(
+        "CREATE MACRO IF NOT EXISTS MatchesFull(s, pattern) AS "
+        "CASE WHEN s IS NULL OR pattern IS NULL THEN NULL "
+        "ELSE regexp_full_match(CAST(s AS VARCHAR), CAST(pattern AS VARCHAR)) END"
     )
 
     # ReplaceMatches: CQL §17.13 — replace regex matches in string
