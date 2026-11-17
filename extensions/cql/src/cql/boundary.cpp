@@ -104,7 +104,15 @@ static Optional<std::string> step_quantity_json(const std::string &value, int di
 	if (!decimal_step) return NullOpt<std::string>();
 	auto q = parse_quantity_json(value);
 	if (!q) return NullOpt<std::string>();
-	q->value += direction * (decimal_step.value() ? 0.00000001 : 1.0);
+	// Decimal-authored quantities step by 10^-fractional-scale of the
+	// authored value text (PredecessorOf1QCMPrecision: 1.0 'cm' -> 0.9).
+	double step = 1.0;
+	if (decimal_step.value()) {
+		auto prec = decimal_text_precision(value);
+		int64_t scale = prec.has_value() ? prec.value() : 0;
+		step = scale > 0 ? std::pow(10.0, -static_cast<double>(scale)) : 0.00000001;
+	}
+	q->value += direction * step;
 	if (q->code.empty()) {
 		q->code = "1";
 	}
@@ -998,10 +1006,13 @@ Optional<std::string> successor_of(const std::string &value) {
 		double d = std::strtod(value.c_str(), &end);
 		if (end != value.c_str() && *end == '\0') {
 			if (decimal_step_overflows(value, 1)) return NullOpt<std::string>();
-			double result = d + 1e-8;
+			auto prec = decimal_text_precision(value);
+			int64_t scale = prec.has_value() ? prec.value() : 0;
+			double step = scale > 0 ? std::pow(10.0, -static_cast<double>(scale)) : 1e-8;
+			long double result = static_cast<long double>(d) + static_cast<long double>(step);
 			std::ostringstream oss;
 			oss.precision(15);
-			oss << result;
+			oss << static_cast<double>(result);
 			return Optional<std::string>(oss.str());
 		}
 	}
