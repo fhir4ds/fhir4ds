@@ -160,9 +160,24 @@ class TestNameFuzzyMatch:
         assert name_fuzzy_match("thompsno", "thompson") is True  # transposition
 
     def test_short_names_do_not_dl_match(self):
-        # CMS E.3: DL fuzzy only applies at >= 5 chars on BOTH sides
-        assert name_fuzzy_match("joan", "joann") is False  # 4 chars
+        # CMS E.3: DL fuzzy only applies at >= 5 chars on BOTH sides.
+        # ("joan"/"joann" moved to a TRUE case below: since AMUX-134 it is
+        # matched by the guarded prefix-abbreviation rule — a 4+-char
+        # truncation — independent of the DL gate.)
+        assert name_fuzzy_match("jone", "joan") is False  # 4 chars, not a prefix
         assert name_fuzzy_match("amy", "ame") is False
+
+    def test_prefix_abbreviation_matches(self):
+        # AMUX-134: truncations (>= 4 chars) and single leading initials
+        # match; ambiguous 2-3 char fragments do not.
+        assert name_fuzzy_match("joan", "joann") is True
+        assert name_fuzzy_match("will", "william") is True
+        assert name_fuzzy_match("william", "will") is True
+        assert name_fuzzy_match("j", "john") is True
+        assert name_fuzzy_match("maria", "m") is True
+        assert name_fuzzy_match("ja", "james") is False
+        assert name_fuzzy_match("mich", "michael") is True
+        assert name_fuzzy_match("mic", "michael") is False
         assert FUZZY_NAME_MIN_LEN == 5
 
     def test_distance_2_rejected(self):
