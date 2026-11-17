@@ -1,8 +1,18 @@
-"""Exact-rule matching engine (slice 1).
+"""Deterministic matching engine (slices 1-2).
 
-Deterministic: rules evaluated in table order (P(collision) ascending,
-ties by rule id); first firing rule wins; candidate ids sorted; confidence
-is the lookup 1 - P(collision), never a computed posterior.
+Rules are evaluated in table order (P(collision) ascending, ties by rule
+id); first firing rule wins; candidate ids sorted; confidence is the
+lookup 1 - P(collision) (the fuzzy P when any fuzzy field matched
+fuzzily), never a computed posterior.
+
+Blocking stays exact-index-first: for a rule with exact fields, candidates
+come from the exact (field, value) index intersection; for an all-fuzzy
+rule (rule 01), the candidate pool is patients holding at least one value
+for every rule field. Fuzzy fields are then verified pairwise against each
+candidate's indexed values — a field matches when ANY of the query
+patient's values matches ANY of the candidate's values, exact first, then
+fuzzy (names: nickname equivalence or Damerau-Levenshtein <= 1 at >= 5
+chars; DOB: +/- 1 day). Suffix-conflict negation is unchanged.
 """
 
 from __future__ import annotations
@@ -12,11 +22,14 @@ from typing import Optional
 
 import duckdb
 
+from .fuzzy import dob_fuzzy_matches, name_fuzzy_match
 from .normalizers import extract_patient_fields, suffix_conflict
-from .rules import CATEGORY1_RULES, MatchRule
-from .store import create_matching_tables, exact_candidates, index_patient
+from .rules import CATEGORY1_RULES, EXACT, MatchRule
+from .store import create_matching_tables, exact_candidates, index_patient  # noqa: F401
 
 __all__ = ["MatchResult", "match_patient", "evaluate_rule"]
+
+_NAME_FIELDS = frozenset({"first", "last"})
 
 
 @dataclass(frozen=True)
@@ -26,14 +39,25 @@ class MatchResult:
     confidence: Optional[float] = None
     matched_ids: tuple[str, ...] = ()
     evidence: dict[str, str] = dc_field(default_factory=dict)
-    skipped_rules: tuple[str, ...] = ()  # fuzzy rules not implemented in v1
+    skipped_rules: tuple[str, ...] = ()  # empty since slice 2 (fuzzy implemented)
     evaluated_rules: tuple[str, ...] = ()
+    match_type: str = "exact"  # 'exact' | 'fuzzy' — per the FIRING rule's evaluation
 
 
 def _candidate_suffixes(conn: duckdb.DuckDBPyConnection, patient_id: str) -> list[str]:
     rows = conn.execute(
         "SELECT value FROM field_values WHERE field_name = 'suffix' AND patient_id = ?",
         [patient_id],
+    ).fetchall()
+    return [r[0] for r in rows]
+
+
+def _indexed_values(
+    conn: duckdb.DuckDBPyConnection, field_name: str, patient_id: str
+) -> list[str]:
+    rows = conn.execute(
+        "SELECT value FROM field_values WHERE field_name = ? AND patient_id = ?",
+        [field_name, patient_id],
     ).fetchall()
     return [r[0] for r in rows]
 
@@ -46,7 +70,7 @@ def _rule_candidate_ids(
     for field_name in rule.exact_fields():
         values = fields.get(field_name, [])
         if not values:
-            return set()  # rule cannot fire: candidate lacks this field
+            return set()  # rule cannot fire: patient lacks this field
         field_ids: set[str] = set()
         for value in values:
             field_ids.update(exact_candidates(conn, field_name, value))
@@ -56,25 +80,85 @@ def _rule_candidate_ids(
     return candidates or set()
 
 
-def _evidence_for(
+def _fuzzy_rule_pool(
+    conn: duckdb.DuckDBPyConnection, rule: MatchRule, fields: dict[str, list[str]]
+) -> set[str]:
+    """Candidate pool for an all-fuzzy rule: patients holding at least one
+    indexed value for EVERY rule field (a fuzzy match needs a value on both
+    sides; the exact index cannot prune typo'd values away)."""
+    ids: Optional[set[str]] = None
+    for field_name, _mode in rule.fields:
+        if not fields.get(field_name):
+            return set()
+        field_ids = {
+            r[0]
+            for r in conn.execute(
+                "SELECT DISTINCT patient_id FROM field_values WHERE field_name = ?",
+                [field_name],
+            ).fetchall()
+        }
+        ids = field_ids if ids is None else (ids & field_ids)
+        if not ids:
+            return set()
+    return ids or set()
+
+
+def _field_match(
+    field_name: str,
+    patient_values: list[str],
+    candidate_values: list[str],
+    allow_fuzzy: bool,
+) -> tuple[bool, bool, str]:
+    """Match one rule field: (matched, was_fuzzy, evidence).
+
+    Exact-any first (patient value present among the candidate's indexed
+    values); then, when the field is fuzzy-marked, pairwise fuzzy
+    verification (names / dob comparators).
+    """
+    cand_set = set(candidate_values)
+    for pv in patient_values:
+        if pv in cand_set:
+            return True, False, pv
+    if allow_fuzzy:
+        if field_name in _NAME_FIELDS:
+            for pv in patient_values:
+                for cv in candidate_values:
+                    if name_fuzzy_match(pv, cv):
+                        return True, True, f"{pv}~{cv}"
+        elif field_name == "dob":
+            for pv in patient_values:
+                for cv in candidate_values:
+                    if dob_fuzzy_matches(pv, cv):
+                        return True, True, f"{pv}~{cv}"
+    return False, False, ""
+
+
+def _verify_candidate(
     conn: duckdb.DuckDBPyConnection,
     rule: MatchRule,
     fields: dict[str, list[str]],
-    matched_id: str,
-) -> dict[str, str]:
+    candidate_id: str,
+) -> tuple[bool, bool, dict[str, str]]:
+    """Verify every rule field against one candidate.
+
+    Returns (matched, any_field_fuzzy, evidence). Exact-mode fields never
+    fuzzy-match; fuzzy-mode fields try exact first (so unchanged values do
+    not taint match_type).
+    """
     evidence: dict[str, str] = {}
-    for field_name in rule.exact_fields():
-        stored = {
-            r[0]
-            for r in conn.execute(
-                "SELECT value FROM field_values WHERE field_name = ? AND patient_id = ?",
-                [field_name, matched_id],
-            ).fetchall()
-        }
-        shared = [v for v in fields.get(field_name, []) if v in stored]
-        if shared:
-            evidence[field_name] = shared[0]
-    return evidence
+    any_fuzzy = False
+    for field_name, mode in rule.fields:
+        matched, was_fuzzy, ev = _field_match(
+            field_name,
+            fields.get(field_name, []),
+            _indexed_values(conn, field_name, candidate_id),
+            allow_fuzzy=(mode != EXACT),
+        )
+        if not matched:
+            return False, False, {}
+        any_fuzzy = any_fuzzy or was_fuzzy
+        evidence[field_name] = ev
+    return True, any_fuzzy, evidence
 
 
 def match_patient(conn: duckdb.DuckDBPyConnection, patient_resource: dict) -> MatchResult:
@@ -86,44 +170,105 @@ def match_patient(conn: duckdb.DuckDBPyConnection, patient_resource: dict) -> Ma
     skipped: list[str] = []
     evaluated: list[str] = []
     for rule in CATEGORY1_RULES:
-        if rule.fuzzy_fields():
-            skipped.append(rule.rule_id)
-            continue
+        # Slice 2: fuzzy rules are evaluated (skipped stays empty, kept for
+        # API compatibility).
         evaluated.append(rule.rule_id)
-        candidates = _rule_candidate_ids(conn, rule, fields)
+        if any(not fields.get(f) for f, _mode in rule.fields):
+            continue  # patient lacks a rule field -> rule cannot fire
+        if rule.exact_fields():
+            candidates = _rule_candidate_ids(conn, rule, fields)
+        else:
+            candidates = _fuzzy_rule_pool(conn, rule, fields)
         if not candidates:
+            continue
+        # Pairwise verification (exact fields are guaranteed by blocking;
+        # fuzzy fields verified exact-first then fuzzy per candidate).
+        verified: dict[str, tuple[bool, dict[str, str]]] = {}
+        for pid in sorted(candidates):
+            matched, any_fuzzy, evidence = _verify_candidate(conn, rule, fields, pid)
+            if matched:
+                verified[pid] = (any_fuzzy, evidence)
+        if not verified:
             continue
         # Suffix-conflict negation: a candidate whose suffix set is non-empty
         # and disjoint from the candidate patient's cannot be this person.
         surviving = [
             pid
-            for pid in candidates
+            for pid in verified
             if not suffix_conflict(candidate_suffixes, _candidate_suffixes(conn, pid))
         ]
         if not surviving:
             continue
+        any_fuzzy = any(verified[pid][0] for pid in surviving)
+        p = rule.p_collision_fuzzy if any_fuzzy else rule.p_collision
+        match_type = "fuzzy" if any_fuzzy else "exact"
         if len(surviving) == 1:
             matched_id = surviving[0]
             return MatchResult(
                 outcome="match",
                 rule_id=rule.rule_id,
-                confidence=1.0 - rule.p_collision,
+                confidence=1.0 - p,
                 matched_ids=(matched_id,),
-                evidence=_evidence_for(conn, rule, fields, matched_id),
+                evidence=verified[matched_id][1],
                 skipped_rules=tuple(skipped),
                 evaluated_rules=tuple(evaluated),
+                match_type=match_type,
             )
         return MatchResult(
             outcome="ambiguous",
             rule_id=rule.rule_id,
-            confidence=1.0 - rule.p_collision,
+            confidence=1.0 - p,
             matched_ids=tuple(sorted(surviving)),
             evidence={},
             skipped_rules=tuple(skipped),
             evaluated_rules=tuple(evaluated),
+            match_type=match_type,
         )
     return MatchResult(
         outcome="no_match",
         skipped_rules=tuple(skipped),
         evaluated_rules=tuple(evaluated),
     )
+
+
+def evaluate_rule(
+    conn: duckdb.DuckDBPyConnection, rule: MatchRule, patient_resource: dict
+) -> MatchResult:
+    """Evaluate a single rule in isolation (diagnostics; same semantics)."""
+    create_matching_tables(conn)
+    fields = extract_patient_fields(patient_resource)
+    if any(not fields.get(f) for f, _mode in rule.fields):
+        return MatchResult(outcome="no_match", evaluated_rules=(rule.rule_id,))
+    candidates = (
+        _rule_candidate_ids(conn, rule, fields)
+        if rule.exact_fields()
+        else _fuzzy_rule_pool(conn, rule, fields)
+    )
+    surviving: list[str] = []
+    any_fuzzy = False
+    for pid in sorted(candidates):
+        matched, fuzzy, _ev = _verify_candidate(conn, rule, fields, pid)
+        if matched and not suffix_conflict(
+            fields.get("suffix", []), _candidate_suffixes(conn, pid)
+        ):
+            surviving.append(pid)
+            any_fuzzy = any_fuzzy or fuzzy
+    if len(surviving) == 1:
+        return MatchResult(
+            outcome="match",
+            rule_id=rule.rule_id,
+            confidence=1.0 - (rule.p_collision_fuzzy if any_fuzzy else rule.p_collision),
+            matched_ids=(surviving[0],),
+            match_type="fuzzy" if any_fuzzy else "exact",
+            evaluated_rules=(rule.rule_id,),
+        )
+    if surviving:
+        return MatchResult(
+            outcome="ambiguous",
+            rule_id=rule.rule_id,
+            confidence=1.0 - (rule.p_collision_fuzzy if any_fuzzy else rule.p_collision),
+            matched_ids=tuple(surviving),
+            match_type="fuzzy" if any_fuzzy else "exact",
+            evaluated_rules=(rule.rule_id,),
+        )
+    return MatchResult(outcome="no_match", evaluated_rules=(rule.rule_id,))

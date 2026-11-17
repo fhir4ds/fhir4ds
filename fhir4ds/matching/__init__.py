@@ -1,7 +1,10 @@
 """fhir4ds.patient-matching — deterministic patient matching (AMUX-134).
 
 Slice 1: CMS A-D normalizers (pure Python), field_values DuckDB index,
-Category-1 exact rule table, exact-rule engine. See
+Category-1 rule table, exact-rule engine.
+Slice 2: upstream P-value pinning (Table-3 u-probability products),
+Damerau-Levenshtein <=1 / nickname fuzzy names, DOB +/-1 day, fuzzy rule
+evaluation in the engine. See
 fhir4ds-private/docs/architecture/plans/FEATURE_PATIENT_MATCHING.md.
 """
 
@@ -10,6 +13,12 @@ from __future__ import annotations
 import duckdb
 
 from .engine import MatchResult, match_patient
+from .fuzzy import (
+    FUZZY_NAME_MIN_LEN,
+    damerau_le1,
+    dob_fuzzy_matches,
+    name_fuzzy_match,
+)
 from .normalizers import (
     extract_patient_fields,
     nickname_set,
@@ -20,10 +29,16 @@ from .normalizers import (
     parse_suffix,
     suffix_conflict,
 )
-from .rules import CATEGORY1_RULES, MatchRule
+from .rules import (
+    APPROVAL_THRESHOLD,
+    CATEGORY1_RULES,
+    FIELD_U_PROBS,
+    MatchRule,
+    p_collision,
+)
 from .store import create_matching_tables, exact_candidates, index_patient
 
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 
 __all__ = [
     "register_matching_macros",
@@ -32,6 +47,13 @@ __all__ = [
     "match_patient",
     "MatchRule",
     "CATEGORY1_RULES",
+    "FIELD_U_PROBS",
+    "APPROVAL_THRESHOLD",
+    "p_collision",
+    "damerau_le1",
+    "name_fuzzy_match",
+    "dob_fuzzy_matches",
+    "FUZZY_NAME_MIN_LEN",
     "create_matching_tables",
     "index_patient",
     "exact_candidates",
@@ -47,8 +69,8 @@ __all__ = [
 ]
 
 # Basic text-normalization macro for ad-hoc SQL exploration. The full CMS
-# normalizer pack (diacritic fold, phone/date/name rules) is Python-side in
-# slice 1; SQL macro equivalents land with the fuzzy slice.
+# normalizer pack (diacritic fold, phone/date/name rules) is Python-side;
+# fuzzy comparators are Python-only by design (slice 2).
 _NORM_TEXT_MACRO = """
 CREATE OR REPLACE MACRO matching_norm_text(x) AS
     trim(lower(regexp_replace(regexp_replace(x, '[^a-zA-Z0-9 ]', '', 'g'), '\\s+', ' ', 'g')))

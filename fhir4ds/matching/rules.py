@@ -1,34 +1,109 @@
 """Category-1 match rule table (port of the CMS deterministic rule set).
 
-Ported from the rule study of icanbwell/cms-hte-patient-matching
-(CMS Patient Matching Proposal v3.4.0, Apache-2.0). Rule ids follow the
-upstream numbering; field modes are `exact` or `fuzzy` (fuzzy = Damerau-
-Levenshtein <= 1 on names, DOB +/- 1 day — slice 2). Slice 1 fires exact
-rules only; a rule with any fuzzy field is skipped and audited as
-not-implemented.
+Ported from icanbwell/cms-hte-patient-matching
+(CMS Patient Matching Proposal v3.4.0, Apache-2.0), files
+`patient_matching/matching/table2_rules.py` and `.../collision.py`
+(fetched 2026-11-17, branch main).
 
-P(collision) values: anchored numbers come from the upstream study
-(rules 01, 04/05, 22, 30). Unrecorded combinations use a conservative
-1.0e-12 (or a family-consistent value) and are marked `p_estimated=True`.
-Rules are ordered P(collision) ascending, ties by rule id — deterministic.
+Slice 2 P-value pinning: every rule's P(collision) is computed at import
+from the upstream Table-3 u-probability table (`FIELD_U_PROBS` below) via
+the upstream `p_collision` product, so the pinned values are exactly the
+upstream numbers — no `p_estimated` entries remain.
+
+Slice-2 field-combination correction: slice 1 carried approximate field
+combinations for rules where the study had not been transcribed. Slice 2
+replaces ALL 29 rule field sets with the upstream v3.4.0 combinations
+rule-for-rule (e.g. upstream rule 02 is First + Last* + DOB* + Phone, not
+First+Last+DOB+Street; upstream has NO First+Last+DOB-alone rule — it fails
+the 2e-12 approval threshold). Rule ids follow upstream numbering; rule 29
+was removed by CMS upstream, so ids run 01-28 plus 30 (29 rules).
+
+Field modes are `exact` or `fuzzy`: fuzzy names = nickname equivalence or
+Damerau-Levenshtein <= 1 (>= 5 chars, CMS E.3); fuzzy DOB = +/- 1 day.
+`p_fuzzy_fields` names which fields take their fuzzy u-probability in the
+fuzzy P(collision) product (upstream `fuzzy_fields`); DOB has no fuzzy
+u-value upstream (Table 3), so DOB* contributes its exact u to both
+figures. Rules are ordered P(collision) ascending, ties by rule id —
+deterministic.
+
+`max_fuzzy_fields` is transcribed for documentation parity with upstream;
+this engine does not enforce a simultaneous-fuzzy cap (each F-marked field
+is verified exact-first, then fuzzy, per the AMUX-134 slice-2 design).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field as dc_field
+from dataclasses import dataclass
+from typing import Optional
 
-__all__ = ["MatchRule", "CATEGORY1_RULES", "EXACT", "FUZZY"]
+__all__ = [
+    "MatchRule",
+    "CATEGORY1_RULES",
+    "EXACT",
+    "FUZZY",
+    "FIELD_U_PROBS",
+    "APPROVAL_THRESHOLD",
+    "p_collision",
+]
 
 EXACT = "exact"
 FUZZY = "fuzzy"
+
+# Upstream Table 3: field -> (conservative u exact, conservative u fuzzy or
+# None when the field has no fuzzy variant). Upstream dismisses Middle Name,
+# Suffix, and Year of Birth for data-quality reasons; no Table-2 rule uses
+# them, so they are not transcribed here.
+FIELD_U_PROBS: dict[str, tuple[float, Optional[float]]] = {
+    "first": (0.02, 0.03),
+    "last": (0.005, 0.01),
+    "dob": (0.0001, None),
+    "street_line": (0.00003, 0.00006),
+    "phone": (0.000001, None),
+    "email": (0.000001, None),
+    "ssn4": (0.0001, None),
+    "itin4": (0.0001, None),
+    "legal_id": (0.000001, None),
+    "mbi": (0.000001, None),
+    # Upstream: spec says "~=0"; a small nonzero float avoids a literal 0.0
+    # masking other fields' probabilities in the product.
+    "namespace_id": (1e-15, None),
+    "member_id": (0.000001, None),
+    "subscriber_id": (0.0001, None),
+}
+
+# CMS approval threshold (upstream collision.APPROVAL_THRESHOLD).
+APPROVAL_THRESHOLD = 2e-12
+
+
+def p_collision(
+    fields: tuple[tuple[str, str], ...],
+    fuzzy_fields: frozenset[str] = frozenset(),
+) -> float:
+    """Joint collision probability: product of each field's u-probability.
+
+    `fuzzy_fields` names which fields use their fuzzy u instead of exact
+    (only meaningful for fields that have one). Port of upstream
+    collision.p_collision.
+    """
+    result = 1.0
+    for name, _mode in fields:
+        exact_u, fuzzy_u = FIELD_U_PROBS[name]
+        if name in fuzzy_fields and fuzzy_u is not None:
+            result *= fuzzy_u
+        else:
+            result *= exact_u
+    return result
 
 
 @dataclass(frozen=True)
 class MatchRule:
     rule_id: str
     fields: tuple[tuple[str, str], ...]  # (field_name, exact|fuzzy)
-    p_collision: float
-    p_estimated: bool = False
+    p_collision: float  # exact-field product (upstream p_collision_exact)
+    p_collision_fuzzy: float  # product with p_fuzzy_fields fuzzy (== exact when none)
+    p_fuzzy_fields: frozenset[str]  # fields taking the fuzzy u in p_collision_fuzzy
+    max_fuzzy_fields: int = 0
+    p_estimated: bool = False  # retained for API compat; always False since slice 2
     description: str = ""
 
     def exact_fields(self) -> tuple[str, ...]:
@@ -38,72 +113,119 @@ class MatchRule:
         return tuple(name for name, mode in self.fields if mode == FUZZY)
 
 
-def _r(rule_id: str, fields: list[tuple[str, str]], p: float, desc: str, est: bool = True) -> MatchRule:
-    return MatchRule(rule_id=rule_id, fields=tuple(fields), p_collision=p, p_estimated=est, description=desc)
+def _r(
+    rule_id: str,
+    fields: list[tuple[str, str]],
+    desc: str,
+    p_fuzzy_fields: frozenset[str] = frozenset(),
+    max_fuzzy_fields: int = 0,
+) -> MatchRule:
+    return MatchRule(
+        rule_id=rule_id,
+        fields=tuple(fields),
+        p_collision=p_collision(tuple(fields)),
+        p_collision_fuzzy=p_collision(tuple(fields), fuzzy_fields=p_fuzzy_fields),
+        p_fuzzy_fields=p_fuzzy_fields,
+        max_fuzzy_fields=max_fuzzy_fields,
+        description=desc,
+    )
 
 
-# --- Category-1 exact/fuzzy rule families (29 rules) -----------------------
+_E, _F = EXACT, FUZZY
+
+# --- Category-1 rules (upstream v3.4.0 table2_rules.py, 29 rules) -----------
 _RULE_DEFS: list[MatchRule] = [
-    # Anchored upstream numbers (est=False)
-    _r("01", [("first", FUZZY), ("last", FUZZY), ("dob", FUZZY), ("street_line", EXACT)], 3.0e-13,
-       "First* + Last* + DOB* + Street*", est=False),
-    _r("04", [("first", EXACT), ("last", EXACT), ("dob", EXACT), ("ssn4", EXACT)], 1.0e-12,
-       "First + Last + DOB + SSN4", est=False),
-    _r("05", [("first", FUZZY), ("last", FUZZY), ("dob", EXACT), ("ssn4", EXACT)], 1.0e-12,
-       "First* + Last* + DOB + SSN4", est=False),
-    _r("22", [("namespace_id", EXACT)], 1.0e-15,
-       "Namespace-ID alone", est=False),
-    _r("30", [("last", FUZZY), ("dob", FUZZY), ("phone", EXACT)], 5.0e-13,
-       "Last* + DOB* + Phone", est=False),
-    # Ported families (P estimated where the study did not record a value)
-    _r("02", [("first", EXACT), ("last", EXACT), ("dob", EXACT), ("street_line", EXACT)], 1.0e-13,
-       "First + Last + DOB + Street"),
-    _r("03", [("first", FUZZY), ("last", FUZZY), ("dob", FUZZY), ("phone", EXACT)], 8.0e-13,
-       "First* + Last* + DOB* + Phone"),
-    _r("06", [("first", EXACT), ("last", EXACT), ("dob", EXACT), ("itin4", EXACT)], 1.0e-12,
-       "First + Last + DOB + ITIN4"),
-    _r("07", [("first", FUZZY), ("last", FUZZY), ("dob", EXACT), ("itin4", EXACT)], 1.0e-12,
-       "First* + Last* + DOB + ITIN4"),
-    _r("08", [("first", EXACT), ("last", EXACT), ("ssn4", EXACT), ("phone", EXACT)], 1.0e-12,
-       "First + Last + SSN4 + Phone"),
-    _r("09", [("first", EXACT), ("last", EXACT), ("dob", EXACT), ("mbi", EXACT)], 1.0e-12,
-       "First + Last + DOB + MBI"),
-    _r("10", [("first", FUZZY), ("last", FUZZY), ("dob", EXACT), ("mbi", EXACT)], 1.0e-12,
-       "First* + Last* + DOB + MBI"),
-    _r("11", [("first", EXACT), ("last", EXACT), ("dob", EXACT), ("member_id", EXACT)], 1.0e-12,
-       "First + Last + DOB + Member ID"),
-    _r("12", [("first", EXACT), ("last", EXACT), ("dob", EXACT), ("subscriber_id", EXACT)], 1.0e-12,
-       "First + Last + DOB + Subscriber ID"),
-    _r("13", [("first", EXACT), ("last", EXACT), ("dob", EXACT), ("legal_id", EXACT)], 1.0e-12,
-       "First + Last + DOB + Legal ID"),
-    _r("14", [("first", EXACT), ("dob", EXACT), ("phone", EXACT), ("street_line", EXACT)], 1.0e-12,
-       "First + DOB + Phone + Street"),
-    _r("15", [("last", EXACT), ("dob", EXACT), ("phone", EXACT), ("street_line", EXACT)], 1.0e-12,
-       "Last + DOB + Phone + Street"),
-    _r("16", [("first", EXACT), ("last", EXACT), ("phone", EXACT), ("email", EXACT)], 1.0e-12,
-       "First + Last + Phone + Email"),
-    _r("17", [("first", EXACT), ("last", EXACT), ("dob", EXACT), ("email", EXACT)], 1.0e-12,
-       "First + Last + DOB + Email"),
-    _r("18", [("first", FUZZY), ("last", FUZZY), ("dob", FUZZY), ("email", EXACT)], 8.0e-13,
-       "First* + Last* + DOB* + Email"),
-    _r("19", [("first", EXACT), ("last", EXACT), ("email", EXACT)], 1.0e-11,
-       "First + Last + Email"),
-    _r("20", [("first", EXACT), ("dob", EXACT), ("ssn4", EXACT)], 1.0e-11,
-       "First + DOB + SSN4"),
-    _r("21", [("last", EXACT), ("dob", EXACT), ("ssn4", EXACT)], 1.0e-11,
-       "Last + DOB + SSN4"),
-    _r("23", [("namespace_id", EXACT), ("dob", EXACT)], 1.0e-15,
-       "Namespace-ID + DOB"),
-    _r("24", [("member_id", EXACT)], 1.0e-14,
-       "Member ID alone"),
-    _r("25", [("subscriber_id", EXACT)], 1.0e-14,
-       "Subscriber ID alone"),
-    _r("26", [("mbi", EXACT)], 1.0e-14,
-       "MBI alone"),
-    _r("27", [("legal_id", EXACT), ("last", EXACT)], 5.0e-12,
-       "Legal ID + Last"),
-    _r("28", [("first", EXACT), ("last", EXACT), ("dob", EXACT)], 5.0e-11,
-       "First + Last + DOB"),
+    _r(
+        "01",
+        [("first", _F), ("last", _F), ("dob", _F), ("street_line", _F)],
+        "First Name* + Last Name* + DOB* + Street Line*",
+        p_fuzzy_fields=frozenset({"first", "last"}),
+        max_fuzzy_fields=2,
+    ),
+    _r(
+        "02",
+        [("first", _E), ("last", _F), ("dob", _F), ("phone", _E)],
+        "First Name + Last Name* + DOB* + Phone Number",
+        p_fuzzy_fields=frozenset({"last"}),
+    ),
+    _r(
+        "03",
+        [("first", _F), ("last", _F), ("dob", _F), ("email", _E)],
+        "First Name* + Last Name* + DOB* + Email Address",
+        p_fuzzy_fields=frozenset({"first", "last"}),
+        max_fuzzy_fields=2,
+    ),
+    _r(
+        "04",
+        [("first", _F), ("last", _E), ("dob", _E), ("ssn4", _E)],
+        "First Name* + Last Name + DOB + SSN Last 4",
+        p_fuzzy_fields=frozenset({"first"}),
+    ),
+    _r(
+        "05",
+        [("first", _E), ("last", _F), ("dob", _E), ("ssn4", _E)],
+        "First Name + Last Name* + DOB + SSN Last 4",
+        p_fuzzy_fields=frozenset({"last"}),
+    ),
+    _r(
+        "06",
+        [("first", _F), ("last", _E), ("dob", _E), ("itin4", _E)],
+        "First Name* + Last Name + DOB + ITIN Last 4",
+        p_fuzzy_fields=frozenset({"first"}),
+    ),
+    _r(
+        "07",
+        [("first", _E), ("last", _F), ("dob", _E), ("itin4", _E)],
+        "First Name + Last Name* + DOB + ITIN Last 4",
+        p_fuzzy_fields=frozenset({"last"}),
+    ),
+    _r("08", [("first", _E), ("dob", _E), ("mbi", _E)], "First Name + DOB + MBI"),
+    _r("09", [("first", _E), ("dob", _E), ("legal_id", _E)], "First Name + DOB + Legal ID"),
+    _r(
+        "10",
+        [("last", _F), ("dob", _F), ("legal_id", _E)],
+        "Last Name* + DOB* + Legal ID",
+        p_fuzzy_fields=frozenset({"last"}),
+    ),
+    _r("11", [("first", _E), ("dob", _E), ("phone", _E)], "First Name + DOB + Phone Number"),
+    _r("12", [("first", _E), ("dob", _E), ("email", _E)], "First Name + DOB + Email Address"),
+    _r("13", [("first", _E), ("phone", _E), ("ssn4", _E)], "First Name + Phone Number + SSN Last 4"),
+    _r("14", [("first", _E), ("phone", _E), ("itin4", _E)], "First Name + Phone Number + ITIN Last 4"),
+    _r("15", [("first", _E), ("email", _E), ("ssn4", _E)], "First Name + Email Address + SSN Last 4"),
+    _r("16", [("first", _E), ("email", _E), ("itin4", _E)], "First Name + Email Address + ITIN Last 4"),
+    _r("17", [("phone", _E), ("mbi", _E)], "Phone Number + MBI"),
+    _r("18", [("phone", _E), ("legal_id", _E)], "Phone Number + Legal ID (w/issuing-authority namespace)"),
+    _r("19", [("email", _E), ("mbi", _E)], "Email Address + MBI"),
+    _r("20", [("email", _E), ("legal_id", _E)], "Email Address + Legal ID (w/issuing-authority namespace)"),
+    _r("21", [("legal_id", _E), ("mbi", _E)], "Legal ID + MBI"),
+    _r("22", [("namespace_id", _E)], "Namespace bound unique identifiers (EMPI, FHIR Patient ID, CSP UUID)"),
+    _r("23", [("first", _E), ("dob", _E), ("member_id", _E)], "First Name + DOB + Member ID (payer namespace)"),
+    _r(
+        "24",
+        [("last", _F), ("dob", _F), ("member_id", _E)],
+        "Last Name* + DOB* (+/-1 day) + Member ID (payer namespace)",
+        p_fuzzy_fields=frozenset({"last"}),
+    ),
+    _r("25", [("phone", _E), ("member_id", _E)], "Phone Number + Member ID (payer namespace)"),
+    _r("26", [("email", _E), ("member_id", _E)], "Email Address + Member ID (payer namespace)"),
+    _r(
+        "27",
+        [("first", _F), ("last", _E), ("dob", _E), ("subscriber_id", _E)],
+        "First Name* + Last Name + DOB + Subscriber ID (payer namespace)",
+        p_fuzzy_fields=frozenset({"first"}),
+    ),
+    _r(
+        "28",
+        [("first", _E), ("last", _F), ("dob", _E), ("subscriber_id", _E)],
+        "First Name + Last Name* + DOB + Subscriber ID (payer namespace)",
+        p_fuzzy_fields=frozenset({"last"}),
+    ),
+    _r(
+        "30",
+        [("last", _F), ("dob", _E), ("phone", _E)],
+        "Last Name* + DOB + Phone Number (legacy exception; no twin disambiguation)",
+        p_fuzzy_fields=frozenset({"last"}),
+    ),
 ]
 
 CATEGORY1_RULES: list[MatchRule] = sorted(_RULE_DEFS, key=lambda r: (r.p_collision, r.rule_id))

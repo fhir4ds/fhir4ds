@@ -206,11 +206,13 @@ class TestRuleTable:
 
     def test_anchors(self):
         by_id = {r.rule_id: r for r in CATEGORY1_RULES}
-        assert by_id["01"].p_collision == 3.0e-13
-        assert by_id["04"].p_collision == 1.0e-12
-        assert by_id["05"].p_collision == 1.0e-12
-        assert by_id["22"].p_collision == 1.0e-15
-        assert by_id["30"].p_collision == 5.0e-13
+        # upstream Table-3 u-probability products (float products carry ULP
+        # drift — the values are computed at import like upstream)
+        assert by_id["01"].p_collision == pytest.approx(3.0e-13)
+        assert by_id["04"].p_collision == pytest.approx(1.0e-12)
+        assert by_id["05"].p_collision == pytest.approx(1.0e-12)
+        assert by_id["22"].p_collision == pytest.approx(1.0e-15)
+        assert by_id["30"].p_collision == pytest.approx(5.0e-13)
         assert not by_id["22"].p_estimated
 
     def test_first_rule_is_namespace(self):
@@ -284,9 +286,10 @@ class TestEngine:
         result = match_patient(conn, DUP_B)
         assert result.outcome == "match"
         assert result.matched_ids == ("dup-a",)
-        # fuzzy-only rules audited as skipped
-        assert "01" in result.skipped_rules
-        assert result.rule_id not in result.skipped_rules
+        # slice 2: fuzzy rules are evaluated; nothing is skipped anymore
+        assert result.skipped_rules == ()
+        assert result.rule_id == "02"  # First + Last* + DOB* + Phone, all exact here
+        assert result.match_type == "exact"
         assert result.confidence is not None and 0 < result.confidence <= 1
 
     def test_no_match(self):
@@ -308,13 +311,21 @@ class TestEngine:
 
     def test_ambiguous(self):
         conn = _conn()
-        # two corpus patients sharing first+last+dob -> rule 28 ambiguity
-        a = dict(DUP_A)
+        # two corpus patients sharing first+last+dob+phone -> rule 02 ambiguity
+        # (slice 2 corrected table: there is no First+Last+DOB-alone rule)
+        a = {
+            "resourceType": "Patient",
+            "id": "dup-a",
+            "name": [{"family": "Muller", "given": ["Robert"]}],
+            "birthDate": "1955-05-05",
+            "telecom": [{"system": "phone", "value": "206-555-0123"}],
+        }
         b = {
             "resourceType": "Patient",
             "id": "dup-c",
             "name": [{"family": "Muller", "given": ["Robert"]}],
             "birthDate": "1955-05-05",
+            "telecom": [{"system": "phone", "value": "(206) 555-0123"}],
         }
         for p in (a, b):
             index_patient(conn, p)
@@ -323,10 +334,12 @@ class TestEngine:
             "id": "cand",
             "name": [{"family": "Müller", "given": ["Robert"]}],
             "birthDate": "1955-05-05",
+            "telecom": [{"system": "phone", "value": "2065550123"}],
         }
         result = match_patient(conn, cand)
         assert result.outcome == "ambiguous"
         assert result.matched_ids == ("dup-a", "dup-c")
+        assert result.rule_id == "02"
 
     def test_suffix_conflict_negates(self):
         conn = _conn()
@@ -335,14 +348,16 @@ class TestEngine:
             "id": "jr",
             "name": [{"family": "Smith", "given": ["John", "Jr."]}],
             "birthDate": "1960-01-01",
+            "telecom": [{"system": "phone", "value": "206-555-0123"}],
         }
         index_patient(conn, jr)
-        # same first+last+dob but Sr -> suffix conflict must negate rule 28
+        # same last+dob+phone but Sr -> suffix conflict must negate rule 30
         sr = {
             "resourceType": "Patient",
             "id": "sr-cand",
             "name": [{"family": "Smith", "given": ["John", "Sr."]}],
             "birthDate": "1960-01-01",
+            "telecom": [{"system": "phone", "value": "2065550123"}],
         }
         result = match_patient(conn, sr)
         assert result.outcome == "no_match"
@@ -368,4 +383,4 @@ class TestEngine:
 
 
 def test_version():
-    assert matching_version == "0.0.1"
+    assert matching_version == "0.0.2"
