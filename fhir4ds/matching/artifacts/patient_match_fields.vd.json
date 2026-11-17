@@ -1,0 +1,77 @@
+{
+  "resourceType": "https://sql-on-fhir.org/ig/StructureDefinition/ViewDefinition",
+  "id": "patient-match-fields",
+  "name": "patient_match_fields",
+  "resource": "Patient",
+  "description": "RAW patient-match field substrate (AMUX-134 slice 5). Columns are deliberately UNNORMALIZED: diacritics, punctuation, case and formatting are preserved here; CMS A-D normalization (norm_text/norm_phone/norm_date/_norm_ident and the ssn4 last-4 rule) lives in the Python normalizer layer (fhir4ds.matching.normalizers.extract_patient_fields) which feeds the field_values index. This view is the auditable raw counterpart of that index, per FEATURE_PATIENT_MATCHING.md (DuckDB-native architecture).",
+  "select": [
+    {
+      "column": [
+        { "path": "id", "name": "patient_id", "type": "string" },
+        { "path": "name.given", "name": "first", "collection": true, "type": "string" },
+        { "path": "name.family", "name": "last", "collection": true, "type": "string" },
+        { "path": "birthDate", "name": "dob", "type": "date" },
+        {
+          "path": "telecom.where(system = 'phone').value",
+          "name": "phone",
+          "collection": true,
+          "type": "string"
+        },
+        {
+          "path": "telecom.where(system = 'email').value",
+          "name": "email",
+          "collection": true,
+          "type": "string"
+        },
+        {
+          "path": "address.line.first()",
+          "name": "street",
+          "collection": true,
+          "type": "string"
+        },
+        {
+          "path": "identifier.where(system.contains('us-ssn') or system.contains('2.16.840.1.113883.4.1')).value",
+          "name": "ssn4raw",
+          "collection": true,
+          "type": "string"
+        },
+        {
+          "path": "identifier.where(system.contains('us-ssn') or system.contains('2.16.840.1.113883.4.1')).value.select(replaceMatches('[^0-9]', '')).select(iif(length() >= 4, substring(length() - 4), {}))",
+          "name": "ssn4",
+          "collection": true,
+          "type": "string"
+        },
+        {
+          "path": "identifier.where(system.lower().contains('mbi')).value",
+          "name": "mbi",
+          "collection": true,
+          "type": "string"
+        },
+        {
+          "path": "identifier.where(system.lower().contains('member')).value",
+          "name": "member_id",
+          "collection": true,
+          "type": "string"
+        },
+        {
+          "path": "identifier.where(system.lower().contains('subscriber')).value",
+          "name": "subscriber_id",
+          "collection": true,
+          "type": "string"
+        },
+        {
+          "path": "identifier.where(system.lower().contains('legal')).value",
+          "name": "legal_id",
+          "collection": true,
+          "type": "string"
+        },
+        {
+          "path": "identifier.where(system.exists() and (system.contains('us-ssn') or system.contains('2.16.840.1.113883.4.1') or system.lower().contains('itin') or system.contains('2.16.840.1.113883.4.23') or system.lower().contains('mbi') or system.lower().contains('member') or system.lower().contains('subscriber') or system.lower().contains('legal')).not()).select(system.lower() & '::' & value)",
+          "name": "namespace_id",
+          "collection": true,
+          "type": "string"
+        }
+      ]
+    }
+  ]
+}

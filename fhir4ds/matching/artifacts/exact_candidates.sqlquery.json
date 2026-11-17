@@ -1,0 +1,37 @@
+{
+  "resourceType": "Library",
+  "id": "exact-candidates",
+  "url": "https://fhir4ds.org/matching/Library/exact-candidates",
+  "version": "0.1.0",
+  "name": "exact_candidates",
+  "title": "Patient Matching — exact-rule candidate lookup",
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
+    ]
+  },
+  "parameter": [
+    {
+      "name": "patient_id",
+      "use": "in",
+      "min": 1,
+      "max": "1",
+      "type": "string",
+      "documentation": "Indexed patient id whose exact-field partners are looked up."
+    }
+  ],
+  "content": [
+    {
+      "contentType": "application/sql;dialect=duckdb",
+      "data": "U0VMRUNUIERJU1RJTkNUIGZ2LnBhdGllbnRfaWQKRlJPTSBmaWVsZF92YWx1ZXMgZnYKV0hFUkUgKGZ2LmZpZWxkX25hbWUsIGZ2LnZhbHVlKSBJTiAoCiAgICBTRUxFQ1QgZmllbGRfbmFtZSwgdmFsdWUKICAgIEZST00gZmllbGRfdmFsdWVzCiAgICBXSEVSRSBwYXRpZW50X2lkID0gJHBhdGllbnRfaWQKKQogIEFORCBmdi5wYXRpZW50X2lkICE9ICRwYXRpZW50X2lkCk9SREVSIEJZIGZ2LnBhdGllbnRfaWQ="
+    }
+  ]
+}
