@@ -439,12 +439,23 @@ class CoreMixin:
                 raise ValueError(f"Invalid time literal: second {s} exceeds 59")
             if len(sec_parts) > 1:
                 ms_str = sec_parts[1]
-                if len(ms_str) > 3:
-                    ms_val = int(ms_str)
-                    if ms_val > 999:
-                        raise ValueError(
-                            f"Invalid time literal: millisecond value {ms_val} exceeds 999"
-                        )
+                if not ms_str.isdigit():
+                    raise ValueError(
+                        f"Invalid time literal: fractional seconds '{ms_str}' is not numeric"
+                    )
+                # CQL Time grammar allows any number of fractional-second
+                # digits; the fraction is a DECIMAL FRACTION OF A SECOND,
+                # not a millisecond count — official fixture
+                # TimeMillisParsing pins @T23:59:59.10000 == @T23:59:59.100
+                # (".10000" means 0.10000 seconds). CQL Time precision stops
+                # at milliseconds, so truncate to 3 digits.
+                ms_val = (int(ms_str) * 1000) // (10 ** len(ms_str)) if ms_str else 0
+                if ms_val > 999:
+                    raise ValueError(
+                        f"Invalid time literal: millisecond value {ms_val} exceeds 999"
+                    )
+                parts[2] = f"{s}.{ms_val:03d}"
+                value = ":".join(parts)
 
         # Transport doctrine (AGENTS / TimeOfDay precedent): CQL Time values
         # are transported as VARCHAR carrying the leading 'T' marker, so
@@ -452,8 +463,10 @@ class CoreMixin:
         # parse them uniformly. This also matches what the DateTimeLiteral
         # path emitted for `@T...` literals before the lexer typed them as
         # TimeLiteral. The previous `CAST(<literal>)` emission was an
-        # incomplete CAST that DuckDB rejected at parse time.
-        return SQLLiteral(value=t.value)
+        # incomplete CAST that DuckDB rejected at parse time. Fractional
+        # seconds are normalized above to 3-digit milliseconds.
+        prefix = "T"
+        return SQLLiteral(value=f"{prefix}{value}")
 
     def _translate_quantity(self, qty: Quantity, boolean_context: bool = False) -> SQLExpression:
         """Translate a CQL Quantity to SQL (as JSON or UDF call)."""

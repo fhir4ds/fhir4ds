@@ -1530,7 +1530,8 @@
       {
         "name": "PrecisionTimeMilliseconds",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected 9 (int), got 8 (int)"
         }
       },
       {
@@ -1611,7 +1612,8 @@
       {
         "name": "PredecessorOfNoon",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected T11:59:59.999 (str), got None (NoneType)"
         }
       },
       {
@@ -1901,7 +1903,8 @@
       {
         "name": "SuccessorOfNoon",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected T12:00:00.001 (str), got None (NoneType)"
         }
       },
       {
@@ -3225,15 +3228,13 @@
       {
         "name": "EquivFloat1Float1WithPrecision",
         "result": {
-          "passed": false,
-          "error": "Expected False (bool), got True (bool)"
+          "passed": true
         }
       },
       {
         "name": "EquivFloat1Float1WithPrecisionAndZ",
         "result": {
-          "passed": false,
-          "error": "Expected False (bool), got True (bool)"
+          "passed": true
         }
       },
       {
@@ -4528,8 +4529,7 @@
       {
         "name": "DateTimeComponentFromTimezoneOffset",
         "result": {
-          "passed": false,
-          "error": "Binder Error: Could not choose a best candidate function for the function call \"year(STRING_LITERAL)\". In order to select one, please add explicit type casts.\n\tCandidate functions:\n\tyear(INTERVAL) -> BIGINT\n\tyear(TIMESTAMP) -> BIGINT\n\tyear(TIMESTAMP WITH TIME ZONE) -> BIGINT\n\tyear(DATE) -> BIGINT\n\n\nLINE 1: SELECT Year('2003-10-29T20:50:33.955+01:00')\n                                               ^"
+          "passed": true
         }
       },
       {
@@ -6230,7 +6230,8 @@
       {
         "name": "TimeCollapse2",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Invalid Input Error: Python exception occurred while executing the UDF: TypeError: '>=' not supported between instances of 'int' and 'str'\n\nAt:\n  /home/jmontavon/src/fhir4ds/fhir4ds/cql/duckdb/udf/interval.py(3300): collapse_intervals\n  /home/jmontavon/src/fhir4ds/fhir4ds/cql/duckdb/udf/interval.py(4231): _collapse_intervals_single\n  /home/jmontavon/src/fhir4ds/conformance/scripts/run_cql.py(411): run_test\n  /home/jmontavon/src/fhir4ds/conformance/scripts/run_cql.py(526): main\n  /home/jmontavon/src/fhir4ds/conformance/scripts/run_cql.py(550): <module>\n"
         }
       },
       {
@@ -6722,8 +6723,7 @@
       {
         "name": "TestIntegerInMaxIntervalTrue",
         "result": {
-          "passed": false,
-          "error": "Expected True (bool), got False (bool)"
+          "passed": true
         }
       },
       {
@@ -7167,7 +7167,8 @@
       {
         "name": "TimeMeetsTrue",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected True (bool), got False (bool)"
         }
       },
       {
@@ -7233,7 +7234,8 @@
       {
         "name": "TimeMeetsBeforeTrue",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected True (bool), got False (bool)"
         }
       },
       {
@@ -7299,7 +7301,8 @@
       {
         "name": "TimeMeetsAfterTrue",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected True (bool), got False (bool)"
         }
       },
       {
@@ -7467,8 +7470,7 @@
       {
         "name": "TestMaxIntervalOverlapsTrue",
         "result": {
-          "passed": false,
-          "error": "Expected True (bool), got None (NoneType)"
+          "passed": true
         }
       },
       {
@@ -7618,7 +7620,8 @@
       {
         "name": "TimeOverlapsTrue",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected True (bool), got None (NoneType)"
         }
       },
       {
@@ -7630,8 +7633,7 @@
       {
         "name": "TestMaxIntervalOverlapsBeforeTrue",
         "result": {
-          "passed": false,
-          "error": "Expected True (bool), got None (NoneType)"
+          "passed": true
         }
       },
       {
@@ -7733,7 +7735,8 @@
       {
         "name": "TimeOverlapsBeforeTrue",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected True (bool), got None (NoneType)"
         }
       },
       {
@@ -7745,8 +7748,7 @@
       {
         "name": "TestMaxIntervalOverlapsAfterTrue",
         "result": {
-          "passed": false,
-          "error": "Expected True (bool), got None (NoneType)"
+          "passed": true
         }
       },
       {
@@ -7848,7 +7850,8 @@
       {
         "name": "TimeOverlapsAfterTrue",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected True (bool), got None (NoneType)"
         }
       },
       {
@@ -7896,7 +7899,8 @@
       {
         "name": "TimeProperContainsTrue",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected True (bool), got None (NoneType)"
         }
       },
       {
@@ -7932,7 +7936,8 @@
       {
         "name": "TimeProperInTrue",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected True (bool), got None (NoneType)"
         }
       },
       {
@@ -8028,7 +8033,8 @@
       {
         "name": "TimeProperlyIncludesFalse",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Invalid Input Error: Python exception occurred while executing the UDF: TypeError: '>=' not supported between instances of 'int' and 'str'\n\nAt:\n  /home/jmontavon/src/fhir4ds/fhir4ds/cql/duckdb/udf/interval.py(2256): intervalProperlyIncludes\n  /home/jmontavon/src/fhir4ds/conformance/scripts/run_cql.py(411): run_test\n  /home/jmontavon/src/fhir4ds/conformance/scripts/run_cql.py(526): main\n  /home/jmontavon/src/fhir4ds/conformance/scripts/run_cql.py(550): <module>\n"
         }
       },
       {
@@ -8094,7 +8100,8 @@
       {
         "name": "TimeProperlyIncludedInFalse",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Invalid Input Error: Python exception occurred while executing the UDF: TypeError: '>=' not supported between instances of 'int' and 'str'\n\nAt:\n  /home/jmontavon/src/fhir4ds/fhir4ds/cql/duckdb/udf/interval.py(2256): intervalProperlyIncludes\n  /home/jmontavon/src/fhir4ds/fhir4ds/cql/duckdb/udf/interval.py(2293): intervalProperlyIncludedIn\n  /home/jmontavon/src/fhir4ds/conformance/scripts/run_cql.py(411): run_test\n  /home/jmontavon/src/fhir4ds/conformance/scripts/run_cql.py(526): main\n  /home/jmontavon/src/fhir4ds/conformance/scripts/run_cql.py(550): <module>\n"
         }
       },
       {
@@ -8124,7 +8131,8 @@
       {
         "name": "TimeIntervalStart",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected T00:00:00.000 (str), got T00:00:0.000 (str)"
         }
       },
       {
@@ -8208,8 +8216,7 @@
       {
         "name": "TestUnionMaxInterval",
         "result": {
-          "passed": false,
-          "error": "Expected {'start': None, 'end': None, 'lowClosed': True, 'highClosed': True} (dict), got None (NoneType)"
+          "passed": true
         }
       },
       {
@@ -8413,7 +8420,8 @@
       {
         "name": "TimeIntervalTest",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected {'start': 'T00:00:00.000', 'end': 'T23:59:59.599', 'lowClosed': True, 'highClosed': True} (dict), got {\"low\": \"T00:00:0.000\", \"high\": \"T23:59:59.599\", \"lowClosed\": true, \"highClosed\": true} (str)"
         }
       },
       {
@@ -11248,7 +11256,8 @@
       {
         "name": "TimeToString1",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected 09:30:01.003 (str), got T09:30:1.003 (str)"
         }
       }
     ]
@@ -11628,7 +11637,8 @@
       {
         "name": "AnyTime",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected T09:00:00.000 (str), got T09:00:0.000 (str)"
         }
       },
       {
@@ -11808,8 +11818,7 @@
       {
         "name": "TimeMillisParsing",
         "result": {
-          "passed": false,
-          "error": "Invalid time literal: millisecond value 10000 exceeds 999"
+          "passed": true
         }
       },
       {
@@ -11827,7 +11836,8 @@
       {
         "name": "TimeAllMin",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected T00:00:00.000 (str), got T00:00:0.000 (str)"
         }
       }
     ]

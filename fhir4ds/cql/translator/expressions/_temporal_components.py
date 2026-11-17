@@ -736,8 +736,11 @@ class DateComponentMixin:
         operand = self.translate(node.operand, boolean_context=False)
         component_lower = node.component.lower()
 
-        # Handle timezoneoffset — extract offset from datetime string via UDF
-        if component_lower == 'timezoneoffset':
+        # Handle timezoneoffset — extract offset from datetime string via UDF.
+        # `timezone from X` is the CQL ≤1.3 spelling of the same component
+        # (official fixture DateTimeComponentFromTimezoneOffset exercises it
+        # and expects the raw offset); both lex to TIMEZONE_FROM.
+        if component_lower in ('timezoneoffset', 'timezone'):
             return SQLFunctionCall(
                 name="cqlTimezoneOffset",
                 args=[SQLCast(expression=operand, target_type="VARCHAR")],

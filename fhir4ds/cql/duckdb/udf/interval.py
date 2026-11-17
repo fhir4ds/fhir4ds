@@ -1577,8 +1577,14 @@ def _unwrap_bound_for_json(val):
 
     If val is a string containing JSON (e.g., quantity), parse it to a dict
     so json.dumps produces properly nested output instead of double-encoding.
+    The translator's closed-null-bound sentinel ``__null__`` (maximum /
+    unbounded interval, e.g. ``Interval[null, null] union Interval[1, 10]`` →
+    ``Interval[null, null]``) serializes as JSON null — the closedness flags
+    carry the unbounded-vs-unknown distinction on re-parse.
     """
     if isinstance(val, str):
+        if val == "__null__":
+            return None
         stripped = val.strip()
         if stripped.startswith('{'):
             try:

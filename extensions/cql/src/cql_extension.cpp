@@ -3683,13 +3683,21 @@ static cql::Optional<std::string> CqlDurationBetweenString(const std::string &st
 	}
 
 	auto start_high = HighBoundaryValue(start_text);
-	if ((duration_unit == "year" || duration_unit == "month") &&
-	    start_text.find('T') == std::string::npos && !start->is_time) {
+	// A trailing bare 'T' (DateTime-with-no-time marker convention) carries
+	// no time components, so the operand is still date-only.
+	bool start_no_time = (start_text.find('T') == std::string::npos && !start->is_time) ||
+	                     (!start->is_time && !start_text.empty() && start_text.back() == 'T');
+	if (start_no_time && date_unit) {
 		// Date-only operands follow the midnight convention for calendar
 		// (year/month) durations — the crisp day-precision path parses
 		// them at midnight — so the uncertain start's latest possible
 		// instant must not inject a phantom 23:59:59.999 that would flip
-		// an exact anniversary boundary.
+		// an exact anniversary boundary. Day/week targets need the same
+		// convention: a date-only operand is fully specified at day
+		// precision, so its intra-day range must not shave a partial day
+		// off the minimum — official fixture `days between
+		// DateTime(2014, 1, 15) and DateTime(2014, 2)` is Interval[17,44].
+		// Sub-day targets KEEP the full 23:59:59.999 high boundary.
 		start_high.hour = 0;
 		start_high.minute = 0;
 		start_high.second = 0;

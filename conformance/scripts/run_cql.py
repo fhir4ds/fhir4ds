@@ -287,7 +287,25 @@ def compare_results(actual: Any, expected: Any) -> bool:
             if v_match and (u_actual == u_expected):
                 return True
 
-        # Interval comparison (production uses low/high, spec uses start/end or low/high)
+        # Interval comparison (production uses low/high, spec uses start/end or low/high).
+        # Detect interval SHAPE (closedness keys) rather than requiring
+        # non-null bounds — the maximum interval `Interval[null, null]`
+        # serializes both bounds as null (official TestUnionMaxInterval)
+        # and must still compare structurally against the expected
+        # start/end-keyed literal.
+        a_is_interval = "lowClosed" in actual or "highClosed" in actual
+        e_is_interval = "lowClosed" in expected or "highClosed" in expected
+        if a_is_interval or e_is_interval:
+            a_low = actual.get("low", actual.get("start"))
+            a_high = actual.get("high", actual.get("end"))
+            e_low = expected.get("low", expected.get("start"))
+            e_high = expected.get("high", expected.get("end"))
+            return (
+                compare_results(a_low, e_low)
+                and compare_results(a_high, e_high)
+                and actual.get("lowClosed") == expected.get("lowClosed")
+                and actual.get("highClosed") == expected.get("highClosed")
+            )
         a_low = actual.get("low") or actual.get("start")
         a_high = actual.get("high") or actual.get("end")
         e_low = expected.get("low") or expected.get("start")

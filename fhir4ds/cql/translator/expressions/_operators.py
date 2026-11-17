@@ -4742,8 +4742,16 @@ class OperatorsMixin:
                                 high_sql = qty_val
                 # Handle closed/open bounds
                 # Check if either bound is null (unbounded interval)
-                low_is_null = isinstance(low_sql, SQLNull) or (isinstance(low_sql, SQLLiteral) and low_sql.value is None)
-                high_is_null = isinstance(high_sql, SQLNull) or (isinstance(high_sql, SQLLiteral) and high_sql.value is None)
+                def _is_null_bound(bound) -> bool:
+                    if isinstance(bound, SQLNull) or bound is None:
+                        return True
+                    # '__null__' sentinel = closed null bound (unbounded /
+                    # maximum interval per CQL §9.14/§9.15)
+                    return isinstance(bound, SQLLiteral) and (
+                        bound.value is None or bound.value == "__null__"
+                    )
+                low_is_null = _is_null_bound(low_sql)
+                high_is_null = _is_null_bound(high_sql)
                 if not low_is_null and not high_is_null and interval.low_closed and interval.high_closed:
                     # CQL §Age/§22.21: age and duration operands are
                     # scalar-or-interval VARCHAR; `in Interval[a, b]` must
@@ -4819,8 +4827,31 @@ class OperatorsMixin:
                         return SQLBinaryOp(operator="AND", left=conditions[0], right=conditions[1])
                     elif len(conditions) == 1:
                         return conditions[0]
-                    # Both bounds null: per CQL §19.14, if the interval is null, result is false.
-                    # Interval[null, null] with untyped nulls is a null interval (§5.4).
+                    # Both bounds null. CLOSED null bounds are the maximum
+                    # interval (official corpus: ``5 in Interval[null, null]``
+                    # → true; §9.14/§9.15 Start/End resolve closed nulls to
+                    # the point-type extrema), so route through
+                    # intervalContains which applies unbounded semantics and
+                    # CQL §19.3 null-point handling. Any OPEN bracket keeps
+                    # the unknown-interval behaviour: the comparison is
+                    # uncertain, and the boundary predicates above dropped
+                    # out (open null bound), so the result is false for a
+                    # non-null point (``5 in Interval(null, null)`` → null /
+                    # not contained).
+                    if interval.low_closed and interval.high_closed:
+                        interval_expr = SQLFunctionCall(
+                            name="intervalFromBounds",
+                            args=[
+                                SQLLiteral("__null__"),
+                                SQLLiteral("__null__"),
+                                SQLLiteral(value=True),
+                                SQLLiteral(value=True),
+                            ],
+                        )
+                        return SQLFunctionCall(
+                            name="intervalContains",
+                            args=[interval_expr, SQLCast(expression=left, target_type="VARCHAR")],
+                        )
                     return SQLLiteral(value=False)
         if self._is_fhir_interval_expression(right):
             return SQLFunctionCall(
@@ -7233,24 +7264,28 @@ class OperatorsMixin:
         ):
             return None
         precision = min(left_precision, right_precision)
-        delta = SQLFunctionCall(
-            name="ABS",
-            args=[
-                SQLBinaryOp(
-                    operator="-",
-                    left=SQLCast(expression=left, target_type="DECIMAL(38,8)"),
-                    right=SQLCast(expression=right, target_type="DECIMAL(38,8)"),
-                )
-            ],
-        )
-        tolerance = SQLCast(
-            expression=SQLLiteral(value=f"{0.5 * (10 ** -precision):.8f}"),
-            target_type="DECIMAL(38,8)",
-        )
+        # CQL 1.5 §9.6 Equivalent: round each operand to the precision of the
+        # LEAST precise operand (trailing zeros ignored — a Decimal literal's
+        # precision is its fraction with trailing zeros stripped) and compare.
+        # Official fixture pins the direction: `1.5 ~ 1.55` is FALSE (1.55
+        # rounds half-away-from-zero to 1.6, not 1.5), so a symmetric
+        # half-width tolerance (`|a-b| <= 0.5*10^-p`) is WRONG — it accepts
+        # the exact boundary. DuckDB ROUND over DECIMAL is half-away-from-
+        # zero, matching the CQL Round doctrine.
+        def _rounded(operand: SQLExpression) -> SQLFunctionCall:
+            return SQLFunctionCall(
+                # `system.` prefix: bare `round` resolves to the CQL Round
+                # macro (TRY_CAST AS INTEGER — wrong semantics here).
+                name="system.round",
+                args=[
+                    SQLCast(expression=operand, target_type="DECIMAL(38,8)"),
+                    SQLLiteral(value=precision),
+                ],
+            )
         result: SQLExpression = SQLBinaryOp(
-            operator="<=",
-            left=delta,
-            right=tolerance,
+            operator="=",
+            left=_rounded(left),
+            right=_rounded(right),
         )
         if is_negated:
             return SQLUnaryOp(operator="NOT", operand=result)

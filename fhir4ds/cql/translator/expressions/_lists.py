@@ -111,14 +111,18 @@ class ListsMixin:
     def _translate_interval(self, interval: Interval, boolean_context: bool = False) -> SQLExpression:
         """Translate a CQL interval to SQL.
 
-        CQL distinguishes ``Interval[null, null]`` (null interval) from
-        ``Interval[null as Integer, null as Integer]`` (universal integer
-        interval with unbounded bounds).  The former evaluates to *null*,
-        the latter produces a real interval.  We detect typed-null bounds
-        at the AST level (``null as <Type>`` is ``BinaryExpression(op='as',
-        left=Literal(null))``) and pass the sentinel ``__null__`` to
-        ``intervalFromBounds`` so the UDF keeps null-null → None for the
-        untyped case while returning a valid JSON interval for the typed case.
+        Closed null bounds are the MAXIMUM interval (unbounded per CQL
+        §9.14/§9.15 Start/End: a closed null bound resolves to the point-type
+        extremum), regardless of whether the null is typed
+        (``Interval[null as Integer, null as Integer]``) or untyped
+        (``Interval[null, null]``) — official CqlIntervalOperatorsTest pins
+        ``5 in Interval[null, null]`` → true and
+        ``Interval[null, null] union Interval[1, 10]`` → ``Interval[null, null]``.
+        OPEN null bounds (``Interval(null, null)``) are the UNKNOWN interval
+        and evaluate to null.  We pass the sentinel ``__null__`` to
+        ``intervalFromBounds`` for closed null bounds so the UDF builds an
+        unbounded interval; two untyped null bounds with any open bracket
+        keep the null-interval behaviour (both SQL NULL → null interval).
         """
         # Interval bounds are always scalar values.  Using SCALAR usage ensures
         # that definition references become correlated subqueries instead of
@@ -130,8 +134,7 @@ class ListsMixin:
         # Detect typed-null bounds at the AST level:
         # ``null as Integer`` parses as BinaryExpression(op='as', left=Literal(null))
         # CQL §5.4 distinguishes null intervals from intervals with null boundaries.
-        # Only TYPED null bounds (``null as <Type>``) produce unbounded intervals;
-        # untyped ``Interval[null, null]`` evaluates to a null interval.
+        # TYPED null bounds (``null as <Type>``) always produce unbounded bounds.
         def _is_typed_null_ast(ast_node):
             """Return True if the AST node is ``null as <Type>``."""
             return (isinstance(ast_node, BinaryExpression)
@@ -142,6 +145,19 @@ class ListsMixin:
         if interval.low and _is_typed_null_ast(interval.low):
             low = SQLLiteral("__null__")
         if interval.high and _is_typed_null_ast(interval.high):
+            high = SQLLiteral("__null__")
+
+        # UNTYPED closed null bounds on BOTH sides are the maximum interval
+        # (official corpus: ``5 in Interval[null, null]`` → true). Only the
+        # fully-closed two-null form is promoted; any open bracket keeps the
+        # unknown-interval (null) behaviour of ``Interval(null, null)``.
+        if (
+            interval.low_closed and interval.high_closed
+            and interval.low is not None and interval.high is not None
+            and isinstance(interval.low, Literal) and interval.low.value is None
+            and isinstance(interval.high, Literal) and interval.high.value is None
+        ):
+            low = SQLLiteral("__null__")
             high = SQLLiteral("__null__")
 
         return SQLInterval(
