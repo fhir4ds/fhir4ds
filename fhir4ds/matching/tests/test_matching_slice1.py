@@ -383,4 +383,4 @@ class TestEngine:
 
 
 def test_version():
-    assert matching_version == "0.0.2"
+    assert matching_version == "0.0.3"  # slice 3

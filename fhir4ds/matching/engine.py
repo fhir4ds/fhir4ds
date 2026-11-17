@@ -161,8 +161,19 @@ def _verify_candidate(
     return True, any_fuzzy, evidence
 
 
-def match_patient(conn: duckdb.DuckDBPyConnection, patient_resource: dict) -> MatchResult:
-    """Match one Patient resource against the indexed corpus."""
+def match_patient(
+    conn: duckdb.DuckDBPyConnection,
+    patient_resource: dict,
+    exclude: frozenset[str] = frozenset(),
+) -> MatchResult:
+    """Match one Patient resource against the indexed corpus.
+
+    ``exclude`` (slice 3) drops patient ids from every rule's candidate
+    pool before verification — used by the ingest hook so an
+    already-indexed patient never matches itself, and by corpus-mode
+    matching so decisions depend only on the patient SET (determinism
+    doctrine, design doc §4).
+    """
     create_matching_tables(conn)
     fields = extract_patient_fields(patient_resource)
     candidate_suffixes = fields.get("suffix", [])
@@ -179,6 +190,7 @@ def match_patient(conn: duckdb.DuckDBPyConnection, patient_resource: dict) -> Ma
             candidates = _rule_candidate_ids(conn, rule, fields)
         else:
             candidates = _fuzzy_rule_pool(conn, rule, fields)
+        candidates = candidates - exclude
         if not candidates:
             continue
         # Pairwise verification (exact fields are guaranteed by blocking;

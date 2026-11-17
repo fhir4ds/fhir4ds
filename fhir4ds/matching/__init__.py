@@ -4,7 +4,10 @@ Slice 1: CMS A-D normalizers (pure Python), field_values DuckDB index,
 Category-1 rule table, exact-rule engine.
 Slice 2: upstream P-value pinning (Table-3 u-probability products),
 Damerau-Levenshtein <=1 / nickname fuzzy names, DOB +/-1 day, fuzzy rule
-evaluation in the engine. See
+evaluation in the engine.
+Slice 3: FHIR R4 Linkage writer (canonical pair keys, deterministic — no
+timestamps), match-decision audit table (caller-supplied run_id), and the
+flag-gated ingest hook. See
 fhir4ds-private/docs/architecture/plans/FEATURE_PATIENT_MATCHING.md.
 """
 
@@ -12,7 +15,17 @@ from __future__ import annotations
 
 import duckdb
 
+from .audit import create_audit_tables, record_match_audit
 from .engine import MatchResult, match_patient
+from .ingest import IngestReport, maybe_match_on_ingest, match_on_ingest
+from .linkage import (
+    MATCHING_EXTENSION_URL,
+    build_linkage_resource,
+    canonical_pair_key,
+    create_linkage_tables,
+    load_linkage_resources,
+    upsert_linkage,
+)
 from .fuzzy import (
     FUZZY_NAME_MIN_LEN,
     damerau_le1,
@@ -38,7 +51,7 @@ from .rules import (
 )
 from .store import create_matching_tables, exact_candidates, index_patient
 
-__version__ = "0.0.2"
+__version__ = "0.0.3"
 
 __all__ = [
     "register_matching_macros",
@@ -65,6 +78,17 @@ __all__ = [
     "norm_text",
     "parse_suffix",
     "suffix_conflict",
+    "MATCHING_EXTENSION_URL",
+    "canonical_pair_key",
+    "build_linkage_resource",
+    "create_linkage_tables",
+    "upsert_linkage",
+    "load_linkage_resources",
+    "create_audit_tables",
+    "record_match_audit",
+    "IngestReport",
+    "match_on_ingest",
+    "maybe_match_on_ingest",
     "__version__",
 ]
 
