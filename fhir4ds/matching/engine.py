@@ -13,6 +13,12 @@ candidate's indexed values — a field matches when ANY of the query
 patient's values matches ANY of the candidate's values, exact first, then
 fuzzy (names: nickname equivalence or Damerau-Levenshtein <= 1 at >= 5
 chars; DOB: +/- 1 day). Suffix-conflict negation is unchanged.
+
+fhir4ds deviation (Joel-approved 2026-11-17): rules may carry post-
+verification ``guards`` (rule 30: ssn4/first-name agreement) - after
+field verification passes, a candidate whose guarded field values
+exist and disagree on both sides is dropped from that rule; another
+rule may still fire (see rules.py).
 """
 
 from __future__ import annotations
@@ -24,7 +30,13 @@ import duckdb
 
 from .fuzzy import dob_fuzzy_matches, name_fuzzy_match
 from .normalizers import extract_patient_fields, suffix_conflict
-from .rules import CATEGORY1_RULES, EXACT, MatchRule
+from .rules import (
+    CATEGORY1_RULES,
+    EXACT,
+    FIRST_NAME_AGREEMENT,
+    SSN4_AGREEMENT,
+    MatchRule,
+)
 from .store import create_matching_tables, exact_candidates, index_patient  # noqa: F401
 
 __all__ = ["MatchResult", "match_patient", "match_fields", "evaluate_rule"]
@@ -133,6 +145,51 @@ def _field_match(
     return False, False, ""
 
 
+def _guard_passes(
+    field_name: str,
+    patient_values: list[str],
+    candidate_values: list[str],
+) -> bool:
+    """One post-verification disagreement guard (fhir4ds rule-30 deviation).
+
+    A guard only fails when BOTH sides carry non-empty value sets for the
+    guarded field AND every cross-pair disagrees: ssn4 sets are disjoint, or
+    no first-name pair matches exactly / by nickname set / fuzzily
+    (``name_fuzzy_match``). Missing values on either side never fail a
+    guard. A guard failure drops the candidate from THIS rule only — it is
+    not a hard negation of the pair.
+    """
+    if not patient_values or not candidate_values:
+        return True
+    if field_name == "ssn4":
+        return bool(set(patient_values) & set(candidate_values))
+    if field_name == "first":
+        return any(
+            name_fuzzy_match(pv, cv) for pv in patient_values for cv in candidate_values
+        )
+    raise ValueError(f"unknown guard field: {field_name!r}")
+
+
+def _guards_pass(
+    rule: MatchRule,
+    fields: dict[str, list[str]],
+    candidate_values_by_field: dict[str, list[str]],
+) -> bool:
+    """All of ``rule.guards`` pass for one candidate (no guards -> True)."""
+    for guard in rule.guards:
+        if guard == SSN4_AGREEMENT:
+            key = "ssn4"
+        elif guard == FIRST_NAME_AGREEMENT:
+            key = "first"
+        else:
+            raise ValueError(f"unknown guard: {guard!r}")
+        if not _guard_passes(
+            key, fields.get(key, []), candidate_values_by_field.get(key, [])
+        ):
+            return False
+    return True
+
+
 def _verify_candidate(
     conn: duckdb.DuckDBPyConnection,
     rule: MatchRule,
@@ -216,8 +273,18 @@ def match_fields(
         verified: dict[str, tuple[bool, dict[str, str]]] = {}
         for pid in sorted(candidates):
             matched, any_fuzzy, evidence = _verify_candidate(conn, rule, fields, pid)
-            if matched:
-                verified[pid] = (any_fuzzy, evidence)
+            if not matched:
+                continue
+            if rule.guards:
+                # fhir4ds rule-30 deviation: post-verification disagreement
+                # guards over fields NOT in the rule (ssn4, first). A failed
+                # guard drops the candidate from THIS rule only.
+                guard_values = {
+                    f: _indexed_values(conn, f, pid) for f in ("ssn4", "first")
+                }
+                if not _guards_pass(rule, fields, guard_values):
+                    continue
+            verified[pid] = (any_fuzzy, evidence)
         if not verified:
             continue
         # Suffix-conflict negation: a candidate whose suffix set is non-empty
@@ -278,7 +345,15 @@ def evaluate_rule(
     any_fuzzy = False
     for pid in sorted(candidates):
         matched, fuzzy, _ev = _verify_candidate(conn, rule, fields, pid)
-        if matched and not suffix_conflict(
+        if not matched:
+            continue
+        if rule.guards and not _guards_pass(
+            rule,
+            fields,
+            {f: _indexed_values(conn, f, pid) for f in ("ssn4", "first")},
+        ):
+            continue
+        if not suffix_conflict(
             fields.get("suffix", []), _candidate_suffixes(conn, pid)
         ):
             surviving.append(pid)

@@ -34,6 +34,8 @@ from ..corpus import _indexed_fields, match_corpus
 from ..engine import (
     _candidate_suffixes,
     _fuzzy_rule_pool,
+    _guards_pass,
+    _indexed_values,
     _rule_candidate_ids,
     _verify_candidate,
 )
@@ -96,7 +98,15 @@ def catching_rules(
         if candidate_id not in (candidates - {patient_id}):
             continue
         matched, _fuzzy, _ev = _verify_candidate(conn, rule, fields, candidate_id)
-        if matched and not suffix_conflict(
+        if not matched:
+            continue
+        if rule.guards and not _guards_pass(
+            rule,
+            fields,
+            {f: _indexed_values(conn, f, candidate_id) for f in ("ssn4", "first")},
+        ):
+            continue
+        if not suffix_conflict(
             own_suffixes, _candidate_suffixes(conn, candidate_id)
         ):
             caught.append(rule.rule_id)

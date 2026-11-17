@@ -29,6 +29,18 @@ deterministic.
 `max_fuzzy_fields` is transcribed for documentation parity with upstream;
 this engine does not enforce a simultaneous-fuzzy cap (each F-marked field
 is verified exact-first, then fuzzy, per the AMUX-134 slice-2 design).
+
+fhir4ds deviation from upstream table2 (Joel-approved 2026-11-17): rule 30
+sibling guard. Upstream rule 30 (Last Name* + DOB + Phone) carries no
+twin/sibling disambiguation, so siblings sharing a household phone, last
+name, and DOB link as the same person. fhir4ds adds optional per-rule
+``guards`` — rule 30 carries ``("ssn4_agreement", "first_name_agreement")``:
+after field verification passes, the pair is dropped from the rule when
+BOTH sides have non-empty ssn4 sets that are disjoint, or BOTH sides have
+non-empty first-name sets with no cross-pair match (exact, nickname set, or
+fuzzy per ``name_fuzzy_match``). A guard failure only skips the rule for
+that pair — it is not a hard negation; any other rule may still fire.
+Fields, modes, and P-values are unchanged from upstream.
 """
 
 from __future__ import annotations
@@ -44,6 +56,8 @@ __all__ = [
     "FIELD_U_PROBS",
     "APPROVAL_THRESHOLD",
     "p_collision",
+    "SSN4_AGREEMENT",
+    "FIRST_NAME_AGREEMENT",
 ]
 
 EXACT = "exact"
@@ -95,6 +109,11 @@ def p_collision(
     return result
 
 
+# Guard names (fhir4ds deviation, rule 30 only — see module docstring).
+SSN4_AGREEMENT = "ssn4_agreement"
+FIRST_NAME_AGREEMENT = "first_name_agreement"
+
+
 @dataclass(frozen=True)
 class MatchRule:
     rule_id: str
@@ -105,6 +124,10 @@ class MatchRule:
     max_fuzzy_fields: int = 0
     p_estimated: bool = False  # retained for API compat; always False since slice 2
     description: str = ""
+    # Post-verification disagreement guards (fhir4ds deviation). A candidate
+    # that fails any named guard is dropped from THIS rule's survivors;
+    # evaluation continues with the next rule (no hard negation of the pair).
+    guards: tuple[str, ...] = ()
 
     def exact_fields(self) -> tuple[str, ...]:
         return tuple(name for name, mode in self.fields if mode == EXACT)
@@ -119,6 +142,7 @@ def _r(
     desc: str,
     p_fuzzy_fields: frozenset[str] = frozenset(),
     max_fuzzy_fields: int = 0,
+    guards: tuple[str, ...] = (),
 ) -> MatchRule:
     return MatchRule(
         rule_id=rule_id,
@@ -128,6 +152,7 @@ def _r(
         p_fuzzy_fields=p_fuzzy_fields,
         max_fuzzy_fields=max_fuzzy_fields,
         description=desc,
+        guards=guards,
     )
 
 
@@ -223,8 +248,10 @@ _RULE_DEFS: list[MatchRule] = [
     _r(
         "30",
         [("last", _F), ("dob", _E), ("phone", _E)],
-        "Last Name* + DOB + Phone Number (legacy exception; no twin disambiguation)",
+        "Last Name* + DOB + Phone Number "
+        "(legacy exception; fhir4ds sibling guard: ssn4/first-name agreement)",
         p_fuzzy_fields=frozenset({"last"}),
+        guards=(SSN4_AGREEMENT, FIRST_NAME_AGREEMENT),
     ),
 ]
 

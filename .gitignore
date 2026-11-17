@@ -27,3 +27,7 @@ dist/
 fhir4ds-publish/
 fhir4ds-private/
 test-results/
+
+# ONC-derived patient-matching test fixtures (fetched, never committed)
+fhir4ds/matching/tests/fixtures/onc/*
+!fhir4ds/matching/tests/fixtures/onc/README.md
