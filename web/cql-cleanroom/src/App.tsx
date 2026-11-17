@@ -2830,6 +2830,15 @@ export default function App() {
               setStatusNote("resource needs resourceType and id");
               return;
             }
+            // F3 (QA it15): the desktop FHIRDataLoader rejects ids outside
+            // the FHIR charset at load; the UI must not author a dataset the
+            // engine's own validator calls invalid.
+            if (!/^[A-Za-z0-9-.]{1,64}$/.test(resource.id)) {
+              setStatusNote(
+                `resource id must match the FHIR id pattern [A-Za-z0-9-.]{1,64} (got ${JSON.stringify(resource.id)})`,
+              );
+              return;
+            }
             const current = (dataset?.resources ?? []) as Array<
               Record<string, unknown>
             >;

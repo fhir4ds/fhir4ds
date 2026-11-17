@@ -486,6 +486,18 @@ async function loadIntoDuckDB(ds: DatasetSpec): Promise<void> {
   for (const r of ds.resources ?? []) {
     const rt = typeof (r as any).resourceType === "string" ? (r as any).resourceType : null;
     const id = typeof (r as any).id === "string" ? (r as any).id : null;
+    // F3 (QA it15): desktop FHIRDataLoader rejects these at load — exclude
+    // them here too so a programmatic dataset cannot silently evaluate
+    // resources the engine's own validator refuses (parity contract).
+    if (id !== null && !/^[A-Za-z0-9-.]{1,64}$/.test(id)) {
+      console.warn(
+        "[loadIntoDuckDB] excluded resource with invalid FHIR id:",
+        JSON.stringify(id).slice(0, 80),
+        "resourceType:",
+        rt,
+      );
+      continue;
+    }
     rows.push({
       patient_ref: rt === "Patient" ? id : patientRefOf(r as Record<string, unknown>),
       resourceType: rt ?? "",
