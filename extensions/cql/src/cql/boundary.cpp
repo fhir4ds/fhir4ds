@@ -99,19 +99,40 @@ static Optional<bool> quantity_value_uses_decimal_step(const std::string &json) 
 	return Optional<bool>(decimal_step);
 }
 
-static Optional<int64_t> decimal_text_precision(const std::string &s);
-
 static Optional<std::string> step_quantity_json(const std::string &value, int direction) {
 	auto decimal_step = quantity_value_uses_decimal_step(value);
 	if (!decimal_step) return NullOpt<std::string>();
 	auto q = parse_quantity_json(value);
 	if (!q) return NullOpt<std::string>();
 	// Decimal-authored quantities step by 10^-fractional-scale of the
-	// authored value text (PredecessorOf1QCMPrecision: 1.0 'cm' -> 0.9).
+	// authored value number inside the JSON (PredecessorOf1QCMPrecision:
+	// 1.0 'cm' -> 0.9 'cm').
 	double step = 1.0;
 	if (decimal_step.value()) {
-		auto prec = decimal_text_precision(value);
-		int64_t scale = prec.has_value() ? prec.value() : 0;
+		int64_t scale = 0;
+		size_t vpos = value.find("\"value\"");
+		if (vpos != std::string::npos) {
+			size_t num_start = value.find_first_of("-+0123456789", vpos);
+			size_t num_end = num_start;
+			while (num_end < value.size() &&
+			       (std::isdigit(static_cast<unsigned char>(value[num_end])) || value[num_end] == '.' ||
+			        value[num_end] == 'e' || value[num_end] == 'E' ||
+			        ((value[num_end] == '-' || value[num_end] == '+') && num_end == num_start))) {
+				num_end++;
+			}
+			std::string num = value.substr(num_start, num_end - num_start);
+			size_t dot = num.find('.');
+			if (dot != std::string::npos) {
+				size_t epos = num.find_first_of("eE");
+				int64_t frac = static_cast<int64_t>((epos == std::string::npos ? num.size() : epos) - dot - 1);
+				int64_t exp = 0;
+				if (epos != std::string::npos) {
+					try { exp = std::stoll(num.substr(epos + 1)); } catch (const std::exception &) { exp = 0; }
+				}
+				scale = frac - exp;
+				if (scale < 0) scale = 0;
+			}
+		}
 		step = scale > 0 ? std::pow(10.0, -static_cast<double>(scale)) : 0.00000001;
 	}
 	q->value += direction * step;
@@ -955,10 +976,13 @@ Optional<std::string> predecessor_of(const std::string &value) {
 		double d = std::strtod(value.c_str(), &end);
 		if (end != value.c_str() && *end == '\0') {
 			if (decimal_step_overflows(value, -1)) return NullOpt<std::string>();
-			double result = d - 1e-8;
+			auto prec = cql_precision(value);
+			int64_t scale = prec.has_value() ? prec.value() : 0;
+			double step = scale > 0 ? std::pow(10.0, -static_cast<double>(scale)) : 1e-8;
+			long double result = static_cast<long double>(d) - static_cast<long double>(step);
 			std::ostringstream oss;
 			oss.precision(15);
-			oss << result;
+			oss << static_cast<double>(result);
 			return Optional<std::string>(oss.str());
 		}
 	}
@@ -1008,7 +1032,7 @@ Optional<std::string> successor_of(const std::string &value) {
 		double d = std::strtod(value.c_str(), &end);
 		if (end != value.c_str() && *end == '\0') {
 			if (decimal_step_overflows(value, 1)) return NullOpt<std::string>();
-			auto prec = decimal_text_precision(value);
+			auto prec = cql_precision(value);
 			int64_t scale = prec.has_value() ? prec.value() : 0;
 			double step = scale > 0 ? std::pow(10.0, -static_cast<double>(scale)) : 1e-8;
 			long double result = static_cast<long double>(d) + static_cast<long double>(step);
