@@ -1025,6 +1025,7 @@ class OperatorsMixin:
         element_sql: SQLExpression,
         list_ast: object,
         element_ast: object,
+        equivalent: bool = False,
     ) -> SQLFunctionCall:
         # In audit_mode='full' (audit_mode + audit_expressions), the
         # `CQLListContainsEq` / `CQLListContainsTemporalEq` SQL macros trigger
@@ -1061,6 +1062,16 @@ class OperatorsMixin:
                 name="list_contains",
                 args=[list_sql, element_sql],
             )
+        if equivalent:
+            # CQL 2.0 '~in'/'~contains': element-wise EQUIVALENCE membership
+            # (null~null true, one-sided null FALSE, precision mismatch on
+            # temporals FALSE — never uncertain).
+            name = (
+                "CQLListContainsTemporalEquivalent"
+                if self._use_temporal_list_contains(list_ast, element_ast)
+                else "CQLListContainsEquivalent"
+            )
+            return SQLFunctionCall(name=name, args=[list_sql, element_sql])
         name = (
             "CQLListContainsTemporalEq"
             if self._use_temporal_list_contains(list_ast, element_ast)
@@ -2946,6 +2957,26 @@ class OperatorsMixin:
             not_left = SQLUnaryOp(operator="NOT", operand=left)
             return SQLBinaryOp(operator="OR", left=not_left, right=right)
 
+        if operator in ("~contains", "~in"):
+            # CQL 2.0 equivalence membership (trial-use). List membership
+            # only; interval operands raise a typed error rather than
+            # silently using equality semantics.
+            list_sql, elem_sql = (
+                (left, right) if operator == "~contains" else (right, left)
+            )
+            list_ast, elem_ast = (
+                (expr.left, expr.right) if operator == "~contains" else (expr.right, expr.left)
+            )
+            if self._is_fhir_interval_expression(list_sql):
+                raise ValueError(
+                    "CQL 2.0 '~in'/'~contains' over interval operands is not "
+                    "supported yet (use 'equivalent' on the interval instead)"
+                )
+            from ._utils import _promote_fhirpath_text_list as _promote
+            list_sql = _promote(list_sql)
+            return self._list_contains_call(
+                list_sql, elem_sql, list_ast, elem_ast, equivalent=True
+            )
         if operator == "contains":
             return self._translate_contains_op(operator, left, right, expr, boolean_context)
         if operator == "in":
@@ -9619,20 +9650,21 @@ class OperatorsMixin:
             or _is_datetime_boundary_literal(expr.operand, "0001-01-01T00:00:00.000")
             or _is_time_boundary_literal(expr.operand, "T00:00:00.000")
         ):
-            raise ValueError(
-                "The result of the predecessor operation precedes "
-                "the minimum value allowed for the type"
-            )
+            # cql-tests#120 (f724ee4): predecessor at the minimum DateTime/Time
+            # is VALID and evaluates to null (mirror of the successor rule).
+            return SQLNull()
 
         if operator == "successor of" and (
             _is_datetime_boundary_constructor(expr.operand, [9999, 12, 31, 23, 59, 59, 999])
             or _is_datetime_boundary_literal(expr.operand, "9999-12-31T23:59:59.999")
             or _is_time_boundary_literal(expr.operand, "T23:59:59.999")
         ):
-            raise ValueError(
-                "The result of the successor operation exceeds "
-                "the maximum value allowed for the type"
-            )
+            # cql-tests#120 (f724ee4): successor at the maximum DateTime/Time
+            # is VALID and evaluates to null (CQL App. C: "If the input is
+            # equal to the maximum value for the type, the result is null").
+            # The former translation-error doctrine rested on the pre-#120
+            # invalid="true" fixtures; fixtures outrank it.
+            return SQLNull()
 
         # CQL §Nullological Operators (Developer's Guide): the infix null-test
         # and boolean-test operators (`is null`, `is not null`, `is true`,

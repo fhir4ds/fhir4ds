@@ -1906,7 +1906,7 @@ class FunctionsMixin:
                 raise TranslationError(
                     f"CQL {name} count argument must be Integer; got {count_type}"
                 )
-        if bare_lower in {"first", "last", "length", "tail", "skip", "take", "singletonfrom"} and arg_nodes:
+        if bare_lower in {"first", "last", "length", "tail", "skip", "take", "singletonfrom", "slice"} and arg_nodes:
             # CQL-19 SKEPTIC QA-002: for a stored-list define reference
             # (`define G: Patient.name.given; Tail(G)`), inline the SOURCE
             # AST only when the alias is NOT itself a stored-list CTE —
@@ -2028,7 +2028,7 @@ class FunctionsMixin:
             else:
                 args = [_coerce_query_rows_to_list(self.translate(arg_nodes[0], usage=ExprUsage.LIST))]
             args.extend(self.translate(arg, usage=ExprUsage.SCALAR) for arg in arg_nodes[1:])
-        elif bare_lower in {"first", "last", "length", "tail", "skip", "take", "singletonfrom"} and arg_nodes and self._is_list_typed_ast(arg_nodes[0]):
+        elif bare_lower in {"first", "last", "length", "tail", "skip", "take", "singletonfrom", "slice"} and arg_nodes and self._is_list_typed_ast(arg_nodes[0]):
             # CQL-19 SKEPTIC QA-002: a stored-list define reference already
             # translates (SCALAR) to the whole element list held in its CTE
             # value column — do NOT rows-coerce it (LIST(value) nests the
@@ -2371,6 +2371,12 @@ class FunctionsMixin:
             ):
                 return SQLFunctionCall(name="CQLIndexOfTemporal", args=[list_arg, elem_arg])
             return SQLFunctionCall(name="CQLIndexOf", args=index_args)
+
+        # CQL 2.0 Slice(list [, start [, end]]) — registered macro with
+        # default params (start=0, end=length); args already list-coerced
+        # and promoted by the list-family handling above.
+        if bare_lower == "slice" and 1 <= len(args) <= 3:
+            return SQLFunctionCall(name="Slice", args=args)
 
         # Step 3: Check registry for simple renames and parameterized translations
         strategy = function_registry.get(name, arity)

@@ -2120,6 +2120,28 @@ def cqlDateTimeEqualListElement(a: str | None, b: str | None) -> bool | None:
     return True
 
 
+def cqlDateTimeEquivalentListElement(a: str | None, b: str | None) -> bool:
+    """List-element temporal EQUIVALENCE (CQL 2.0 ``~in``/``~contains``).
+
+    Unlike equality (where precision mismatch is uncertain/null), §6.1.2
+    Equivalent on temporals is FALSE at differing precision, TRUE at equal
+    precision + same instant; offsets compare as instants and seconds/ms
+    are one combined decimal precision.
+    """
+    if a is None and b is None:
+        return True
+    if a is None or b is None:
+        return False
+    a_s, b_s = str(a), str(b)
+    try:
+        cmp, certain = _compare_at_min_precision(a_s, b_s, combined_seconds_ms=False)
+    except (ValueError, KeyError, OverflowError):
+        return False
+    if not certain:
+        return False
+    return cmp == 0
+
+
 def _extract_datetime_from_interval(s: str) -> str:
     """If *s* is an interval/period JSON string, return its start datetime.
 
@@ -2373,6 +2395,7 @@ def registerDatetimeUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     con.create_function("cqlAfter", cqlAfter, null_handling="special")
     con.create_function("cqlDateTimeEqual", cqlDateTimeEqual, null_handling="special")
     con.create_function("cqlDateTimeEqualListElement", cqlDateTimeEqualListElement, null_handling="special")
+    con.create_function("cqlDateTimeEquivalentListElement", cqlDateTimeEquivalentListElement, null_handling="special")
     # Precision-aware arithmetic (preserves input precision in output)
     con.create_function("cqlDateTimeAdd", cqlDateTimeAdd, null_handling="special")
     # Precision-qualified temporal comparison UDFs (CQL §19.14-21)

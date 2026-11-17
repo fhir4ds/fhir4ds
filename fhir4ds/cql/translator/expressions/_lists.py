@@ -1387,6 +1387,15 @@ class ListsMixin:
                 args=[SQLSubquery(query=inner_select)]
             )
 
+        # CQL spec "Distinct": a null list argument yields null (pinned by
+        # the upstream DistinctNull fixture, cql-tests f724ee4). Static
+        # typed-null lists must lower to SQL NULL before any LIST() wrap.
+        _probe = self.translate(node.source, usage=ExprUsage.SCALAR)
+        if isinstance(_probe, SQLNull) or (
+            isinstance(_probe, SQLLiteral) and _probe.value is None
+        ) or self._is_static_null_case(_probe):
+            return SQLNull()
+
         # Generic fallback: translate source as list, apply order-preserving Distinct macro
         source = self.translate(node.source, usage=ExprUsage.LIST)
         # CQL-18 SKEPTIC relaunch QA-003: dynamic multi-valued FHIR properties
