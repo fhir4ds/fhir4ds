@@ -7138,6 +7138,7 @@ class QueryMixin:
                         # body arithmetic (`T + <CASE int>`) binds instead of
                         # `+(VARCHAR, INTEGER)`/`+(JSON, INTEGER)`.
                         _acc_binding = SQLIdentifier(name=_agg_lambda_x)
+                        _acc_binding_is_decimal = False
                         if (
                             _agg_element_is_json
                             and isinstance(agg.starting, _ASTLiteral)
@@ -7149,10 +7150,24 @@ class QueryMixin:
                                 target_type="DECIMAL(38,8)",
                                 try_cast=True,
                             )
+                            _acc_binding_is_decimal = True
                         self.context.add_alias(accum_name, ast_expr=_acc_binding)
                         if alias:
                             self.context.add_alias(alias, ast_expr=SQLIdentifier(name=_agg_lambda_y))
                         agg_body = self.translate(agg.expression, usage=ExprUsage.SCALAR)
+                        if _acc_binding_is_decimal:
+                            # DuckDB 2.0 binder: list_reduce over a VARCHAR
+                            # list requires the lambda RETURN type to share a
+                            # common super type with the element type — the
+                            # DECIMAL arithmetic result must transport as
+                            # VARCHAR (re-cast to DECIMAL on every fold
+                            # iteration via the accumulator binding above;
+                            # 1.5.x coerced silently, 2.0 refuses).
+                            agg_body = SQLCast(
+                                expression=agg_body,
+                                target_type="VARCHAR",
+                                try_cast=True,
+                            )
                     finally:
                         self.context.pop_scope()
 
