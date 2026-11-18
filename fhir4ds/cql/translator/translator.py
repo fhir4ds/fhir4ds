@@ -740,7 +740,9 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             output_columns: Mapping of output column name to CQL definition name.
                            If None, includes all definitions.
                            If empty dict, returns patient_id only.
-            parameters: Runtime parameter values (not yet implemented).
+            parameters: Runtime parameter values. Interval parameters may be
+                        supplied as ``{"start": ..., "end": ...}`` dicts,
+                        ``(start, end)`` tuples, or ``[start, end]`` lists.
             patient_ids: Optional list of patient IDs to filter.
             patient_scope: Patient subject source. ``"literal"`` preserves the
                            existing SQL-literal patient_ids behavior.

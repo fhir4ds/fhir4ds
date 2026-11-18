@@ -524,3 +524,39 @@ def _get_qicore_extension_fhirpath(registry, resource_type: Optional[str], prop_
             escaped_url = escape_fhirpath_string_literal(entry["url"])
             return f"extension.where(url='{escaped_url}').value{entry['value_type']}"
     return None
+
+
+_JSON_LIST_SOURCE_FUNCS = frozenset(
+    {
+        "collapse_intervals",
+        "collapse_intervals_per",
+        "expand",
+        "expand1",
+        "expand_points",
+        "expand_points1",
+    }
+)
+
+
+def _coerce_json_list_source(node):
+    """Rewrite a JSON-array-string list function call to a native DuckDB list.
+
+    ``collapse_intervals``/``collapse_intervals_per``/``expand*`` return a JSON
+    array text (VARCHAR), not a list. List consumers that call DuckDB list
+    functions/macros directly (``CQLListEqualEq``, ``CQLListContainsEq``,
+    ``array_length``) binder-error on the raw VARCHAR. This extends the CQL-15
+    HISTORIAN JSON-list doctrine (``_JSON_LIST_FUNCS`` in ``_functions.py``,
+    the LIST_EXTRACT wrap in ``_lists.py``) to the list equality/membership
+    lowering sites (D3 EXPLORER 2026-11-17).
+    """
+    from ...translator.types import SQLFunctionCall, SQLLiteral
+
+    if (
+        isinstance(node, SQLFunctionCall)
+        and node.name in _JSON_LIST_SOURCE_FUNCS
+    ):
+        return SQLFunctionCall(
+            name="from_json",
+            args=[node, SQLLiteral(value='["VARCHAR"]')],
+        )
+    return node

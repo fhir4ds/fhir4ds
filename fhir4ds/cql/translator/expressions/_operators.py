@@ -685,6 +685,7 @@ from ...translator.expressions._utils import (
     _is_list_returning_sql,
     _contains_sql_subquery,
     _promote_fhirpath_text_list,
+    _coerce_json_list_source,
     _ensure_scalar_body,
     escape_fhirpath_string_literal,
     _get_qicore_extension_fhirpath,
@@ -1056,8 +1057,10 @@ class OperatorsMixin:
             # raw builtin call (from_json(fhirpath(...)) IS a plain scalar
             # expression — no macro expansion — so the struct_pack binder
             # workaround still holds).
-            from ._utils import _promote_fhirpath_text_list as _promote
-            list_sql = _promote(list_sql)
+            list_sql = _promote_fhirpath_text_list(list_sql)
+            # D3 EXPLORER: collapse/expand list sources are JSON array
+            # strings — coerce to a native list (CQL-15 JSON-list doctrine).
+            list_sql = _coerce_json_list_source(list_sql)
             return SQLFunctionCall(
                 name="list_contains",
                 args=[list_sql, element_sql],
@@ -1108,6 +1111,9 @@ class OperatorsMixin:
         # lower to scalar fhirpath_text (first-node truncation); list
         # operators need the full element list.
         list_sql = _promote_fhirpath_text_list(list_sql)
+        # D3 EXPLORER: collapse/expand list sources are JSON array strings —
+        # coerce to a native list (CQL-15 JSON-list doctrine).
+        list_sql = _coerce_json_list_source(list_sql)
         return SQLFunctionCall(name=name, args=[list_sql, element_sql])
 
     def _definitely_null_sql(self, translated: SQLExpression) -> bool:
@@ -1167,6 +1173,11 @@ class OperatorsMixin:
         # (first-node truncation) to full list projections (CQL 1.5 §10.x).
         left_sql = _promote_fhirpath_text_list(left_sql)
         right_sql = _promote_fhirpath_text_list(right_sql)
+        # D3 EXPLORER (2026-11-17): collapse/expand list sources are JSON
+        # array strings — list macros need a native list (CQL-15 JSON-list
+        # doctrine extended to the equality/set-op lowering sites).
+        left_sql = _coerce_json_list_source(left_sql)
+        right_sql = _coerce_json_list_source(right_sql)
         return SQLFunctionCall(name=name, args=[left_sql, right_sql])
 
     def _list_except_call(
@@ -1185,6 +1196,11 @@ class OperatorsMixin:
         # (first-node truncation) to full list projections (CQL 1.5 §10.x).
         left_sql = _promote_fhirpath_text_list(left_sql)
         right_sql = _promote_fhirpath_text_list(right_sql)
+        # D3 EXPLORER (2026-11-17): collapse/expand list sources are JSON
+        # array strings — list macros need a native list (CQL-15 JSON-list
+        # doctrine extended to the equality/set-op lowering sites).
+        left_sql = _coerce_json_list_source(left_sql)
+        right_sql = _coerce_json_list_source(right_sql)
         return SQLFunctionCall(name=name, args=[left_sql, right_sql])
 
     def _list_intersect_call(
@@ -1203,6 +1219,11 @@ class OperatorsMixin:
         # (first-node truncation) to full list projections (CQL 1.5 §10.x).
         left_sql = _promote_fhirpath_text_list(left_sql)
         right_sql = _promote_fhirpath_text_list(right_sql)
+        # D3 EXPLORER (2026-11-17): collapse/expand list sources are JSON
+        # array strings — list macros need a native list (CQL-15 JSON-list
+        # doctrine extended to the equality/set-op lowering sites).
+        left_sql = _coerce_json_list_source(left_sql)
+        right_sql = _coerce_json_list_source(right_sql)
         return SQLFunctionCall(name=name, args=[left_sql, right_sql])
 
     def _list_index_of_call(
@@ -1273,6 +1294,11 @@ class OperatorsMixin:
         # (first-node truncation) to full list projections (CQL 1.5 §10.x).
         left_sql = _promote_fhirpath_text_list(left_sql)
         right_sql = _promote_fhirpath_text_list(right_sql)
+        # D3 EXPLORER (2026-11-17): collapse/expand list sources are JSON
+        # array strings — list macros need a native list (CQL-15 JSON-list
+        # doctrine extended to the equality/set-op lowering sites).
+        left_sql = _coerce_json_list_source(left_sql)
+        right_sql = _coerce_json_list_source(right_sql)
         return SQLFunctionCall(name=name, args=[left_sql, right_sql])
 
     def _infer_static_cql_type_for_logical_operand(self, operand: object) -> str:
@@ -3793,7 +3819,16 @@ class OperatorsMixin:
             and self._definitely_null_operand(expr.right, right)
         ):
             return SQLNull()
-        if self._interval_selector_is_untyped_null_interval(expr.left):
+        if (
+            self._interval_selector_is_untyped_null_interval(expr.left)
+            # D3-HISTORIAN (QA-018 re-land): a CLOSED null-null selector is the
+            # MAXIMUM interval, not a null container — official fixture
+            # TestIntegerInMaxIntervalTrue pins `5 in Interval[null, null]` as
+            # true, and contains is the mirror of in. Only the OPEN selector
+            # `Interval(null, null)` folds here (unknown bounds).
+            and not getattr(expr.left, "low_closed", True)
+            and not getattr(expr.left, "high_closed", True)
+        ):
             return SQLLiteral(value=False)
 
         # CQL §19.3 Contains precision: "Interval<T> contains <precision> of
@@ -5343,6 +5378,10 @@ class OperatorsMixin:
         if isinstance(left, SQLArray) or isinstance(right, SQLArray):
             non_array = right if isinstance(left, SQLArray) else left
             array_side = left if isinstance(left, SQLArray) else right
+            # D3 EXPLORER: collapse/expand list sources are JSON array
+            # strings — coerce to a native list before list_concat (CQL-15
+            # JSON-list doctrine).
+            non_array = _coerce_json_list_source(non_array)
             # Compile-time null: CQL §20.29 null = empty list → return the array side
             if isinstance(non_array, SQLNull):
                 return array_side

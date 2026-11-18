@@ -87,7 +87,10 @@ def test_cql_interval_part2_translated_sql_matches_cpp_registration() -> None:
         "MeetsAfter": (True,),
         "DateTimeMeetsAfter": (True,),
         "MeetsNullLow": (None,),
-        "MeetsAfterNullHigh": (False,),
+        # Official fixture TestMeetsAfterNull pins this exact expression as
+        # null: the open/unknown null boundaries (low of the left operand,
+        # high of the right operand) make the comparison indeterminate.
+        "MeetsAfterNullHigh": (None,),
         "TimeProperContainsUncertain": (None,),
         "TimeProperInUncertain": (None,),
         "TimeProperContainsPrecisionUncertain": (None,),
@@ -258,7 +261,9 @@ def test_cql_interval_part2_boundary_regressions_match_no_python_cpp() -> None:
         (
             "SELECT intervalMeetsAfter(intervalFromBounds('__null__', '5', false, true), "
             "intervalFromBounds('11', '__null__', true, false))",
-            (False,),
+            # Official fixture TestMeetsAfterNull: open/unknown null bounds
+            # make meets-after indeterminate -> null (not false).
+            (None,),
         ),
         (
             "SELECT intervalProperlyContains("
