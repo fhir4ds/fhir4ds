@@ -600,7 +600,7 @@ static yyjson_val *FindChoiceChild(yyjson_val *obj, const std::string &field_nam
 }
 
 static void ResolveSegment(const std::vector<yyjson_val *> &input, const std::string &segment,
-                           std::vector<yyjson_val *> &output) {
+                           std::vector<yyjson_val *> &output, bool *shadow_possible = nullptr) {
 	for (auto *node : input) {
 		if (!node || yyjson_is_null(node)) {
 			continue;
@@ -612,7 +612,7 @@ static void ResolveSegment(const std::vector<yyjson_val *> &input, const std::st
 			yyjson_arr_foreach(node, idx, max, elem) {
 				elems.push_back(elem);
 			}
-			ResolveSegment(elems, segment, output);
+			ResolveSegment(elems, segment, output, shadow_possible);
 			continue;
 		}
 		if (!yyjson_is_obj(node)) {
@@ -628,6 +628,11 @@ static void ResolveSegment(const std::vector<yyjson_val *> &input, const std::st
 			// Evaluator::evalMemberAccess.
 			if (segment == "value") {
 				output.push_back(node);
+			} else if (shadow_possible != nullptr) {
+				// Member access on a primitive other than the `.value`
+				// idiom can only be resolved by the full evaluator via the
+				// primitive `_field` shadow (v0.0.25 Domain 1 EXPLORER).
+				*shadow_possible = true;
 			}
 			continue;
 		}
@@ -636,13 +641,23 @@ static void ResolveSegment(const std::vector<yyjson_val *> &input, const std::st
 		if (!child) {
 			child = FindChoiceChild(node, segment);
 		}
+		if (!child && shadow_possible != nullptr) {
+			// The member is absent from the raw value but a split
+			// representation shadow exists: the full evaluator may resolve
+			// members through the shadow.
+			std::string shadow_name = "_" + segment;
+			if (yyjson_obj_get(node, shadow_name.c_str())) {
+				*shadow_possible = true;
+			}
+		}
 		AddFlattenedJsonValue(child, output);
 	}
 }
 
 static std::vector<yyjson_val *> ResolveJsonPath(yyjson_val *root, const std::vector<yyjson_val *> &input,
                                                  const std::vector<std::string> &segments,
-                                                 bool allow_resource_type_prefix) {
+                                                 bool allow_resource_type_prefix,
+                                                 bool *shadow_possible = nullptr) {
 	std::vector<yyjson_val *> current = input;
 	size_t seg_start = 0;
 	if (allow_resource_type_prefix && root && !input.empty() && input.size() == 1 && input[0] == root) {
@@ -650,7 +665,7 @@ static std::vector<yyjson_val *> ResolveJsonPath(yyjson_val *root, const std::ve
 	}
 	for (size_t seg_idx = seg_start; seg_idx < segments.size(); seg_idx++) {
 		std::vector<yyjson_val *> next;
-		ResolveSegment(current, segments[seg_idx], next);
+		ResolveSegment(current, segments[seg_idx], next, shadow_possible);
 		current.swap(next);
 		if (current.empty()) {
 			break;
@@ -718,12 +733,20 @@ static bool FastCandidateMatches(yyjson_val *candidate, const std::vector<FastPr
 
 static void ApplySourceStep(yyjson_val *root, const std::vector<yyjson_val *> &input,
                             const FastSourceStep &step, bool allow_resource_type_prefix,
-                            std::vector<yyjson_val *> &output) {
+                            std::vector<yyjson_val *> &output, bool *decline = nullptr) {
+	// `decline` propagates ResolveJsonPath's primitive-shadow detection:
+	// member access on a JSON scalar (or a member whose `_field` shadow
+	// exists) can only be resolved by the full evaluator, which zips
+	// primitive shadows and honors the `.value` object-model idiom.
+	// Without this the raw-JSON fast paths definitively report
+	// `birthDate.extension.url` / `name.given.extension` ABSENT for split
+	// representations, diverging from the full evaluator and the Python
+	// fallback (v0.0.25 Domain 1 EXPLORER).
 	std::vector<yyjson_val *> navigated;
 	if (step.path_segments.empty()) {
 		navigated = input;
 	} else {
-		navigated = ResolveJsonPath(root, input, step.path_segments, allow_resource_type_prefix);
+		navigated = ResolveJsonPath(root, input, step.path_segments, allow_resource_type_prefix, decline);
 	}
 
 	if (step.clauses.empty()) {
@@ -750,14 +773,23 @@ static bool TryEvaluateWhereExistsFast(const char *json_data, idx_t json_len,
 	start.push_back(root);
 	std::vector<yyjson_val *> candidates = start;
 	bool allow_resource_type_prefix = true;
+	bool fast_declined = false;
 	for (const auto &step : pattern.source_steps) {
 		std::vector<yyjson_val *> next;
-		ApplySourceStep(root, candidates, step, allow_resource_type_prefix, next);
+		ApplySourceStep(root, candidates, step, allow_resource_type_prefix, next, &fast_declined);
+		if (fast_declined) {
+			break;
+		}
 		candidates.swap(next);
 		allow_resource_type_prefix = false;
 		if (candidates.empty()) {
 			break;
 		}
+	}
+
+	if (fast_declined) {
+		yyjson_doc_free(doc);
+		return false;
 	}
 
 	result = false;
@@ -834,14 +866,23 @@ static bool TryEvaluateTextFast(const char *json_data, idx_t json_len,
 	start.push_back(root);
 	std::vector<yyjson_val *> candidates = start;
 	bool allow_resource_type_prefix = true;
+	bool fast_declined = false;
 	for (const auto &step : pattern.source_steps) {
 		std::vector<yyjson_val *> next;
-		ApplySourceStep(root, candidates, step, allow_resource_type_prefix, next);
+		ApplySourceStep(root, candidates, step, allow_resource_type_prefix, next, &fast_declined);
+		if (fast_declined) {
+			break;
+		}
 		candidates.swap(next);
 		allow_resource_type_prefix = false;
 		if (candidates.empty()) {
 			break;
 		}
+	}
+
+	if (fast_declined) {
+		yyjson_doc_free(doc);
+		return false;
 	}
 
 	if (candidates.empty()) {
@@ -866,14 +907,23 @@ static bool TryEvaluateListFast(const char *json_data, idx_t json_len,
 	start.push_back(root);
 	std::vector<yyjson_val *> candidates = start;
 	bool allow_resource_type_prefix = true;
+	bool fast_declined = false;
 	for (const auto &step : pattern.source_steps) {
 		std::vector<yyjson_val *> next;
-		ApplySourceStep(root, candidates, step, allow_resource_type_prefix, next);
+		ApplySourceStep(root, candidates, step, allow_resource_type_prefix, next, &fast_declined);
+		if (fast_declined) {
+			break;
+		}
 		candidates.swap(next);
 		allow_resource_type_prefix = false;
 		if (candidates.empty()) {
 			break;
 		}
+	}
+
+	if (fast_declined) {
+		yyjson_doc_free(doc);
+		return false;
 	}
 
 	for (auto *candidate : candidates) {
@@ -1161,7 +1211,15 @@ static void FhirpathNumberFunction(DataChunk &args, ExpressionState &state, Vect
 				} else {
 					std::vector<yyjson_val *> start;
 					start.push_back(root);
-					auto values = ResolveJsonPath(root, start, segments, true);
+					bool shadow_possible = false;
+					auto values = ResolveJsonPath(root, start, segments, true, &shadow_possible);
+					if (shadow_possible) {
+						// Split-representation (`_field`) shadows can only be
+						// resolved by the full evaluator — decline the fast
+						// path (v0.0.25 Domain 1 EXPLORER).
+						yyjson_doc_free(doc);
+						// fall through to full evaluator below
+					} else {
 					// Extract value BEFORE freeing the document to avoid use-after-free.
 					// Copy the numeric value into a local while the yyjson doc is still alive.
 					yyjson_val *value = values.size() == 1 ? values[0] : nullptr;
@@ -1188,6 +1246,7 @@ static void FhirpathNumberFunction(DataChunk &args, ExpressionState &state, Vect
 					}
 					// Multiple values: let the full evaluator apply scalar singleton
 					// enforcement consistently with the Python fallback.
+					}
 				}
 			}
 		}

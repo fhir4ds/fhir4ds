@@ -1722,3 +1722,64 @@ def test_recorded_and_last_updated_typed_instant_both_engines_fp15_explorer(
         native, fallback = _run_both(con, fb, resource, expr)
         assert native == expected, (expr, native)
         assert fallback == expected, (expr, fallback)
+
+
+def test_choice_stem_navigation_type_operators_match_native_d25_dom1_skeptic(
+    monkeypatch,
+) -> None:
+    """Choice-stem navigation (`extension.value`) must keep runtime element typing
+    through `is`/`ofType` in the forced Python fallback.
+
+    Model-backed choice-stem projection resolves elements to
+    ResourceNode(path=<primitive>, propName="Patient.extension[0].value").
+    The indexed, resource-prefixed propName broke the exact-key choice-arm
+    match in `_matches_unqualified_choice_primitive`, so the fallback returned
+    []/0 for `where($this is Integer)` and `ofType(Integer)` while native
+    classified by runtime value ([5]/1). Regression for v0.0.25 Domain 1
+    SKEPTIC.
+    """
+    resource = json.dumps(
+        {
+            "resourceType": "Patient",
+            "id": "p1",
+            "extension": [
+                {"url": "http://x", "valueInteger": 5},
+                {"url": "http://y", "valueString": "hello"},
+                {"url": "http://z", "valueBoolean": True},
+            ],
+        }
+    )
+    observation = json.dumps(
+        {
+            "resourceType": "Observation",
+            "status": "final",
+            "code": {"text": "bp"},
+            "valueQuantity": {"value": 120, "unit": "mmHg"},
+            "component": [
+                {"code": {"text": "sys"}, "valueQuantity": {"value": 120}},
+                {"code": {"text": "dia"}, "valueString": "80"},
+                {"code": {"text": "note"}, "valueInteger": 42},
+            ],
+        }
+    )
+    con = _connection()
+    fb = _python_fallback_connection(monkeypatch)
+    for res, expr, expected in [
+        (resource, "extension.value.where($this is Integer)", ["5"]),
+        (resource, "extension.value.where($this is Integer).count()", ["1"]),
+        (resource, "extension.value.where($this is String)", ["hello"]),
+        (resource, "extension.value.where($this is Boolean)", ["true"]),
+        (resource, "extension.value.ofType(Integer)", ["5"]),
+        (resource, "extension.value.ofType(Integer).count()", ["1"]),
+        (resource, "extension.value.ofType(String)", ["hello"]),
+        (resource, "extension.value.select($this is Integer)", ["true", "false", "false"]),
+        # non-choice fields must NOT gain System-type matches (no false positives)
+        (resource, "telecom.value.where($this is Integer)", None),  # telecom absent -> empty
+        (observation, "component.value.ofType(Integer).count()", ["1"]),
+        (observation, "component.value.where($this is String)", ["80"]),
+    ]:
+        native, fallback = _run_both(con, fb, res, expr)
+        if expected is None:
+            expected = []
+        assert native == expected, (expr, native)
+        assert fallback == expected, (expr, fallback)

@@ -1263,3 +1263,65 @@ def test_descendants_dedups_quantity_shaped_children_qa018(
     finally:
         native.close()
         fallback.close()
+
+
+def test_fast_path_primitive_shadow_navigation_parity_d25_dom1_explorer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bare dotted member access through a primitive shadow must not be
+    reported absent by the native fast paths.
+
+    The raw-JSON fast-text/list/where-exists paths resolved segments by
+    object lookup only, so `birthDate.extension.url` (shadow held in
+    `_birthDate`) and `name.given.extension` (element-level `_given`
+    shadows) were definitively reported missing by native while the full
+    evaluator and the Python fallback found them. The fast paths now
+    decline when a step would navigate off a JSON scalar, falling through
+    to the full evaluator. v0.0.25 Domain 1 EXPLORER.
+    """
+    obj_shadow = json.dumps(
+        {
+            "resourceType": "Patient",
+            "id": "p1",
+            "birthDate": "1974-12-25",
+            "_birthDate": {"extension": [{"url": "http://b", "valueString": "obj"}]},
+        }
+    )
+    arr_shadow = json.dumps(
+        {
+            "resourceType": "Patient",
+            "id": "p1",
+            "name": [
+                {
+                    "given": ["Peter", "Jim"],
+                    "_given": [
+                        None,
+                        {"extension": [{"url": "http://g", "valueString": "arr"}]},
+                    ],
+                }
+            ],
+        }
+    )
+    con = _connection()
+    fb = _python_fallback_connection(monkeypatch)
+    try:
+        for resource, expr, expected in [
+            (obj_shadow, "birthDate.extension.url", ["http://b"]),
+            (obj_shadow, "birthDate.extension.url.count()", ["1"]),
+            (obj_shadow, "birthDate.extension('http://b').valueString", ["obj"]),
+            (arr_shadow, "name.given.extension.url", ["http://g"]),
+            (arr_shadow, "name.given.extension.url.count()", ["1"]),
+            (arr_shadow, "name.given.extension('http://g').valueString", ["arr"]),
+            (arr_shadow, "name.given.children().count()", ["1"]),
+        ]:
+            native = con.execute(
+                "SELECT fhirpath(?::JSON, ?)", [resource, expr]
+            ).fetchone()[0]
+            fallback = fb.execute(
+                "SELECT fhirpath(?::JSON, ?)", [resource, expr]
+            ).fetchone()[0]
+            assert native == expected, (expr, native)
+            assert fallback == expected, (expr, fallback)
+    finally:
+        con.close()
+        fb.close()

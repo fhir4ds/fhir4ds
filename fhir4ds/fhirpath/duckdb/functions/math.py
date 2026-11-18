@@ -64,7 +64,27 @@ def _to_numeric(value: Any) -> Numeric | None:
         return value
     if isinstance(value, float):
         return value
+    if isinstance(value, Decimal):
+        # Exported helpers receive Decimal values from the engine path
+        # (e.g. round_fn(Decimal('-0.5'))); accepting them here keeps the
+        # direct-helper API in lockstep with the engine. Binary helpers
+        # must align mixed Decimal/int/float peers via _align_decimal.
+        return value
     return None
+
+
+def _align_decimal(left: Numeric, right: Numeric) -> tuple[Numeric, Numeric]:
+    """Coerce a mixed Decimal/non-Decimal operand pair to Decimal.
+
+    Python raises TypeError for Decimal <op> float, so binary arithmetic
+    helpers must align peers before computing. int and float are converted
+    with the repo's str-based Decimal materialization convention.
+    """
+    if isinstance(left, Decimal) and not isinstance(right, Decimal):
+        return left, _to_decimal(right)
+    if isinstance(right, Decimal) and not isinstance(left, Decimal):
+        return _to_decimal(left), right
+    return left, right
 
 
 def _to_quantity(value: Any) -> FP_Quantity | None:
@@ -126,6 +146,7 @@ def add(left: Any, right: Any) -> list[Any]:
     if left_num is None or right_num is None:
         return []
 
+    left_num, right_num = _align_decimal(left_num, right_num)
     result = left_num + right_num
 
     # Preserve integer type if both operands are integers
@@ -166,6 +187,7 @@ def subtract(left: Any, right: Any) -> list[Any]:
     if left_num is None or right_num is None:
         return []
 
+    left_num, right_num = _align_decimal(left_num, right_num)
     result = left_num - right_num
 
     # Preserve integer type if both operands are integers
@@ -206,6 +228,7 @@ def multiply(left: Any, right: Any) -> list[Any]:
     if left_num is None or right_num is None:
         return []
 
+    left_num, right_num = _align_decimal(left_num, right_num)
     result = left_num * right_num
 
     # Preserve integer type if both operands are integers
@@ -449,11 +472,16 @@ def sum_fn(collection: Any) -> list[Any]:
         num = _to_numeric(item)
         if num is not None:
             numeric_values.append(num)
-            if isinstance(num, float):
+            if not isinstance(num, int):
                 has_decimal = True
 
     if not numeric_values:
         return []
+
+    # Align mixed Decimal/int/float items before summing (Decimal <op>
+    # float raises TypeError; Decimal sums must stay exact).
+    if any(isinstance(v, Decimal) for v in numeric_values):
+        numeric_values = [_to_decimal(v) for v in numeric_values]
 
     result = sum(numeric_values)
 
