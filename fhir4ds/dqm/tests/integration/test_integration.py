@@ -475,7 +475,7 @@ define "Initial Population":
         )
 
         sql = compiled.groups[0].sql
-        assert '"Matching Statuses" AS (\nSELECT Status1.patient_id' in sql
+        assert '"Matching Statuses" AS MATERIALIZED (\nSELECT Status1.patient_id' in sql
         assert 'AS value FROM "Encounter Statuses" AS Status1' in sql
         assert 'SELECT sub.resource FROM "Matching Statuses"' not in sql
 
@@ -530,7 +530,7 @@ define "Initial Population":
         )
 
         sql = compiled.groups[0].sql
-        assert '"Score Differences" AS (\nSELECT FirstScore.patient_id' in sql
+        assert '"Score Differences" AS MATERIALIZED (\nSELECT FirstScore.patient_id' in sql
         assert 'AS value FROM "Observation" AS FirstScore' in sql
         assert "Score.value" in sql
 
@@ -584,7 +584,7 @@ define "Initial Population":
         )
 
         sql = compiled.groups[0].sql
-        assert '"Returned Encounters" AS (' in sql
+        assert '"Returned Encounters" AS MATERIALIZED (' in sql
         assert "_inner._resource_data AS resource" in sql
         assert 'FROM "Encounter Tuples" AS T' in sql
         assert "E.resource" in sql
