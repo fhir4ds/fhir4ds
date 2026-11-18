@@ -48286,3 +48286,238 @@ At:
       Expected T09:00:00.000 (str), got T09:00:0.000 (str)
     - CqlTypesTest.xml::TimeAllMin
       Expected T00:00:00.000 (str), got T00:00:0.000 (str)
+================================================================================
+[2026-11-17T17:47:24-06:00]  ViewDefinition  |  144/144 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-17T17:47:25-06:00]  FHIRPath (R4)  |  1038/1038 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-17T17:47:35-06:00]  CQL  |  2013/2037 (98.8%)  |  FAIL
+  Failures (24):
+    - CqlArithmeticFunctionsTest.xml::PrecisionTimeMilliseconds
+      Expected 9 (int), got 8 (int)
+    - CqlArithmeticFunctionsTest.xml::PredecessorOfNoon
+      Expected T11:59:59.999 (str), got None (NoneType)
+    - CqlArithmeticFunctionsTest.xml::SuccessorOfNoon
+      Expected T12:00:00.001 (str), got None (NoneType)
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse2
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::NotEquivalentNullNull
+      Expected error or NULL per CQL §16, got False
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainInterval
+      Expected {'start': 17, 'end': 44, 'lowClosed': True, 'highClosed': True} (dict), got {"start":16,"end":44,"lowClosed":true,"highClosed":true} (str)
+    - CqlIntervalOperatorsTest.xml::TimeCollapse2
+      Invalid Input Error: Python exception occurred while executing the UDF: TypeError: '>=' not supported between instances of 'int' and 'str'
+
+At:
+  /home/jmontavon/src/fhir4ds/fhir4ds/cql/duckdb/udf/interval.py(3300): collapse_intervals
+  /home/jmontavon/src/fhir4ds/fhir4ds/cql/duckdb/udf/interval.py(4231): _collapse_intervals_single
+
+    - CqlIntervalOperatorsTest.xml::TimeMeetsTrue
+      Expected True (bool), got False (bool)
+    - CqlIntervalOperatorsTest.xml::TimeMeetsBeforeTrue
+      Expected True (bool), got False (bool)
+    - CqlIntervalOperatorsTest.xml::TimeMeetsAfterTrue
+      Expected True (bool), got False (bool)
+    - CqlIntervalOperatorsTest.xml::TimeOverlapsTrue
+      Expected True (bool), got None (NoneType)
+    - CqlIntervalOperatorsTest.xml::TimeOverlapsBeforeTrue
+      Expected True (bool), got None (NoneType)
+    - CqlIntervalOperatorsTest.xml::TimeOverlapsAfterTrue
+      Expected True (bool), got None (NoneType)
+    - CqlIntervalOperatorsTest.xml::TimeProperContainsTrue
+      Expected True (bool), got None (NoneType)
+    - CqlIntervalOperatorsTest.xml::TimeProperInTrue
+      Expected True (bool), got None (NoneType)
+    - CqlIntervalOperatorsTest.xml::TimeProperlyIncludesFalse
+      Invalid Input Error: Python exception occurred while executing the UDF: TypeError: '>=' not supported between instances of 'int' and 'str'
+
+At:
+  /home/jmontavon/src/fhir4ds/fhir4ds/cql/duckdb/udf/interval.py(2256): intervalProperlyIncludes
+
+    - CqlIntervalOperatorsTest.xml::TimeProperlyIncludedInFalse
+      Invalid Input Error: Python exception occurred while executing the UDF: TypeError: '>=' not supported between instances of 'int' and 'str'
+
+At:
+  /home/jmontavon/src/fhir4ds/fhir4ds/cql/duckdb/udf/interval.py(2256): intervalProperlyIncludes
+  /home/jmontavon/src/fhir4ds/fhir4ds/cql/duckdb/udf/interval.py(2293): intervalProperlyIncludedIn
+
+    - CqlIntervalOperatorsTest.xml::TimeIntervalStart
+      Expected T00:00:00.000 (str), got T00:00:0.000 (str)
+    - CqlIntervalOperatorsTest.xml::TimeIntervalTest
+      Expected {'start': 'T00:00:00.000', 'end': 'T23:59:59.599', 'lowClosed': True, 'highClosed': True} (dict), got {"low": "T00:00:0.000", "high": "T23:59:59.599", "lowClosed": true, "highClosed": true} (str)
+    - CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs
+      Expected error or NULL per CQL §16, got 15
+    - CqlStringOperatorsTest.xml::TimeToString1
+      Expected 09:30:01.003 (str), got T09:30:1.003 (str)
+    - CqlTypesTest.xml::AnyTime
+      Expected T09:00:00.000 (str), got T09:00:0.000 (str)
+    - CqlTypesTest.xml::TimeAllMin
+      Expected T00:00:00.000 (str), got T00:00:0.000 (str)
+================================================================================
+[2026-11-17T17:49:09-06:00]  DQM (QI-Core 2025)  |  47/47 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-17T17:54:43-06:00]  DQM (US-Core 2025)  |  73/73 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-17T17:54:48-06:00]  ALL SUITES (master run)  |  3353/3377 (99.3%)  |  FAIL
+  Failures (24):
+    - CqlArithmeticFunctionsTest.xml::PrecisionTimeMilliseconds
+      Expected 9 (int), got 8 (int)
+    - CqlArithmeticFunctionsTest.xml::PredecessorOfNoon
+      Expected T11:59:59.999 (str), got None (NoneType)
+    - CqlArithmeticFunctionsTest.xml::SuccessorOfNoon
+      Expected T12:00:00.001 (str), got None (NoneType)
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse2
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::NotEquivalentNullNull
+      Expected error or NULL per CQL §16, got False
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainInterval
+      Expected {'start': 17, 'end': 44, 'lowClosed': True, 'highClosed': True} (dict), got {"start":16,"end":44,"lowClosed":true,"highClosed":true} (str)
+    - CqlIntervalOperatorsTest.xml::TimeCollapse2
+      Invalid Input Error: Python exception occurred while executing the UDF: TypeError: '>=' not supported between instances of 'int' and 'str'
+
+At:
+  /home/jmontavon/src/fhir4ds/fhir4ds/cql/duckdb/udf/interval.py(3300): collapse_intervals
+  /home/jmontavon/src/fhir4ds/fhir4ds/cql/duckdb/udf/interval.py(4231): _collapse_intervals_single
+
+    - CqlIntervalOperatorsTest.xml::TimeMeetsTrue
+      Expected True (bool), got False (bool)
+    - CqlIntervalOperatorsTest.xml::TimeMeetsBeforeTrue
+      Expected True (bool), got False (bool)
+    - CqlIntervalOperatorsTest.xml::TimeMeetsAfterTrue
+      Expected True (bool), got False (bool)
+    - CqlIntervalOperatorsTest.xml::TimeOverlapsTrue
+      Expected True (bool), got None (NoneType)
+    - CqlIntervalOperatorsTest.xml::TimeOverlapsBeforeTrue
+      Expected True (bool), got None (NoneType)
+    - CqlIntervalOperatorsTest.xml::TimeOverlapsAfterTrue
+      Expected True (bool), got None (NoneType)
+    - CqlIntervalOperatorsTest.xml::TimeProperContainsTrue
+      Expected True (bool), got None (NoneType)
+    - CqlIntervalOperatorsTest.xml::TimeProperInTrue
+      Expected True (bool), got None (NoneType)
+    - CqlIntervalOperatorsTest.xml::TimeProperlyIncludesFalse
+      Invalid Input Error: Python exception occurred while executing the UDF: TypeError: '>=' not supported between instances of 'int' and 'str'
+
+At:
+  /home/jmontavon/src/fhir4ds/fhir4ds/cql/duckdb/udf/interval.py(2256): intervalProperlyIncludes
+
+    - CqlIntervalOperatorsTest.xml::TimeProperlyIncludedInFalse
+      Invalid Input Error: Python exception occurred while executing the UDF: TypeError: '>=' not supported between instances of 'int' and 'str'
+
+At:
+  /home/jmontavon/src/fhir4ds/fhir4ds/cql/duckdb/udf/interval.py(2256): intervalProperlyIncludes
+  /home/jmontavon/src/fhir4ds/fhir4ds/cql/duckdb/udf/interval.py(2293): intervalProperlyIncludedIn
+
+    - CqlIntervalOperatorsTest.xml::TimeIntervalStart
+      Expected T00:00:00.000 (str), got T00:00:0.000 (str)
+    - CqlIntervalOperatorsTest.xml::TimeIntervalTest
+      Expected {'start': 'T00:00:00.000', 'end': 'T23:59:59.599', 'lowClosed': True, 'highClosed': True} (dict), got {"low": "T00:00:0.000", "high": "T23:59:59.599", "lowClosed": true, "highClosed": true} (str)
+    - CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs
+      Expected error or NULL per CQL §16, got 15
+    - CqlStringOperatorsTest.xml::TimeToString1
+      Expected 09:30:01.003 (str), got T09:30:1.003 (str)
+    - CqlTypesTest.xml::AnyTime
+      Expected T09:00:00.000 (str), got T09:00:0.000 (str)
+    - CqlTypesTest.xml::TimeAllMin
+      Expected T00:00:00.000 (str), got T00:00:0.000 (str)
+================================================================================
+[2026-11-17T18:12:02-06:00]  CQL  |  2010/2037 (98.7%)  |  FAIL
+  Failures (27):
+    - CqlArithmeticFunctionsTest.xml::PrecisionTimeMilliseconds
+      Expected 9 (int), got 8 (int)
+    - CqlArithmeticFunctionsTest.xml::PredecessorOfNoon
+      Expected T11:59:59.999 (str), got None (NoneType)
+    - CqlArithmeticFunctionsTest.xml::SuccessorOfNoon
+      Expected T12:00:00.001 (str), got None (NoneType)
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse2
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::NotEquivalentNullNull
+      Expected error or NULL per CQL §16, got False
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainAdd
+      Expected {'start': 32, 'end': 88, 'lowClosed': True, 'highClosed': True} (dict), got {"start":34,"end":88,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainSubtract
+      Expected {'start': 0, 'end': 40, 'lowClosed': True, 'highClosed': True} (dict), got {"start":1,"end":40,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainMultiply
+      Expected {'start': 256, 'end': 1936, 'lowClosed': True, 'highClosed': True} (dict), got {"start":289,"end":1936,"lowClosed":true,"highClosed":true} (str)
+    - CqlIntervalOperatorsTest.xml::TimeCollapse2
+      Invalid Input Error: Python exception occurred while executing the UDF: TypeError: '>=' not supported between instances of 'int' and 'str'
+
+At:
+  /home/jmontavon/src/fhir4ds/fhir4ds/cql/duckdb/udf/interval.py(3300): collapse_intervals
+  /home/jmontavon/src/fhir4ds/fhir4ds/cql/duckdb/udf/interval.py(4231): _collapse_intervals_single
+  /home/jmontavon/src/fhir4ds/conformance/scripts/run_cql.py(411): run_test
+  /home/jmontavon/src/fhir4ds/conformance/scripts/run_cql.py(526): main
+  /home/jmontavon/src/fhir4ds/conformance/scripts/run_cql.py(550): <module>
+
+    - CqlIntervalOperatorsTest.xml::TimeMeetsTrue
+      Expected True (bool), got False (bool)
+    - CqlIntervalOperatorsTest.xml::TimeMeetsBeforeTrue
+      Expected True (bool), got False (bool)
+    - CqlIntervalOperatorsTest.xml::TimeMeetsAfterTrue
+      Expected True (bool), got False (bool)
+    - CqlIntervalOperatorsTest.xml::TimeOverlapsTrue
+      Expected True (bool), got None (NoneType)
+    - CqlIntervalOperatorsTest.xml::TimeOverlapsBeforeTrue
+      Expected True (bool), got None (NoneType)
+    - CqlIntervalOperatorsTest.xml::TimeOverlapsAfterTrue
+      Expected True (bool), got None (NoneType)
+    - CqlIntervalOperatorsTest.xml::TimeProperContainsTrue
+      Expected True (bool), got None (NoneType)
+    - CqlIntervalOperatorsTest.xml::TimeProperInTrue
+      Expected True (bool), got None (NoneType)
+    - CqlIntervalOperatorsTest.xml::TimeProperlyIncludesFalse
+      Invalid Input Error: Python exception occurred while executing the UDF: TypeError: '>=' not supported between instances of 'int' and 'str'
+
+At:
+  /home/jmontavon/src/fhir4ds/fhir4ds/cql/duckdb/udf/interval.py(2256): intervalProperlyIncludes
+
+    - CqlIntervalOperatorsTest.xml::TimeProperlyIncludedInFalse
+      Invalid Input Error: Python exception occurred while executing the UDF: TypeError: '>=' not supported between instances of 'int' and 'str'
+
+At:
+  /home/jmontavon/src/fhir4ds/fhir4ds/cql/duckdb/udf/interval.py(2256): intervalProperlyIncludes
+  /home/jmontavon/src/fhir4ds/fhir4ds/cql/duckdb/udf/interval.py(2293): intervalProperlyIncludedIn
+
+    - CqlIntervalOperatorsTest.xml::TimeIntervalStart
+      Expected T00:00:00.000 (str), got T00:00:0.000 (str)
+    - CqlIntervalOperatorsTest.xml::TimeIntervalTest
+      Expected {'start': 'T00:00:00.000', 'end': 'T23:59:59.599', 'lowClosed': True, 'highClosed': True} (dict), got {"low": "T00:00:0.000", "high": "T23:59:59.599", "lowClosed": true, "highClosed": true} (str)
+    - CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs
+      Expected error or NULL per CQL §16, got 15
+    - CqlStringOperatorsTest.xml::TimeToString1
+      Expected 09:30:01.003 (str), got T09:30:1.003 (str)
+    - CqlTypesTest.xml::AnyTime
+      Expected T09:00:00.000 (str), got T09:00:0.000 (str)
+    - CqlTypesTest.xml::DateTimeUncertain
+      Expected {'start': 18, 'end': 49, 'lowClosed': True, 'highClosed': True} (dict), got {"start":19,"end":49,"lowClosed":true,"highClosed":true} (str)
+    - CqlTypesTest.xml::TimeAllMin
+      Expected T00:00:00.000 (str), got T00:00:0.000 (str)
+================================================================================
+[2026-11-17T18:15:39-06:00]  CQL  |  2029/2037 (99.6%)  |  FAIL
+  Failures (8):
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse2
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::NotEquivalentNullNull
+      Expected error or NULL per CQL §16, got False
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainAdd
+      Expected {'start': 32, 'end': 88, 'lowClosed': True, 'highClosed': True} (dict), got {"start":34,"end":88,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainSubtract
+      Expected {'start': 0, 'end': 40, 'lowClosed': True, 'highClosed': True} (dict), got {"start":1,"end":40,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainMultiply
+      Expected {'start': 256, 'end': 1936, 'lowClosed': True, 'highClosed': True} (dict), got {"start":289,"end":1936,"lowClosed":true,"highClosed":true} (str)
+    - CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs
+      Expected error or NULL per CQL §16, got 15
+    - CqlTypesTest.xml::DateTimeUncertain
+      Expected {'start': 18, 'end': 49, 'lowClosed': True, 'highClosed': True} (dict), got {"start":19,"end":49,"lowClosed":true,"highClosed":true} (str)

@@ -1530,8 +1530,7 @@
       {
         "name": "PrecisionTimeMilliseconds",
         "result": {
-          "passed": false,
-          "error": "Expected 9 (int), got 8 (int)"
+          "passed": true
         }
       },
       {
@@ -1612,8 +1611,7 @@
       {
         "name": "PredecessorOfNoon",
         "result": {
-          "passed": false,
-          "error": "Expected T11:59:59.999 (str), got None (NoneType)"
+          "passed": true
         }
       },
       {
@@ -1903,8 +1901,7 @@
       {
         "name": "SuccessorOfNoon",
         "result": {
-          "passed": false,
-          "error": "Expected T12:00:00.001 (str), got None (NoneType)"
+          "passed": true
         }
       },
       {
@@ -4823,8 +4820,7 @@
       {
         "name": "DateTimeDurationBetweenUncertainInterval",
         "result": {
-          "passed": false,
-          "error": "Expected {'start': 17, 'end': 44, 'lowClosed': True, 'highClosed': True} (dict), got {\"start\":16,\"end\":44,\"lowClosed\":true,\"highClosed\":true} (str)"
+          "passed": true
         }
       },
       {
@@ -4836,19 +4832,22 @@
       {
         "name": "DateTimeDurationBetweenUncertainAdd",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected {'start': 32, 'end': 88, 'lowClosed': True, 'highClosed': True} (dict), got {\"start\":34,\"end\":88,\"lowClosed\":true,\"highClosed\":true} (str)"
         }
       },
       {
         "name": "DateTimeDurationBetweenUncertainSubtract",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected {'start': 0, 'end': 40, 'lowClosed': True, 'highClosed': True} (dict), got {\"start\":1,\"end\":40,\"lowClosed\":true,\"highClosed\":true} (str)"
         }
       },
       {
         "name": "DateTimeDurationBetweenUncertainMultiply",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected {'start': 256, 'end': 1936, 'lowClosed': True, 'highClosed': True} (dict), got {\"start\":289,\"end\":1936,\"lowClosed\":true,\"highClosed\":true} (str)"
         }
       },
       {
@@ -6230,8 +6229,7 @@
       {
         "name": "TimeCollapse2",
         "result": {
-          "passed": false,
-          "error": "Invalid Input Error: Python exception occurred while executing the UDF: TypeError: '>=' not supported between instances of 'int' and 'str'\n\nAt:\n  /home/jmontavon/src/fhir4ds/fhir4ds/cql/duckdb/udf/interval.py(3300): collapse_intervals\n  /home/jmontavon/src/fhir4ds/fhir4ds/cql/duckdb/udf/interval.py(4231): _collapse_intervals_single\n  /home/jmontavon/src/fhir4ds/conformance/scripts/run_cql.py(411): run_test\n  /home/jmontavon/src/fhir4ds/conformance/scripts/run_cql.py(526): main\n  /home/jmontavon/src/fhir4ds/conformance/scripts/run_cql.py(550): <module>\n"
+          "passed": true
         }
       },
       {
@@ -7167,8 +7165,7 @@
       {
         "name": "TimeMeetsTrue",
         "result": {
-          "passed": false,
-          "error": "Expected True (bool), got False (bool)"
+          "passed": true
         }
       },
       {
@@ -7234,8 +7231,7 @@
       {
         "name": "TimeMeetsBeforeTrue",
         "result": {
-          "passed": false,
-          "error": "Expected True (bool), got False (bool)"
+          "passed": true
         }
       },
       {
@@ -7301,8 +7297,7 @@
       {
         "name": "TimeMeetsAfterTrue",
         "result": {
-          "passed": false,
-          "error": "Expected True (bool), got False (bool)"
+          "passed": true
         }
       },
       {
@@ -7620,8 +7615,7 @@
       {
         "name": "TimeOverlapsTrue",
         "result": {
-          "passed": false,
-          "error": "Expected True (bool), got None (NoneType)"
+          "passed": true
         }
       },
       {
@@ -7735,8 +7729,7 @@
       {
         "name": "TimeOverlapsBeforeTrue",
         "result": {
-          "passed": false,
-          "error": "Expected True (bool), got None (NoneType)"
+          "passed": true
         }
       },
       {
@@ -7850,8 +7843,7 @@
       {
         "name": "TimeOverlapsAfterTrue",
         "result": {
-          "passed": false,
-          "error": "Expected True (bool), got None (NoneType)"
+          "passed": true
         }
       },
       {
@@ -7899,8 +7891,7 @@
       {
         "name": "TimeProperContainsTrue",
         "result": {
-          "passed": false,
-          "error": "Expected True (bool), got None (NoneType)"
+          "passed": true
         }
       },
       {
@@ -7936,8 +7927,7 @@
       {
         "name": "TimeProperInTrue",
         "result": {
-          "passed": false,
-          "error": "Expected True (bool), got None (NoneType)"
+          "passed": true
         }
       },
       {
@@ -8033,8 +8023,7 @@
       {
         "name": "TimeProperlyIncludesFalse",
         "result": {
-          "passed": false,
-          "error": "Invalid Input Error: Python exception occurred while executing the UDF: TypeError: '>=' not supported between instances of 'int' and 'str'\n\nAt:\n  /home/jmontavon/src/fhir4ds/fhir4ds/cql/duckdb/udf/interval.py(2256): intervalProperlyIncludes\n  /home/jmontavon/src/fhir4ds/conformance/scripts/run_cql.py(411): run_test\n  /home/jmontavon/src/fhir4ds/conformance/scripts/run_cql.py(526): main\n  /home/jmontavon/src/fhir4ds/conformance/scripts/run_cql.py(550): <module>\n"
+          "passed": true
         }
       },
       {
@@ -8100,8 +8089,7 @@
       {
         "name": "TimeProperlyIncludedInFalse",
         "result": {
-          "passed": false,
-          "error": "Invalid Input Error: Python exception occurred while executing the UDF: TypeError: '>=' not supported between instances of 'int' and 'str'\n\nAt:\n  /home/jmontavon/src/fhir4ds/fhir4ds/cql/duckdb/udf/interval.py(2256): intervalProperlyIncludes\n  /home/jmontavon/src/fhir4ds/fhir4ds/cql/duckdb/udf/interval.py(2293): intervalProperlyIncludedIn\n  /home/jmontavon/src/fhir4ds/conformance/scripts/run_cql.py(411): run_test\n  /home/jmontavon/src/fhir4ds/conformance/scripts/run_cql.py(526): main\n  /home/jmontavon/src/fhir4ds/conformance/scripts/run_cql.py(550): <module>\n"
+          "passed": true
         }
       },
       {
@@ -8131,8 +8119,7 @@
       {
         "name": "TimeIntervalStart",
         "result": {
-          "passed": false,
-          "error": "Expected T00:00:00.000 (str), got T00:00:0.000 (str)"
+          "passed": true
         }
       },
       {
@@ -8420,8 +8407,7 @@
       {
         "name": "TimeIntervalTest",
         "result": {
-          "passed": false,
-          "error": "Expected {'start': 'T00:00:00.000', 'end': 'T23:59:59.599', 'lowClosed': True, 'highClosed': True} (dict), got {\"low\": \"T00:00:0.000\", \"high\": \"T23:59:59.599\", \"lowClosed\": true, \"highClosed\": true} (str)"
+          "passed": true
         }
       },
       {
@@ -11256,8 +11242,7 @@
       {
         "name": "TimeToString1",
         "result": {
-          "passed": false,
-          "error": "Expected 09:30:01.003 (str), got T09:30:1.003 (str)"
+          "passed": true
         }
       }
     ]
@@ -11637,8 +11622,7 @@
       {
         "name": "AnyTime",
         "result": {
-          "passed": false,
-          "error": "Expected T09:00:00.000 (str), got T09:00:0.000 (str)"
+          "passed": true
         }
       },
       {
@@ -11728,7 +11712,8 @@
       {
         "name": "DateTimeUncertain",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected {'start': 18, 'end': 49, 'lowClosed': True, 'highClosed': True} (dict), got {\"start\":19,\"end\":49,\"lowClosed\":true,\"highClosed\":true} (str)"
         }
       },
       {
@@ -11836,8 +11821,7 @@
       {
         "name": "TimeAllMin",
         "result": {
-          "passed": false,
-          "error": "Expected T00:00:00.000 (str), got T00:00:0.000 (str)"
+          "passed": true
         }
       }
     ]

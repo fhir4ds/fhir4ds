@@ -454,7 +454,7 @@ class CoreMixin:
                     raise ValueError(
                         f"Invalid time literal: millisecond value {ms_val} exceeds 999"
                     )
-                parts[2] = f"{s}.{ms_val:03d}"
+                parts[2] = f"{s:02d}.{ms_val:03d}"
                 value = ":".join(parts)
 
         # Transport doctrine (AGENTS / TimeOfDay precedent): CQL Time values
