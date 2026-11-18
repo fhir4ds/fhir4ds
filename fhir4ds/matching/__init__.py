@@ -62,7 +62,7 @@ from .rules import (
 )
 from .store import create_matching_tables, exact_candidates, index_patient
 
-__version__ = "0.0.24"
+__version__ = "0.0.25"
 
 __all__ = [
     "register_matching_macros",
