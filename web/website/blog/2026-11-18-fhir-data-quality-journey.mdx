@@ -1,0 +1,153 @@
+---
+title: "From Messy FHIR to Trusted Analysis: A Journey Through Ingestion, Matching, and Deduplication"
+description: "Walk through how raw, duplicated, inconsistently-authored FHIR data becomes a clean analytical dataset — with real before/after examples of every transformation."
+authors: joel
+tags: [fhir, data-quality, patient-matching, deduplication, analytics]
+date: 2026-11-18T12:00:00Z
+slug: /fhir-data-journey
+---
+
+Every healthcare analytics project starts the same way: someone hands you a folder of FHIR data exported from three different systems, and a question that assumes the data is clean.
+
+It never is.
+
+The same patient exists three times with slightly different names. The same lab result was recorded twice — once with a timezone, once without, once in different units. Two visits that were supposed to be one. A birthdate that says `"1975-03"` because that's all the source system knew.
+
+This post walks through what actually happens to that data in fhir4ds, step by step, with real examples of the data before and after each transformation. No SQL required (though there's plenty under the hood, running on DuckDB).
+
+## Step 0: The mess arrives
+
+Here's a realistic slice of what lands in your data directory — NDJSON, one FHIR resource per line, straight from the export:
+
+```json
+{"resourceType": "Patient", "id": "pat-a",
+ "name": [{"family": "Montavon", "given": ["Joel"]}],
+ "birthDate": "1975-03-12",
+ "identifier": [{"system": "http://hl7.org/fhir/sid/us-ssn",
+                 "value": "123-45-6789"}]}
+
+{"resourceType": "Patient", "id": "pat-b",
+ "name": [{"family": "MONTAVON ", "given": ["JOE"]}],
+ "birthDate": "1975-03-11",
+ "identifier": [{"system": "urn:oid:2.16.840.1.113883.4.1",
+                 "value": "123456789"}]}
+
+{"resourceType": "Observation", "id": "obs-1",
+ "status": "final", "code": {"coding": [{
+   "system": "http://loinc.org", "code": "29463-7"}]},
+ "effectiveDateTime": "2026-03-04T08:30:00-06:00",
+ "valueQuantity": {"value": 82, "unit": "kg"}}
+
+{"resourceType": "Observation", "id": "obs-2",
+ "status": "final", "code": {"coding": [{
+   "system": "http://snomed.info/sct", "code": "27113001"}]},
+ "effectiveDateTime": "2026-03-04T08:52:00-06:00",
+ "valueQuantity": {"value": 82000, "unit": "g"}}
+```
+
+Four resources. Already three different problems hiding in them — can you spot all three? (One patient recorded twice. One body weight recorded twice, in different terminologies and different units, 28 minutes apart. And an SSN written two different ways.)
+
+## Step 1: Ingestion — the bouncer at the door
+
+The loader reads every line and decides, before anything is stored: *is this actually a FHIR resource?*
+
+- Not JSON? Rejected, with the line number.
+- JSON but no `resourceType`? Rejected.
+- Bundle? Each entry is unpacked and validated individually.
+- File starts with a Windows BOM? Handled silently (yes, that happens).
+- Duplicate of something already loaded? Last write wins, cleanly.
+
+```python
+from fhir4ds.cql.loader import FHIRDataLoader
+
+loader = FHIRDataLoader(connection)
+loader.load_ndjson("exports/system-a.ndjson", strict=True)
+```
+
+With `strict=True`, the whole file is validated **before** anything is inserted — one bad line in the middle means nothing is committed, not half a dataset. Everything that survives lands in a table keyed by `(resourceType, id)`, ready for querying.
+
+What ingestion does *not* do is judge whether the data makes clinical sense. That's the next two steps.
+
+## Step 2: Person matching — "is this the same human?"
+
+Our two patients:
+
+| | `pat-a` | `pat-b` |
+|---|---|---|
+| Family name | `Montavon` | `MONTAVON ` (caps, trailing space) |
+| Given name | `Joel` | `Joe` (a known nickname) |
+| Birthdate | `1975-03-12` | `1975-03-11` (one day off — a classic fat-finger) |
+| SSN | `123-45-6789` | `123456789` (same number, different formatting) |
+
+The matching engine normalizes first (name case and punctuation, phone placeholders, SSN dashes, nickname → canonical set), then runs a deterministic cascade of rules modeled on the CMS data-matching proposal. Rules fire in order of statistical strength — an exact SSN match outranks a fuzzy name match — and every decision carries its evidence.
+
+For this pair: the SSNs agree exactly after normalization, the names agree (nickname-equivalent), and the birthdate is within one day. That's a **match**, with high confidence.
+
+The output is *not* a merged patient — the originals stay untouched. It's a FHIR **Linkage** resource, the standard's way of saying "these two records describe the same person":
+
+```json
+{"resourceType": "Linkage", "active": true,
+ "item": [
+   {"type": "source",    "resource": {"reference": "Patient/pat-a"}},
+   {"type": "alternate", "resource": {"reference": "Patient/pat-b"}}]}
+```
+
+Because it's a normal FHIR resource, downstream systems see it, audit it, and can reverse it. And because every match decision writes an audit row with its rule and evidence, you can always answer *"why are these two linked?"*
+
+Importantly, the engine also surfaces **contradictions** — a strong identifier match alongside a hard disagreement (different sexes, birthdates years apart) — instead of silently picking a winner. Ambiguous cases come back as `ambiguous`, not matches.
+
+## Step 3: Resource deduplication — "is this the same event?"
+
+Back to our two observations. Same patient, same morning, same body weight — but a human reader has to notice that `29463-7` (LOINC "Body weight") and `27113001` (SNOMED "Body weight") are the same concept, that `82 kg` and `82000 g` are the same value, and that `08:30-06:00` and `08:52Z`... wait, are 22 minutes even "the same measurement"?
+
+The dedup engine answers this in two stages.
+
+**Stage 1 — could these be the same event?** Resources are bucketed by patient, resource type, date, and value. Codes are normalized to canonical sets (so LOINC and SNOMED translations of the same concept intersect), and quantities are converted across units (82 kg *is* 82000 g — the UCUM math runs inside the engine). If two resources don't land in the same bucket, they never merge. Different value on the same day? Different buckets, no merge.
+
+**Stage 2 — are they close enough in time?** Each resource's effective time is parsed with its authored precision and normalized to a real instant — `08:30:00-06:00` and `14:30:00Z` are the *same moment*, and the engine knows it. (This matters more than you'd think: the same morning authored as `08:30-06:00` by one system and `14:30Z` by another must not become "five and a half hours apart" — and a naive timestamp with no offset gets a documented default timezone rather than a guess.) Vital-sign observations merge within a 30-minute window; serial troponins within 5 minutes; imprecise dates (a `"1975-03"` birthdate-style month) subsume into any event that month contains.
+
+Our pair — 08:30 and 08:52, same offset — sits 22 minutes apart: inside the window, same canonical code set, same canonical value. **Duplicates.**
+
+## Step 4: Survivorship — one record to rule them
+
+When a cluster of duplicates is found, one member is chosen as the **survivor** by a transparent ranking: the most precise timestamp wins (an offset-aware datetime beats a date-only value), then the earliest, then the richest in clinical detail. Ties break deterministically — the same input always produces the same survivor, no matter the order data arrived.
+
+A new merged resource is materialized (`dedup-3f9a...`) that unions the identifiers and codings from every member, and the originals — again — are never touched:
+
+```json
+{"resourceType": "Linkage", "active": true,
+ "item": [
+   {"type": "source",    "resource": {"reference": "Observation/dedup-3f9a..."}},
+   {"type": "alternate", "resource": {"reference": "Observation/obs-1"}},
+   {"type": "alternate", "resource": {"reference": "Observation/obs-2"}}]}
+```
+
+Delete the Linkage, and you're back exactly where you started. Every decision wrote its evidence to the audit table first: which rule fired, which window applied, why the survivor won.
+
+## The result
+
+After the journey, your analytical query — "average body weight per patient in March" — runs against data where:
+
+- **one** patient represents Joel (with both SSN spellings preserved on the merged record),
+- **one** weight observation represents that morning (82000 g and 82 kg reconciled, LOINC and SNOMED both retained),
+- and every merge decision has a FHIR-standard, reversible audit trail behind it.
+
+```python
+results = connection.execute("""
+    SELECT patient_ref, value FROM weights_view
+""").fetchall()
+```
+
+No phantom duplicate patients inflating denominators. No double-counted labs skewing averages. No mysterious "why does this patient weigh 82 kg and 82000 g?"
+
+## Try it
+
+All of this ships in fhir4ds v0.0.25 — the loader, the matching engine, and the dedup pipeline all run on an embedded DuckDB database with no external services:
+
+```bash
+pip install fhir4ds-v2
+```
+
+The matching and dedup passes are opt-in and run over your existing resources table — your source data is never modified, only annotated with Linkage resources and audit rows you can inspect, query, and reverse.
+
+*Data quality isn't a prerequisite for healthcare analytics. With the right pipeline, it's a product of it.*
