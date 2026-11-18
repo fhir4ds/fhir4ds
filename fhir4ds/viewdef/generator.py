@@ -426,7 +426,11 @@ class SQLGenerator:
         """Return runtime FHIRPath type().name values compatible with a declaration."""
         if declared_type == "string":
             return set(self._STRING_COMPATIBLE_TYPE_NAMES)
-        if declared_type == "integer":
+        if declared_type in ("integer", "integer64"):
+            # FHIRPath type().name reports JSON numbers as "integer"/"Integer";
+            # it can never return "integer64", so the integer-compatible set
+            # must cover integer64 columns too or every present value falsely
+            # trips the runtime type guard.
             return set(self._INTEGER_COMPATIBLE_TYPE_NAMES)
         if declared_type == "decimal":
             return set(self._DECIMAL_COMPATIBLE_TYPE_NAMES)

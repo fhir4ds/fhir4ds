@@ -3054,3 +3054,68 @@ def test_boolean_constant_false_column_without_type_native_and_fallback(monkeypa
     finally:
         native.close()
         fallback.close()
+
+
+class TestInteger64ColumnTypeDom5Skeptic:
+    """Regression: declared type ``integer64`` was unrepresentable by the
+    FHIRPath ``type().name`` runtime guard.
+
+    FHIRPath ``type().name`` reports JSON numbers as ``integer``/``Integer`` —
+    it can never return ``integer64`` — so a declared ``integer64`` column
+    rejected every PRESENT value (QA dom5 SKEPTIC, v0.0.25). The guard must
+    accept the integer-compatible actual names, while still rejecting genuinely
+    wrong-typed present values and leaving absent paths NULL.
+    """
+
+    def test_integer64_column_accepts_present_integer_and_rejects_boolean(
+        self, monkeypatch
+    ):
+        view = {
+            "resource": "Patient",
+            "select": [{
+                "column": [{
+                    "path": "multipleBirthInteger",
+                    "name": "birth_order",
+                    "type": "integer64",
+                }]
+            }],
+        }
+        with_value = {
+            "resourceType": "Patient",
+            "id": "pt1",
+            "multipleBirthInteger": 3,
+        }
+        absent = {"resourceType": "Patient", "id": "pt2"}
+        wrong_type = {"resourceType": "Patient", "id": "pt3", "active": True}
+
+        native = duckdb.connect(config={"allow_unsigned_extensions": True})
+        if register_fhirpath(native) is not True:
+            native.close()
+            pytest.skip("Bundled C++ FHIRPath extension is not available")
+        fallback = _forced_python_connection(monkeypatch)
+        try:
+            for con in (native, fallback):
+                assert _execute_shared_view(con, view, [with_value, absent]) == [
+                    (3,),
+                    (None,),
+                ]
+                with pytest.raises(
+                    Exception, match="ViewDefinition column 'birth_order'"
+                ):
+                    _execute_shared_view(
+                        con,
+                        {
+                            "resource": "Patient",
+                            "select": [{
+                                "column": [{
+                                    "path": "active",
+                                    "name": "birth_order",
+                                    "type": "integer64",
+                                }]
+                            }],
+                        },
+                        [wrong_type],
+                    )
+        finally:
+            native.close()
+            fallback.close()
