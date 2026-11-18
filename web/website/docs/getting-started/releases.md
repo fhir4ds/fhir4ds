@@ -17,10 +17,13 @@ recorded), **known issues**, and **upgrade** notes.
 ### Highlights
 
 - **Packaging improvements**: the optional `[duckdb2]` extra now installs
-  cleanly (`pip install 'fhir4ds-v2[duckdb2]'`), scoped to Python ≥ 3.11
-  where DuckDB 2.x wheels exist, and the `fhir4ds` console script now loads
-  DQM backends lazily so it starts quickly on every install. Covered by new
-  resolver and CLI smoke tests.
+  cleanly, and — new installs on **Python ≥ 3.11 now default to DuckDB
+  2.0.x**, the engine our benchmarks recommend (~10× faster at population
+  scale, with the automatic `delim_join_as_cte=false` planner tuning).
+  Python 3.10 installs keep the 1.5.x line (2.x wheels are cp311+ only),
+  and `[duckdb1]` remains the explicit way back to 1.5.x. The `fhir4ds`
+  console script now loads DQM backends lazily so it starts quickly on
+  every install. Covered by new resolver, metadata and CLI smoke tests.
 - **Typed errors at public boundaries + a frozen API contract.** The
   matching, operations, dedup and serve public surfaces raise documented
   typed exceptions (no raw `AttributeError`/`KeyError` leaks), and the
@@ -52,8 +55,11 @@ recorded), **known issues**, and **upgrade** notes.
 
 ### Breaking changes
 
-- None at the public API level. The `[duckdb2]` extra fix is
-  metadata-only; base installs resolve exactly as before.
+- **DuckDB default flip on Python ≥ 3.11**: upgrading on Python 3.11+
+  moves installs to the DuckDB 2.0.x line (the benchmark-recommended
+  engine; the correct native extension loads automatically). To stay on
+  1.5.x, install with the `[duckdb1]` extra. Python 3.10 installs are
+  unaffected.
 
 ### Conformance
 
@@ -68,11 +74,12 @@ ViewDefinition 144/144 · FHIRPath 1038/1038 · CQL 2029/2037 · DQM QI-Core
 
 ### Upgrade
 
-`pip install fhir4ds-v2==0.0.25`. DuckDB 1.5.5 → 2.0.0 are supported; the
-correct native extension for your DuckDB version loads automatically. For
-experimental DuckDB 2.0.0 support on Python ≥ 3.11:
-`pip install 'fhir4ds-v2[duckdb2]'` (on Python 3.10 this resolves to the
-1.5.x line — 2.x wheels are cp311+ only).
+`pip install fhir4ds-v2==0.0.25`. On Python ≥ 3.11 this now installs
+DuckDB 2.0.x by default (~10× faster at population scale, with the
+automatic planner tuning); Python 3.10 keeps DuckDB 1.5.x. All of
+DuckDB 1.5.5 → 2.0.0 are supported and the correct native extension
+loads automatically. To pin 1.5.x on Python 3.11+:
+`pip install 'fhir4ds-v2[duckdb1]'`.
 
 ## Version 0.0.24
 *November 2026*
