@@ -62,6 +62,11 @@ class MeasureParser:
         groups_json = measure.get("group", [])
         if not groups_json:
             raise MeasureParseError(f"Measure '{measure_id}' has no group element")
+        if not isinstance(groups_json, list):
+            raise MeasureParseError(
+                f"Measure '{measure_id}' group must be a list, got "
+                f"{type(groups_json).__name__}"
+            )
 
         groups = [self._parse_group(g, i) for i, g in enumerate(groups_json)]
         return PopulationMap(measure_id=measure_id, cql_library_ref=cql_ref, groups=groups)

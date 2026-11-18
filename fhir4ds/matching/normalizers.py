@@ -501,6 +501,11 @@ def extract_patient_fields(patient_resource: dict) -> dict[str, list[str]]:
     mbi, legal_id, member_id, subscriber_id, namespace_id, suffix (internal,
     consumed by the suffix-conflict negation, never referenced by a rule).
     """
+    if not isinstance(patient_resource, dict):
+        raise TypeError(
+            f"patient_resource must be a dict (a FHIR Patient resource), "
+            f"got {type(patient_resource).__name__}"
+        )
     out: dict[str, list[str]] = {}
 
     def add(field: str, value: Optional[str]) -> None:

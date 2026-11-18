@@ -107,4 +107,7 @@ __all__ = [
     "tests_input_from_dict",
     "translate_cql",
     "validate_resource",
+    "__version__",
 ]
+
+__version__ = "0.0.24"

@@ -36,6 +36,11 @@ def index_patient(conn: duckdb.DuckDBPyConnection, patient_resource: dict) -> in
     Idempotent: deletes any prior rows for the patient_id first.
     Returns the number of rows inserted.
     """
+    if not isinstance(patient_resource, dict):
+        raise TypeError(
+            f"patient_resource must be a dict (a FHIR Patient resource), "
+            f"got {type(patient_resource).__name__}"
+        )
     patient_id = patient_resource.get("id")
     if not isinstance(patient_id, str) or not patient_id:
         raise ValueError("Patient resource must carry a non-empty string 'id'")

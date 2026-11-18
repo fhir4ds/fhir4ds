@@ -235,6 +235,15 @@ class TestEvaluateSnippetCapability:
         assert not r.ok
         assert r.diagnostics[0].code.value == "input_error"
 
+    def test_none_main_is_input_error_not_attribute_error(self):
+        # v0.0.25 Domain 8 EXPLORER: malformed main must surface as an
+        # input diagnostic, never as an internal AttributeError.
+        conn = create_connection()
+        r = evaluate_snippet([], None, "1", None, conn)
+        assert not r.ok
+        assert r.diagnostics[0].code.value == "input_error"
+        assert "LibraryText" in r.diagnostics[0].message
+
     def test_broken_snippet_diagnostics_shift_back(self):
         # SIMPLE_LIB is 7 lines; the broken snippet lands on appended
         # lines ~9-11 — after the offset shift the reported line must

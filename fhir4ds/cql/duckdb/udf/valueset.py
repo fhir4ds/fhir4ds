@@ -239,8 +239,10 @@ def _extractAllCodes(data: dict, path: str) -> List[Tuple[str, str]]:
 
     # Navigate path
     current = data
+    parent: dict | None = None
     for part in path.split('.'):
         if isinstance(current, dict):
+            parent = current
             value = current.get(part)
             if value is None:
                 # Try FHIR choice type resolution (e.g., 'code' → 'codeCodeableConcept')
@@ -264,6 +266,7 @@ def _extractAllCodes(data: dict, path: str) -> List[Tuple[str, str]]:
 
     # If the value is a JSON-encoded string (e.g. from tuple fhirpath_text serialization),
     # parse it back into a dict/list so CodeableConcept extraction works.
+    plain_string_code = None
     if isinstance(current, str):
         stripped = current.strip()
         if stripped.startswith('{') or stripped.startswith('['):
@@ -271,6 +274,16 @@ def _extractAllCodes(data: dict, path: str) -> List[Tuple[str, str]]:
                 current = orjson.loads(stripped)
             except (orjson.JSONDecodeError, ValueError) as e:
                 _logger.warning("_extractAllCodes JSON parse failed: %s", e)
+        else:
+            # Plain-string code element (QA-D6-001): the path resolved to a
+            # bare code string. Native extractCodes treats it as the code
+            # itself, paired with the sibling 'system' key of the containing
+            # element when present. Keep the Python fallback in lockstep.
+            plain_string_code = stripped
+
+    if plain_string_code is not None:
+        system = parent.get('system', '') if isinstance(parent, dict) else ''
+        return [(system, plain_string_code)]
 
     codes = []
 

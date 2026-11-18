@@ -230,10 +230,9 @@ def build_membership(
     roots = _components(members, edges, _veto_set(veto_pairs))
     conn.execute(MEMBERSHIP_DDL)
     conn.execute("DELETE FROM patient_membership")
-    conn.executemany(
-        "INSERT INTO patient_membership VALUES (?, ?)",
-        [(m, roots[m]) for m in members],  # members sorted -> deterministic order
-    )
+    rows = [(m, roots[m]) for m in members]  # members sorted -> deterministic order
+    if rows:
+        conn.executemany("INSERT INTO patient_membership VALUES (?, ?)", rows)
     return len(set(roots.values()))
 
 
