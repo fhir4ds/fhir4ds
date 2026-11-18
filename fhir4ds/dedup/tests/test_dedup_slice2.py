@@ -94,7 +94,7 @@ class TestDedupRecord:
         assert record.nd.signature == Signature.DT_Z
         assert record.code_keys == frozenset({("http://loinc.org", "2160-0")})
         assert record.category == Category.LAB
-        assert record.secondary_ts == "2024-03-05T09:00:00Z"
+        assert record.secondary_ts == "2024-03-05T09:00:00.000Z"
 
     def test_patient_ref_variants(self):
         absolute = DedupRecord.from_resource(

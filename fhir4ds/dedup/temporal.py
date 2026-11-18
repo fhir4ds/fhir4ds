@@ -117,10 +117,12 @@ def _tz(name: str) -> ZoneInfo:
 def _format_instant(dt: datetime) -> str:
     """Format an aware datetime as a deterministic UTC string with Z suffix."""
     utc = dt.astimezone(timezone.utc)
+    # Always render exactly 3 fraction digits: a uniform format keeps
+    # lexicographic ordering of these strings equal to chronological
+    # ordering (a fraction-less "...:00Z" would sort AFTER "...:00.500Z"
+    # because 'Z' > '.').
     text = utc.strftime("%Y-%m-%dT%H:%M:%S")
-    ms = utc.microsecond
-    if ms:
-        text += f".{ms // 1000:03d}"
+    text += f".{utc.microsecond // 1000:03d}"
     return text + "Z"
 
 
@@ -253,6 +255,8 @@ def _classify_datetime(raw: str) -> Optional[tuple[str, datetime, str]]:
     if parsed is None:
         return None
     y, m, d, day_prec = parsed
+    if y < 1:
+        return None  # year 0000 is outside the datetime domain (no year 0)
     time_part = raw[10:] if len(raw) > 10 else ""
     if not day_prec:
         # Partial dates cannot carry a time component.

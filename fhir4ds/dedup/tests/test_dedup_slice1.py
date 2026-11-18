@@ -18,7 +18,7 @@ from fhir4ds.dedup import (
     normalize_value,
     secondary_timestamp,
 )
-from fhir4ds.dedup.temporal import Signature
+from fhir4ds.dedup.temporal import Signature, _format_instant
 
 
 def _obs(temporal_field, value):
@@ -41,23 +41,23 @@ class TestSignatureMatrix:
         assert result.signature == Signature.YEAR
         assert result.local_date == "2024"
         assert result.dt_utc is None
-        assert result.start_utc == "2024-01-01T06:00:00Z"  # Chicago = UTC-6 (Jan)
-        assert result.end_utc == "2025-01-01T06:00:00Z"
+        assert result.start_utc == "2024-01-01T06:00:00.000Z"  # Chicago = UTC-6 (Jan)
+        assert result.end_utc == "2025-01-01T06:00:00.000Z"
 
     def test_month(self):
         result = normalize_temporal(_obs("effectiveDateTime", "2024-03"))
         assert result.signature == Signature.MONTH
         assert result.local_date == "2024-03"
-        assert result.start_utc == "2024-03-01T06:00:00Z"
-        assert result.end_utc == "2024-04-01T05:00:00Z"  # DST starts Mar 10
+        assert result.start_utc == "2024-03-01T06:00:00.000Z"
+        assert result.end_utc == "2024-04-01T05:00:00.000Z"  # DST starts Mar 10
 
     def test_date_only(self):
         result = normalize_temporal(_obs("effectiveDateTime", "2024-03-05"))
         assert result.signature == Signature.DATE_ONLY
         assert result.local_date == "2024-03-05"
         assert result.dt_utc is None
-        assert result.start_utc == "2024-03-05T06:00:00Z"
-        assert result.end_utc == "2024-03-06T06:00:00Z"
+        assert result.start_utc == "2024-03-05T06:00:00.000Z"
+        assert result.end_utc == "2024-03-06T06:00:00.000Z"
 
     def test_dt_naive(self):
         result = normalize_temporal(_obs("effectiveDateTime", "2024-03-05T23:30:00"))
@@ -70,7 +70,9 @@ class TestSignatureMatrix:
     def test_dt_z(self):
         result = normalize_temporal(_obs("effectiveDateTime", "2024-07-04T12:00:00Z"))
         assert result.signature == Signature.DT_Z
-        assert result.dt_utc == "2024-07-04T12:00:00Z"
+        # M1: _format_instant always renders 3 fraction digits so the
+        # uniform-format strings order lexicographically == chronologically.
+        assert result.dt_utc == "2024-07-04T12:00:00.000Z"
         # Z instants render local_date in the configured default TZ (CDT, UTC-5)
         assert result.local_date == "2024-07-04"
         assert result.start_utc == result.dt_utc
@@ -87,7 +89,7 @@ class TestSignatureMatrix:
         assert result.signature == Signature.DT_OFFSET
         # PARTITION key uses the AUTHORED LOCAL date (design §2a rationale)
         assert result.local_date == "2024-03-05"
-        assert result.dt_utc == "2024-03-06T04:30:00Z"
+        assert result.dt_utc == "2024-03-06T04:30:00.000Z"
 
     def test_offset_and_z_same_instant_same_partition(self):
         # The design's motivating pair: authored-local 23:30-05:00 and naive
@@ -97,20 +99,20 @@ class TestSignatureMatrix:
         b = normalize_temporal(_obs("effectiveDateTime", "2024-03-05T23:30:00"))
         c = normalize_temporal(_obs("effectiveDateTime", "2024-03-06T04:30:00Z"))
         assert a.local_date == b.local_date == c.local_date == "2024-03-05"
-        assert a.dt_utc == c.dt_utc == "2024-03-06T04:30:00Z"
+        assert a.dt_utc == c.dt_utc == "2024-03-06T04:30:00.000Z"
 
     def test_dt_offset_positive(self):
         result = normalize_temporal(_obs("effectiveDateTime",
                                          "2024-03-05T10:00:00+05:30"))
         assert result.signature == Signature.DT_OFFSET
         assert result.local_date == "2024-03-05"
-        assert result.dt_utc == "2024-03-05T04:30:00Z"
+        assert result.dt_utc == "2024-03-05T04:30:00.000Z"
 
     def test_dt_partial_time_hour_only(self):
         result = normalize_temporal(_obs("effectiveDateTime", "2024-03-05T23Z"))
         assert result is not None
         assert result.signature == Signature.DT_Z
-        assert result.dt_utc == "2024-03-05T23:00:00Z"
+        assert result.dt_utc == "2024-03-05T23:00:00.000Z"
 
     def test_dt_fractional_seconds(self):
         result = normalize_temporal(_obs("effectiveDateTime",
@@ -137,9 +139,39 @@ class TestInvalidDates:
         "2024-03-05T10:00:00+15:00", "2024-03-05T10:00:00+14:01",
         "2024-03-05T10:00:00.1234567890123", "2024-03-05T", "not-a-date",
         "2024-03-05 10:00:00", "", None, 123,
+        # M2: year 0000 has no datetime representation; must stay on the
+        # None-on-malformed contract instead of raising ValueError.
+        "0000", "0000-01", "0000-01-01",
     ])
     def test_invalid_yields_none(self, bad):
         assert normalize_temporal(_obs("effectiveDateTime", bad)) is None
+
+    def test_year_zero_onset_none_not_crash(self):
+        # M2 regression: birthDate-style Condition.onsetDateTime "0000"
+        # previously raised ValueError from datetime(0, 1, 1).
+        assert normalize_temporal({"resourceType": "Condition",
+                                   "onsetDateTime": "0000"}) is None
+
+
+class TestInstantFormatOrdering:
+    def test_format_instant_lexicographic_equals_chronological(self):
+        # M1 invariant: _format_instant emits a UNIFORM format (always 3
+        # fraction digits), so lexicographic string comparison equals
+        # chronological comparison across mixed fraction forms.
+        from datetime import datetime, timezone
+        dts = [
+            datetime(2024, 3, 5, 10, 0, 0, 0, tzinfo=timezone.utc),
+            datetime(2024, 3, 5, 10, 0, 0, 500000, tzinfo=timezone.utc),
+            datetime(2024, 3, 5, 9, 59, 59, 999000, tzinfo=timezone.utc),
+            datetime(2024, 3, 5, 23, 0, 0, 0, tzinfo=timezone.utc),
+            datetime(2024, 3, 5, 10, 0, 1, 0, tzinfo=timezone.utc),
+        ]
+        texts = [_format_instant(d) for d in dts]
+        # uniform width: exactly 3 fraction digits before the Z suffix
+        import re as _re
+        assert all(_re.fullmatch(r".*\.\d{3}Z", t) for t in texts)
+        assert sorted(texts) == [t for _, t in
+                                 sorted(zip(dts, texts), key=lambda p: p[0])]
 
     def test_absent_all_variants_yields_none(self):
         assert normalize_temporal(_obs("status", "final")) is None
@@ -165,8 +197,8 @@ class TestPeriods:
         assert result is not None
         assert result.signature == Signature.DT_Z
         assert result.dt_utc is None  # periods carry bounds, not a point
-        assert result.start_utc == "2024-03-05T10:00:00Z"
-        assert result.end_utc == "2024-03-05T12:00:00Z"
+        assert result.start_utc == "2024-03-05T10:00:00.000Z"
+        assert result.end_utc == "2024-03-05T12:00:00.000Z"
         assert result.local_date == "2024-03-05"
 
     def test_period_signature_is_more_precise_bound(self):
@@ -175,7 +207,7 @@ class TestPeriods:
             "2024-03-05", "2024-03-05T12:00:00Z"))
         assert result.signature == Signature.DT_Z  # DT flavor tie-break
         assert result.start_utc is None  # date-level start has no authored instant
-        assert result.end_utc == "2024-03-05T12:00:00Z"
+        assert result.end_utc == "2024-03-05T12:00:00.000Z"
 
     def test_period_signature_date_level_when_both_date_level(self):
         result = normalize_temporal(self._period("2024-03", "2024-03-15"))
@@ -233,14 +265,14 @@ class TestChoiceVariantOrder:
         resource["effectivePeriod"] = {"start": "2024-01-01T00:00:00Z"}
         result = normalize_temporal(resource)
         assert result is not None
-        assert result.start_utc == "2024-01-01T00:00:00Z"
+        assert result.start_utc == "2024-01-01T00:00:00.000Z"
 
 
 class TestSecondaryTimestamp:
     def test_observation_issued(self):
         result = secondary_timestamp(_obs("issued", "2024-03-05T10:00:00Z"))
         assert result is not None
-        assert result.dt_utc == "2024-03-05T10:00:00Z"
+        assert result.dt_utc == "2024-03-05T10:00:00.000Z"
 
     def test_condition_recorded_date(self):
         result = secondary_timestamp({"resourceType": "Condition",
@@ -508,7 +540,7 @@ class TestPublicSurface:
     def test_import_package_clean(self):
         import fhir4ds  # noqa: F401
         import fhir4ds.dedup
-        assert fhir4ds.dedup.__version__ == "0.0.1"
+        assert fhir4ds.dedup.__version__ == "0.0.24"
 
     def test_normalized_date_is_frozen(self):
         result = normalize_temporal(_obs("effectiveDateTime", "2024-03-05"))

@@ -132,14 +132,35 @@ class TestSurvivorRanking:
         late = obs("a", effective="2024-03-05T10:00:00Z")
         assert select_survivor(records(early, late)).rid == "b"
 
+    def test_subsecond_mixed_fraction_forms_order_chronologically(self):
+        # M1 regression: with a uniform 3-fraction-digit format the whole-
+        # second instant "...:00.000Z" sorts BEFORE "...:00.500Z". The old
+        # fraction-less rendering put "...:00Z" AFTER "...:00.500Z"
+        # lexicographically ('Z' > '.'), picking the wrong survivor.
+        whole = obs("frac-lose", effective="2024-03-05T10:00:00.500Z")
+        exact = obs("whole-win", effective="2024-03-05T10:00:00Z")
+        cluster = records(whole, exact)
+        assert select_survivor(cluster).rid == "whole-win"
+        # End-to-end: the two cluster together and the survivor is the
+        # earliest record (survivorRid names it in the dedup extension).
+        result = run_dedup([whole, exact], "m1-subsecond")
+        assert len(result.survivors) == 1
+        ext = next(e for e in result.survivors[0]["extension"]
+                   if e["url"] == DEDUP_EXTENSION_URL)["extension"]
+        rule = next(e for e in ext
+                    if e["url"] == "survivorRule")["extension"]
+        survivor_rid = next(e for e in rule
+                            if e["url"] == "survivorRid")["valueString"]
+        assert survivor_rid == "whole-win"
+
     def test_none_timestamp_sorts_last(self):
         # Direct probe of the level-2 key shape: (ts is None, ts or "").
         stamped = records(obs("a", effective="2024-03-05T09:00:00Z"))[0]
         naive = records(obs("b", effective="2024-03-05T09:00:00"))[0]
-        assert _timestamp(stamped) == "2024-03-05T09:00:00Z"
+        assert _timestamp(stamped) == "2024-03-05T09:00:00.000Z"
         assert _timestamp(naive) is None
         assert survivor_ranking_key(stamped)[1] == (False,
-                                                    "2024-03-05T09:00:00Z")
+                                                    "2024-03-05T09:00:00.000Z")
         assert survivor_ranking_key(naive)[1] == (True, "")
 
     def test_richest_metadata_wins_when_signature_and_ts_tie(self):
@@ -580,6 +601,19 @@ def mixed_corpus():
 
 
 class TestRunDedup:
+    def test_year_zero_onset_record_skipped_gracefully(self):
+        # M2 regression: a Condition whose only temporal arm is year-0000
+        # normalizes to None (no exception) and run_dedup emits it as a
+        # singleton instead of crashing.
+        bad = {"resourceType": "Condition", "id": "cond-zero",
+               "onsetDateTime": "0000",
+               "code": {"coding": [{"system": SNOMED, "code": "123"}]},
+               "subject": {"reference": "Patient/p1"}}
+        ok = dict(bad, id="cond-ok", onsetDateTime="2024-03-05")
+        result = run_dedup([bad, ok], "m2-year-zero")
+        assert result.stats["survivors"] == 0  # different partitions, no dupes
+        assert result.stats["emitted"] >= 1
+
     def test_mixed_corpus_counts(self):
         result = run_dedup(mixed_corpus(), "run-1")
         assert result.stats["input_resources"] == 6

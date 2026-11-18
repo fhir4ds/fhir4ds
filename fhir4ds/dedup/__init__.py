@@ -62,7 +62,7 @@ from .temporal import (
 )
 from .values import normalize_value
 
-__version__ = "0.0.1"
+__version__ = "0.0.24"
 
 __all__ = [
     "Category",

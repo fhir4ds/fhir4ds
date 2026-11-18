@@ -266,10 +266,10 @@ class TestTZSignatureProperties:
             _obs("x", "2024-03-10T03:30:00-05:00")).local_date == "2024-03-10"
         assert normalize_temporal(
             _obs("x", "2024-11-03T01:30:00-05:00")).dt_utc \
-            == "2024-11-03T06:30:00Z"
+            == "2024-11-03T06:30:00.000Z"
         assert normalize_temporal(
             _obs("x", "2024-11-03T01:30:00-06:00")).dt_utc \
-            == "2024-11-03T07:30:00Z"
+            == "2024-11-03T07:30:00.000Z"
         # Midnight-adjacent: a UTC instant that is the PREVIOUS local day in
         # Chicago partitions on the Chicago date (default-TZ rendering), and
         # the Chicago-authored offset form agrees.
@@ -292,10 +292,12 @@ class TestTZSignatureProperties:
                 "reference": "Patient/t"},
             "code": {"coding": [{"system": LOINC, "code": "x"}]},
             "onsetDateTime": "2024-11-03"})
-        assert spring.start_utc == "2024-03-10T06:00:00Z"
-        assert spring.end_utc == "2024-03-11T05:00:00Z"  # 23h span
-        assert fall.start_utc == "2024-11-03T05:00:00Z"
-        assert fall.end_utc == "2024-11-04T06:00:00Z"    # 25h span
+        # M1: uniform 3-fraction-digit instant format (lexicographic ==
+        # chronological ordering) — expectations carry .000.
+        assert spring.start_utc == "2024-03-10T06:00:00.000Z"
+        assert spring.end_utc == "2024-03-11T05:00:00.000Z"  # 23h span
+        assert fall.start_utc == "2024-11-03T05:00:00.000Z"
+        assert fall.end_utc == "2024-11-04T06:00:00.000Z"    # 25h span
 
     def test_clustering_deterministic_across_seeds(self):
         corpus = load_golden_corpus()
