@@ -30,6 +30,28 @@ def _normalize_system(system: Optional[str]) -> Optional[str]:
 
 _CODE_RESOURCE_TYPES = ("Observation", "Condition", "Immunization", "Procedure")
 
+#: FHIR element carrying the primary code per resource type. Every type in
+#: scope except Immunization uses ``code``; Immunization carries its vaccine
+#: code on ``vaccineCode`` (FHIR R4) — without this mapping an Immunization's
+#: canonical code set is always empty, and empty sets never union (design
+#: §10), so no Immunization could ever dedup despite being approved v1 scope
+#: (design §1.2 / §9 Q3).
+_CODE_FIELD_BY_TYPE: dict[str, str] = {
+    "Observation": "code",
+    "Condition": "code",
+    "Procedure": "code",
+    "Immunization": "vaccineCode",
+}
+
+
+def _code_field(resource: dict) -> Optional[dict]:
+    rtype = resource.get("resourceType")
+    field_name = _CODE_FIELD_BY_TYPE.get(rtype) if isinstance(rtype, str) else None
+    if field_name is None:
+        return None
+    code_field = resource.get(field_name)
+    return code_field if isinstance(code_field, dict) else None
+
 
 def normalize_codes(resource: dict) -> frozenset[tuple[str, str]]:
     """Normalize ALL codings of the resource's primary code to a canonical
@@ -49,8 +71,8 @@ def normalize_codes(resource: dict) -> frozenset[tuple[str, str]]:
     rtype = resource.get("resourceType")
     if rtype not in _CODE_RESOURCE_TYPES:
         return frozenset()
-    code_field = resource.get("code")
-    if not isinstance(code_field, dict):
+    code_field = _code_field(resource)
+    if code_field is None:
         return frozenset()
     codings = code_field.get("coding")
     if not isinstance(codings, list):
@@ -80,8 +102,8 @@ def normalize_code(resource: dict) -> Optional[tuple[str, str]]:
     rtype = resource.get("resourceType")
     if rtype not in _CODE_RESOURCE_TYPES:
         return None
-    code_field = resource.get("code")
-    if not isinstance(code_field, dict):
+    code_field = _code_field(resource)
+    if code_field is None:
         return None
     codings = code_field.get("coding")
     if not isinstance(codings, list):

@@ -267,8 +267,12 @@ class TestSecondaryTimestamp:
 
 class TestNormalizeCode:
     def _coded(self, system, code, rtype="Observation"):
+        # FHIR element name is per-type: Immunization carries its vaccine
+        # code on ``vaccineCode`` (FHIR R4), every other in-scope type on
+        # ``code``.
+        field = "vaccineCode" if rtype == "Immunization" else "code"
         return {"resourceType": rtype,
-                "code": {"coding": [{"system": system, "code": code}]}}
+                field: {"coding": [{"system": system, "code": code}]}}
 
     def test_oid_loinc_to_canonical(self):
         assert normalize_code(self._coded("urn:oid:2.16.840.1.113883.6.1",
