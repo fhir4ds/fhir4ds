@@ -11,6 +11,79 @@ entry follows the same format: **highlights**, **breaking changes** (always
 listed, even when there are none), topic sections, **conformance** (where
 recorded), **known issues**, and **upgrade** notes.
 
+## Version 0.0.25
+*November 2026*
+
+### Highlights
+
+- **`pip install 'fhir4ds-v2[duckdb2]'` works again.** The opt-in DuckDB 2.0
+  extra had been unresolvable since the base `duckdb` pin was narrowed to
+  `<2` (pip intersected the two pins into an empty set — the install command
+  recommended in these very release notes failed with
+  `ResolutionImpossible`). The base pin is now marker-scoped
+  (`; extra != 'duckdb2'`), so the extra resolves cleanly; on Python 3.10 it
+  falls back safely to the 1.5.x line because DuckDB 2.x wheels are cp311+,
+  and activation happens on Python ≥ 3.11. Covered by a new resolver gate
+  test.
+- **The `fhir4ds` CLI works on base installs.** The console script no longer
+  crashes with `ModuleNotFoundError: pandas` on a bare install — DQM/backend
+  imports are now lazy, loaded only when the corresponding command runs.
+- **Typed errors at public boundaries + a frozen API contract.** The
+  matching, operations, dedup and serve public surfaces raise documented
+  typed exceptions (no raw `AttributeError`/`KeyError` leaks), and the
+  exported API is pinned by contract tests so accidental surface changes
+  fail CI.
+- **FHIRPath engine fixes**: choice-stem navigation (`extension.value`,
+  `Observation.value`) keeps runtime element typing from the model (so
+  `is`/`ofType` work over choice stems), exported math helpers accept
+  `decimal.Decimal` inputs, and the native raw-JSON fast paths shadow the
+  full evaluator correctly (no more divergent fast-path results).
+- **CQL interval parity re-landed**: `Interval[null, null] contains 5`,
+  unbounded-interval equality, and `intervalEquals` now agree between the
+  Python fallback and the native extension; list operators over `collapse`
+  sources no longer binder-error (JSON-list coercion at the list-operator
+  boundary).
+- **ViewDefinition `integer64` columns work**: a declared `integer64` column
+  with a present value no longer raises a spurious type-guard violation
+  (the runtime guard now accepts integer-valued JSON numbers for the
+  `integer64` declaration).
+- **Patient matching & deduplication hardening**: the matching normalizer
+  no longer crashes on non-dict records or non-string phone values; the
+  dedup patient-reference anchor no longer substring-matches, malformed
+  sentinel values no longer merge distinct patients, and mixed-precision
+  FHIR Periods are no longer dropped from escalation windows.
+- **Terminology docs corrected**: `terminology-service.md` now describes the
+  real medterm4ds bound and the in-process intensional-expansion support.
+- **All six native extension bundles** (fhirpath + cql × DuckDB 1.5.5 /
+  1.5.6 / 2.0.0) rebuilt from one verified source tree and stamp-verified.
+
+### Breaking changes
+
+- None at the public API level. The `[duckdb2]` extra fix is
+  metadata-only; base installs resolve exactly as before.
+
+### Conformance
+
+ViewDefinition 144/144 · FHIRPath 1038/1038 · CQL 2029/2037 (the documented
+8-test doctrine/corpus ceiling, unchanged) · DQM QI-Core 2025 **47/47
+PERFECT** · DQM US-Core 2025 **73/73 PERFECT** · OMOP 38/38 — **3369/3377**
+overall.
+
+### Known issues
+
+- The CQL 8-test gap (2029/2037) is the documented fixture/doctrine ceiling,
+  not a regression; it has been stable across releases.
+- The upstream FHIRPath `isSemanticChecks`/`documentFunctions` fixture
+  exclusions documented under 0.0.24 remain.
+
+### Upgrade
+
+`pip install fhir4ds-v2==0.0.25`. DuckDB 1.5.5 → 2.0.0 are supported; the
+correct native extension for your DuckDB version loads automatically. For
+experimental DuckDB 2.0.0 support on Python ≥ 3.11:
+`pip install 'fhir4ds-v2[duckdb2]'` (on Python 3.10 this resolves to the
+1.5.x line — 2.x wheels are cp311+ only).
+
 ## Version 0.0.24
 *November 2026*
 
