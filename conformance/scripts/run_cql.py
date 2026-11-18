@@ -506,7 +506,6 @@ def main():
             # of the same expression. Gate: run tests valid AT 2.0 only
             # (version absent, or version <= 2.0), and skip tests whose
             # versionTo < 2.0 when a same-expression 2.0 variant exists.
-            t_version = test_elem.get("version")
             t_version_to = test_elem.get("versionTo")
             if t_version_to is not None and t_version_to.strip() not in ("2.0", "2.0.0"):
                 # superseded pre-2.0 pin; check for a 2.0 sibling of the same expression

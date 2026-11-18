@@ -7,6 +7,7 @@ import json
 import logging
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fhir4ds.dqm.config import (
     AuditSpec,
@@ -29,6 +30,48 @@ from fhir4ds.dqm.types import AuditMode
 # The names are populated into module globals by _load_dqm_backends() at the
 # top of run(), mirroring the lazy-import + actionable-hint pattern already
 # used by fhir4ds/cli/serve.py for the [serve] extra.
+if TYPE_CHECKING:  # static-analysis view of the lazily-loaded backends
+    # (runtime import happens in _load_dqm_backends() — see the comment above)
+    from fhir4ds.dqm.batch import inspect_config, run_batch, validate_config
+    from fhir4ds.dqm.hapi_materialization import (
+        enqueue_existing_patients,
+        explain_patient_scope_plan,
+        install_materialization_schema,
+        listen_and_process,
+        load_materialization_config,
+        materialization_status,
+        process_queue_once,
+        prune_materialization_history,
+        reset_materialization_queue,
+        sync_measure_config,
+    )
+    from fhir4ds.dqm.mongo_materialization import (
+        enqueue_existing_patients as mongo_enqueue_existing_patients,
+    )
+    from fhir4ds.dqm.mongo_materialization import (
+        install_mongo_materialization,
+        load_mongo_materialization_config,
+    )
+    from fhir4ds.dqm.mongo_materialization import (
+        listen_and_process as mongo_listen_and_process,
+    )
+    from fhir4ds.dqm.mongo_materialization import (
+        materialization_status as mongo_materialization_status,
+    )
+    from fhir4ds.dqm.mongo_materialization import (
+        process_queue_once as mongo_process_queue_once,
+    )
+    from fhir4ds.dqm.mongo_materialization import (
+        prune_materialization_history as mongo_prune_materialization_history,
+    )
+    from fhir4ds.dqm.mongo_materialization import require_pymongo as mongo_require_pymongo
+    from fhir4ds.dqm.mongo_materialization import (
+        reset_patient_queue as mongo_reset_patient_queue,
+    )
+    from fhir4ds.dqm.mongo_materialization import (
+        sync_measure_config as mongo_sync_measure_config,
+    )
+
 _BATCH_NAMES = ("inspect_config", "run_batch", "validate_config")
 _HAPI_NAMES = (
     "enqueue_existing_patients",
