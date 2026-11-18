@@ -64,11 +64,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# DuckDB line extras (D2, Joel ruling 2026-10-29 — narrowing only; pip
-# intersects extra constraints with the wide base pin, which ships in the
-# release that carries the dual extension bundle):
+# DuckDB line extras (D2, Joel ruling 2026-10-29 — narrowing only; the
+# base pin ships marker-scoped `; extra != 'duckdb2'` so the documented
+# duckdb2 opt-in can resolve — see the base-dependencies comment):
 #   pip install fhir4ds-v2[duckdb1]   → pins duckdb to the 1.x line
-#   pip install fhir4ds-v2[duckdb2]   → pins duckdb to 2.0.x (>=2,<2.1)
+#   pip install fhir4ds-v2[duckdb2]   → pins duckdb to 2.0.x (>=2,<2.1,
+#                                       Python >=3.11 — 2.x wheels are
+#                                       cp311+ only)
 # 2.0 stays OPT-IN, not the default, because of an UPSTREAM DuckDB 2.0
 # optimizer pathology — NOT an fhir4ds defect: planner/optimizer passes
 # scale super-linearly with expression-tree size on CMS2-class SQL
@@ -88,7 +90,7 @@ duckdb1 = [
     "duckdb>=1.5.5,<2",
 ]
 duckdb2 = [
-    "duckdb>=2.0.0,<2.1",
+    "duckdb>=2.0.0,<2.1; python_version >= '3.11'",
 ]
 # FHIR R4 / SQL-on-FHIR HTTP surface (``fhir4ds serve``).
 # The engine already depends on duckdb + pyarrow, so parquet output needs

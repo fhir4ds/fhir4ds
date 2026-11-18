@@ -81,6 +81,7 @@ from ...translator.types import (
 from ...translator.expressions._utils import (
     BINARY_OPERATOR_MAP,
     UNARY_OPERATOR_MAP,
+    JSON_LIST_SOURCE_FUNCS,
     _coerce_query_rows_to_list,
     _is_list_returning_sql,
     _contains_sql_subquery,
@@ -3341,10 +3342,7 @@ class FunctionsMixin:
             # single-interval expand_points family also returns a JSON
             # array string — list_count over the VARCHAR text is a
             # BinderException.
-            _JSON_LIST_FUNCS = {
-                "collapse_intervals", "collapse_intervals_per", "expand",
-                "expand1", "expand_points", "expand_points1",
-            }
+            _JSON_LIST_FUNCS = JSON_LIST_SOURCE_FUNCS
             _is_json_list = isinstance(source_sql, SQLFunctionCall) and source_sql.name in _JSON_LIST_FUNCS
             if _is_json_list:
                 if name.lower() == "count":

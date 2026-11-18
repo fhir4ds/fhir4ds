@@ -526,7 +526,10 @@ def _get_qicore_extension_fhirpath(registry, resource_type: Optional[str], prop_
     return None
 
 
-_JSON_LIST_SOURCE_FUNCS = frozenset(
+# Canonical set of functions returning a JSON-array-string list. Shared by
+# the aggregate lowering (_functions.py) and _coerce_json_list_source — keep
+# ONE definition (REV-002 drift doctrine; code review L-2, v0.0.25).
+JSON_LIST_SOURCE_FUNCS = frozenset(
     {
         "collapse_intervals",
         "collapse_intervals_per",
@@ -536,6 +539,9 @@ _JSON_LIST_SOURCE_FUNCS = frozenset(
         "expand_points1",
     }
 )
+
+# Backwards-compatible alias for existing importers.
+_JSON_LIST_SOURCE_FUNCS = JSON_LIST_SOURCE_FUNCS
 
 
 def _coerce_json_list_source(node):
