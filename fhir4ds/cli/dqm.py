@@ -8,7 +8,6 @@ import logging
 import sys
 from pathlib import Path
 
-from fhir4ds.dqm.batch import inspect_config, run_batch, validate_config
 from fhir4ds.dqm.config import (
     AuditSpec,
     DefinitionOutputSpec,
@@ -20,47 +19,82 @@ from fhir4ds.dqm.config import (
     TerminologySpec,
     load_run_config,
 )
-from fhir4ds.dqm.hapi_materialization import (
-    enqueue_existing_patients,
-    explain_patient_scope_plan,
-    install_materialization_schema,
-    listen_and_process,
-    load_materialization_config,
-    materialization_status,
-    process_queue_once,
-    prune_materialization_history,
-    reset_materialization_queue,
-    sync_measure_config,
-)
-from fhir4ds.dqm.mongo_materialization import (
-    enqueue_existing_patients as mongo_enqueue_existing_patients,
-)
-from fhir4ds.dqm.mongo_materialization import (
-    install_mongo_materialization,
-    load_mongo_materialization_config,
-)
-from fhir4ds.dqm.mongo_materialization import (
-    listen_and_process as mongo_listen_and_process,
-)
-from fhir4ds.dqm.mongo_materialization import (
-    materialization_status as mongo_materialization_status,
-)
-from fhir4ds.dqm.mongo_materialization import (
-    process_queue_once as mongo_process_queue_once,
-)
-from fhir4ds.dqm.mongo_materialization import (
-    prune_materialization_history as mongo_prune_materialization_history,
-)
-from fhir4ds.dqm.mongo_materialization import (
-    require_pymongo as mongo_require_pymongo,
-)
-from fhir4ds.dqm.mongo_materialization import (
-    reset_patient_queue as mongo_reset_patient_queue,
-)
-from fhir4ds.dqm.mongo_materialization import (
-    sync_measure_config as mongo_sync_measure_config,
-)
 from fhir4ds.dqm.types import AuditMode
+
+# The pandas-backed DQM backends (batch → evaluator, hapi/mongo
+# materialization) are imported LAZILY (QA-D10-002, v0.0.25): pandas is an
+# optional [measures] extra, and the previous module-level imports made the
+# installed `fhir4ds` console script crash with ModuleNotFoundError on a
+# vanilla `pip install fhir4ds-v2` before argparse could even print help.
+# The names are populated into module globals by _load_dqm_backends() at the
+# top of run(), mirroring the lazy-import + actionable-hint pattern already
+# used by fhir4ds/cli/serve.py for the [serve] extra.
+_BATCH_NAMES = ("inspect_config", "run_batch", "validate_config")
+_HAPI_NAMES = (
+    "enqueue_existing_patients",
+    "explain_patient_scope_plan",
+    "install_materialization_schema",
+    "listen_and_process",
+    "load_materialization_config",
+    "materialization_status",
+    "process_queue_once",
+    "prune_materialization_history",
+    "reset_materialization_queue",
+    "sync_measure_config",
+)
+_MONGO_ALIASES = {
+    # local name -> (module, source attribute); mirrors the previous
+    # `from ... import X as Y` aliasing exactly.
+    "mongo_enqueue_existing_patients": "enqueue_existing_patients",
+    "install_mongo_materialization": "install_mongo_materialization",
+    "load_mongo_materialization_config": "load_mongo_materialization_config",
+    "mongo_listen_and_process": "listen_and_process",
+    "mongo_materialization_status": "materialization_status",
+    "mongo_process_queue_once": "process_queue_once",
+    "mongo_prune_materialization_history": "prune_materialization_history",
+    "mongo_require_pymongo": "require_pymongo",
+    "mongo_reset_patient_queue": "reset_patient_queue",
+    "mongo_sync_measure_config": "sync_measure_config",
+}
+
+
+def _backend_source(name: str) -> tuple[str, str]:
+    if name in _BATCH_NAMES:
+        return "fhir4ds.dqm.batch", name
+    if name in _MONGO_ALIASES:
+        return "fhir4ds.dqm.mongo_materialization", _MONGO_ALIASES[name]
+    return "fhir4ds.dqm.hapi_materialization", name
+
+
+_BACKEND_NAMES = _BATCH_NAMES + _HAPI_NAMES + tuple(_MONGO_ALIASES)
+
+
+def _load_dqm_backends() -> None:
+    """Populate the pandas-backed backend names on first real use.
+
+    `fhir4ds --help` and subcommand parsing must work on a base install
+    (no [measures] extra); only actually running a DQM command needs the
+    heavy imports. Raises ImportError with the install remedy otherwise.
+    """
+    import importlib
+
+    for name in _BACKEND_NAMES:
+        if globals().get(name) is not None:
+            continue
+        module_name, attr = _backend_source(name)
+        try:
+            module = importlib.import_module(module_name)
+        except ImportError as exc:
+            raise ImportError(
+                f"fhir4ds dqm requires optional dependencies that are not "
+                f"installed ({exc}). "
+                "Install them with: pip install 'fhir4ds-v2[measures]'"
+            ) from exc
+        if not hasattr(module, attr):
+            raise AttributeError(  # pragma: no cover - defensive against renames
+                f"{module_name} no longer exports {attr!r}"
+            )
+        globals()[name] = getattr(module, attr)
 
 
 def configure_parser(parser: argparse.ArgumentParser) -> None:
@@ -94,6 +128,11 @@ def run(args: argparse.Namespace) -> int:
             "fhir4ds dqm requires a subcommand: run, validate, inspect, hapi, or mongo",
             file=sys.stderr,
         )
+        return 2
+    try:
+        _load_dqm_backends()
+    except ImportError as exc:
+        print(f"fhir4ds dqm: {exc}", file=sys.stderr)
         return 2
     try:
         if args.dqm_command == "hapi":
