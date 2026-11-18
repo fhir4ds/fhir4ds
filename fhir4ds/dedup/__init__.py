@@ -17,6 +17,22 @@ from __future__ import annotations
 
 from .category import Category, US_CORE_VITAL_LOINC, categorize
 from .codes import normalize_code, normalize_codes
+from .audit import (
+    DEDUP_AUDIT_DDL,
+    create_dedup_audit_table,
+    load_dedup_audit,
+    record_dedup_audit,
+)
+from .linkage import (
+    DEDUP_LINKAGE_DDL,
+    TEMPORAL_DEDUP_EXTENSION_URL,
+    build_linkage_resource,
+    create_dedup_linkage_table,
+    delete_linkage,
+    infer_window_rule,
+    load_dedup_linkage_resources,
+    upsert_dedup_linkage,
+)
 from .pipeline import (
     POC_TROPONIN,
     VITAL_EXTENDED_WINDOW_LOINC,
@@ -25,6 +41,17 @@ from .pipeline import (
     dedup_pass,
     escalate,
     partition,
+)
+from .runner import DedupRunResult, run_dedup
+from .survivorship import (
+    DEDUP_EXTENSION_URL,
+    RICHNESS_KEYS,
+    SURVIVOR_SIGNATURE_RANK,
+    merge_resources,
+    select_survivor,
+    survivor_dedup_id,
+    survivor_ranking_key,
+    survivor_rule_tuple,
 )
 from .temporal import (
     DEFAULT_TZ,
@@ -44,6 +71,7 @@ __all__ = [
     "VITAL_EXTENDED_WINDOW_LOINC",
     "DedupRecord",
     "DedupResult",
+    "DedupRunResult",
     "categorize",
     "normalize_code",
     "normalize_codes",
@@ -53,6 +81,30 @@ __all__ = [
     "dedup_pass",
     "escalate",
     "partition",
+    "run_dedup",
+    # survivorship (slice 3)
+    "DEDUP_EXTENSION_URL",
+    "RICHNESS_KEYS",
+    "SURVIVOR_SIGNATURE_RANK",
+    "merge_resources",
+    "select_survivor",
+    "survivor_dedup_id",
+    "survivor_ranking_key",
+    "survivor_rule_tuple",
+    # linkage (slice 3)
+    "DEDUP_LINKAGE_DDL",
+    "TEMPORAL_DEDUP_EXTENSION_URL",
+    "build_linkage_resource",
+    "create_dedup_linkage_table",
+    "delete_linkage",
+    "infer_window_rule",
+    "load_dedup_linkage_resources",
+    "upsert_dedup_linkage",
+    # audit (slice 3)
+    "DEDUP_AUDIT_DDL",
+    "create_dedup_audit_table",
+    "load_dedup_audit",
+    "record_dedup_audit",
     "NormalizedDate",
     "Signature",
     "DEFAULT_TZ",
