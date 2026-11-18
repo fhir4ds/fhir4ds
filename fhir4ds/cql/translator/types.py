@@ -1635,6 +1635,44 @@ def deduplicate_retrieve_ctes(ctes: List[SQLRetrieveCTE]) -> List[SQLRetrieveCTE
     return list(seen.values())
 
 
+def _mask_quoted_sql(sql: str) -> str:
+    """Blank out the CONTENTS of string literals and quoted identifiers.
+
+    Used by :meth:`SQLFragment._resolve_materialization` to measure paren
+    depth at CTE-name occurrence positions without being skewed by
+    parentheses inside literals (valueset names like ``"... (encounter-
+    diagnosis)"`` carry their own parens). Quotes themselves are preserved
+    and the output has the same length as the input, so occurrence indices
+    computed on the original SQL remain valid.
+    """
+    out = list(sql)
+    i = 0
+    n = len(sql)
+    while i < n:
+        ch = sql[i]
+        if ch == "'":
+            j = i + 1
+            while j < n:
+                if sql[j] == "'":
+                    if j + 1 < n and sql[j + 1] == "'":  # escaped ''
+                        j += 2
+                        continue
+                    break
+                j += 1
+            for k in range(i + 1, min(j, n)):
+                out[k] = " "
+            i = j + 1 if j < n else n
+        elif ch == '"':
+            j = sql.find('"', i + 1)
+            end = j if j != -1 else n
+            for k in range(i + 1, end):
+                out[k] = " "
+            i = end + 1 if j != -1 else n
+        else:
+            i += 1
+    return "".join(out)
+
+
 @dataclass
 class SQLFragment:
     """
@@ -1655,8 +1693,23 @@ class SQLFragment:
         most once drops MATERIALIZED (inlining once is equal-or-faster and
         avoids eager materialization cost).
 
+        A single-reference CTE ALSO keeps MATERIALIZED when its one
+        reference is NESTED (inside a subquery — e.g. an arm of a UNION
+        chain inside a correlated EXISTS) rather than a top-level FROM
+        table of its consumer. Inlining into a nested context lets DuckDB
+        re-evaluate the CTE body per outer row / lose the join-order fence,
+        which is the CMS133 regression (sql_execution 732ms -> ~2000ms,
+        traced to one Condition retrieve whose only reference sat at
+        paren-depth 2 inside ``WHERE EXISTS (SELECT 1 FROM (... UNION
+        ...) AS X WHERE ... AND X.patient_id = outer.patient_id)``;
+        materializing just that one CTE restored ~170ms).
+
         Reference counting is lexical on rendered SQL: each CTE's name is
         counted inside every OTHER CTE's rendered body plus the main query.
+        Nesting is measured as the paren depth at the occurrence position,
+        computed on a quote-masked copy of the consumer SQL so parens
+        inside string literals / quoted identifiers (valueset names carry
+        them) do not skew the count.
 
         NOTE: resolves by MUTATING the CTEDefinitions in place; assumes
         to_sql() is called once per fragment (every translator path does —
@@ -1670,17 +1723,43 @@ class SQLFragment:
             for cte in self.ctes
         }
         main_sql = self.main_query.to_sql()
+        masked = {
+            cte.name: _mask_quoted_sql(cte.query.to_sql())
+            for cte in self.ctes
+        }
+        masked_main = _mask_quoted_sql(main_sql)
+
+        def _nested_reference(name: str, consumer: str, consumer_masked: str) -> bool:
+            """True if ``name`` occurs at paren depth > 0 in the consumer.
+
+            Occurrence positions are found in the rendered SQL (the mask
+            blanks quoted-identifier contents, so quoted CTE names would
+            never match there); depth is measured on the masked copy.
+            """
+            idx = consumer.find(name)
+            while idx != -1:
+                prefix = consumer_masked[:idx]
+                if prefix.count("(") - prefix.count(")") > 0:
+                    return True
+                idx = consumer.find(name, idx + len(name))
+            return False
+
         for cte in self.ctes:
             if cte.materialized is not None:
                 continue
             refs = 0
+            nested = False
             name = cte.name
             for other in self.ctes:
                 if other.name == name:
                     continue
                 refs += rendered[other.name].count(name)
+                if _nested_reference(name, rendered[other.name], masked[other.name]):
+                    nested = True
             refs += main_sql.count(name)
-            cte.materialized = refs > 1
+            if _nested_reference(name, main_sql, masked_main):
+                nested = True
+            cte.materialized = refs > 1 or nested
 
     def to_sql(self) -> str:
         if not self.ctes:

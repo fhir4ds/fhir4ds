@@ -3,8 +3,12 @@
 CTEDefinition.materialized is now tri-state:
 - True  -> forced AS MATERIALIZED (e.g. shared _rt_<Type> base scans)
 - False -> forced plain CTE
-- None  -> AUTO: SQLFragment.to_sql() keeps MATERIALIZED only for CTEs
-           referenced by more than one consumer.
+- None  -> AUTO: SQLFragment.to_sql() keeps MATERIALIZED for CTEs
+           referenced by more than one consumer OR whose (single)
+           reference is nested inside a subquery (CMS133 regression:
+           inlining a CTE into a correlated EXISTS re-evaluated it per
+           outer row, 732ms -> ~2000ms; see
+           SQLFragment._resolve_materialization).
 
 Rationale (measured): the Phase-1 pathology (DuckDB inlining retrieves into
 consumers and pushing heavy predicates into base table scans) only recurs
@@ -60,11 +64,78 @@ class TestConditionalMaterialization:
 
     def test_single_reference_cte_inlines(self):
         sql = _pop_sql(_CQL_SINGLE)
-        # "Condition: VS1" has exactly one consumer (the "Cond1" define) and
-        # "Cond1" one consumer (the IP EXISTS) — they must NOT be forced
-        # MATERIALIZED; the resolver drops the hint for single-ref CTEs.
+        # "Condition: VS1" is consumed as a TOP-LEVEL FROM table of the
+        # "Cond1" define — single top-level reference still INLINES (the
+        # phase-2 win is preserved). "Cond1" itself is consumed inside a
+        # correlated EXISTS — a NESTED reference (the exact shape that
+        # regressed CMS133, 732ms -> ~2000ms when inlined) — so it KEEPS
+        # MATERIALIZED under the nesting rule.
         assert '"Condition: VS1" AS (\n' in sql
-        assert '"Cond1" AS (\n' in sql
+        assert '"Cond1" AS MATERIALIZED' in sql
+
+    def test_single_reference_toplevel_inline_still_happens(self):
+        """Resolver-level check: a single TOP-LEVEL FROM reference inlines.
+
+        The nesting rule must not collapse AUTO back to always-materialized:
+        a CTE consumed as a plain top-level FROM table of its consumer's
+        outermost SELECT still drops the MATERIALIZED hint.
+        """
+        from fhir4ds.cql.translator.types import (
+            CTEDefinition,
+            SQLFragment,
+            SQLIdentifier,
+            SQLSelect,
+        )
+        frag = SQLFragment(
+            main_query=SQLSelect(
+                columns=[SQLIdentifier(name="x")],
+                from_clause=SQLIdentifier(name="c"),
+            ),
+            ctes=[
+                CTEDefinition(
+                    name="c",
+                    query=SQLSelect(
+                        columns=[SQLIdentifier(name="x")],
+                        from_clause=SQLIdentifier(name="t"),
+                    ),
+                ),
+            ],
+        )
+        sql = frag.to_sql()
+        assert "AS MATERIALIZED (" not in sql
+
+    def test_single_nested_reference_keeps_materialized(self):
+        """A single reference inside a subquery keeps MATERIALIZED.
+
+        Regression guard for CMS133: the Condition retrieve CTE whose only
+        reference was an arm of a UNION chain inside a correlated EXISTS.
+        Reproduced at paren depth 2 with a scalar subquery consumer.
+        """
+        from fhir4ds.cql.translator.types import (
+            CTEDefinition,
+            SQLFragment,
+            SQLIdentifier,
+            SQLRaw,
+            SQLSelect,
+        )
+        # main query references "c" only inside EXISTS (SELECT 1 FROM c)
+        main = SQLSelect(
+            columns=[SQLRaw(raw_sql="(SELECT 1 FROM c WHERE c.x = o.x)")],
+            from_clause=SQLIdentifier(name="o"),
+        )
+        frag = SQLFragment(
+            main_query=main,
+            ctes=[
+                CTEDefinition(
+                    name="c",
+                    query=SQLSelect(
+                        columns=[SQLIdentifier(name="x")],
+                        from_clause=SQLIdentifier(name="t"),
+                    ),
+                ),
+            ],
+        )
+        assert "c AS MATERIALIZED (" in frag.to_sql()
 
     def test_tri_state_forced_values_survive(self):
         from fhir4ds.cql.translator.types import (

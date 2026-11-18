@@ -176,7 +176,10 @@ define "A":
 
     assert ("Chain", "Encounters") in translator._context._promoted_cte_keys
 
-    let_defs = set(re.findall(r'"(_let_[^"]+)" AS \(', sql))
+    # Let CTEs may keep MATERIALIZED under the nesting rule (their single
+    # reference sits inside the promoted _fn_ Chain CTE body — a nested
+    # consumer; see SQLFragment._resolve_materialization, CMS133 guard).
+    let_defs = set(re.findall(r'"(_let_[^"]+)" AS (?:MATERIALIZED )?\(', sql))
     let_refs = set(re.findall(r'"(_let_[^"]+)"', sql))
     assert let_refs
     assert let_refs == let_defs
