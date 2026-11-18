@@ -233,6 +233,44 @@ class TestExtraction:
         assert fields["first"] == ["alice"]
         assert fields["last"] == ["smith"]
 
+    def test_pathological_non_dict_container_entries_skipped_dom14_skeptic(self):
+        """D14 SKEPTIC (v0.0.25): non-dict address/telecom/identifier entries
+        are skipped, not crashed on — crash-free normalizer doctrine."""
+        p = {
+            "address": ["not-an-address", {"line": ["123 Main St"]}],
+            "telecom": ["nope", None, 7],
+            "identifier": ["x", 3, None],
+        }
+        fields = extract_patient_fields(p)
+        assert fields["street_line"] == ["123 main st"]
+        assert "phone" not in fields
+        assert "namespace_id" not in fields
+
+    def test_pathological_non_string_identifier_system_skipped_dom14_skeptic(self):
+        """D14 SKEPTIC: a non-string identifier ``system`` (dict/number) must
+        not reach ``.lower()``; the identifier is treated as system-less."""
+        p = {
+            "identifier": [
+                {"system": {"nested": True}, "value": "V1"},
+                {"system": 42, "value": "V2"},
+                {"value": "V3"},  # genuinely absent system (existing behavior)
+            ]
+        }
+        fields = extract_patient_fields(p)
+        assert "namespace_id" not in fields
+        assert "ssn4" not in fields
+
+    def test_pathological_non_string_telecom_value_rejected_dom14_skeptic(self):
+        """D14 SKEPTIC: a non-string telecom ``value`` (e.g. a phone stored
+        as a number) is rejected, not crashed on."""
+        p = {"telecom": [{"system": "phone", "value": 2065550100}]}
+        fields = extract_patient_fields(p)
+        assert "phone" not in fields
+
+    def test_pathological_non_dict_address_entry_skipped_dom14_skeptic(self):
+        p = {"address": ["flat", 9, {"line": ["742 Evergreen Terrace"]}]}
+        fields = extract_patient_fields(p)
+        assert fields["street_line"] == ["742 evergreen terrace"]
 
     def test_empty_resource(self):
         assert extract_patient_fields({}) == {}

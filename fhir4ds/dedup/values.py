@@ -14,6 +14,7 @@ merge. Absent values key on a dataAbsentReason sentinel.
 from __future__ import annotations
 
 import json
+import math
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Optional
 
@@ -35,9 +36,15 @@ _DAR_NULL = "DAR:null"
 
 def _round2(value) -> Optional[Decimal]:
     try:
-        return Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        result = Decimal(str(value)).quantize(Decimal("0.01"),
+                                              rounding=ROUND_HALF_UP)
     except (InvalidOperation, ValueError, TypeError):
         return None
+    if not result.is_finite():
+        # Decimal('NaN') quantizes to NaN without raising; Decimal('Infinity')
+        # raises. Both are malformed values, not a rounded quantity.
+        return None
+    return result
 
 
 def _quantity_key(value, code: str) -> str:
@@ -96,6 +103,12 @@ def normalize_value(resource: dict) -> str:
             q_value = value.get("value")
             if isinstance(q_value, bool) or not isinstance(q_value, (int, float)):
                 continue
+            if isinstance(q_value, float) and not math.isfinite(q_value):
+                # D15 SKEPTIC (v0.0.25): non-finite values are MALFORMED, not
+                # absent — a per-repr sentinel keeps them out of the DAR:null
+                # partition (an inf-valued row must never merge with a
+                # value-absent row) and keeps NaN / inf / -inf distinct.
+                return f"DAR:malformed:{q_value!r}"
             unit = value.get("code") or value.get("unit")
             if not isinstance(unit, str) or not unit:
                 unit = "1"

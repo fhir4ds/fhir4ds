@@ -89,7 +89,11 @@ _DATETIME_SIGNATURES = (Signature.DT_NAIVE, Signature.DT_Z, Signature.DT_OFFSET)
 # Patient-typed reference extraction: relative, absolute, and versioned
 # spellings normalize to "Patient/<id>" (patient_ref doctrine — Patient-typed
 # refs only; bare ids and non-Patient subjects do not attribute).
-_PATIENT_REF_RE = re.compile(r"Patient/([A-Za-z0-9\-.]{1,64})")
+# ANCHORED (D15 SKEPTIC, v0.0.25): the Patient/<id> segment must be the FINAL
+# path segment (after _history stripping) — an unanchored re.search attributed
+# phantom patients from embedded/trailing path text such as
+# ".../Patient/abc/other" or ".../List/Patient/abc-items" mid-path.
+_PATIENT_REF_RE = re.compile(r"(?:^|/)Patient/([A-Za-z0-9\-.]{1,64})$")
 _HISTORY_RE = re.compile(r"/_history/[A-Za-z0-9\-.]+$")
 
 
@@ -307,7 +311,10 @@ def _window_instant(record: DedupRecord, default_tz: str = DEFAULT_TZ
     """Comparable instant for Stage-2 windowing, or None.
 
     - DT_Z / DT_OFFSET: the authored instant (``dt_utc``, falling back to the
-      period ``start_utc``).
+      period ``start_utc``, then the period ``end_utc`` — a mixed-precision
+      Period whose start is date-only still windows on its timestamped END;
+      before the v0.0.25 D15 fix such rows had NO comparable instant and
+      silently dropped out of escalation).
     - DT_NAIVE: the authored wall clock interpreted in the configured default
       TZ (design §2a: the default TZ applies ONLY inside Stage-2 comparisons).
     - Date-level signatures: None (no time component to compare).
@@ -316,7 +323,7 @@ def _window_instant(record: DedupRecord, default_tz: str = DEFAULT_TZ
     if nd is None or nd.signature not in _DATETIME_SIGNATURES:
         return None
     if nd.signature in (Signature.DT_Z, Signature.DT_OFFSET):
-        text = nd.dt_utc or nd.start_utc
+        text = nd.dt_utc or nd.start_utc or nd.end_utc
         return _instant(text) if text else None
     naive = _naive_authored_datetime(record)
     if naive is None:

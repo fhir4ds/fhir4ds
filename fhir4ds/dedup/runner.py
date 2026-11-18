@@ -27,6 +27,7 @@ from .survivorship import (
     select_survivor,
     survivor_dedup_id,
     survivor_ranking_key,
+    survivor_rule_tuple,
 )
 
 __all__ = ["DedupRunResult", "run_dedup"]
@@ -112,7 +113,13 @@ def run_dedup(
                 len(cluster),
                 survivor.rid,
                 rule,
-                list(survivor_ranking_key(survivor)),
+                # L4 fix (v0.0.25 D15): the audit docstring (and slice-3
+                # tests) define rule_json as the serialized SURVIVORSHIP
+                # ranking tuple [signature, richness, rid] — timestamp-free
+                # per the determinism doctrine. This was previously fed the
+                # internal survivor_ranking_key, whose second element
+                # embeds the authored timestamp — a doc/behavior mismatch.
+                survivor_rule_tuple(survivor),
                 _cluster_evidence(cluster, survivor),
             )
             survivors.append(merged)

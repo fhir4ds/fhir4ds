@@ -81,6 +81,8 @@ def norm_phone(value: Optional[str]) -> Optional[str]:
     """
     if value is None:
         return None
+    if not isinstance(value, str):
+        return None  # pathological-resource guard: non-string values reject
     digits = re.sub(r"\D", "", value)
     if len(digits) == 11 and digits.startswith("1"):
         digits = digits[1:]
@@ -542,6 +544,8 @@ def extract_patient_fields(patient_resource: dict) -> dict[str, list[str]]:
     add("dob", norm_date(patient_resource.get("birthDate")))
 
     for address in patient_resource.get("address") or []:
+        if not isinstance(address, dict):
+            continue  # pathological-resource guard: non-dict entries skipped
         lines = address.get("line") or []
         if isinstance(lines, str):
             lines = [lines]
@@ -552,6 +556,8 @@ def extract_patient_fields(patient_resource: dict) -> dict[str, list[str]]:
             add("street_line", norm_text(lines[0]))
 
     for telecom in patient_resource.get("telecom") or []:
+        if not isinstance(telecom, dict):
+            continue  # pathological-resource guard: non-dict entries skipped
         system = telecom.get("system")
         value = telecom.get("value")
         if system == "phone":
@@ -562,7 +568,11 @@ def extract_patient_fields(patient_resource: dict) -> dict[str, list[str]]:
                 add("email", norm_text_keep_dots(value))
 
     for ident in patient_resource.get("identifier") or []:
+        if not isinstance(ident, dict):
+            continue  # pathological-resource guard: non-dict entries skipped
         system = ident.get("system") or ""
+        if not isinstance(system, str):
+            system = ""  # non-string system: no namespace heuristic applies
         system_l = system.lower()
         value = ident.get("value")
         if not isinstance(value, str) or not value.strip():
