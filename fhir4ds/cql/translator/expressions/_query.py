@@ -7179,7 +7179,11 @@ class QueryMixin:
                             # align the starting value's physical type so
                             # list_prepend does not binder-fail mixing
                             # INTEGER[]/VARCHAR[]. Numeric starts cast to
-                            # DECIMAL(38,8) to match the accumulator binding.
+                            # VARCHAR: the element list is VARCHAR[] and the
+                            # fold lambda transports its (internally DECIMAL)
+                            # result as VARCHAR too — keeping every list
+                            # element VARCHAR is what makes duckdb 2.0's
+                            # common-super-type binder accept the fold.
                             starting_sql = SQLCast(
                                 expression=starting_sql,
                                 target_type="VARCHAR",
