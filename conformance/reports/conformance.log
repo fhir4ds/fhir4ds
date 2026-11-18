@@ -48521,3 +48521,499 @@ At:
       Expected error or NULL per CQL §16, got 15
     - CqlTypesTest.xml::DateTimeUncertain
       Expected {'start': 18, 'end': 49, 'lowClosed': True, 'highClosed': True} (dict), got {"start":19,"end":49,"lowClosed":true,"highClosed":true} (str)
+================================================================================
+[2026-11-17T22:20:08-06:00]  ViewDefinition  |  144/144 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-17T22:38:57-06:00]  ViewDefinition  |  144/144 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-17T22:38:59-06:00]  FHIRPath (R4)  |  1038/1038 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-17T22:39:09-06:00]  CQL  |  2029/2037 (99.6%)  |  FAIL
+  Failures (8):
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse2
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::NotEquivalentNullNull
+      Expected error or NULL per CQL §16, got False
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainAdd
+      Expected {'start': 32, 'end': 88, 'lowClosed': True, 'highClosed': True} (dict), got {"start":34,"end":88,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainSubtract
+      Expected {'start': 0, 'end': 40, 'lowClosed': True, 'highClosed': True} (dict), got {"start":1,"end":40,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainMultiply
+      Expected {'start': 256, 'end': 1936, 'lowClosed': True, 'highClosed': True} (dict), got {"start":289,"end":1936,"lowClosed":true,"highClosed":true} (str)
+    - CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs
+      Expected error or NULL per CQL §16, got 15
+    - CqlTypesTest.xml::DateTimeUncertain
+      Expected {'start': 18, 'end': 49, 'lowClosed': True, 'highClosed': True} (dict), got {"start":19,"end":49,"lowClosed":true,"highClosed":true} (str)
+================================================================================
+[2026-11-17T22:40:44-06:00]  DQM (QI-Core 2025)  |  47/47 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-17T22:44:43-06:00]  ViewDefinition  |  144/144 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-17T22:44:44-06:00]  FHIRPath (R4)  |  1038/1038 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-17T22:44:55-06:00]  CQL  |  2029/2037 (99.6%)  |  FAIL
+  Failures (8):
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse2
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::NotEquivalentNullNull
+      Expected error or NULL per CQL §16, got False
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainAdd
+      Expected {'start': 32, 'end': 88, 'lowClosed': True, 'highClosed': True} (dict), got {"start":34,"end":88,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainSubtract
+      Expected {'start': 0, 'end': 40, 'lowClosed': True, 'highClosed': True} (dict), got {"start":1,"end":40,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainMultiply
+      Expected {'start': 256, 'end': 1936, 'lowClosed': True, 'highClosed': True} (dict), got {"start":289,"end":1936,"lowClosed":true,"highClosed":true} (str)
+    - CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs
+      Expected error or NULL per CQL §16, got 15
+    - CqlTypesTest.xml::DateTimeUncertain
+      Expected {'start': 18, 'end': 49, 'lowClosed': True, 'highClosed': True} (dict), got {"start":19,"end":49,"lowClosed":true,"highClosed":true} (str)
+================================================================================
+[2026-11-17T22:46:12-06:00]  DQM (US-Core 2025)  |  73/73 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-17T22:46:17-06:00]  ALL SUITES (master run)  |  3369/3377 (99.8%)  |  FAIL
+  Failures (8):
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse2
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::NotEquivalentNullNull
+      Expected error or NULL per CQL §16, got False
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainAdd
+      Expected {'start': 32, 'end': 88, 'lowClosed': True, 'highClosed': True} (dict), got {"start":34,"end":88,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainSubtract
+      Expected {'start': 0, 'end': 40, 'lowClosed': True, 'highClosed': True} (dict), got {"start":1,"end":40,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainMultiply
+      Expected {'start': 256, 'end': 1936, 'lowClosed': True, 'highClosed': True} (dict), got {"start":289,"end":1936,"lowClosed":true,"highClosed":true} (str)
+    - CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs
+      Expected error or NULL per CQL §16, got 15
+    - CqlTypesTest.xml::DateTimeUncertain
+      Expected {'start': 18, 'end': 49, 'lowClosed': True, 'highClosed': True} (dict), got {"start":19,"end":49,"lowClosed":true,"highClosed":true} (str)
+================================================================================
+[2026-11-17T22:46:29-06:00]  DQM (QI-Core 2025)  |  47/47 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-17T22:47:13-06:00]  CQL  |  2029/2037 (99.6%)  |  FAIL
+  Failures (8):
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse2
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::NotEquivalentNullNull
+      Expected error or NULL per CQL §16, got False
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainAdd
+      Expected {'start': 32, 'end': 88, 'lowClosed': True, 'highClosed': True} (dict), got {"start":34,"end":88,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainSubtract
+      Expected {'start': 0, 'end': 40, 'lowClosed': True, 'highClosed': True} (dict), got {"start":1,"end":40,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainMultiply
+      Expected {'start': 256, 'end': 1936, 'lowClosed': True, 'highClosed': True} (dict), got {"start":289,"end":1936,"lowClosed":true,"highClosed":true} (str)
+    - CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs
+      Expected error or NULL per CQL §16, got 15
+    - CqlTypesTest.xml::DateTimeUncertain
+      Expected {'start': 18, 'end': 49, 'lowClosed': True, 'highClosed': True} (dict), got {"start":19,"end":49,"lowClosed":true,"highClosed":true} (str)
+================================================================================
+[2026-11-17T22:51:24-06:00]  DQM (US-Core 2025)  |  72/73 (98.6%)  |  FAIL
+  Failures (1):
+    - CMS156::Full Logic Accuracy
+      local variable 'reverse_cols' referenced before assignment
+================================================================================
+[2026-11-17T22:51:29-06:00]  ALL SUITES (master run)  |  3368/3377 (99.7%)  |  FAIL
+  Failures (9):
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse2
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::NotEquivalentNullNull
+      Expected error or NULL per CQL §16, got False
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainAdd
+      Expected {'start': 32, 'end': 88, 'lowClosed': True, 'highClosed': True} (dict), got {"start":34,"end":88,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainSubtract
+      Expected {'start': 0, 'end': 40, 'lowClosed': True, 'highClosed': True} (dict), got {"start":1,"end":40,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainMultiply
+      Expected {'start': 256, 'end': 1936, 'lowClosed': True, 'highClosed': True} (dict), got {"start":289,"end":1936,"lowClosed":true,"highClosed":true} (str)
+    - CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs
+      Expected error or NULL per CQL §16, got 15
+    - CqlTypesTest.xml::DateTimeUncertain
+      Expected {'start': 18, 'end': 49, 'lowClosed': True, 'highClosed': True} (dict), got {"start":19,"end":49,"lowClosed":true,"highClosed":true} (str)
+    - CMS156::Full Logic Accuracy
+      local variable 'reverse_cols' referenced before assignment
+================================================================================
+[2026-11-17T23:01:54-06:00]  ViewDefinition  |  144/144 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-17T23:01:55-06:00]  FHIRPath (R4)  |  1038/1038 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-17T23:02:05-06:00]  CQL  |  2029/2037 (99.6%)  |  FAIL
+  Failures (8):
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse2
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::NotEquivalentNullNull
+      Expected error or NULL per CQL §16, got False
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainAdd
+      Expected {'start': 32, 'end': 88, 'lowClosed': True, 'highClosed': True} (dict), got {"start":34,"end":88,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainSubtract
+      Expected {'start': 0, 'end': 40, 'lowClosed': True, 'highClosed': True} (dict), got {"start":1,"end":40,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainMultiply
+      Expected {'start': 256, 'end': 1936, 'lowClosed': True, 'highClosed': True} (dict), got {"start":289,"end":1936,"lowClosed":true,"highClosed":true} (str)
+    - CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs
+      Expected error or NULL per CQL §16, got 15
+    - CqlTypesTest.xml::DateTimeUncertain
+      Expected {'start': 18, 'end': 49, 'lowClosed': True, 'highClosed': True} (dict), got {"start":19,"end":49,"lowClosed":true,"highClosed":true} (str)
+================================================================================
+[2026-11-17T23:03:39-06:00]  DQM (QI-Core 2025)  |  47/47 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-17T23:09:01-06:00]  DQM (US-Core 2025)  |  73/73 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-17T23:09:06-06:00]  ALL SUITES (master run)  |  3369/3377 (99.8%)  |  FAIL
+  Failures (8):
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse2
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::NotEquivalentNullNull
+      Expected error or NULL per CQL §16, got False
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainAdd
+      Expected {'start': 32, 'end': 88, 'lowClosed': True, 'highClosed': True} (dict), got {"start":34,"end":88,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainSubtract
+      Expected {'start': 0, 'end': 40, 'lowClosed': True, 'highClosed': True} (dict), got {"start":1,"end":40,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainMultiply
+      Expected {'start': 256, 'end': 1936, 'lowClosed': True, 'highClosed': True} (dict), got {"start":289,"end":1936,"lowClosed":true,"highClosed":true} (str)
+    - CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs
+      Expected error or NULL per CQL §16, got 15
+    - CqlTypesTest.xml::DateTimeUncertain
+      Expected {'start': 18, 'end': 49, 'lowClosed': True, 'highClosed': True} (dict), got {"start":19,"end":49,"lowClosed":true,"highClosed":true} (str)
+================================================================================
+[2026-11-17T23:20:50-06:00]  ViewDefinition  |  144/144 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-17T23:20:51-06:00]  FHIRPath (R4)  |  1038/1038 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-17T23:21:01-06:00]  CQL  |  2029/2037 (99.6%)  |  FAIL
+  Failures (8):
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse2
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::NotEquivalentNullNull
+      Expected error or NULL per CQL §16, got False
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainAdd
+      Expected {'start': 32, 'end': 88, 'lowClosed': True, 'highClosed': True} (dict), got {"start":34,"end":88,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainSubtract
+      Expected {'start': 0, 'end': 40, 'lowClosed': True, 'highClosed': True} (dict), got {"start":1,"end":40,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainMultiply
+      Expected {'start': 256, 'end': 1936, 'lowClosed': True, 'highClosed': True} (dict), got {"start":289,"end":1936,"lowClosed":true,"highClosed":true} (str)
+    - CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs
+      Expected error or NULL per CQL §16, got 15
+    - CqlTypesTest.xml::DateTimeUncertain
+      Expected {'start': 18, 'end': 49, 'lowClosed': True, 'highClosed': True} (dict), got {"start":19,"end":49,"lowClosed":true,"highClosed":true} (str)
+================================================================================
+[2026-11-17T23:22:35-06:00]  DQM (QI-Core 2025)  |  47/47 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-17T23:28:01-06:00]  DQM (US-Core 2025)  |  73/73 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-17T23:28:06-06:00]  ALL SUITES (master run)  |  3369/3377 (99.8%)  |  FAIL
+  Failures (8):
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse2
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::NotEquivalentNullNull
+      Expected error or NULL per CQL §16, got False
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainAdd
+      Expected {'start': 32, 'end': 88, 'lowClosed': True, 'highClosed': True} (dict), got {"start":34,"end":88,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainSubtract
+      Expected {'start': 0, 'end': 40, 'lowClosed': True, 'highClosed': True} (dict), got {"start":1,"end":40,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainMultiply
+      Expected {'start': 256, 'end': 1936, 'lowClosed': True, 'highClosed': True} (dict), got {"start":289,"end":1936,"lowClosed":true,"highClosed":true} (str)
+    - CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs
+      Expected error or NULL per CQL §16, got 15
+    - CqlTypesTest.xml::DateTimeUncertain
+      Expected {'start': 18, 'end': 49, 'lowClosed': True, 'highClosed': True} (dict), got {"start":19,"end":49,"lowClosed":true,"highClosed":true} (str)
+================================================================================
+[2026-11-17T23:46:30-06:00]  ViewDefinition  |  144/144 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-17T23:46:31-06:00]  FHIRPath (R4)  |  1038/1038 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-17T23:46:41-06:00]  CQL  |  2029/2037 (99.6%)  |  FAIL
+  Failures (8):
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse2
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::NotEquivalentNullNull
+      Expected error or NULL per CQL §16, got False
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainAdd
+      Expected {'start': 32, 'end': 88, 'lowClosed': True, 'highClosed': True} (dict), got {"start":34,"end":88,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainSubtract
+      Expected {'start': 0, 'end': 40, 'lowClosed': True, 'highClosed': True} (dict), got {"start":1,"end":40,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainMultiply
+      Expected {'start': 256, 'end': 1936, 'lowClosed': True, 'highClosed': True} (dict), got {"start":289,"end":1936,"lowClosed":true,"highClosed":true} (str)
+    - CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs
+      Expected error or NULL per CQL §16, got 15
+    - CqlTypesTest.xml::DateTimeUncertain
+      Expected {'start': 18, 'end': 49, 'lowClosed': True, 'highClosed': True} (dict), got {"start":19,"end":49,"lowClosed":true,"highClosed":true} (str)
+================================================================================
+[2026-11-17T23:48:15-06:00]  DQM (QI-Core 2025)  |  46/47 (97.9%)  |  FAIL
+  Failures (1):
+    - CMS56::Full Logic Accuracy
+      Accuracy: 96.6%
+================================================================================
+[2026-11-17T23:53:34-06:00]  DQM (US-Core 2025)  |  73/73 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-17T23:53:39-06:00]  ALL SUITES (master run)  |  3368/3377 (99.7%)  |  FAIL
+  Failures (9):
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse2
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::NotEquivalentNullNull
+      Expected error or NULL per CQL §16, got False
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainAdd
+      Expected {'start': 32, 'end': 88, 'lowClosed': True, 'highClosed': True} (dict), got {"start":34,"end":88,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainSubtract
+      Expected {'start': 0, 'end': 40, 'lowClosed': True, 'highClosed': True} (dict), got {"start":1,"end":40,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainMultiply
+      Expected {'start': 256, 'end': 1936, 'lowClosed': True, 'highClosed': True} (dict), got {"start":289,"end":1936,"lowClosed":true,"highClosed":true} (str)
+    - CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs
+      Expected error or NULL per CQL §16, got 15
+    - CqlTypesTest.xml::DateTimeUncertain
+      Expected {'start': 18, 'end': 49, 'lowClosed': True, 'highClosed': True} (dict), got {"start":19,"end":49,"lowClosed":true,"highClosed":true} (str)
+    - CMS56::Full Logic Accuracy
+      Accuracy: 96.6%
+================================================================================
+[2026-11-18T03:25:31-06:00]  ViewDefinition  |  144/144 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-18T03:25:33-06:00]  FHIRPath (R4)  |  1038/1038 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-18T03:25:43-06:00]  CQL  |  2029/2037 (99.6%)  |  FAIL
+  Failures (8):
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse2
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::NotEquivalentNullNull
+      Expected error or NULL per CQL §16, got False
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainAdd
+      Expected {'start': 32, 'end': 88, 'lowClosed': True, 'highClosed': True} (dict), got {"start":34,"end":88,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainSubtract
+      Expected {'start': 0, 'end': 40, 'lowClosed': True, 'highClosed': True} (dict), got {"start":1,"end":40,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainMultiply
+      Expected {'start': 256, 'end': 1936, 'lowClosed': True, 'highClosed': True} (dict), got {"start":289,"end":1936,"lowClosed":true,"highClosed":true} (str)
+    - CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs
+      Expected error or NULL per CQL §16, got 15
+    - CqlTypesTest.xml::DateTimeUncertain
+      Expected {'start': 18, 'end': 49, 'lowClosed': True, 'highClosed': True} (dict), got {"start":19,"end":49,"lowClosed":true,"highClosed":true} (str)
+================================================================================
+[2026-11-18T03:27:14-06:00]  DQM (QI-Core 2025)  |  47/47 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-18T03:32:33-06:00]  DQM (US-Core 2025)  |  73/73 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-18T03:32:37-06:00]  ALL SUITES (master run)  |  3369/3377 (99.8%)  |  FAIL
+  Failures (8):
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse2
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::NotEquivalentNullNull
+      Expected error or NULL per CQL §16, got False
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainAdd
+      Expected {'start': 32, 'end': 88, 'lowClosed': True, 'highClosed': True} (dict), got {"start":34,"end":88,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainSubtract
+      Expected {'start': 0, 'end': 40, 'lowClosed': True, 'highClosed': True} (dict), got {"start":1,"end":40,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainMultiply
+      Expected {'start': 256, 'end': 1936, 'lowClosed': True, 'highClosed': True} (dict), got {"start":289,"end":1936,"lowClosed":true,"highClosed":true} (str)
+    - CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs
+      Expected error or NULL per CQL §16, got 15
+    - CqlTypesTest.xml::DateTimeUncertain
+      Expected {'start': 18, 'end': 49, 'lowClosed': True, 'highClosed': True} (dict), got {"start":19,"end":49,"lowClosed":true,"highClosed":true} (str)
+================================================================================
+[2026-11-18T05:52:46-06:00]  ViewDefinition  |  144/144 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-18T05:52:48-06:00]  FHIRPath (R4)  |  1038/1038 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-18T05:52:58-06:00]  CQL  |  2029/2037 (99.6%)  |  FAIL
+  Failures (8):
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse2
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::NotEquivalentNullNull
+      Expected error or NULL per CQL §16, got False
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainAdd
+      Expected {'start': 32, 'end': 88, 'lowClosed': True, 'highClosed': True} (dict), got {"start":34,"end":88,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainSubtract
+      Expected {'start': 0, 'end': 40, 'lowClosed': True, 'highClosed': True} (dict), got {"start":1,"end":40,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainMultiply
+      Expected {'start': 256, 'end': 1936, 'lowClosed': True, 'highClosed': True} (dict), got {"start":289,"end":1936,"lowClosed":true,"highClosed":true} (str)
+    - CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs
+      Expected error or NULL per CQL §16, got 15
+    - CqlTypesTest.xml::DateTimeUncertain
+      Expected {'start': 18, 'end': 49, 'lowClosed': True, 'highClosed': True} (dict), got {"start":19,"end":49,"lowClosed":true,"highClosed":true} (str)
+================================================================================
+[2026-11-18T05:54:31-06:00]  DQM (QI-Core 2025)  |  47/47 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-18T05:55:02-06:00]  ALL SUITES (master run)  |  3369/3377 (99.8%)  |  FAIL
+  Failures (8):
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse2
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::NotEquivalentNullNull
+      Expected error or NULL per CQL §16, got False
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainAdd
+      Expected {'start': 32, 'end': 88, 'lowClosed': True, 'highClosed': True} (dict), got {"start":34,"end":88,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainSubtract
+      Expected {'start': 0, 'end': 40, 'lowClosed': True, 'highClosed': True} (dict), got {"start":1,"end":40,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainMultiply
+      Expected {'start': 256, 'end': 1936, 'lowClosed': True, 'highClosed': True} (dict), got {"start":289,"end":1936,"lowClosed":true,"highClosed":true} (str)
+    - CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs
+      Expected error or NULL per CQL §16, got 15
+    - CqlTypesTest.xml::DateTimeUncertain
+      Expected {'start': 18, 'end': 49, 'lowClosed': True, 'highClosed': True} (dict), got {"start":19,"end":49,"lowClosed":true,"highClosed":true} (str)
+================================================================================
+[2026-11-18T07:17:31-06:00]  CQL  |  2029/2037 (99.6%)  |  FAIL
+  Failures (8):
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse2
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::NotEquivalentNullNull
+      Expected error or NULL per CQL §16, got False
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainAdd
+      Expected {'start': 32, 'end': 88, 'lowClosed': True, 'highClosed': True} (dict), got {"start":34,"end":88,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainSubtract
+      Expected {'start': 0, 'end': 40, 'lowClosed': True, 'highClosed': True} (dict), got {"start":1,"end":40,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainMultiply
+      Expected {'start': 256, 'end': 1936, 'lowClosed': True, 'highClosed': True} (dict), got {"start":289,"end":1936,"lowClosed":true,"highClosed":true} (str)
+    - CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs
+      Expected error or NULL per CQL §16, got 15
+    - CqlTypesTest.xml::DateTimeUncertain
+      Expected {'start': 18, 'end': 49, 'lowClosed': True, 'highClosed': True} (dict), got {"start":19,"end":49,"lowClosed":true,"highClosed":true} (str)
+================================================================================
+[2026-11-18T07:19:50-06:00]  ViewDefinition  |  144/144 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-18T07:19:51-06:00]  FHIRPath (R4)  |  1038/1038 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-18T07:20:01-06:00]  CQL  |  2029/2037 (99.6%)  |  FAIL
+  Failures (8):
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse2
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::NotEquivalentNullNull
+      Expected error or NULL per CQL §16, got False
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainAdd
+      Expected {'start': 32, 'end': 88, 'lowClosed': True, 'highClosed': True} (dict), got {"start":34,"end":88,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainSubtract
+      Expected {'start': 0, 'end': 40, 'lowClosed': True, 'highClosed': True} (dict), got {"start":1,"end":40,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainMultiply
+      Expected {'start': 256, 'end': 1936, 'lowClosed': True, 'highClosed': True} (dict), got {"start":289,"end":1936,"lowClosed":true,"highClosed":true} (str)
+    - CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs
+      Expected error or NULL per CQL §16, got 15
+    - CqlTypesTest.xml::DateTimeUncertain
+      Expected {'start': 18, 'end': 49, 'lowClosed': True, 'highClosed': True} (dict), got {"start":19,"end":49,"lowClosed":true,"highClosed":true} (str)
+================================================================================
+[2026-11-18T07:21:34-06:00]  DQM (QI-Core 2025)  |  47/47 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-18T07:27:12-06:00]  DQM (US-Core 2025)  |  73/73 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-18T07:27:17-06:00]  ALL SUITES (master run)  |  3369/3377 (99.8%)  |  FAIL
+  Failures (8):
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse2
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::NotEquivalentNullNull
+      Expected error or NULL per CQL §16, got False
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainAdd
+      Expected {'start': 32, 'end': 88, 'lowClosed': True, 'highClosed': True} (dict), got {"start":34,"end":88,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainSubtract
+      Expected {'start': 0, 'end': 40, 'lowClosed': True, 'highClosed': True} (dict), got {"start":1,"end":40,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainMultiply
+      Expected {'start': 256, 'end': 1936, 'lowClosed': True, 'highClosed': True} (dict), got {"start":289,"end":1936,"lowClosed":true,"highClosed":true} (str)
+    - CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs
+      Expected error or NULL per CQL §16, got 15
+    - CqlTypesTest.xml::DateTimeUncertain
+      Expected {'start': 18, 'end': 49, 'lowClosed': True, 'highClosed': True} (dict), got {"start":19,"end":49,"lowClosed":true,"highClosed":true} (str)
+================================================================================
+[2026-11-18T07:32:28-06:00]  ViewDefinition  |  144/144 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-18T07:32:30-06:00]  FHIRPath (R4)  |  1038/1038 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-18T07:32:39-06:00]  CQL  |  2029/2037 (99.6%)  |  FAIL
+  Failures (8):
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse2
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::NotEquivalentNullNull
+      Expected error or NULL per CQL §16, got False
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainAdd
+      Expected {'start': 32, 'end': 88, 'lowClosed': True, 'highClosed': True} (dict), got {"start":34,"end":88,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainSubtract
+      Expected {'start': 0, 'end': 40, 'lowClosed': True, 'highClosed': True} (dict), got {"start":1,"end":40,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainMultiply
+      Expected {'start': 256, 'end': 1936, 'lowClosed': True, 'highClosed': True} (dict), got {"start":289,"end":1936,"lowClosed":true,"highClosed":true} (str)
+    - CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs
+      Expected error or NULL per CQL §16, got 15
+    - CqlTypesTest.xml::DateTimeUncertain
+      Expected {'start': 18, 'end': 49, 'lowClosed': True, 'highClosed': True} (dict), got {"start":19,"end":49,"lowClosed":true,"highClosed":true} (str)
+================================================================================
+[2026-11-18T07:34:14-06:00]  DQM (QI-Core 2025)  |  47/47 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-18T07:39:55-06:00]  DQM (US-Core 2025)  |  73/73 (100.0%)  |  PASS
+  Failures: none
+================================================================================
+[2026-11-18T07:39:59-06:00]  ALL SUITES (master run)  |  3369/3377 (99.8%)  |  FAIL
+  Failures (8):
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse2
+      Expected error or NULL per CQL §16, got False
+    - CqlComparisonOperatorsTest.xml::NotEquivalentNullNull
+      Expected error or NULL per CQL §16, got False
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainAdd
+      Expected {'start': 32, 'end': 88, 'lowClosed': True, 'highClosed': True} (dict), got {"start":34,"end":88,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainSubtract
+      Expected {'start': 0, 'end': 40, 'lowClosed': True, 'highClosed': True} (dict), got {"start":1,"end":40,"lowClosed":true,"highClosed":true} (str)
+    - CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainMultiply
+      Expected {'start': 256, 'end': 1936, 'lowClosed': True, 'highClosed': True} (dict), got {"start":289,"end":1936,"lowClosed":true,"highClosed":true} (str)
+    - CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs
+      Expected error or NULL per CQL §16, got 15
+    - CqlTypesTest.xml::DateTimeUncertain
+      Expected {'start': 18, 'end': 49, 'lowClosed': True, 'highClosed': True} (dict), got {"start":19,"end":49,"lowClosed":true,"highClosed":true} (str)

@@ -1,6 +1,6 @@
 {
   "runner_ref": "main",
-  "server_url": "http://127.0.0.1:49249/fhir",
+  "server_url": "http://127.0.0.1:43033/fhir",
   "quick": false,
   "only": [],
   "status": "not-run",
