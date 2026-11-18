@@ -35,7 +35,22 @@ dependencies = [
     # bundle (fhir4ds/*/extensions/*.duckdb2_extension) still ships
     # in-tree for the opt-in path; guarded by
     # fhir4ds/tests/test_duckdb2_dual_support.py::test_pin_widening_atomicity.
-    "duckdb>=1.5.5,<2",
+    #
+    # The `extra != 'duckdb2'` marker (QA-D10-001, v0.0.25): pip INTERSECTS
+    # same-package constraints from base and extras, so an unscoped
+    # `>=1.5.5,<2` base makes `pip install 'fhir4ds-v2[duckdb2]'` (the
+    # documented opt-in) a ResolutionImpossible error — the extra was
+    # designed against a wide base (commit 800349eea6) and the 2026-10-30
+    # re-narrowing silently broke it. Scoping the base pin to "every extra
+    # except duckdb2" makes the documented command resolve duckdb 2.0.x on
+    # Python >=3.11 while plain installs keep the 1.5.x line. LIMITATION
+    # (pip union semantics): request [duckdb2] on its OWN — combining it
+    # with other extras in one command (e.g. [duckdb2,serve]) re-activates
+    # this base pin through the other extra's context and conflicts again;
+    # install other extras in a second command. When the base widens past
+    # <2 per the 10-29 atomicity ruling, drop the marker. Guarded by
+    # fhir4ds/tests/test_packaging.py::test_duckdb2_extra_is_resolvable.
+    "duckdb>=1.5.5,<2; extra != 'duckdb2'",
     # duckdb 2.x Python client requires pytz for TIMESTAMPTZ rendering;
     # 2.x wheels are cp311+ so the marker scopes it to exactly those.
     "pytz; python_version >= '3.11'",

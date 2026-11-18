@@ -315,7 +315,12 @@ pip install fhir4ds-v2==0.0.20
 ```
 
 For experimental DuckDB 2.0.0 support: `pip install
-'fhir4ds-v2[duckdb2]'`. The base DuckDB pin stays `>=1.5.5,<2`.
+'fhir4ds-v2[duckdb2]'`. The base DuckDB pin stays `>=1.5.5,<2`
+(*correction, 0.0.25 QA: with that base pin the one-line
+`[duckdb2]` install only resolves from 0.0.25 onward, which scopes
+the base pin with `; extra != 'duckdb2'`; on 0.0.20–0.0.24 use
+`pip install fhir4ds-v2 && pip install --upgrade 'duckdb>=2.0.0,<2.1'`.
+See the installation guide's "DuckDB 2.0" section.*).
 
 ---
 

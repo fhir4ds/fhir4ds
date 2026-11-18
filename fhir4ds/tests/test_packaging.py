@@ -112,3 +112,49 @@ def test_count_correlation_module_is_importable():
     from fhir4ds.cql.translator.correlate_counts import correlate_count_subqueries
 
     assert callable(correlate_count_subqueries)
+
+
+def _pyproject_text() -> str:
+    return (REPO_ROOT / "pyproject.toml").read_text()
+
+
+def test_duckdb2_extra_is_resolvable():
+    """QA-D10-001 (v0.0.25): the [duckdb2] extra must never be a dead letter.
+
+    pip INTERSECTS same-package constraints from the base dependencies and
+    the requested extras. With an unscoped base pin ``duckdb>=1.5.5,<2``
+    and a ``[duckdb2]`` extra requiring ``duckdb>=2.0.0,<2.1``, the
+    documented opt-in command ``pip install 'fhir4ds-v2[duckdb2]'`` is a
+    ResolutionImpossible error for every user — the exact command the
+    0.0.20 release notes recommend. (The extra was originally designed
+    against a wide ``>=1.5.5,<3`` base; the 2026-10-30 re-narrowing broke
+    it without adjusting the extra.)
+
+    Two states are shippable:
+      * the base duckdb pin is scoped ``; extra != 'duckdb2'`` (single-extra
+        opt-in resolves duckdb 2.0.x; plain installs keep the 1.5 line), or
+      * the base pin allows 2.x outright (the 10-29 atomicity design; then
+        the extra narrows to 2.0.x and no marker is needed).
+    Anything else — a sub-2 base pin with an unscoped marker while the
+    duckdb2 extra demands >=2 — fails here.
+    """
+    import re
+
+    text = _pyproject_text()
+    base = re.search(r'"duckdb>=([\d.]+)(?:,<(\d+))?(?:;([^"]*))?"', text)
+    assert base, "base duckdb pin not found in pyproject.toml"
+    lower, upper, marker = base.group(1), base.group(2), (base.group(3) or "")
+    pin_allows_2x = upper is not None and int(upper) > 2
+    extra = re.search(r'duckdb2\s*=\s*\[[^\]]*"duckdb>=([\d.]+)', text)
+    assert extra, "[duckdb2] extra not found in pyproject.toml"
+    extra_demands_2x = int(extra.group(1).split(".")[0]) >= 2
+
+    if extra_demands_2x and not pin_allows_2x:
+        assert "extra != 'duckdb2'" in marker, (
+            "The [duckdb2] extra requires duckdb>=2 while the base pin "
+            f"stays <{upper} with no extra-scoping marker: pip intersects "
+            "the two constraints, so `pip install 'fhir4ds-v2[duckdb2]'` "
+            "cannot resolve. Scope the base pin with "
+            "`; extra != 'duckdb2'` (see the pyproject comment) or widen "
+            "the base past <2 per the 2026-10-29 atomicity ruling."
+        )

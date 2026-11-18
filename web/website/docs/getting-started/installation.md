@@ -34,6 +34,30 @@ pip install "fhir4ds-v2[hapi]"   # HAPI PostgreSQL worker
 pip install "fhir4ds-v2[mongo]"  # Mongo change-stream worker
 ```
 
+### DuckDB 2.0 (experimental, opt-in)
+
+The default install pins the DuckDB 1.5.x line. Experimental DuckDB 2.0.0
+support (the wheel bundles the `.duckdb2_extension` binaries and selects
+them at runtime) is opt-in:
+
+```bash
+pip install "fhir4ds-v2[duckdb2]"
+```
+
+DuckDB 2.x wheels require **Python 3.11+**. Request the `[duckdb2]` extra
+**on its own** — pip intersects it with the base DuckDB pin, so combining
+extras in one command (e.g. `[duckdb2,serve]`) cannot resolve; install any
+other extras in a second command:
+
+```bash
+pip install "fhir4ds-v2[duckdb2]"
+pip install "fhir4ds-v2[serve]"
+```
+
+2.0 stays opt-in (not the default pin) because of an upstream DuckDB 2.0
+optimizer/planner pathology on large generated SQL
+([duckdb/duckdb#28181](https://github.com/duckdb/duckdb/issues/28181)).
+
 After installation, import from the `fhir4ds` namespace:
 
 ```python
