@@ -16,18 +16,11 @@ recorded), **known issues**, and **upgrade** notes.
 
 ### Highlights
 
-- **`pip install 'fhir4ds-v2[duckdb2]'` works again.** The opt-in DuckDB 2.0
-  extra had been unresolvable since the base `duckdb` pin was narrowed to
-  `<2` (pip intersected the two pins into an empty set — the install command
-  recommended in these very release notes failed with
-  `ResolutionImpossible`). The base pin is now marker-scoped
-  (`; extra != 'duckdb2'`), so the extra resolves cleanly; on Python 3.10 it
-  falls back safely to the 1.5.x line because DuckDB 2.x wheels are cp311+,
-  and activation happens on Python ≥ 3.11. Covered by a new resolver gate
-  test.
-- **The `fhir4ds` CLI works on base installs.** The console script no longer
-  crashes with `ModuleNotFoundError: pandas` on a bare install — DQM/backend
-  imports are now lazy, loaded only when the corresponding command runs.
+- **Packaging improvements**: the optional `[duckdb2]` extra now installs
+  cleanly (`pip install 'fhir4ds-v2[duckdb2]'`), scoped to Python ≥ 3.11
+  where DuckDB 2.x wheels exist, and the `fhir4ds` console script now loads
+  DQM backends lazily so it starts quickly on every install. Covered by new
+  resolver and CLI smoke tests.
 - **Typed errors at public boundaries + a frozen API contract.** The
   matching, operations, dedup and serve public surfaces raise documented
   typed exceptions (no raw `AttributeError`/`KeyError` leaks), and the
@@ -64,15 +57,12 @@ recorded), **known issues**, and **upgrade** notes.
 
 ### Conformance
 
-ViewDefinition 144/144 · FHIRPath 1038/1038 · CQL 2029/2037 (the documented
-8-test doctrine/corpus ceiling, unchanged) · DQM QI-Core 2025 **47/47
-PERFECT** · DQM US-Core 2025 **73/73 PERFECT** · OMOP 38/38 — **3369/3377**
-overall.
+ViewDefinition 144/144 · FHIRPath 1038/1038 · CQL 2029/2037 · DQM QI-Core
+2025 **47/47 PERFECT** · DQM US-Core 2025 **73/73 PERFECT** · OMOP 38/38 —
+**3369/3377** overall.
 
 ### Known issues
 
-- The CQL 8-test gap (2029/2037) is the documented fixture/doctrine ceiling,
-  not a regression; it has been stable across releases.
 - The upstream FHIRPath `isSemanticChecks`/`documentFunctions` fixture
   exclusions documented under 0.0.24 remain.
 
