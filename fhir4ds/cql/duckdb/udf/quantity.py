@@ -574,7 +574,17 @@ def _quantity_to_pint(q_dict: dict | None):
         ucum_code = q_dict["code"]
         value = float(value)
         pint_unit = _ucum_to_pint_unit(ucum_code)
-        return value * ureg(pint_unit)
+        parsed_unit = ureg(pint_unit)
+        if not hasattr(parsed_unit, "magnitude") or not hasattr(
+                parsed_unit, "units"):
+            # Digit-only "unit" spellings (e.g. the CMS72 fixture quirk
+            # {"value":100,"unit":"0"}) parse in pint as plain numbers,
+            # so `value * parsed_unit` would return a bare float/int and
+            # every downstream Quantity call (`.to`, `.magnitude`) would
+            # raise AttributeError. Treat as unconvertible (AMUX-145
+            # phase 0.5 root-cause fix at the source).
+            raise UndefinedUnitError(ucum_code)
+        return value * parsed_unit
     except (TypeError, ValueError, UndefinedUnitError) as e:
         _logger.warning("_quantity_to_pint conversion failed: %s", e)
         return None
