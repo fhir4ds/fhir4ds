@@ -342,9 +342,22 @@ def build_view(name: str) -> dict:
 
 # ---------------------------------------------------------------------------
 # SAM SQL builders
+#
+# SECURITY: the f-string SQL below interpolates ONLY author-time catalog
+# constants (column names, data classes, entities, mnemonics, patterns
+# from the packaged PIQI spec tables). NO caller/runtime data may ever
+# reach these builders — runtime values (patient ids etc.) go through
+# the SQLQueryRunner's prepared-statement binding exclusively.
 # ---------------------------------------------------------------------------
 def _q(label: str) -> str:
-    return '"' + label + '"'
+    """Quote a view/SAM label for SQL.
+
+    Delegates to the canonical viewdef helper so PIQI authoring and the
+    rest of the codebase cannot drift on quoting behavior.
+    """
+    from ..viewdef.utils import quote_identifier
+
+    return quote_identifier(label)
 
 
 def _populated(col: str) -> str:
