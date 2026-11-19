@@ -26,6 +26,13 @@ Optional<std::string> quantity_convert(const std::string &q_json, const std::str
 Optional<std::string> quantity_multiply(const std::string &q1_json, const std::string &q2_json);
 Optional<std::string> quantity_divide(const std::string &q1_json, const std::string &q2_json);
 Optional<std::string> quantity_negate(const std::string &q_json);
+// CQL 2.0 Round(Quantity[, precision]): round the value (ties away from
+// zero), preserve the unit. Null precision is 0.
+Optional<std::string> quantity_round(const std::string &q_json, int precision);
+// CQL 2.0 Comparable(Quantity, Quantity): true iff the units are
+// commensurable (a '==' comparison would be determined). Null argument
+// -> NullOpt.
+Optional<bool> quantity_comparable(const std::string &q1_json, const std::string &q2_json);
 Optional<std::string> quantity_abs(const std::string &q_json);
 Optional<std::string> quantity_modulo(const std::string &q1_json, const std::string &q2_json);
 Optional<std::string> quantity_truncated_divide(const std::string &q1_json, const std::string &q2_json);

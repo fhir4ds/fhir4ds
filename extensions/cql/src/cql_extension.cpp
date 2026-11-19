@@ -7964,6 +7964,69 @@ DEFINE_TWO_STR_STR_UDF(QuantityDivideFunc, {
 	result_data[i] = StringVector::AddString(result, *res);
 })
 
+// CQL 2.0 Round(Quantity) — value rounds, unit preserved.
+DEFINE_ONE_STR_STR_UDF(RoundQuantityFunc, {
+	auto res = cql::quantity_round(a_str, 0);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *res);
+})
+
+// CQL 2.0 Round(Quantity, precision).
+static void RoundQuantityToFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data, b_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
+	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
+	auto b_vals = UnifiedVectorFormat::GetData<int64_t>(b_data);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = fhir4ds_compat::data<string_t>(result);
+	auto &result_mask = fhir4ds_compat::validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		auto a_idx = a_data.sel->get_index(i);
+		auto b_idx = b_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(a_idx) || !b_data.validity.RowIsValid(b_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		auto res = cql::quantity_round(a_vals[a_idx].GetString(),
+		                               static_cast<int>(b_vals[b_idx]));
+		if (!res) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		result_data[i] = StringVector::AddString(result, *res);
+	}
+}
+
+// CQL 2.0 Comparable(Quantity, Quantity) — unit commensurability.
+static void QuantityComparableFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data, b_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
+	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
+	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = fhir4ds_compat::data<bool>(result);
+	auto &result_mask = fhir4ds_compat::validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		auto a_idx = a_data.sel->get_index(i);
+		auto b_idx = b_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(a_idx) || !b_data.validity.RowIsValid(b_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		auto res = cql::quantity_comparable(a_vals[a_idx].GetString(),
+		                                    b_vals[b_idx].GetString());
+		if (!res) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		result_data[i] = *res;
+	}
+}
+
 DEFINE_ONE_STR_STR_UDF(QuantityNegateFunc, {
 	auto res = cql::quantity_negate(a_str);
 	if (!res) { result_mask.SetInvalid(i); continue; }
@@ -9808,6 +9871,13 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                      LogicalType::VARCHAR, QuantityMultiplyFunc);
 	RegisterSpecialScalar(loader, "quantityDivide", {LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                      LogicalType::VARCHAR, QuantityDivideFunc);
+	// CQL 2.0 (CQL20-A): Round(Quantity) overloads + Comparable.
+	RegisterSpecialScalar(loader, "RoundQuantity", {LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, RoundQuantityFunc);
+	RegisterSpecialScalar(loader, "RoundQuantityTo", {LogicalType::VARCHAR, LogicalType::BIGINT},
+	                      LogicalType::VARCHAR, RoundQuantityToFunc);
+	RegisterSpecialScalar(loader, "Comparable", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, QuantityComparableFunc);
 	RegisterSpecialScalar(loader, "quantityNegate", {LogicalType::VARCHAR},
 	                      LogicalType::VARCHAR, QuantityNegateFunc);
 	RegisterSpecialScalar(loader, "quantityAbs", {LogicalType::VARCHAR},

@@ -912,6 +912,33 @@ Optional<std::string> quantity_negate(const std::string &q_json) {
 	return format_quantity_json(*q);
 }
 
+Optional<std::string> quantity_round(const std::string &q_json, int precision) {
+	auto q = parse_quantity_json(q_json);
+	if (!q) return NullOpt<std::string>();
+	// Traditional round (ties away from zero), matching the number Round
+	// doctrine: Round(-0.5) = -1, Round(2.54) = 3.
+	double m = 1.0;
+	for (int i = 0; i < (precision < 0 ? -precision : precision); i++) {
+		m *= 10.0;
+	}
+	// precision >= 0: scale up, round, scale back down.
+	// precision <  0: scale down, round, scale back up (tens/hundreds...).
+	double scaled = (precision < 0) ? q->value / m : q->value * m;
+	double rounded = (scaled >= 0) ? std::floor(scaled + 0.5) : std::ceil(scaled - 0.5);
+	q->value = (precision < 0) ? rounded * m : rounded / m;
+	return format_quantity_json(*q);
+}
+
+Optional<bool> quantity_comparable(const std::string &q1_json, const std::string &q2_json) {
+	auto q1 = parse_quantity_json(q1_json);
+	auto q2 = parse_quantity_json(q2_json);
+	if (!q1 || !q2) return NullOpt<bool>();
+	// Commensurable iff a unit-aware equality comparison is determined
+	// (quantity_compare returns NullOpt for incompatible unit pairs such
+	// as 'cm' vs 'cm2', calendar 'year' vs UCUM 'a', or unknown codes).
+	return quantity_compare(q1_json, q2_json, "==").has_value();
+}
+
 Optional<std::string> quantity_abs(const std::string &q_json) {
 	auto q = parse_quantity_json(q_json);
 	if (!q) return NullOpt<std::string>();
