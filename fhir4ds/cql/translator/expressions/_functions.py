@@ -81,6 +81,7 @@ from ...translator.types import (
 from ...translator.expressions._utils import (
     BINARY_OPERATOR_MAP,
     UNARY_OPERATOR_MAP,
+    JSON_LIST_SOURCE_FUNCS,
     _coerce_query_rows_to_list,
     _is_list_returning_sql,
     _contains_sql_subquery,
@@ -1906,7 +1907,7 @@ class FunctionsMixin:
                 raise TranslationError(
                     f"CQL {name} count argument must be Integer; got {count_type}"
                 )
-        if bare_lower in {"first", "last", "length", "tail", "skip", "take", "singletonfrom"} and arg_nodes:
+        if bare_lower in {"first", "last", "length", "tail", "skip", "take", "singletonfrom", "slice"} and arg_nodes:
             # CQL-19 SKEPTIC QA-002: for a stored-list define reference
             # (`define G: Patient.name.given; Tail(G)`), inline the SOURCE
             # AST only when the alias is NOT itself a stored-list CTE —
@@ -2028,7 +2029,7 @@ class FunctionsMixin:
             else:
                 args = [_coerce_query_rows_to_list(self.translate(arg_nodes[0], usage=ExprUsage.LIST))]
             args.extend(self.translate(arg, usage=ExprUsage.SCALAR) for arg in arg_nodes[1:])
-        elif bare_lower in {"first", "last", "length", "tail", "skip", "take", "singletonfrom"} and arg_nodes and self._is_list_typed_ast(arg_nodes[0]):
+        elif bare_lower in {"first", "last", "length", "tail", "skip", "take", "singletonfrom", "slice"} and arg_nodes and self._is_list_typed_ast(arg_nodes[0]):
             # CQL-19 SKEPTIC QA-002: a stored-list define reference already
             # translates (SCALAR) to the whole element list held in its CTE
             # value column — do NOT rows-coerce it (LIST(value) nests the
@@ -2371,6 +2372,12 @@ class FunctionsMixin:
             ):
                 return SQLFunctionCall(name="CQLIndexOfTemporal", args=[list_arg, elem_arg])
             return SQLFunctionCall(name="CQLIndexOf", args=index_args)
+
+        # CQL 2.0 Slice(list [, start [, end]]) — registered macro with
+        # default params (start=0, end=length); args already list-coerced
+        # and promoted by the list-family handling above.
+        if bare_lower == "slice" and 1 <= len(args) <= 3:
+            return SQLFunctionCall(name="Slice", args=args)
 
         # Step 3: Check registry for simple renames and parameterized translations
         strategy = function_registry.get(name, arity)
@@ -3335,10 +3342,7 @@ class FunctionsMixin:
             # single-interval expand_points family also returns a JSON
             # array string — list_count over the VARCHAR text is a
             # BinderException.
-            _JSON_LIST_FUNCS = {
-                "collapse_intervals", "collapse_intervals_per", "expand",
-                "expand1", "expand_points", "expand_points1",
-            }
+            _JSON_LIST_FUNCS = JSON_LIST_SOURCE_FUNCS
             _is_json_list = isinstance(source_sql, SQLFunctionCall) and source_sql.name in _JSON_LIST_FUNCS
             if _is_json_list:
                 if name.lower() == "count":
@@ -3885,9 +3889,12 @@ class FunctionsMixin:
             else:
                 substr = SQLFunctionCall(name="system.substring", args=[args[0], start_index])
             invalid_start = SQLBinaryOp(left=args[1], operator="<", right=SQLLiteral(value=0))
+            # CQL 1.5 §17.16: only start > Length is null; start ==
+            # Length yields the empty string (Substring('', 0) -> '',
+            # fixture-pinned; supersedes the older >= boundary).
             past_end = SQLBinaryOp(
                 left=args[1],
-                operator=">=",
+                operator=">",
                 right=SQLFunctionCall(name="system.length", args=[args[0]]),
             )
             condition = SQLBinaryOp(operator="OR", left=invalid_start, right=past_end)

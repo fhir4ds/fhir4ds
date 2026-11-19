@@ -166,10 +166,13 @@ def test_pin_widening_atomicity() -> None:
 
     repo = P(__file__).resolve().parents[2]
     pyproject = (repo / "pyproject.toml").read_text()
-    m = re.search(r"duckdb>=([\d.]+)(?:,<(\d+))?", pyproject)
-    assert m, "duckdb pin not found in pyproject.toml"
-    upper = m.group(2)
-    pin_allows_2x = upper is None or int(upper) > 2 or (int(upper) == 2 and False) or upper == "3"
+    pins = re.findall(r"duckdb>=([\d.]+)(?:,<(\d+))?(?:;[^\"]*)?", pyproject)
+    assert pins, "duckdb pin not found in pyproject.toml"
+    # v0.0.25 (Joel ruling 2026-11-18): the base pins are python-version
+    # scoped — 3.10 gets >=1.5.5,<2; 3.11+ defaults to >=2.0.0,<2.1.
+    pin_allows_2x = any(u is not None and int(u) > 2 for _, u in pins) or any(
+        lo.split(".")[0] == "2" for lo, _ in pins
+    )
 
     bundles = [
         repo / "fhir4ds" / "fhirpath" / "duckdb" / "extensions" / "fhirpath.duckdb2_extension",
@@ -190,7 +193,7 @@ def test_pin_widening_atomicity() -> None:
     # resolves 1.5.6 for a plain `pip install fhir4ds`, and DuckDB 1.5.6
     # rejects the v1.5.5-ABI bundle — so a pin that allows 1.5.6 MUST bundle
     # the v1.5.6 binaries or installs silently fall back to Python UDFs.
-    lower = m.group(1)
+    lower = pins[0][0]
     pin_allows_156 = [
         int(x) for x in lower.split(".")[:3] + ["0"] * (3 - min(3, len(lower.split("."))))
     ] <= [1, 5, 6]

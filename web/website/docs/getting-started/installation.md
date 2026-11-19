@@ -34,6 +34,24 @@ pip install "fhir4ds-v2[hapi]"   # HAPI PostgreSQL worker
 pip install "fhir4ds-v2[mongo]"  # Mongo change-stream worker
 ```
 
+### DuckDB 2.0 (default on Python 3.11+)
+
+New installs pick the DuckDB line automatically: **Python 3.11+ gets
+DuckDB 2.0.x** (measurably faster at population scale — up to ~10× on
+large measures — with the validated planner tuning that
+`fhir4ds.register()` applies automatically); **Python 3.10 gets the 1.5.x
+line** (DuckDB 2.x wheels are cp311+ only). The correct native extension
+for whichever DuckDB is installed loads at runtime.
+
+To stay on (or return to) the 1.5.x line on Python 3.11+:
+
+```bash
+pip install "fhir4ds-v2[duckdb1]"
+```
+
+`[duckdb2]` also remains available as the explicit 2.0.x pin. On Python
+3.10 it resolves to the 1.5.x line.
+
 After installation, import from the `fhir4ds` namespace:
 
 ```python

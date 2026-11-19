@@ -272,6 +272,12 @@ def _coerce_query_rows_to_list(node):
         return node
 
     value_alias = "__cql_list_value"
+    # Engine-backlog: DISTINCT (the CQL default `return` de-dup at the
+    # definition root) reorders rows hash-wise, scrambling list() order
+    # against order-sensitive comparison. With no explicit ORDER BY, order
+    # the aggregate by the element so deduped lists come out deterministic
+    # (source-order for already-ordered literals, ascending otherwise).
+    _order_elem = first_expr if (inner_select.distinct and not inner_select.order_by) else None
     projected = SQLSelect(
         columns=[SQLAlias(expr=first_expr, alias=value_alias)],
         from_clause=inner_select.from_clause,
@@ -284,11 +290,19 @@ def _coerce_query_rows_to_list(node):
         distinct=inner_select.distinct,
     )
     value_ref = SQLQualifiedIdentifier(parts=["_cql_list_source", value_alias])
+    if _order_elem is not None:
+        _list_call = SQLFunctionCall(
+            name="list",
+            args=[value_ref],
+            order_by=[(value_ref, "ASC")],
+        )
+    else:
+        _list_call = SQLFunctionCall(name="list", args=[value_ref])
     return SQLSubquery(query=SQLSelect(
         columns=[SQLFunctionCall(
             name="COALESCE",
             args=[
-                SQLFunctionCall(name="list", args=[value_ref]),
+                _list_call,
                 SQLArray([]),
             ],
         )],
@@ -510,3 +524,45 @@ def _get_qicore_extension_fhirpath(registry, resource_type: Optional[str], prop_
             escaped_url = escape_fhirpath_string_literal(entry["url"])
             return f"extension.where(url='{escaped_url}').value{entry['value_type']}"
     return None
+
+
+# Canonical set of functions returning a JSON-array-string list. Shared by
+# the aggregate lowering (_functions.py) and _coerce_json_list_source — keep
+# ONE definition (REV-002 drift doctrine; code review L-2, v0.0.25).
+JSON_LIST_SOURCE_FUNCS = frozenset(
+    {
+        "collapse_intervals",
+        "collapse_intervals_per",
+        "expand",
+        "expand1",
+        "expand_points",
+        "expand_points1",
+    }
+)
+
+# Backwards-compatible alias for existing importers.
+_JSON_LIST_SOURCE_FUNCS = JSON_LIST_SOURCE_FUNCS
+
+
+def _coerce_json_list_source(node):
+    """Rewrite a JSON-array-string list function call to a native DuckDB list.
+
+    ``collapse_intervals``/``collapse_intervals_per``/``expand*`` return a JSON
+    array text (VARCHAR), not a list. List consumers that call DuckDB list
+    functions/macros directly (``CQLListEqualEq``, ``CQLListContainsEq``,
+    ``array_length``) binder-error on the raw VARCHAR. This extends the CQL-15
+    HISTORIAN JSON-list doctrine (``_JSON_LIST_FUNCS`` in ``_functions.py``,
+    the LIST_EXTRACT wrap in ``_lists.py``) to the list equality/membership
+    lowering sites (D3 EXPLORER 2026-11-17).
+    """
+    from ...translator.types import SQLFunctionCall, SQLLiteral
+
+    if (
+        isinstance(node, SQLFunctionCall)
+        and node.name in _JSON_LIST_SOURCE_FUNCS
+    ):
+        return SQLFunctionCall(
+            name="from_json",
+            args=[node, SQLLiteral(value='["VARCHAR"]')],
+        )
+    return node

@@ -1,6 +1,11 @@
 from ...engine.nodes import ResourceNode, TypeInfo
 from ...engine.errors import FHIRPathError
 
+import re
+
+# JSON array index segments inside ResourceNode propName paths.
+_INDEX_SEGMENT_RE = re.compile(r"\[\d+\]")
+
 
 def _is_any_type(type_info):
     return (
@@ -27,7 +32,11 @@ def _matches_unqualified_choice_primitive(value, type_info):
 
     fhir_name = TypeInfo.SYSTEM_TO_FHIR_TYPE.get(type_info.name)
     prop_name = getattr(value, "propName", None) or ""
-    prop_segment = prop_name.rsplit(".", 1)[-1] if prop_name else ""
+    # Choice-stem propNames carry JSON index brackets
+    # ("Patient.extension[0].value"); strip them before matching so indexed
+    # choice elements classify identically to their non-indexed siblings.
+    normalized_prop = _INDEX_SEGMENT_RE.sub("", prop_name)
+    prop_segment = normalized_prop.rsplit(".", 1)[-1] if normalized_prop else ""
     if value.path == fhir_name:
         # Model-backed choice projection can carry the resolved primitive type
         # as the node path (e.g. path="integer", propName="Observation.value").
@@ -36,7 +45,15 @@ def _matches_unqualified_choice_primitive(value, type_info):
         if prop_segment.endswith(type_info.name) and len(prop_segment) > len(type_info.name):
             prefix = prop_segment[: -len(type_info.name)]
             return bool(prefix) and prefix[0].islower()
-        return bool(prop_name) and f"{prop_name}{type_info.name}" in TypeInfo.FHIR_PATH_TO_TYPE
+        # Choice-stem navigation (extension.value, Observation.value) resolves
+        # through the model to path=<resolved primitive> with a choice-stem
+        # propName whose last segment ("value") plus the System type name
+        # forms a known choice-arm suffix key (".valueInteger"). Match by
+        # suffix key: resource-prefixed and indexed propNames can never match
+        # the exact-key form below.
+        if prop_segment and f".{prop_segment}{type_info.name}" in TypeInfo.FHIR_PATH_TO_TYPE:
+            return True
+        return bool(normalized_prop) and f"{normalized_prop}{type_info.name}" in TypeInfo.FHIR_PATH_TO_TYPE
 
     segment = value.path.rsplit(".", 1)[-1]
     suffix = type_info.name

@@ -332,12 +332,21 @@ class FileSystemSource:
         )
         # ``for`` included: Task's patient compartment reference (same
         # Patient-typed guard; mirrors the loader's path tuple).
+        # Lambda syntax is duckdb-version dependent (2.0 deprecates the
+        # bare ``r ->`` arrow form); pick per connection version.
+        try:
+            import duckdb as _duckdb
+
+            _duckdb_major = int(_duckdb.__version__.split(".")[0])
+        except Exception:
+            _duckdb_major = 1
+        _lam = "lambda r:" if _duckdb_major >= 2 else "r ->"
         for path in ("$.subject", "$.patient", "$.beneficiary", "$.for"):
             ref_expr = (
                 f"CASE WHEN json_type({resource_expr}, '{path}') = 'ARRAY' THEN "
                 f"list_extract(list_filter(from_json(json_extract({resource_expr}, "
                 f"'{path}[*].reference'), '[\"VARCHAR\"]'), "
-                f"r -> regexp_matches(r, '{first_typed}')), 1) "
+                f"{_lam} regexp_matches(r, '{first_typed}')), 1) "
                 f"ELSE json_extract_string({resource_expr}, '{path}.reference') END"
             )
             candidates.append(

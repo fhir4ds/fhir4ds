@@ -685,6 +685,7 @@ from ...translator.expressions._utils import (
     _is_list_returning_sql,
     _contains_sql_subquery,
     _promote_fhirpath_text_list,
+    _coerce_json_list_source,
     _ensure_scalar_body,
     escape_fhirpath_string_literal,
     _get_qicore_extension_fhirpath,
@@ -1025,6 +1026,7 @@ class OperatorsMixin:
         element_sql: SQLExpression,
         list_ast: object,
         element_ast: object,
+        equivalent: bool = False,
     ) -> SQLFunctionCall:
         # In audit_mode='full' (audit_mode + audit_expressions), the
         # `CQLListContainsEq` / `CQLListContainsTemporalEq` SQL macros trigger
@@ -1055,12 +1057,24 @@ class OperatorsMixin:
             # raw builtin call (from_json(fhirpath(...)) IS a plain scalar
             # expression — no macro expansion — so the struct_pack binder
             # workaround still holds).
-            from ._utils import _promote_fhirpath_text_list as _promote
-            list_sql = _promote(list_sql)
+            list_sql = _promote_fhirpath_text_list(list_sql)
+            # D3 EXPLORER: collapse/expand list sources are JSON array
+            # strings — coerce to a native list (CQL-15 JSON-list doctrine).
+            list_sql = _coerce_json_list_source(list_sql)
             return SQLFunctionCall(
                 name="list_contains",
                 args=[list_sql, element_sql],
             )
+        if equivalent:
+            # CQL 2.0 '~in'/'~contains': element-wise EQUIVALENCE membership
+            # (null~null true, one-sided null FALSE, precision mismatch on
+            # temporals FALSE — never uncertain).
+            name = (
+                "CQLListContainsTemporalEquivalent"
+                if self._use_temporal_list_contains(list_ast, element_ast)
+                else "CQLListContainsEquivalent"
+            )
+            return SQLFunctionCall(name=name, args=[list_sql, element_sql])
         name = (
             "CQLListContainsTemporalEq"
             if self._use_temporal_list_contains(list_ast, element_ast)
@@ -1097,6 +1111,9 @@ class OperatorsMixin:
         # lower to scalar fhirpath_text (first-node truncation); list
         # operators need the full element list.
         list_sql = _promote_fhirpath_text_list(list_sql)
+        # D3 EXPLORER: collapse/expand list sources are JSON array strings —
+        # coerce to a native list (CQL-15 JSON-list doctrine).
+        list_sql = _coerce_json_list_source(list_sql)
         return SQLFunctionCall(name=name, args=[list_sql, element_sql])
 
     def _definitely_null_sql(self, translated: SQLExpression) -> bool:
@@ -1156,6 +1173,11 @@ class OperatorsMixin:
         # (first-node truncation) to full list projections (CQL 1.5 §10.x).
         left_sql = _promote_fhirpath_text_list(left_sql)
         right_sql = _promote_fhirpath_text_list(right_sql)
+        # D3 EXPLORER (2026-11-17): collapse/expand list sources are JSON
+        # array strings — list macros need a native list (CQL-15 JSON-list
+        # doctrine extended to the equality/set-op lowering sites).
+        left_sql = _coerce_json_list_source(left_sql)
+        right_sql = _coerce_json_list_source(right_sql)
         return SQLFunctionCall(name=name, args=[left_sql, right_sql])
 
     def _list_except_call(
@@ -1174,6 +1196,11 @@ class OperatorsMixin:
         # (first-node truncation) to full list projections (CQL 1.5 §10.x).
         left_sql = _promote_fhirpath_text_list(left_sql)
         right_sql = _promote_fhirpath_text_list(right_sql)
+        # D3 EXPLORER (2026-11-17): collapse/expand list sources are JSON
+        # array strings — list macros need a native list (CQL-15 JSON-list
+        # doctrine extended to the equality/set-op lowering sites).
+        left_sql = _coerce_json_list_source(left_sql)
+        right_sql = _coerce_json_list_source(right_sql)
         return SQLFunctionCall(name=name, args=[left_sql, right_sql])
 
     def _list_intersect_call(
@@ -1192,6 +1219,11 @@ class OperatorsMixin:
         # (first-node truncation) to full list projections (CQL 1.5 §10.x).
         left_sql = _promote_fhirpath_text_list(left_sql)
         right_sql = _promote_fhirpath_text_list(right_sql)
+        # D3 EXPLORER (2026-11-17): collapse/expand list sources are JSON
+        # array strings — list macros need a native list (CQL-15 JSON-list
+        # doctrine extended to the equality/set-op lowering sites).
+        left_sql = _coerce_json_list_source(left_sql)
+        right_sql = _coerce_json_list_source(right_sql)
         return SQLFunctionCall(name=name, args=[left_sql, right_sql])
 
     def _list_index_of_call(
@@ -1262,6 +1294,11 @@ class OperatorsMixin:
         # (first-node truncation) to full list projections (CQL 1.5 §10.x).
         left_sql = _promote_fhirpath_text_list(left_sql)
         right_sql = _promote_fhirpath_text_list(right_sql)
+        # D3 EXPLORER (2026-11-17): collapse/expand list sources are JSON
+        # array strings — list macros need a native list (CQL-15 JSON-list
+        # doctrine extended to the equality/set-op lowering sites).
+        left_sql = _coerce_json_list_source(left_sql)
+        right_sql = _coerce_json_list_source(right_sql)
         return SQLFunctionCall(name=name, args=[left_sql, right_sql])
 
     def _infer_static_cql_type_for_logical_operand(self, operand: object) -> str:
@@ -2946,6 +2983,26 @@ class OperatorsMixin:
             not_left = SQLUnaryOp(operator="NOT", operand=left)
             return SQLBinaryOp(operator="OR", left=not_left, right=right)
 
+        if operator in ("~contains", "~in"):
+            # CQL 2.0 equivalence membership (trial-use). List membership
+            # only; interval operands raise a typed error rather than
+            # silently using equality semantics.
+            list_sql, elem_sql = (
+                (left, right) if operator == "~contains" else (right, left)
+            )
+            list_ast, elem_ast = (
+                (expr.left, expr.right) if operator == "~contains" else (expr.right, expr.left)
+            )
+            if self._is_fhir_interval_expression(list_sql):
+                raise ValueError(
+                    "CQL 2.0 '~in'/'~contains' over interval operands is not "
+                    "supported yet (use 'equivalent' on the interval instead)"
+                )
+            from ._utils import _promote_fhirpath_text_list as _promote
+            list_sql = _promote(list_sql)
+            return self._list_contains_call(
+                list_sql, elem_sql, list_ast, elem_ast, equivalent=True
+            )
         if operator == "contains":
             return self._translate_contains_op(operator, left, right, expr, boolean_context)
         if operator == "in":
@@ -3762,7 +3819,16 @@ class OperatorsMixin:
             and self._definitely_null_operand(expr.right, right)
         ):
             return SQLNull()
-        if self._interval_selector_is_untyped_null_interval(expr.left):
+        if (
+            self._interval_selector_is_untyped_null_interval(expr.left)
+            # D3-HISTORIAN (QA-018 re-land): a CLOSED null-null selector is the
+            # MAXIMUM interval, not a null container — official fixture
+            # TestIntegerInMaxIntervalTrue pins `5 in Interval[null, null]` as
+            # true, and contains is the mirror of in. Only the OPEN selector
+            # `Interval(null, null)` folds here (unknown bounds).
+            and not getattr(expr.left, "low_closed", True)
+            and not getattr(expr.left, "high_closed", True)
+        ):
             return SQLLiteral(value=False)
 
         # CQL §19.3 Contains precision: "Interval<T> contains <precision> of
@@ -4711,8 +4777,16 @@ class OperatorsMixin:
                                 high_sql = qty_val
                 # Handle closed/open bounds
                 # Check if either bound is null (unbounded interval)
-                low_is_null = isinstance(low_sql, SQLNull) or (isinstance(low_sql, SQLLiteral) and low_sql.value is None)
-                high_is_null = isinstance(high_sql, SQLNull) or (isinstance(high_sql, SQLLiteral) and high_sql.value is None)
+                def _is_null_bound(bound) -> bool:
+                    if isinstance(bound, SQLNull) or bound is None:
+                        return True
+                    # '__null__' sentinel = closed null bound (unbounded /
+                    # maximum interval per CQL §9.14/§9.15)
+                    return isinstance(bound, SQLLiteral) and (
+                        bound.value is None or bound.value == "__null__"
+                    )
+                low_is_null = _is_null_bound(low_sql)
+                high_is_null = _is_null_bound(high_sql)
                 if not low_is_null and not high_is_null and interval.low_closed and interval.high_closed:
                     # CQL §Age/§22.21: age and duration operands are
                     # scalar-or-interval VARCHAR; `in Interval[a, b]` must
@@ -4788,8 +4862,31 @@ class OperatorsMixin:
                         return SQLBinaryOp(operator="AND", left=conditions[0], right=conditions[1])
                     elif len(conditions) == 1:
                         return conditions[0]
-                    # Both bounds null: per CQL §19.14, if the interval is null, result is false.
-                    # Interval[null, null] with untyped nulls is a null interval (§5.4).
+                    # Both bounds null. CLOSED null bounds are the maximum
+                    # interval (official corpus: ``5 in Interval[null, null]``
+                    # → true; §9.14/§9.15 Start/End resolve closed nulls to
+                    # the point-type extrema), so route through
+                    # intervalContains which applies unbounded semantics and
+                    # CQL §19.3 null-point handling. Any OPEN bracket keeps
+                    # the unknown-interval behaviour: the comparison is
+                    # uncertain, and the boundary predicates above dropped
+                    # out (open null bound), so the result is false for a
+                    # non-null point (``5 in Interval(null, null)`` → null /
+                    # not contained).
+                    if interval.low_closed and interval.high_closed:
+                        interval_expr = SQLFunctionCall(
+                            name="intervalFromBounds",
+                            args=[
+                                SQLLiteral("__null__"),
+                                SQLLiteral("__null__"),
+                                SQLLiteral(value=True),
+                                SQLLiteral(value=True),
+                            ],
+                        )
+                        return SQLFunctionCall(
+                            name="intervalContains",
+                            args=[interval_expr, SQLCast(expression=left, target_type="VARCHAR")],
+                        )
                     return SQLLiteral(value=False)
         if self._is_fhir_interval_expression(right):
             return SQLFunctionCall(
@@ -5281,6 +5378,10 @@ class OperatorsMixin:
         if isinstance(left, SQLArray) or isinstance(right, SQLArray):
             non_array = right if isinstance(left, SQLArray) else left
             array_side = left if isinstance(left, SQLArray) else right
+            # D3 EXPLORER: collapse/expand list sources are JSON array
+            # strings — coerce to a native list before list_concat (CQL-15
+            # JSON-list doctrine).
+            non_array = _coerce_json_list_source(non_array)
             # Compile-time null: CQL §20.29 null = empty list → return the array side
             if isinstance(non_array, SQLNull):
                 return array_side
@@ -7202,24 +7303,28 @@ class OperatorsMixin:
         ):
             return None
         precision = min(left_precision, right_precision)
-        delta = SQLFunctionCall(
-            name="ABS",
-            args=[
-                SQLBinaryOp(
-                    operator="-",
-                    left=SQLCast(expression=left, target_type="DECIMAL(38,8)"),
-                    right=SQLCast(expression=right, target_type="DECIMAL(38,8)"),
-                )
-            ],
-        )
-        tolerance = SQLCast(
-            expression=SQLLiteral(value=f"{0.5 * (10 ** -precision):.8f}"),
-            target_type="DECIMAL(38,8)",
-        )
+        # CQL 1.5 §9.6 Equivalent: round each operand to the precision of the
+        # LEAST precise operand (trailing zeros ignored — a Decimal literal's
+        # precision is its fraction with trailing zeros stripped) and compare.
+        # Official fixture pins the direction: `1.5 ~ 1.55` is FALSE (1.55
+        # rounds half-away-from-zero to 1.6, not 1.5), so a symmetric
+        # half-width tolerance (`|a-b| <= 0.5*10^-p`) is WRONG — it accepts
+        # the exact boundary. DuckDB ROUND over DECIMAL is half-away-from-
+        # zero, matching the CQL Round doctrine.
+        def _rounded(operand: SQLExpression) -> SQLFunctionCall:
+            return SQLFunctionCall(
+                # `system.` prefix: bare `round` resolves to the CQL Round
+                # macro (TRY_CAST AS INTEGER — wrong semantics here).
+                name="system.round",
+                args=[
+                    SQLCast(expression=operand, target_type="DECIMAL(38,8)"),
+                    SQLLiteral(value=precision),
+                ],
+            )
         result: SQLExpression = SQLBinaryOp(
-            operator="<=",
-            left=delta,
-            right=tolerance,
+            operator="=",
+            left=_rounded(left),
+            right=_rounded(right),
         )
         if is_negated:
             return SQLUnaryOp(operator="NOT", operand=result)
@@ -9619,20 +9724,21 @@ class OperatorsMixin:
             or _is_datetime_boundary_literal(expr.operand, "0001-01-01T00:00:00.000")
             or _is_time_boundary_literal(expr.operand, "T00:00:00.000")
         ):
-            raise ValueError(
-                "The result of the predecessor operation precedes "
-                "the minimum value allowed for the type"
-            )
+            # cql-tests#120 (f724ee4): predecessor at the minimum DateTime/Time
+            # is VALID and evaluates to null (mirror of the successor rule).
+            return SQLNull()
 
         if operator == "successor of" and (
             _is_datetime_boundary_constructor(expr.operand, [9999, 12, 31, 23, 59, 59, 999])
             or _is_datetime_boundary_literal(expr.operand, "9999-12-31T23:59:59.999")
             or _is_time_boundary_literal(expr.operand, "T23:59:59.999")
         ):
-            raise ValueError(
-                "The result of the successor operation exceeds "
-                "the maximum value allowed for the type"
-            )
+            # cql-tests#120 (f724ee4): successor at the maximum DateTime/Time
+            # is VALID and evaluates to null (CQL App. C: "If the input is
+            # equal to the maximum value for the type, the result is null").
+            # The former translation-error doctrine rested on the pre-#120
+            # invalid="true" fixtures; fixtures outrank it.
+            return SQLNull()
 
         # CQL §Nullological Operators (Developer's Guide): the infix null-test
         # and boolean-test operators (`is null`, `is not null`, `is true`,

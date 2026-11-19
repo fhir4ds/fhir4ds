@@ -1577,8 +1577,14 @@ def _unwrap_bound_for_json(val):
 
     If val is a string containing JSON (e.g., quantity), parse it to a dict
     so json.dumps produces properly nested output instead of double-encoding.
+    The translator's closed-null-bound sentinel ``__null__`` (maximum /
+    unbounded interval, e.g. ``Interval[null, null] union Interval[1, 10]`` →
+    ``Interval[null, null]``) serializes as JSON null — the closedness flags
+    carry the unbounded-vs-unknown distinction on re-parse.
     """
     if isinstance(val, str):
+        if val == "__null__":
+            return None
         stripped = val.strip()
         if stripped.startswith('{'):
             try:
@@ -2148,8 +2154,13 @@ def intervalEquals(interval1: str | None, interval2: str | None) -> bool | None:
         return None
     iv1 = _parse_interval(interval1)
     iv2 = _parse_interval(interval2)
-    if _open_null_bound_uncertain(iv1) or _open_null_bound_uncertain(iv2):
-        return None
+    # D3-HISTORIAN lockstep (CQL-16 doctrine: intervalEquals must match native
+    # Interval::equals_nullable, interval.cpp:1031). No blanket open-null
+    # gate here: a BOTH-NULL side is equal per the reference EqualEvaluator
+    # (point-level equal(null, null) -> true inside Start/End comparison),
+    # and one-sided null bounds are already handled per-bound by
+    # _interval_bound_equals_nullable (closed-null -> unknown, open-null ->
+    # unbounded/unequal), which is the exact native table.
     if not iv1 or not iv2:
         return None
     starts_equal = _interval_bound_equals_nullable(iv1, iv2, "low")

@@ -10,3 +10,9 @@ cql:
   label: CQL
 performance:
   label: Performance
+data-quality:
+  label: Data Quality
+patient-matching:
+  label: Patient Matching
+deduplication:
+  label: Deduplication

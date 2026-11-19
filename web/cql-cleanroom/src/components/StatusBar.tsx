@@ -22,6 +22,9 @@ export interface StatusBarProps {
   /** Epoch ms of the last content save (standalone autosave / explicit
    *  writes); null when nothing has been saved this session. */
   lastSavedAt: number | null;
+  /** QA it7 F1: autosave is failing (e.g. IndexedDB blocked) — the user
+   *  must know their work is NOT persisting. */
+  storageDegraded?: boolean;
   /** Connected workspaces read from disk — nothing is written back, so
    *  the saved stamp explains the dash instead of lying. */
   diskSource: boolean;
@@ -48,6 +51,7 @@ export function StatusBar({
   workspace,
   engine,
   lastSavedAt,
+  storageDegraded,
   diskSource,
   note,
   onDismissNote,
@@ -63,8 +67,9 @@ export function StatusBar({
 
   const engineLabel =
     engine ?? (connected ? "DuckDB" : "DuckDB-WASM");
-  const savedLabel =
-    lastSavedAt != null
+  const savedLabel = storageDegraded
+    ? "save failed — browser storage unavailable"
+    : lastSavedAt != null
       ? `saved ${relTime(lastSavedAt, now)}`
       : diskSource
         ? "local files"

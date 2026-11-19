@@ -545,7 +545,14 @@ def _step_quantity_json(value: str, direction: int) -> str | None:
         return None
 
     unit = parsed.get("unit") or parsed.get("code") or "1"
-    step = Decimal("0.00000001") if ("." in raw_number or "e" in raw_number.lower()) else Decimal(1)
+    # Decimal-authored quantities step by 10^-fractional-scale of the
+    # AUTHORED value text (PredecessorOf1QCMPrecision: 1.0 'cm' -> 0.9 'cm');
+    # integer-authored keep the integer step (CQL-11 doctrine).
+    if "." in raw_number or "e" in raw_number.lower():
+        scale = max(-current.as_tuple().exponent, 0)
+        step = Decimal(1).scaleb(-scale) if scale > 0 else Decimal("0.00000001")
+    else:
+        step = Decimal(1)
     return _format_cql_quantity(current + direction * step, unit)
 
 
@@ -579,20 +586,26 @@ def _step_value(x, direction: int) -> str | float | int | None:
         # Try numeric string
         try:
             v = Decimal(x_stripped)
+            scale = max(-v.as_tuple().exponent, 0)
+            step = Decimal(1).scaleb(-scale) if scale > 0 else Decimal("0.00000001")
             if (direction < 0 and v <= _CQL_DECIMAL_MIN) or (direction > 0 and v >= _CQL_DECIMAL_MAX):
                 return None
-            return float(v + direction * Decimal("0.00000001"))
+            return float(v + direction * step)
         except Exception as e:
             _logger.debug("Unexpected error in UDF _step_value numeric parse: %s", e)
             return None
     if isinstance(x, Decimal) or isinstance(x, float):
-        step = Decimal("0.00000001")
+        # Decimal step is 10^-scale of the OPERAND's fractional digits
+        # (cql-tests PredecessorOf1DPrecision: predecessor of 1.0 is 0.9,
+        # not 0.99999999 — supersedes the flat 1e-8 doctrine).
         decimal_value = x if isinstance(x, Decimal) else Decimal(str(x))
+        scale = max(-decimal_value.as_tuple().exponent, 0)
+        step = Decimal(1).scaleb(-scale) if scale > 0 else Decimal("0.00000001")
         if (direction < 0 and decimal_value <= _CQL_DECIMAL_MIN) or (
             direction > 0 and decimal_value >= _CQL_DECIMAL_MAX
         ):
             return None
-        return x + direction * step if isinstance(x, Decimal) else float(x) + direction * 1e-8
+        return decimal_value + direction * step
     if isinstance(x, bool):
         return None
     if isinstance(x, int):

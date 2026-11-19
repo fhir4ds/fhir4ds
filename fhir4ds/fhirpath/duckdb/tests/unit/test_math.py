@@ -10,6 +10,7 @@ Tests the math functions module following FHIRPath semantics:
 
 import math
 import pytest
+from decimal import Decimal
 
 from fhir4ds.fhirpath.engine.nodes import FP_Quantity
 
@@ -813,3 +814,39 @@ class TestFp11HistorianMathHelperEngineContract:
         assert str(r) == "0.0"
         assert str(round_fn(-0.5)[0]) == "-1.0"
         assert str(round_fn(0.5)[0]) == "1.0"
+
+
+class TestDecimalInputsAcceptedD25Dom1Historian:
+    """v0.0.25 Domain 1 HISTORIAN: exported math helpers must accept Decimal.
+
+    `_to_numeric` previously rejected Decimal, so every helper routed through
+    it returned [] for Decimal inputs (round_fn(Decimal('-0.5')) -> []) while
+    the engine handled Decimals — the 14th "exported helper API forgotten"
+    instance. Mixed Decimal/int/float operands must not raise TypeError.
+    """
+
+    def test_unary_helpers_accept_decimal(self):
+        assert round_fn(Decimal("-0.5")) == [-1.0]
+        assert abs_fn(Decimal("-5.5")) == [Decimal("5.5")]
+        assert ceiling(Decimal("1.2")) == [2]
+        assert floor(Decimal("1.8")) == [1]
+        assert sqrt(Decimal("4")) == [2.0]
+        assert power(Decimal("1.1"), 2) == [Decimal("1.21")]
+        assert negate(Decimal("1.5")) == [Decimal("-1.5")]
+
+    def test_binary_helpers_accept_decimal_and_mixed_operands(self):
+        assert add(Decimal("0.1"), Decimal("0.2")) == [Decimal("0.3")]
+        assert add(Decimal("0.1"), 1) == [Decimal("1.1")]
+        assert add(1.5, Decimal("0.5")) == [Decimal("2.0")]
+        assert subtract(Decimal("1.5"), 1) == [Decimal("0.5")]
+        assert multiply(Decimal("1.1"), Decimal("1.1")) == [Decimal("1.21")]
+        assert multiply(Decimal("1.5"), 2.0) == [Decimal("3.00")]
+        assert div(Decimal("10"), 3) == [3]
+        assert mod(Decimal("-5.5"), 2) == [-1.5]
+
+    def test_aggregates_accept_decimal(self):
+        assert sum_fn([Decimal("0.1"), Decimal("0.2")]) == [Decimal("0.3")]
+        assert sum_fn([Decimal("0.1"), 0.2]) == [Decimal("0.3")]
+        assert sum_fn([1, 2, 3]) == [6]
+        assert min_fn([Decimal("1.5"), 2]) == [Decimal("1.5")]
+        assert avg([Decimal("1"), 2]) == [1.5]

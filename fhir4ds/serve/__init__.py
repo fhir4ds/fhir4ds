@@ -21,9 +21,16 @@ from typing import Any
 
 from .config import ServeConfig
 
-__version__ = "0.0.24"
+__version__ = "0.0.25"
 
 __all__ = ["create_app", "ServeConfig", "__version__"]
+
+_Globals = dict(globals())
+
+
+def __dir__() -> list[str]:
+    """PEP 562: ``dir()`` must surface the lazily-resolved names too."""
+    return sorted(set(_Globals) | set(__all__))
 
 
 def __getattr__(name: str) -> Any:

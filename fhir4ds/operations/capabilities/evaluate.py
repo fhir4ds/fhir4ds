@@ -437,6 +437,16 @@ def evaluate_snippet(
         return EvaluateResult(
             ok=False, diagnostics=(input_error("snippet must be a non-empty string"),)
         )
+    if not isinstance(main, LibraryText):
+        return EvaluateResult(
+            ok=False,
+            diagnostics=(
+                input_error(
+                    "main must be a LibraryText, got "
+                    + type(main).__name__
+                ),
+            ),
+        )
     count = main.text.count("\n")
     define_line = count + (1 if main.text.endswith("\n") else 2)
     suffixed = dataclasses.replace(

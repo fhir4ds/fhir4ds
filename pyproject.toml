@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fhir4ds-v2"
-version = "0.0.24"
+version = "0.0.25"
 description = "FHIR for Data Science — unified package for FHIRPath, CQL, and SQL-on-FHIR analytics"
 readme = "README.md"
 license = {text = "AGPL-3.0-only"}
@@ -26,16 +26,19 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Medical Science Apps.",
 ]
 dependencies = [
-    # DuckDB pin: base stays on the 1.5.x line. DuckDB 2.0 remains OPT-IN
-    # via the [duckdb2] extra (see below): the 2026-10-30 dual-version
-    # retest found an upstream DuckDB 2.0 optimizer/planner pathology on
-    # CMS2-class SQL (~92% of wall time in the planner; worst pass
-    # projection_pullup; upstream issue duckdb/duckdb#28181), so 2.0 is
-    # not the default until that is resolved upstream. The 2.0 extension
-    # bundle (fhir4ds/*/extensions/*.duckdb2_extension) still ships
-    # in-tree for the opt-in path; guarded by
-    # fhir4ds/tests/test_duckdb2_dual_support.py::test_pin_widening_atomicity.
-    "duckdb>=1.5.5,<2",
+    # DuckDB pin: DuckDB 2.0 is the DEFAULT on Python >= 3.11 (cp311+ wheels
+    # only) — the v0.0.24 performance campaign showed 2.0 ~10x faster than
+    # 1.5.x at population scale (CMS130/CMS133 @5k patients) with the
+    # validated `delim_join_as_cte=false` planner tuning that
+    # fhir4ds.register() applies automatically on 2.x. Python 3.10 stays on
+    # the 1.5.x line (no 2.x wheels exist there); the [duckdb1] extra pins
+    # 1.5.x explicitly for users who need it on 3.11+. The original
+    # upstream planner pathology (duckdb/duckdb#28181) is mitigated by the
+    # tuning; see docs/getting-started/benchmarking.md. Guarded by
+    # fhir4ds/tests/test_duckdb2_dual_support.py and
+    # fhir4ds/tests/test_packaging.py.
+    "duckdb>=1.5.5,<2; python_version < '3.11'",
+    "duckdb>=2.0.0,<2.1; python_version >= '3.11'",
     # duckdb 2.x Python client requires pytz for TIMESTAMPTZ rendering;
     # 2.x wheels are cp311+ so the marker scopes it to exactly those.
     "pytz; python_version >= '3.11'",
@@ -49,31 +52,23 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# DuckDB line extras (D2, Joel ruling 2026-10-29 — narrowing only; pip
-# intersects extra constraints with the wide base pin, which ships in the
-# release that carries the dual extension bundle):
-#   pip install fhir4ds-v2[duckdb1]   → pins duckdb to the 1.x line
-#   pip install fhir4ds-v2[duckdb2]   → pins duckdb to 2.0.x (>=2,<2.1)
-# 2.0 stays OPT-IN, not the default, because of an UPSTREAM DuckDB 2.0
-# optimizer pathology — NOT an fhir4ds defect: planner/optimizer passes
-# scale super-linearly with expression-tree size on CMS2-class SQL
-# (generated SQL ~1.3MB; two structurally-identical ~650KB twin
-# subqueries; `projection_pullup` dominant at ~14s of a ~30-40s total
-# plan tax, corpus-size independent). Baseline and optimized trees are
-# affected EQUALLY — MATERIALIZED shared-retrieve CTEs were exonerated by
-# A/B/C experiment. 2.0 is a large WIN where it matters: CMS68 exec
-# -80..-88% vs baseline, CMS130@5k 228s→5.6s, peak RSS @5k 40.1→15.9GB;
-# CMS130 rung100/rung1000 mixed. Full evidence:
-# fhir4ds-private/docs/architecture/plans/PERF_RCA_DUCKDB2_CMS2_PLANTIME.md
-# (perf/phase2-opt @6b70358; includes the corrected 4-leg matrix with the
-# baseline-on-2.0 leg the first retest lacked).
+# DuckDB line extras (Joel ruling 2026-11-18: DuckDB 2.0 is the DEFAULT on
+# Python >= 3.11 — see the base-dependencies comment for the v0.0.24
+# performance evidence; the upstream planner pathology is mitigated by the
+# automatic `delim_join_as_cte=false` tuning):
+#   pip install fhir4ds-v2[duckdb1]   → pins duckdb to the 1.5.x line
+#                                       (the escape hatch on 3.11+)
+#   pip install fhir4ds-v2[duckdb2]   → pins duckdb to 2.0.x explicitly
+#                                       (>=2,<2.1, Python >=3.11; on 3.10
+#                                       it resolves to the 1.5.x line —
+#                                       2.x wheels are cp311+ only)
 # pytz rides in BASE (marker-scoped py>=3.11) so 2.x adopters get it
 # regardless of extra choice.
 duckdb1 = [
     "duckdb>=1.5.5,<2",
 ]
 duckdb2 = [
-    "duckdb>=2.0.0,<2.1",
+    "duckdb>=2.0.0,<2.1; python_version >= '3.11'",
 ]
 # FHIR R4 / SQL-on-FHIR HTTP surface (``fhir4ds serve``).
 # The engine already depends on duckdb + pyarrow, so parquet output needs

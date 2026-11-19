@@ -279,14 +279,19 @@ async function executeSnippet(
     // console's SQL/AST/CQL tabs replay the selection run faithfully.
     env.cql = executedText;
     if (diagShift > 0) {
+      // D2 (QA it5): EOF diagnostics sit one line PAST the selection end
+      // (the parser reports EOF at the synthesized text's last line + 1).
+      // Clamp renumbered lines to the selection's line count so a
+      // diagnostic never points at a line the user cannot see.
+      const selectionLines = body.split("\n").length;
       for (const d of env.diagnostics ?? []) {
         const loc = d.location;
         if (!loc) continue;
         if (loc.start_line != null && loc.start_line >= diagShift) {
-          loc.start_line = loc.start_line - diagShift;
+          loc.start_line = Math.min(loc.start_line - diagShift, selectionLines);
         }
         if (loc.end_line != null && loc.end_line >= diagShift) {
-          loc.end_line = loc.end_line - diagShift;
+          loc.end_line = Math.min(loc.end_line - diagShift, selectionLines);
         }
       }
     }
@@ -481,6 +486,18 @@ async function loadIntoDuckDB(ds: DatasetSpec): Promise<void> {
   for (const r of ds.resources ?? []) {
     const rt = typeof (r as any).resourceType === "string" ? (r as any).resourceType : null;
     const id = typeof (r as any).id === "string" ? (r as any).id : null;
+    // F3 (QA it15): desktop FHIRDataLoader rejects these at load — exclude
+    // them here too so a programmatic dataset cannot silently evaluate
+    // resources the engine's own validator refuses (parity contract).
+    if (id !== null && !/^[A-Za-z0-9-.]{1,64}$/.test(id)) {
+      console.warn(
+        "[loadIntoDuckDB] excluded resource with invalid FHIR id:",
+        JSON.stringify(id).slice(0, 80),
+        "resourceType:",
+        rt,
+      );
+      continue;
+    }
     rows.push({
       patient_ref: rt === "Patient" ? id : patientRefOf(r as Record<string, unknown>),
       resourceType: rt ?? "",

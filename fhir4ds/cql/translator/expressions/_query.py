@@ -5969,6 +5969,55 @@ class QueryMixin:
                     wc_expr = with_clause.expression
                     such_that = with_clause.such_that
 
+                    # Engine-backlog: a LITERAL-list with/without source
+                    # (`({1,2,3}) X with ({1,2}) Y such that X = Y`) iterates
+                    # elements via unnest — the literal is patient-independent
+                    # so no patient correlation; the element column IS the
+                    # alias (same binding as the main list-literal source).
+                    _wc_is_literal_list = isinstance(wc_expr, ListExpression)
+                    if _wc_is_literal_list:
+                        _wc_list_sql = self.translate(wc_expr, usage=ExprUsage.LIST)
+                        # If the MAIN source is also a list literal and the
+                        # query collapsed (no where/return), the main alias
+                        # was never registered — bare `A` in such_that would
+                        # resolve to the whole array. Register the element
+                        # binding so `A = B` compares elements.
+                        _wq_main_src = node.source[0] if isinstance(node.source, list) and node.source else node.source
+                        _wq_main_expr = getattr(_wq_main_src, "expression", None) if _wq_main_src is not None else None
+                        _wq_main_alias = getattr(_wq_main_src, "alias", None) if _wq_main_src is not None else None
+                        if (
+                            _wq_main_alias
+                            and isinstance(_wq_main_expr, ListExpression)
+                            and _wq_main_alias not in self.context._alias_source_asts
+                        ):
+                            self.context.add_alias(_wq_main_alias, table_alias=_wq_main_alias)
+                            self.context._alias_source_asts[_wq_main_alias] = _wq_main_expr
+                        _wc_inner = SQLSelect(columns=[SQLAlias(
+                            expr=SQLFunctionCall(name="unnest", args=[_wc_list_sql]),
+                            alias=wc_alias,
+                        )])
+                        _wc_from = SQLAlias(
+                            expr=SQLSubquery(query=_wc_inner), alias="_wc_list",
+                        )
+                        self.context.add_alias(wc_alias, table_alias=wc_alias)
+                        self.context._alias_source_asts[wc_alias] = wc_expr
+                        old_resource_alias = self.context.resource_alias
+                        self.context.resource_alias = wc_alias
+                        try:
+                            _wc_cond = self.translate(such_that, usage=ExprUsage.BOOLEAN) if such_that else SQLLiteral(value=True)
+                        finally:
+                            self.context.resource_alias = old_resource_alias
+                        _wc_exists_sel = SQLSelect(
+                            columns=[SQLLiteral(value=1)],
+                            from_clause=_wc_from,
+                            where=_wc_cond if not (isinstance(_wc_cond, SQLLiteral) and _wc_cond.value is True) else None,
+                        )
+                        _wc_exists = SQLExists(subquery=SQLSubquery(query=_wc_exists_sel))
+                        if is_without:
+                            _wc_exists = SQLUnaryOp(operator="NOT", operand=_wc_exists)
+                        _with_parts.append((_wc_exists, is_without, wc_alias, _wc_from))
+                        continue
+
                     # Translate the source expression for the with clause
                     # For definition references, bypass query_builder tracking to avoid
                     # picking up the outer query's tracked alias (e.g., j1.resource)
@@ -6222,7 +6271,26 @@ class QueryMixin:
                             return _swapped
 
             # Add to existing WHERE clause
-            if isinstance(result, SQLSelect):
+            _wq_src0 = node.source[0] if isinstance(node.source, list) and node.source else node.source
+            if isinstance(result, (SQLArray, SQLFunctionCall)) and _wq_src0 is not None:
+                # Engine-backlog: a with/without query with NO where and NO
+                # return collapses to the bare source list — iterate its
+                # elements (unnest, same binding as the list-literal source)
+                # and apply the EXISTS there; otherwise the with clause is
+                # silently dropped.
+                _wq_alias = getattr(_wq_src0, "alias", None) or "X"
+                result = SQLSelect(
+                    columns=[SQLIdentifier(name=_wq_alias)],
+                    from_clause=SQLAlias(
+                        expr=SQLSubquery(query=SQLSelect(columns=[SQLAlias(
+                            expr=SQLFunctionCall(name="unnest", args=[result]),
+                            alias=_wq_alias,
+                        )])),
+                        alias="_list",
+                    ),
+                    where=exists_expr,
+                )
+            elif isinstance(result, SQLSelect):
                 if result.where:
                     new_where = SQLBinaryOp(left=result.where, operator="AND", right=exists_expr)
                 else:
@@ -7070,6 +7138,7 @@ class QueryMixin:
                         # body arithmetic (`T + <CASE int>`) binds instead of
                         # `+(VARCHAR, INTEGER)`/`+(JSON, INTEGER)`.
                         _acc_binding = SQLIdentifier(name=_agg_lambda_x)
+                        _acc_binding_is_decimal = False
                         if (
                             _agg_element_is_json
                             and isinstance(agg.starting, _ASTLiteral)
@@ -7081,10 +7150,24 @@ class QueryMixin:
                                 target_type="DECIMAL(38,8)",
                                 try_cast=True,
                             )
+                            _acc_binding_is_decimal = True
                         self.context.add_alias(accum_name, ast_expr=_acc_binding)
                         if alias:
                             self.context.add_alias(alias, ast_expr=SQLIdentifier(name=_agg_lambda_y))
                         agg_body = self.translate(agg.expression, usage=ExprUsage.SCALAR)
+                        if _acc_binding_is_decimal:
+                            # DuckDB 2.0 binder: list_reduce over a VARCHAR
+                            # list requires the lambda RETURN type to share a
+                            # common super type with the element type — the
+                            # DECIMAL arithmetic result must transport as
+                            # VARCHAR (re-cast to DECIMAL on every fold
+                            # iteration via the accumulator binding above;
+                            # 1.5.x coerced silently, 2.0 refuses).
+                            agg_body = SQLCast(
+                                expression=agg_body,
+                                target_type="VARCHAR",
+                                try_cast=True,
+                            )
                     finally:
                         self.context.pop_scope()
 
@@ -7096,7 +7179,11 @@ class QueryMixin:
                             # align the starting value's physical type so
                             # list_prepend does not binder-fail mixing
                             # INTEGER[]/VARCHAR[]. Numeric starts cast to
-                            # DECIMAL(38,8) to match the accumulator binding.
+                            # VARCHAR: the element list is VARCHAR[] and the
+                            # fold lambda transports its (internally DECIMAL)
+                            # result as VARCHAR too — keeping every list
+                            # element VARCHAR is what makes duckdb 2.0's
+                            # common-super-type binder accept the fold.
                             starting_sql = SQLCast(
                                 expression=starting_sql,
                                 target_type="VARCHAR",

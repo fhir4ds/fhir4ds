@@ -1,0 +1,159 @@
+---
+title: "Thirty Rules and a Timeline: How fhir4ds Decides Two Records Are the Same"
+description: "A walk through the patient-matching rule cascade and temporal resource deduplication — with before/after examples for the scenarios that actually show up in real healthcare data."
+authors: joel
+tags: [fhir, data-quality, patient-matching, deduplication, analytics]
+date: 2026-11-18T12:00:00Z
+slug: /fhir-data-journey
+unlisted: true
+---
+
+Healthcare data arrives duplicated, abbreviated, and inconsistently spelled — usually all three at once. Before you can compute anything trustworthy, two questions have to be answered millions of times over:
+
+{/* truncate */}
+
+1. **Are these two patient records the same human?**
+2. **Are these two observations the same clinical event?**
+
+fhir4ds answers both deterministically, with an audit trail, and without ever modifying your source data. This post shows how — with the actual rules, and before/after examples for the scenarios that show up in real exports.
+
+## Part 1: The thirty rules of person matching
+
+The matching engine is modeled on the CMS data-matching proposal: a cascade of ~30 deterministic rules, each one a specific combination of agreeing fields. The rules are tried **in order of statistical strength** — a rule whose field combination would collide by chance in one-in-a-quadrillion records gets to decide before a rule whose combination collides once in a billion. The first rule that fires wins, and its strength becomes the confidence of the match.
+
+A sample of the cascade (strongest first):
+
+| Rule | Fields that must agree | Chance collision |
+|---|---|---|
+| 22 | Any identifier in the same namespace | ~1 in 1,000,000,000,000,000 |
+| 02 | First name (fuzzy) + last name (fuzzy) + DOB (±1 day) + **exact phone** | ~1 in 100 trillion |
+| 04 | First name (fuzzy) + exact last name + exact DOB + **SSN last-4** | ~1 in 1,000,000,000,000 |
+| 17 | Exact phone + **exact Medicare MBI** | ~1 in 1,000,000,000,000 |
+| 11 | Exact first name + exact DOB + exact phone | ~1 in 500,000,000,000 |
+
+Any rule whose combination is *rarer* than the approval threshold (a chance collision probability below 2×10⁻¹²) declares a **match**. Weaker agreement leaves the pair **ambiguous** rather than guessed. Nothing above the threshold is ever silently declared a non-match either — ambiguous means "a human should look", no_match means the cascade ran out of rules.
+
+Three pieces of vocabulary make those "fuzzy" markers work:
+
+- **Normalization happens first.** `MONTAVON ,` and `Montavon` and `Joé` are compared as canonical forms — case-folded, punctuation-stripped, diacritics-folded, suffixes (`Jr.`, `III`) pulled aside.
+- **Nicknames are equivalence sets.** Joe ≡ Joey ≡ Joseph. The engine carries ~220 nickname sets, so "JOE" and "Joel" agreeing counts as first-name agreement.
+- **Fuzzy means one typo.** Names match fuzzily at edit distance ≤ 1 — one dropped letter, one transposition. Birthdates match at ±1 day, which catches the overwhelming majority of fat-fingered DOBs.
+
+### Scenario 1: The same patient, three spellings
+
+**Before** — two records from two systems:
+
+```json
+{"id": "pat-a", "name": [{"family": "Montavon", "given": ["Joel"]}],
+ "birthDate": "1975-03-12",
+ "telecom": [{"system": "phone", "value": "(555) 867-5309"}]}
+
+{"id": "pat-b", "name": [{"family": "MONTAVON ", "given": ["Joe"]}],
+ "birthDate": "1975-03-11",
+ "telecom": [{"system": "phone", "value": "555.867.5309"}]}
+```
+
+After normalization, last names are identical, given names are nickname-equivalent, birthdates are one day apart, and the phones — once placeholders are stripped — are **exactly** equal. Rule 02 (first~ + last~ + dob~ + phone=) fires at P ≈ 10⁻¹⁴, far below the 2×10⁻¹² threshold.
+
+**After** — a match, recorded as a FHIR Linkage resource (the standard's "same entity" assertion), plus an audit row naming rule 02 and the evidence:
+
+```json
+{"resourceType": "Linkage", "active": true,
+ "item": [
+   {"type": "source",    "resource": {"reference": "Patient/pat-a"}},
+   {"type": "alternate", "resource": {"reference": "Patient/pat-b"}}]}
+```
+
+The two Patient records are untouched. Reverse the Linkage and you're exactly where you started.
+
+### Scenario 2: The sibling trap
+
+**Before** — two brothers, same household, one letter apart:
+
+```json
+{"id": "bro-1", "name": [{"family": "Nguyen", "given": ["Danh"]}],
+ "birthDate": "1998-04-02",
+ "telecom": [{"system": "phone", "value": "555-222-1234"}]}
+
+{"id": "bro-2", "name": [{"family": "Nguyen", "given": ["Dan"]}],
+ "birthDate": "1996-04-02",
+ "telecom": [{"system": "phone", "value": "555-222-1234"}]}
+```
+
+Same last name, same phone, given names at edit distance 1 — a pure rule-cascade could happily merge two different people on the phone-and-name rules. Real registries are full of exactly this shape: siblings, parent/child with the same name, roommates.
+
+The cascade holds here on its own: the strongest name-and-phone rule (rule 30) requires the birthdates to match *exactly*, and no weaker rule can carry a two-year DOB gap plus a fuzzy-only first name below the threshold. And for the narrower trap — siblings or relatives who *do* share a birthdate, or a DOB typo that lands on the same day — rule 30 carries **disagreement guards**, a fhir4ds addition to the upstream proposal: before accepting the match, the engine verifies the SSN last-4s don't contradict each other and the first names genuinely agree. A candidate that fails a guard is dropped from that rule's survivors rather than negated outright.
+
+**After** — `ambiguous`, deliberately. The engine surfaces contradiction candidates like this for human review instead of guessing, because merging two brothers is a much more expensive error than flagging a pair for a look.
+
+## Part 2: Resource deduplication — same event, twice
+
+Patient identity is only half the problem. The same *clinical event* gets recorded twice constantly: an interface retries a message, two systems both report the same lab, a timezone gets mangled in transit.
+
+The dedup pipeline asks a narrower question — "could these be the same measurement/procedure/condition for the same patient?" — in two stages.
+
+**Stage 1: Could they be the same event?** Records are bucketed by patient, type, date, and *canonical value*. Codes normalize across terminologies (LOINC ↔ SNOMED for the same concept), and quantities normalize across units — the UCUM math runs inside the engine.
+
+**Stage 2: Are they close enough in time?** Every timestamp becomes a real instant — `08:30-06:00` and `14:30Z` are the same moment, a naive `08:30` gets a documented default zone rather than a guess. Then type-specific windows apply: vital signs merge within 30 minutes, serial troponins within 5, imprecise dates (month-only, year-only) subsume into any event their period contains.
+
+### Scenario 3: Two words for "body weight," two units for 82 kg
+
+**Before:**
+
+```json
+{"id": "obs-1", "code": {"coding": [
+    {"system": "http://loinc.org", "code": "29463-7"}]},
+ "effectiveDateTime": "2026-03-04T08:30:00-06:00",
+ "valueQuantity": {"value": 82, "unit": "kg"}}
+
+{"id": "obs-2", "code": {"coding": [
+    {"system": "http://snomed.info/sct", "code": "27113001"}]},
+ "effectiveDateTime": "2026-03-04T08:52:00-06:00",
+ "valueQuantity": {"value": 82000, "unit": "g"}}
+```
+
+Different code systems, different units, 22 minutes apart. A human reads "same weight." Stage 1 sees both code sets canonicalize to *body weight* and both values convert to the same quantity. Stage 2 sees 22 minutes — inside the vital-signs window.
+
+**After** — one cluster, one **survivor**, and an N-way Linkage:
+
+```json
+{"resourceType": "Linkage", "active": true,
+ "item": [
+   {"type": "source",    "resource": {"reference": "Observation/dedup-3f9a…"}},
+   {"type": "alternate", "resource": {"reference": "Observation/obs-1"}},
+   {"type": "alternate", "resource": {"reference": "Observation/obs-2"}}]}
+```
+
+The survivor is chosen by a transparent ranking — most precise timestamp first, then earliest, then richest clinical detail, with deterministic tie-breaks. It's a new merged resource (id `dedup-3f9a…`) carrying the union of both records' identifiers and codings, plus an extension recording the decision: cluster size, member references, and the rule that picked the survivor. The originals are, again, untouched.
+
+### Scenario 4: The honest duplicate that *isn't*
+
+**Before** — same patient, same test, 22 minutes apart… but serial troponins this time, where the hospital draws them 20 minutes apart on purpose:
+
+```json
+{"id": "trop-1", "code": {"coding": [
+    {"system": "http://loinc.org", "code": "10839-9"}]},
+ "effectiveDateTime": "2026-03-04T09:00:00-06:00",
+ "valueQuantity": {"value": 14, "unit": "ng/mL"}}
+
+{"id": "trop-2", "code": {"coding": [
+    {"system": "http://loinc.org", "code": "10839-9"}]},
+ "effectiveDateTime": "2026-03-04T09:18:00-06:00",
+ "valueQuantity": {"value": 38, "unit": "ng/mL"}}
+```
+
+**After** — two observations, no merge. Rising troponins 18 minutes apart are *medicine*, not duplication: troponin clusters use a 5-minute window precisely so a serial draw is never collapsed into one row. (Flip side: the identical values in Scenario 3 at 6 minutes apart on a non-serial vital *still* merge — windows are per-code-family.) Every window boundary is inclusive and tested — 30:00 merges, 30:01 doesn't — and any *false* merge anywhere in the golden test corpus is treated as a release blocker, not a tuning knob.
+
+## The point
+
+None of this is machine learning guessing at similarity. It's ~30 published rules with computed collision probabilities, unit-aware quantity math, timezone-correct instant comparison, and windows per clinical family — all deterministic, all auditable, all reversible. Every decision writes its evidence before it writes its verdict.
+
+The result is that when your analytical query asks "average body weight per patient in March," the answer counts Joel once and his March 4 weight once — and if anyone ever asks *why*, the audit table answers in one row.
+
+All of this ships in fhir4ds v0.0.25, runs on an embedded DuckDB database, and leaves your source data untouched:
+
+```bash
+pip install fhir4ds-v2
+```
+
+*Determinism isn't a nice-to-have in healthcare analytics. It's the whole product.*

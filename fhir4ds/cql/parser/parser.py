@@ -634,6 +634,15 @@ class CQLParser:
             elif self.match_and_advance(TokenType.NOT_EQUALS):
                 right = self.parse_equality_operand()
                 left = BinaryExpression(operator="!=", left=left, right=right)
+            elif self.match(TokenType.TILDE) and self.peek(1).type in (TokenType.IN, TokenType.CONTAINS):
+                # CQL 2.0 equivalence membership: '~in' / '~contains' (the
+                # equality-tier TILDE must not consume the tilde here).
+                self.advance()  # consume TILDE
+                membership_op = "in" if self.match_and_advance(TokenType.IN) else (
+                    "contains" if self.match_and_advance(TokenType.CONTAINS) else None
+                )
+                right = self.parse_type_expression()
+                left = BinaryExpression(operator=f"~{membership_op}", left=left, right=right)
             elif self.match_and_advance(TokenType.TILDE):
                 right = self.parse_equality_operand()
                 left = BinaryExpression(operator="~", left=left, right=right)

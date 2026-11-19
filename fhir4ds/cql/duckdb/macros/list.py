@@ -56,6 +56,20 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
         "'UTINYINT', 'USMALLINT', 'UINTEGER', 'UBIGINT', 'UHUGEINT'"
     )
     con.execute(
+        # CQL 2.0 Slice(list [, start [, end]]): 0-based half-open range;
+        # negative start/end index from the list end; null start=0, null
+        # end=length; out-of-range clamps (empty result at/past the ends).
+        "CREATE OR REPLACE MACRO Slice(lst, start := 0, the_end := NULL) AS "
+        "CASE WHEN lst IS NULL THEN NULL ELSE "
+        "(SELECT CASE WHEN _s >= _e THEN lst[1:0] ELSE list_slice(lst, _s + 1, _e) END "
+        "FROM (SELECT least(greatest(CASE WHEN COALESCE(start, 0) < 0 "
+        "THEN system.array_length(lst) + COALESCE(start, 0) "
+        "ELSE COALESCE(start, 0) END, 0), system.array_length(lst)) AS _s, "
+        "least(greatest(CASE WHEN the_end IS NULL THEN system.array_length(lst) "
+        "WHEN the_end < 0 THEN system.array_length(lst) + the_end "
+        "ELSE the_end END, 0), system.array_length(lst)) AS _e) _slice_t) END"
+    )
+    con.execute(
         "CREATE OR REPLACE MACRO Skip(lst, n) AS "
         "CASE WHEN lst IS NULL THEN NULL "
         "WHEN n IS NULL THEN lst "
@@ -263,6 +277,25 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
         "WHEN left_value IS NULL AND right_value IS NULL THEN TRUE "
         "WHEN left_value IS NULL OR right_value IS NULL THEN FALSE "
         "ELSE cqlDateTimeEqualListElement(CAST(left_value AS VARCHAR), CAST(right_value AS VARCHAR)) END"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO CQLListContainsEquivalent(lst, elem) AS "
+        "CASE WHEN lst IS NULL THEN FALSE "
+        "WHEN EXISTS (SELECT 1 FROM (SELECT COALESCE(lst, []) AS _cql_ceq_l) _cql_ceq_t, "
+        "UNNEST(_cql_ceq_t._cql_ceq_l) AS _cql_ceq_u(_cql_ceq_item) "
+        "WHERE CQLListElementEquivalent(_cql_ceq_item, elem) IS TRUE) THEN TRUE "
+        "ELSE FALSE END"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO CQLListContainsTemporalEquivalent(lst, elem) AS "
+        "CASE WHEN lst IS NULL THEN FALSE "
+        "WHEN EXISTS (SELECT 1 FROM (SELECT COALESCE(lst, []) AS _cql_ceqt_l) _cql_ceqt_t, "
+        "UNNEST(_cql_ceqt_t._cql_ceqt_l) AS _cql_ceqt_u(_cql_ceqt_item) "
+        "WHERE CASE WHEN _cql_ceqt_item IS NULL AND elem IS NULL THEN TRUE "
+        "WHEN _cql_ceqt_item IS NULL OR elem IS NULL THEN FALSE "
+        "ELSE COALESCE(cqlDateTimeEquivalentListElement(CAST(_cql_ceqt_item AS VARCHAR), "
+        "CAST(elem AS VARCHAR)), FALSE) END IS TRUE) THEN TRUE "
+        "ELSE FALSE END"
     )
     con.execute(
         "CREATE OR REPLACE MACRO CQLListContainsTemporalEq(lst, elem) AS "
@@ -527,7 +560,7 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
     # ============================================
     con.execute(
         'CREATE OR REPLACE MACRO "Distinct"(lst) AS '
-        "CQLListDistinctEq(lst)"
+        "CASE WHEN lst IS NULL THEN NULL ELSE CQLListDistinctEq(lst) END"
     )
 
     # ============================================

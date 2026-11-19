@@ -50,6 +50,12 @@
         }
       },
       {
+        "name": "AllTrueAllNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "AnyTrueAllTrue",
         "result": {
           "passed": true
@@ -110,13 +116,61 @@
         }
       },
       {
+        "name": "AnyTrueAllNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "AvgTest1",
         "result": {
           "passed": true
         }
       },
       {
+        "name": "AvgNullElements",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "AvgAllNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "AvgIsNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "ProductLong",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ProductInteger",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ProductDecimal",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ProductAllNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ProductIsNull",
         "result": {
           "passed": true
         }
@@ -141,6 +195,18 @@
       },
       {
         "name": "CountTestNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "CountAllNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "CountNullSource",
         "result": {
           "passed": true
         }
@@ -176,7 +242,49 @@
         }
       },
       {
+        "name": "MaxTestDecimal",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "MaxNullElements",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "MaxAllNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "MaxIsNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "MedianTestDecimal",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "MedianOddCount",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "MedianAllNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "MedianIsNull",
         "result": {
           "passed": true
         }
@@ -212,6 +320,24 @@
         }
       },
       {
+        "name": "MinTestDecimal",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "MinAllNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "MinIsNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "ModeTestInteger",
         "result": {
           "passed": true
@@ -236,6 +362,18 @@
         }
       },
       {
+        "name": "ModeAllNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ModeIsNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "PopStdDevTest1",
         "result": {
           "passed": true
@@ -243,6 +381,12 @@
       },
       {
         "name": "PopulationStdDevIsNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "PopulationStdDevIsAlsoNull",
         "result": {
           "passed": true
         }
@@ -260,6 +404,12 @@
         }
       },
       {
+        "name": "PopulationVarianceIsAlsoNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "StdDevTest1",
         "result": {
           "passed": true
@@ -267,6 +417,12 @@
       },
       {
         "name": "StdDevIsNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "StdDevIsAlsoNull",
         "result": {
           "passed": true
         }
@@ -296,7 +452,55 @@
         }
       },
       {
+        "name": "SumInteger",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SumAllNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SumIsNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "VarianceTest1",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "VarianceAllNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "VarianceIsNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "GeometricMean4",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "GeometricMeanAllNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "GeometricMeanIsNull",
         "result": {
           "passed": true
         }
@@ -358,6 +562,24 @@
         "result": {
           "passed": true
         }
+      },
+      {
+        "name": "AggregateEmptySourceWithStart",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "AggregateEmptySourceNoStart",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "AggregateDecimal",
+        "result": {
+          "passed": true
+        }
       }
     ]
   },
@@ -406,6 +628,18 @@
         }
       },
       {
+        "name": "AbsMinIntegerOverflow",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "AbsMinLongOverflow",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "AddNull",
         "result": {
           "passed": true
@@ -448,6 +682,24 @@
         }
       },
       {
+        "name": "AddIntegerOverflow",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "AddLongAndInteger",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "AddQuantityInvalidDimension",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "CeilingNull",
         "result": {
           "passed": true
@@ -485,6 +737,66 @@
       },
       {
         "name": "Ceiling1I",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "CeilingMaxInteger",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "CeilingMaxIntegerAsDecimal",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "CeilingMaxIntegerAsDecimalWhereDecimalIsNonZero",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "CeilingIntegerGreaterThanMaxInteger",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "CeilingDecimalGreaterThanMaxInteger",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "CeilingMinInteger",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "CeilingMinIntegerAsDecimal",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "CeilingMinIntegerAsDecimalWhereDecimalIsNonZero",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "CeilingIntegerLessThanMinInteger",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "CeilingDecimalLessThanMinInteger",
         "result": {
           "passed": true
         }
@@ -562,6 +874,12 @@
         }
       },
       {
+        "name": "DivideQuantityByZero",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "FloorNull",
         "result": {
           "passed": true
@@ -605,6 +923,66 @@
       },
       {
         "name": "Floor2I",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "FloorMaxInteger",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "FloorMaxIntegerAsDecimal",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "FloorMaxIntegerAsDecimalWhereDecimalIsNonZero",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "FloorIntegerGreaterThanMaxInteger",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "FloorDecimalGreaterThanMaxInteger",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "FloorMinInteger",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "FloorMinIntegerAsDecimal",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "FloorMinIntegerAsDecimalWhereDecimalIsNonZero",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "FloorIntegerLessThanMinInteger",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "FloorDecimalLessThanMinInteger",
         "result": {
           "passed": true
         }
@@ -677,6 +1055,18 @@
       },
       {
         "name": "HighBoundaryTimeMillisecond",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "HighBoundaryNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "HighBoundaryNullPrecision",
         "result": {
           "passed": true
         }
@@ -755,6 +1145,18 @@
       },
       {
         "name": "LowBoundaryTimeMillisecond",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "LowBoundaryNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "LowBoundaryNullPrecision",
         "result": {
           "passed": true
         }
@@ -1006,6 +1408,12 @@
         }
       },
       {
+        "name": "MultiplyIntegerOverflow",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "NegateNull",
         "result": {
           "passed": true
@@ -1084,6 +1492,18 @@
         }
       },
       {
+        "name": "NegateMinIntegerOverflow",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "NegateMinLongOverflow",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "PrecisionDecimal",
         "result": {
           "passed": true
@@ -1109,6 +1529,12 @@
       },
       {
         "name": "PrecisionTimeMilliseconds",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "PrecisionNull",
         "result": {
           "passed": true
         }
@@ -1140,17 +1566,38 @@
       {
         "name": "PredecessorOf1D",
         "result": {
-          "passed": true
+          "passed": true,
+          "skipped": "superseded by 2.0 pin"
         }
       },
       {
         "name": "PredecessorOf101D",
+        "result": {
+          "passed": true,
+          "skipped": "superseded by 2.0 pin"
+        }
+      },
+      {
+        "name": "PredecessorOf1DPrecision",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "PredecessorOf101DPrecision",
         "result": {
           "passed": true
         }
       },
       {
         "name": "PredecessorOf1QCM",
+        "result": {
+          "passed": true,
+          "skipped": "superseded by 2.0 pin"
+        }
+      },
+      {
+        "name": "PredecessorOf1QCMPrecision",
         "result": {
           "passed": true
         }
@@ -1336,6 +1783,18 @@
         }
       },
       {
+        "name": "RoundPos2D5",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "RoundNullPrecision",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "SubtractNull",
         "result": {
           "passed": true
@@ -1372,6 +1831,18 @@
         }
       },
       {
+        "name": "SubtractIntegerOverflow",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SubtractQuantityInvalidDimension",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "SuccessorNull",
         "result": {
           "passed": true
@@ -1398,11 +1869,25 @@
       {
         "name": "SuccessorOf1D",
         "result": {
-          "passed": true
+          "passed": true,
+          "skipped": "superseded by 2.0 pin"
         }
       },
       {
         "name": "SuccessorOf101D",
+        "result": {
+          "passed": true,
+          "skipped": "superseded by 2.0 pin"
+        }
+      },
+      {
+        "name": "SuccessorOf1DPrecision",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SuccessorOf101DPrecision",
         "result": {
           "passed": true
         }
@@ -1646,6 +2131,60 @@
         }
       },
       {
+        "name": "BetweenIntFalse",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "BetweenIntLowBoundary",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "BetweenIntHighBoundary",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "BetweenNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "BetweenLongTrue",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "BetweenDecimalFalse",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "BetweenQuantityDimensionMismatchNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "BetweenStringTrue",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "BetweenDateTimeImprecisionNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "SimpleEqTrueTrue",
         "result": {
           "passed": true
@@ -1700,6 +2239,12 @@
         }
       },
       {
+        "name": "SimpleEqLong1Long2",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "SimpleEqStringAStringA",
         "result": {
           "passed": true
@@ -1719,6 +2264,18 @@
       },
       {
         "name": "SimpleEqFloat1Float2",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SimpleEqFloat1Float1WithZ",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SimpleEqFloat1Float1WithPrecisionAndZ",
         "result": {
           "passed": true
         }
@@ -1749,6 +2306,24 @@
       },
       {
         "name": "QuantityEqDiffPrecision",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "RatioEqual",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "RatioNotEqualDiffNumerator",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "RatioNotEqualDiffDenominator",
         "result": {
           "passed": true
         }
@@ -1814,6 +2389,12 @@
         }
       },
       {
+        "name": "TupleEqDateTimeTrue2",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "TupleEqTimeTrue",
         "result": {
           "passed": true
@@ -1850,7 +2431,19 @@
         }
       },
       {
+        "name": "DateTimeEqMissingArg",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "DateTimeEqNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "DateTimeEqTrue",
         "result": {
           "passed": true
         }
@@ -1880,6 +2473,12 @@
         }
       },
       {
+        "name": "DateTimeEqUncertain",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "GreaterZZ",
         "result": {
           "passed": true
@@ -1887,6 +2486,12 @@
       },
       {
         "name": "GreaterZ1",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "GreaterLong",
         "result": {
           "passed": true
         }
@@ -2037,6 +2642,12 @@
       },
       {
         "name": "GreaterOrEqualZ1",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "GreaterOrEqualZ1Long",
         "result": {
           "passed": true
         }
@@ -2204,6 +2815,18 @@
         }
       },
       {
+        "name": "LessLong",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "LessLongNeg",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "LessZNeg1",
         "result": {
           "passed": true
@@ -2349,6 +2972,12 @@
       },
       {
         "name": "LessOrEqualZ1",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "LessOrEqualZ1Long",
         "result": {
           "passed": true
         }
@@ -2570,6 +3199,12 @@
         }
       },
       {
+        "name": "EquivStringIgnoreCase",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "EquivFloat1Float1",
         "result": {
           "passed": true
@@ -2577,6 +3212,30 @@
       },
       {
         "name": "EquivFloat1Float2",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "EquivFloat1Float1WithZ",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "EquivFloat1Float1WithPrecision",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "EquivFloat1Float1WithPrecisionAndZ",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "EquivFloatTrailingZero",
         "result": {
           "passed": true
         }
@@ -2606,6 +3265,24 @@
         }
       },
       {
+        "name": "RatioEquivalent",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "RatioNotEquivalentDiffNumerator",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "RatioNotEquivalentDiffDenominator",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "EquivTupleJohnJohn",
         "result": {
           "passed": true
@@ -2615,6 +3292,20 @@
         "name": "EquivTupleJohnJohnWithNulls",
         "result": {
           "passed": true
+        }
+      },
+      {
+        "name": "EquivTupleJohnJohnFalse",
+        "result": {
+          "passed": false,
+          "error": "Expected error or NULL per CQL \u00a716, got False"
+        }
+      },
+      {
+        "name": "EquivTupleJohnJohnFalse2",
+        "result": {
+          "passed": false,
+          "error": "Expected error or NULL per CQL \u00a716, got False"
         }
       },
       {
@@ -2649,6 +3340,18 @@
       },
       {
         "name": "EquivTime10A10P",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "EquivIntNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "EquivQuantityDimensionMismatch",
         "result": {
           "passed": true
         }
@@ -2703,6 +3406,12 @@
       },
       {
         "name": "SimpleNotEqInt1Int2",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SimpleNotEqLong1Long2",
         "result": {
           "passed": true
         }
@@ -2826,6 +3535,283 @@
         "result": {
           "passed": true
         }
+      },
+      {
+        "name": "DateTimeNotEqUncertain",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "IntegerNotEquivalentIsFalse",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "LongNotEquivalentIsFalse",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "DecimalNotEquivalentIsTrue",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "StringNotEquivalentIgnoreCaseIsFalse",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "QuantityNotEquivalentDimensionMismatchIsTrue",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "NotEquivalentTrueNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "NotEquivalentNullNull",
+        "result": {
+          "passed": false,
+          "error": "Expected error or NULL per CQL \u00a716, got False"
+        }
+      },
+      {
+        "name": "TestQuantityMillisecondEqualMs",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantityMillisecondEqualMilliseconds",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantityMillisecondsEqualMs",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantitySecondEqualS",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantitySecondEqualSeconds",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantitySecondsEqualS",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantityMinuteEqualMin",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantityMinuteEqualMinutes",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantityMinutesEqualMin",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantityHourEqualH",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantityHourEqualHours",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantityHoursEqualH",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantityDayEqualD",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantityDayEqualDays",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantityDaysEqualD",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantityWeekEqualWk",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantityWeekEqualWeeks",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantityWeeksEqualWk",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantityMonthEqualMo",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantityMonthNotEqualMo",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantityMonthEquivalentMo",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantityMonthEqualMonths",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantityMonthsNotEqualMo",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantityMonthsEquivalentMo",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantityYearEqualA",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantityYearNotEqualA",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantityYearEquivalentA",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantityYearsEqualYear",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantityYearsNotEqualA",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestQuantityYearsEquivalentA",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestYearEquivalentMonths",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestYearEquivalentDays",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestMonthEquivalentDays",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestWeekEqualDays",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestDayEqualHours",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestHourEqualMinutes",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestMinuteEqualSeconds",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestSecondEqualMilliseconds",
+        "result": {
+          "passed": true
+        }
       }
     ]
   },
@@ -2850,6 +3836,18 @@
         }
       },
       {
+        "name": "IfNullCondition",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "IfNested",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "StandardCase1",
         "result": {
           "passed": true
@@ -2868,6 +3866,12 @@
         }
       },
       {
+        "name": "StandardCaseNullCondition",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "SelectedCase1",
         "result": {
           "passed": true
@@ -2881,6 +3885,18 @@
       },
       {
         "name": "SelectedCase3",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SelectedCaseNullComparand",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SelectedCaseNullWhen",
         "result": {
           "passed": true
         }
@@ -3508,7 +4524,7 @@
         }
       },
       {
-        "name": "DateTimeComponentFromTimezone2",
+        "name": "DateTimeComponentFromTimezoneOffset",
         "result": {
           "passed": true
         }
@@ -3539,6 +4555,12 @@
       },
       {
         "name": "TimeComponentFromMilli",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "DateTimeComponentFromMonthIsNull",
         "result": {
           "passed": true
         }
@@ -3635,6 +4657,12 @@
       },
       {
         "name": "TimeDifferenceMillis",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "DateTimeDifferenceYearBoundary",
         "result": {
           "passed": true
         }
@@ -3760,6 +4788,18 @@
         }
       },
       {
+        "name": "YearsBetweenLeapYearDatesEquals2",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "YearsBetweenLeapYearDateTimesEquals2",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "DateTimeDurationBetweenMonth",
         "result": {
           "passed": true
@@ -3767,6 +4807,12 @@
       },
       {
         "name": "DateTimeDurationBetweenDaysDiffYears",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "DateTimeDurationBetweenYearBoundary",
         "result": {
           "passed": true
         }
@@ -3786,19 +4832,22 @@
       {
         "name": "DateTimeDurationBetweenUncertainAdd",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected {'start': 32, 'end': 88, 'lowClosed': True, 'highClosed': True} (dict), got {\"start\":34,\"end\":88,\"lowClosed\":true,\"highClosed\":true} (str)"
         }
       },
       {
         "name": "DateTimeDurationBetweenUncertainSubtract",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected {'start': 0, 'end': 40, 'lowClosed': True, 'highClosed': True} (dict), got {\"start\":1,\"end\":40,\"lowClosed\":true,\"highClosed\":true} (str)"
         }
       },
       {
         "name": "DateTimeDurationBetweenUncertainMultiply",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected {'start': 256, 'end': 1936, 'lowClosed': True, 'highClosed': True} (dict), got {\"start\":289,\"end\":1936,\"lowClosed\":true,\"highClosed\":true} (str)"
         }
       },
       {
@@ -4818,6 +5867,24 @@
         "result": {
           "passed": true
         }
+      },
+      {
+        "name": "TestMessageConditionFalse",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestMessageErrorConditionFalse",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestMessageNullSource",
+        "result": {
+          "passed": true
+        }
       }
     ]
   },
@@ -5436,7 +6503,19 @@
         }
       },
       {
-        "name": "TestEndsNull",
+        "name": "TestNullEndsNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestMaxIntervalEndsFalse",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestUnknownIntervalEndsNull",
         "result": {
           "passed": true
         }
@@ -5568,13 +6647,13 @@
         }
       },
       {
-        "name": "NullInterval",
+        "name": "TestMaxIntervalExceptNull",
         "result": {
           "passed": true
         }
       },
       {
-        "name": "TestExceptNull",
+        "name": "TestUnitIntervalExceptNull",
         "result": {
           "passed": true
         }
@@ -5640,7 +6719,13 @@
         }
       },
       {
-        "name": "TestInNullBoundaries",
+        "name": "TestIntegerInMaxIntervalTrue",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestIntegerInUnknownIntervalNull",
         "result": {
           "passed": true
         }
@@ -6378,7 +7463,13 @@
         }
       },
       {
-        "name": "TestOverlapsNull",
+        "name": "TestMaxIntervalOverlapsTrue",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestUnknownIntervalOverlapsNull",
         "result": {
           "passed": true
         }
@@ -6534,7 +7625,13 @@
         }
       },
       {
-        "name": "TestOverlapsBeforeNull",
+        "name": "TestMaxIntervalOverlapsBeforeTrue",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestUnknownIntervalOverlapsBeforeNull",
         "result": {
           "passed": true
         }
@@ -6642,7 +7739,13 @@
         }
       },
       {
-        "name": "TestOverlapsAfterNull",
+        "name": "TestMaxIntervalOverlapsAfterTrue",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestUnknownIntervalOverlapsAfterNull",
         "result": {
           "passed": true
         }
@@ -6751,6 +7854,18 @@
       },
       {
         "name": "TestPointFromNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestPointFromMaxIntervalError",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestPointFromUnknownIntervalNull",
         "result": {
           "passed": true
         }
@@ -6912,7 +8027,7 @@
         }
       },
       {
-        "name": "IntegerIntervalProperlyIncludedInNullBoundaries",
+        "name": "IntegerIntervalProperlyIncludedInMaxIntervalTrue",
         "result": {
           "passed": true
         }
@@ -7008,7 +8123,19 @@
         }
       },
       {
-        "name": "TestStartsNull",
+        "name": "TestNullStartsNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestMaxIntervalStartsFalse",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestUnknownIntervalStartsNull",
         "result": {
           "passed": true
         }
@@ -7074,7 +8201,13 @@
         }
       },
       {
-        "name": "TestUnionNull",
+        "name": "TestUnionMaxInterval",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TestUnionUnknownInterval",
         "result": {
           "passed": true
         }
@@ -7294,6 +8427,42 @@
         "result": {
           "passed": true
         }
+      },
+      {
+        "name": "SizeTest",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SizeTestOpen",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SizeIsNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "IntegerIntervalNotEquivalentFalse",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "IntervalNotEquivalentNullBoundaryFalse",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "IntegerIntervalNotEquivalentTrue",
+        "result": {
+          "passed": true
+        }
       }
     ]
   },
@@ -7414,6 +8583,36 @@
         }
       },
       {
+        "name": "EquivalentContainsIsTrue",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "EquivalentContainsIsFalse",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "EquivalentContainsNullLeftIsFalse",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "EquivalentContainsNullIsFalse",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "EquivalentContainsNullIsTrue",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "DescendentsEmptyList",
         "result": {
           "passed": true
@@ -7469,6 +8668,12 @@
       },
       {
         "name": "DistinctTime",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "DistinctNull",
         "result": {
           "passed": true
         }
@@ -7606,6 +8811,18 @@
         }
       },
       {
+        "name": "ExceptNullLeft",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ExceptWithNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "ExistsEmpty",
         "result": {
           "passed": true
@@ -7678,6 +8895,12 @@
         }
       },
       {
+        "name": "FlattenNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "FirstEmpty",
         "result": {
           "passed": true
@@ -7709,6 +8932,12 @@
       },
       {
         "name": "FirstTime",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "FirstNull",
         "result": {
           "passed": true
         }
@@ -7763,6 +8992,30 @@
       },
       {
         "name": "InTimeFalse",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "EquivalentInIsTrue",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "EquivalentInIsFalse",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "EquivalentInNullRightIsFalse",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "NullEquivalentInIsTrue",
         "result": {
           "passed": true
         }
@@ -8020,6 +9273,18 @@
         }
       },
       {
+        "name": "IntersectNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "IntersectWithNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "LastEmpty",
         "result": {
           "passed": true
@@ -8230,13 +9495,103 @@
         }
       },
       {
+        "name": "NotEquivalentIsFalse",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "NotEquivalentWithNullIsFalse",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "NotEquivalentIsTrue",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "NotEquivalentTimeTrue",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "NotEquivalentTimeFalse",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ProperContains1",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ProperContains2",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ProperContains3",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ProperContains4",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "ProperContainsNullRightFalse",
         "result": {
           "passed": true
         }
       },
       {
+        "name": "ProperContains5",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "ProperContainsNullRightTrue",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ProperContains6",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ProperContains7",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ProperContains8",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ProperContains9",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ProperContains10",
         "result": {
           "passed": true
         }
@@ -8254,13 +9609,73 @@
         }
       },
       {
+        "name": "ProperIn1",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ProperIn2",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ProperIn3",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ProperIn4",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "ProperInNullRightFalse",
         "result": {
           "passed": true
         }
       },
       {
+        "name": "ProperIn5",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "ProperInNullRightTrue",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ProperIn6",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ProperIn7",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ProperIn8",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ProperIn9",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ProperIn10",
         "result": {
           "passed": true
         }
@@ -8434,6 +9849,12 @@
         }
       },
       {
+        "name": "SingletonFromNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "SkipNull",
         "result": {
           "passed": true
@@ -8459,6 +9880,78 @@
       },
       {
         "name": "SkipAll",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SkipNullNumber",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SkipNegative",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SliceAll",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SliceEmpty",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SliceNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SliceStart",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SliceStartNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SliceEnd",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SliceEndNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SliceNegative",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SliceStartAndNegative",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SlicePast",
         "result": {
           "passed": true
         }
@@ -8525,6 +10018,18 @@
       },
       {
         "name": "TakeAll",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TakeTooMany",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TakeNegative",
         "result": {
           "passed": true
         }
@@ -8880,6 +10385,37 @@
         }
       },
       {
+        "name": "Coalesce15",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "CoalesceFourArgs",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "CoalesceFiveArgs",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "CoalesceAllNullList",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "CoalesceMoreThanFiveArgs",
+        "result": {
+          "passed": false,
+          "error": "Expected error or NULL per CQL \u00a716, got 15"
+        }
+      },
+      {
         "name": "IsNullTrue",
         "result": {
           "passed": true
@@ -8910,6 +10446,18 @@
         }
       },
       {
+        "name": "IsNullOperatorTrue",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "IsNullOperatorFalse",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "IsFalseFalse",
         "result": {
           "passed": true
@@ -8928,6 +10476,24 @@
         }
       },
       {
+        "name": "IsFalseOperatorTrue",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "IsFalseOperatorFalse",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "IsFalseOperatorNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "IsTrueTrue",
         "result": {
           "passed": true
@@ -8941,6 +10507,24 @@
       },
       {
         "name": "IsTrueNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "IsTrueOperatorTrue",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "IsTrueOperatorFalse",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "IsTrueOperatorNull",
         "result": {
           "passed": true
         }
@@ -8963,6 +10547,54 @@
       },
       {
         "name": "MultiSource",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "WhereFilter",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "WhereNoMatch",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "LetClause",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ReturnExpression",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ReturnDistinctDefault",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ReturnAll",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "WithSuchThat",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "WithoutSuchThat",
         "result": {
           "passed": true
         }
@@ -9050,6 +10682,18 @@
         }
       },
       {
+        "name": "CombineWithNulls",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "CombineNullSeparator",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "ConcatenateNullNull",
         "result": {
           "passed": true
@@ -9080,6 +10724,24 @@
         }
       },
       {
+        "name": "ConcatenatePlusNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ConcatenateAndNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ConcatenateAndWithNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "EndsWithNull",
         "result": {
           "passed": true
@@ -9093,6 +10755,12 @@
       },
       {
         "name": "EndsWithFalse",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "EndsWithEmpty",
         "result": {
           "passed": true
         }
@@ -9165,6 +10833,12 @@
       },
       {
         "name": "LastPositionOf2",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "LastPositionOfEmptyIsStringLength15",
         "result": {
           "passed": true
         }
@@ -9272,6 +10946,24 @@
         }
       },
       {
+        "name": "MatchesFullTrue",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "MatchesFullFalse",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "MatchesFullNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "PositionOfNullNull",
         "result": {
           "passed": true
@@ -9303,6 +10995,12 @@
       },
       {
         "name": "PositionOfCInAB",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "PositionOfEmptyIs0",
         "result": {
           "passed": true
         }
@@ -9362,6 +11060,30 @@
         }
       },
       {
+        "name": "SplitOnMatchesNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SplitOnMatchesComma",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SplitOnMatchesRegex",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SplitOnMatchesNotFound",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "StartsWithNull",
         "result": {
           "passed": true
@@ -9387,6 +11109,12 @@
       },
       {
         "name": "StartsWithFalse1",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "StartsWithEmpty",
         "result": {
           "passed": true
         }
@@ -9429,6 +11157,12 @@
       },
       {
         "name": "SubstringABNeg1",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "SubstringEmptyAnd0",
         "result": {
           "passed": true
         }
@@ -9594,7 +11328,97 @@
         }
       },
       {
+        "name": "StringTrueToBoolean",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "StringYToBoolean",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "String1ToBoolean",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "String0ToBoolean",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "StringInvalidToBoolean",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "NullToBoolean",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "Integer1ToBoolean",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "Integer0ToBoolean",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "CodeToConcept1",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "NullCodeToConcept",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ToDate1",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ToDateYearMonth",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ToDateYear",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ToDateIgnoresTime",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ToDateFromDateTime",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ToDateMalformed",
         "result": {
           "passed": true
         }
@@ -9660,7 +11484,61 @@
         }
       },
       {
+        "name": "StringNeg25D5ToDecimal",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "StringInvalidToDecimal",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "StringToRatio",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "StringMalformedToRatio",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "StringNeg25ToInteger",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "StringPos25ToInteger",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "StringInvalidToInteger",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "BooleanTrueToInteger",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "StringNeg1ToLong",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "StringInvalidToLong",
         "result": {
           "passed": true
         }
@@ -9772,6 +11650,36 @@
         }
       },
       {
+        "name": "DateProper",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "DateYearMonth",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "DateYear",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "DateMin",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "DateMax",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "DateTimeNull",
         "result": {
           "passed": true
@@ -9804,7 +11712,8 @@
       {
         "name": "DateTimeUncertain",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected {'start': 18, 'end': 49, 'lowClosed': True, 'highClosed': True} (dict), got {\"start\":19,\"end\":49,\"lowClosed\":true,\"highClosed\":true} (str)"
         }
       },
       {
@@ -9821,6 +11730,24 @@
       },
       {
         "name": "DateTimeTimeUnspecified",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "LongProper",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "LongMax",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "LongUpperBoundExcept",
         "result": {
           "passed": true
         }
@@ -9874,7 +11801,7 @@
         }
       },
       {
-        "name": "TimeUpperBoundMillis",
+        "name": "TimeMillisParsing",
         "result": {
           "passed": true
         }
@@ -10293,6 +12220,78 @@
       },
       {
         "name": "DecimalNeg10Pow28",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "StringSimple",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "StringEmpty",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "DateTimeDatePrecision",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "DateTimeMinutePrecision",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "DateTimeMillisecondPrecision",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TimeMinutePrecision",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TimeMillisecondPrecision",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ListInteger",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ListString",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "ListWithNull",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "IntervalInteger",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "IntervalDecimal",
         "result": {
           "passed": true
         }

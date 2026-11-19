@@ -12,7 +12,7 @@ Clinical Quality Language (CQL) is an HL7 standard designed for expressing clini
 :::tip
 New to CQL? Work through the [CQL Clinic](/docs/examples/cql-clinic/) — twelve
 interactive lessons that run in your browser — then experiment freely in the
-[CQL Playground](/docs/examples/cql-playground/).
+[CQL Playground](/docs/examples/cql-playground/). For an architectural deep dive and benchmarks against legacy Java engines, read [CQL to SQL: Translating Clinical Quality Language to Relational Queries](/blog/cql-to-sql-translation/).
 :::
 
 ## 1. Overview

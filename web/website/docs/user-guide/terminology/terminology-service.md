@@ -17,7 +17,7 @@ The reference backend is [medterm4ds](https://terminology.fhir4ds.com) — a UML
 pip install 'fhir4ds-v2[terminology]'
 ```
 
-The extra pulls `httpx>=0.24` and `medterm4ds>=0.0.1`. fhir4ds itself never imports either at module load — both are imported lazily inside the factory when you opt into a non-disabled mode.
+The extra pulls `httpx>=0.24` and a bounded `medterm4ds` release (`>=0.0.13,<0.0.14` at the time of writing — see `pyproject.toml` for the current bound; each minor is validated with the integration before the bound moves). fhir4ds itself never imports either at module load — both are imported lazily inside the factory when you opt into a non-disabled mode.
 
 ## 2. Configuration
 
@@ -91,7 +91,7 @@ refs = endpoint.expand("http://snomed.info/sct?fhir_vs=isa/73211009")
 results = endpoint.search_text("diabetes", category="condition", mode="hybrid")
 ```
 
-**Known limitation:** `expand_intensional` is HTTP-only on the published medterm4ds 0.0.1 wheel — there is no programmatic entry point. The in-process adapter logs a WARNING and returns `[]`; if you need intensional ValueSet expansion, switch this endpoint to HTTP mode.
+**Note:** in-process `expand_intensional` is supported from medterm4ds 0.0.6 onward (verified against 0.0.12/0.0.13: a SNOMED `is-a` filter expansion returns the full concept list). On medterm4ds releases older than that there was no programmatic entry point; the in-process adapter degraded to a WARNING and `[]`. If you see empty intensional expansions in-process, upgrade medterm4ds to the version bound declared by the `terminology` extra.
 
 ## 5. Endpoint surface
 
@@ -145,7 +145,7 @@ endpoint = InProcessTerminologyEndpoint(
 )
 ```
 
-The "not supported" path on `expand_intensional` (in-process mode, published medterm4ds 0.0.1) intentionally **does not** trip the breaker — it's a permanent gap rather than a transient failure, and tripping would collateral-damage `expand` and `search_text`.
+The "not supported" path on `expand_intensional` (in-process mode, medterm4ds older than 0.0.6) intentionally **does not** trip the breaker — it's a permanent capability gap rather than a transient failure, and tripping would collateral-damage `expand` and `search_text`.
 
 ## 7. System URL normalization
 

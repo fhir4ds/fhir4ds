@@ -11,6 +11,76 @@ entry follows the same format: **highlights**, **breaking changes** (always
 listed, even when there are none), topic sections, **conformance** (where
 recorded), **known issues**, and **upgrade** notes.
 
+## Version 0.0.25
+*November 2026*
+
+### Highlights
+
+- **Packaging improvements**: the optional `[duckdb2]` extra now installs
+  cleanly, and — new installs on **Python ≥ 3.11 now default to DuckDB
+  2.0.x**, the engine our benchmarks recommend (~10× faster at population
+  scale, with the automatic `delim_join_as_cte=false` planner tuning).
+  Python 3.10 installs keep the 1.5.x line (2.x wheels are cp311+ only),
+  and `[duckdb1]` remains the explicit way back to 1.5.x. The `fhir4ds`
+  console script now loads DQM backends lazily so it starts quickly on
+  every install. Covered by new resolver, metadata and CLI smoke tests.
+- **Typed errors at public boundaries + a frozen API contract.** The
+  matching, operations, dedup and serve public surfaces raise documented
+  typed exceptions (no raw `AttributeError`/`KeyError` leaks), and the
+  exported API is pinned by contract tests so accidental surface changes
+  fail CI.
+- **FHIRPath engine fixes**: choice-stem navigation (`extension.value`,
+  `Observation.value`) keeps runtime element typing from the model (so
+  `is`/`ofType` work over choice stems), exported math helpers accept
+  `decimal.Decimal` inputs, and the native raw-JSON fast paths shadow the
+  full evaluator correctly (no more divergent fast-path results).
+- **CQL interval parity re-landed**: `Interval[null, null] contains 5`,
+  unbounded-interval equality, and `intervalEquals` now agree between the
+  Python fallback and the native extension; list operators over `collapse`
+  sources no longer binder-error (JSON-list coercion at the list-operator
+  boundary).
+- **ViewDefinition `integer64` columns work**: a declared `integer64` column
+  with a present value no longer raises a spurious type-guard violation
+  (the runtime guard now accepts integer-valued JSON numbers for the
+  `integer64` declaration).
+- **Patient matching & deduplication hardening**: the matching normalizer
+  no longer crashes on non-dict records or non-string phone values; the
+  dedup patient-reference anchor no longer substring-matches, malformed
+  sentinel values no longer merge distinct patients, and mixed-precision
+  FHIR Periods are no longer dropped from escalation windows.
+- **Terminology docs corrected**: `terminology-service.md` now describes the
+  real medterm4ds bound and the in-process intensional-expansion support.
+- **All six native extension bundles** (fhirpath + cql × DuckDB 1.5.5 /
+  1.5.6 / 2.0.0) rebuilt from one verified source tree and stamp-verified.
+
+### Breaking changes
+
+- **DuckDB default flip on Python ≥ 3.11**: upgrading on Python 3.11+
+  moves installs to the DuckDB 2.0.x line (the benchmark-recommended
+  engine; the correct native extension loads automatically). To stay on
+  1.5.x, install with the `[duckdb1]` extra. Python 3.10 installs are
+  unaffected.
+
+### Conformance
+
+ViewDefinition 144/144 · FHIRPath 1038/1038 · CQL 2029/2037 · DQM QI-Core
+2025 **47/47 PERFECT** · DQM US-Core 2025 **73/73 PERFECT** · OMOP 38/38 —
+**3369/3377** overall.
+
+### Known issues
+
+- The upstream FHIRPath `isSemanticChecks`/`documentFunctions` fixture
+  exclusions documented under 0.0.24 remain.
+
+### Upgrade
+
+`pip install fhir4ds-v2==0.0.25`. On Python ≥ 3.11 this now installs
+DuckDB 2.0.x by default (~10× faster at population scale, with the
+automatic planner tuning); Python 3.10 keeps DuckDB 1.5.x. All of
+DuckDB 1.5.5 → 2.0.0 are supported and the correct native extension
+loads automatically. To pin 1.5.x on Python 3.11+:
+`pip install 'fhir4ds-v2[duckdb1]'`.
+
 ## Version 0.0.24
 *November 2026*
 
@@ -315,7 +385,12 @@ pip install fhir4ds-v2==0.0.20
 ```
 
 For experimental DuckDB 2.0.0 support: `pip install
-'fhir4ds-v2[duckdb2]'`. The base DuckDB pin stays `>=1.5.5,<2`.
+'fhir4ds-v2[duckdb2]'`. The base DuckDB pin stays `>=1.5.5,<2`
+(*correction, 0.0.25 QA: with that base pin the one-line
+`[duckdb2]` install only resolves from 0.0.25 onward, which scopes
+the base pin with `; extra != 'duckdb2'`; on 0.0.20–0.0.24 use
+`pip install fhir4ds-v2 && pip install --upgrade 'duckdb>=2.0.0,<2.1'`.
+See the installation guide's "DuckDB 2.0" section.*).
 
 ---
 

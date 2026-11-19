@@ -222,8 +222,13 @@ define ContainsNullPoint: Interval[1, 10] contains null
     expected = {
         "NullContainsPoint": (False,),
         "PointInNullInterval": (False,),
-        "NullBoundsContainsPoint": (False,),
-        "PointInNullBounds": (False,),
+        # D3-HISTORIAN: a CLOSED null-null selector is the MAXIMUM interval
+        # [min, max] (sentinel doctrine, CQL §9.14/§9.15 Start/End), not a
+        # null container. Official fixture TestIntegerInMaxIntervalTrue pins
+        # `5 in Interval[null, null]` as true, and contains is the mirror
+        # of in — both spellings must agree.
+        "NullBoundsContainsPoint": (True,),
+        "PointInNullBounds": (True,),
         "ContainsNullPoint": (None,),
     }
     direct_cases = [
@@ -529,6 +534,11 @@ define MissingLowEquivalent: Interval(null, 5] ~ Interval(null, 5]
 define OneMissingEndEqual: Interval[1, null) = Interval[1, 5]
 """
     translated = translate_cql(cql)
+    # Lockstep with native Interval::equals_nullable (interval.cpp:1031) and
+    # the reference EqualEvaluator: a BOTH-NULL side is equal (point-level
+    # equal(null, null) -> true inside Start/End comparison); a one-sided
+    # CLOSED null bound is unknown (null); a one-sided OPEN null bound is
+    # unbounded (definitely unequal -> false).
     expected = {
         "MissingHighEqual": (True,),
         "MissingHighNotEqual": (False,),

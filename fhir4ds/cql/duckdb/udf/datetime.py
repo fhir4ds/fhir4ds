@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 import calendar
 import logging
 import math
+import re
 from datetime import timedelta, datetime as _dt_class
 
 _logger = logging.getLogger(__name__)
@@ -528,13 +529,23 @@ def _duration_between_with_uncertainty(start_str: str, end_str: str, unit: str) 
     # Uncertainty: compute min/max by using low/high boundaries
     s_low = _low_boundary(start_str)
     s_high = _high_boundary(start_str)
-    if date_unit and unit_key in ('year', 'month') and 'T' not in start_str:
+    # A trailing bare 'T' (DateTime-with-no-time marker convention) carries
+    # no time components, so the operand is still date-only for the midnight
+    # convention.
+    if date_unit and not re.search(r'T\d', start_str):
         # Date-only operands follow the midnight convention for calendar
         # (year/month) durations — the crisp day-precision path parses
         # them at midnight — so the uncertain start's latest possible
         # instant must not inject a phantom 23:59:59.999 that would flip
         # an exact anniversary boundary (e.g. years between @1975-03 and
         # @2020-03-31 must stay 45, not Interval[44,45]).
+        # Day/week targets need the same convention: a date-only operand
+        # is fully specified at day precision, so its intra-day range must
+        # not shave a partial day off the minimum — official fixture
+        # `days between DateTime(2014, 1, 15) and DateTime(2014, 2)` is
+        # Interval[17, 44], not [16, 44]. Sub-day targets KEEP the full
+        # 23:59:59.999 high boundary (official pin: hours between
+        # date-only day-precise operands is Interval[0, 47]).
         s_high = s_high.replace(hour=0, minute=0, second=0, microsecond=0)
     e_low = _low_boundary(end_str)
     e_high = _duration_high_boundary(end_str, unit_key)
@@ -2120,6 +2131,28 @@ def cqlDateTimeEqualListElement(a: str | None, b: str | None) -> bool | None:
     return True
 
 
+def cqlDateTimeEquivalentListElement(a: str | None, b: str | None) -> bool:
+    """List-element temporal EQUIVALENCE (CQL 2.0 ``~in``/``~contains``).
+
+    Unlike equality (where precision mismatch is uncertain/null), §6.1.2
+    Equivalent on temporals is FALSE at differing precision, TRUE at equal
+    precision + same instant; offsets compare as instants and seconds/ms
+    are one combined decimal precision.
+    """
+    if a is None and b is None:
+        return True
+    if a is None or b is None:
+        return False
+    a_s, b_s = str(a), str(b)
+    try:
+        cmp, certain = _compare_at_min_precision(a_s, b_s, combined_seconds_ms=False)
+    except (ValueError, KeyError, OverflowError):
+        return False
+    if not certain:
+        return False
+    return cmp == 0
+
+
 def _extract_datetime_from_interval(s: str) -> str:
     """If *s* is an interval/period JSON string, return its start datetime.
 
@@ -2373,6 +2406,7 @@ def registerDatetimeUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     con.create_function("cqlAfter", cqlAfter, null_handling="special")
     con.create_function("cqlDateTimeEqual", cqlDateTimeEqual, null_handling="special")
     con.create_function("cqlDateTimeEqualListElement", cqlDateTimeEqualListElement, null_handling="special")
+    con.create_function("cqlDateTimeEquivalentListElement", cqlDateTimeEquivalentListElement, null_handling="special")
     # Precision-aware arithmetic (preserves input precision in output)
     con.create_function("cqlDateTimeAdd", cqlDateTimeAdd, null_handling="special")
     # Precision-qualified temporal comparison UDFs (CQL §19.14-21)

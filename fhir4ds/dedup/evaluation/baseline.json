@@ -1,0 +1,17 @@
+{
+  "corpus": "fhir4ds/dedup/tests/fixtures/dedup_golden_corpus.json",
+  "f1": 1.0,
+  "false_negative_count": 0,
+  "false_positive_count": 0,
+  "labeled_clusters": 150,
+  "labeled_negatives": 60,
+  "note": "Recorded by scripts/gen_dedup_golden.py self-check / gate run; precision target = 1.0 (any false merge is a failure), recall regression tolerance = 0.02, survivorship accuracy target = 1.0.",
+  "positive_pairs": 214,
+  "precision": 1.0,
+  "predicted_cluster_count": 150,
+  "recall": 1.0,
+  "survivorship_accuracy": 1.0,
+  "survivorship_correct": 120,
+  "survivorship_total": 120,
+  "true_positives": 214
+}

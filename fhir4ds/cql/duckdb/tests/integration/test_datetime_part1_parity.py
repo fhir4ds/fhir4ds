@@ -307,8 +307,10 @@ define DurationDaysAsymmetric: days between @2012-06-01 and @2014
         "DurationMonthsAsymmetric": '{"start":19,"end":30,"lowClosed":true,"highClosed":true}',
         # difference months: crossed boundaries 19..30
         "DifferenceMonthsAsymmetric": '{"start":19,"end":30,"lowClosed":true,"highClosed":true}',
-        # days: from Jun 1 2012 to Dec 31 2014 = 943 days max
-        "DurationDaysAsymmetric": '{"start":578,"end":943,"lowClosed":true,"highClosed":true}',
+        # days: from Jun 1 2012 to Dec 31 2014 = 943 days max.
+        # Min: to the EARLIEST instant of year-precision @2014 (Jan 1) =
+        # 365 (to Jun 1 2013) + 214 (Jun 1 2013 -> Jan 1 2014) = 579.
+        "DurationDaysAsymmetric": '{"start":579,"end":943,"lowClosed":true,"highClosed":true}',
     }
     py = _python_only_connection()
     cpp = _cpp_connection()

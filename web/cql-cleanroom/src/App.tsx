@@ -750,6 +750,8 @@ export default function App() {
   // connected workspace reads local files and writes nothing back, so
   // the footer explains that dash instead of inventing a timestamp.
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  // QA it7 F1: storage failures must be visible, not swallowed.
+  const [storageDegraded, setStorageDegraded] = useState(false);
   // S25: an explicit reset marks the workspace so a reload restores the
   // clean demo instead of re-loading the featured example (pristine-boot
   // behavior is unchanged for fresh installs, which have no marker).
@@ -1455,11 +1457,15 @@ export default function App() {
         postReset,
       })
         .then(() => {
+          setStorageDegraded(false);
           // S29: "last saved" is a CONTENT save — connected writes are
           // chrome-only, so they must not claim the content was saved.
           if (!connected) setLastSavedAt(Date.now());
         })
-        .catch(() => undefined);
+        .catch(() => {
+          // QA it7 F1: silent degradation is the defect — surface it.
+          setStorageDegraded(true);
+        });
     }, 800);
     return () => clearTimeout(t);
   }, [
@@ -2822,6 +2828,15 @@ export default function App() {
               !resource.id
             ) {
               setStatusNote("resource needs resourceType and id");
+              return;
+            }
+            // F3 (QA it15): the desktop FHIRDataLoader rejects ids outside
+            // the FHIR charset at load; the UI must not author a dataset the
+            // engine's own validator calls invalid.
+            if (!/^[A-Za-z0-9-.]{1,64}$/.test(resource.id)) {
+              setStatusNote(
+                `resource id must match the FHIR id pattern [A-Za-z0-9-.]{1,64} (got ${JSON.stringify(resource.id)})`,
+              );
               return;
             }
             const current = (dataset?.resources ?? []) as Array<
@@ -4675,7 +4690,9 @@ export default function App() {
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
                           resource,
-                          replace: builderPrefill?.sourceIndex === undefined,
+                          // F4b (QA it16): REPLACE only when editing a
+                          // known source row; a NEW resource appends.
+                          replace: builderPrefill?.sourceIndex !== undefined,
                         }),
                       }).catch(() => undefined);
                       setBuilderPrefill(null);
@@ -4787,6 +4804,7 @@ export default function App() {
           serverMode.kind === "connected" ? (serverMode.engine ?? null) : null
         }
         lastSavedAt={lastSavedAt}
+        storageDegraded={storageDegraded}
         diskSource={serverMode.kind === "connected"}
         note={statusNote}
         onDismissNote={() => setStatusNote(null)}
