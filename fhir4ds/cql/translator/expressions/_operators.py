@@ -1615,6 +1615,13 @@ class OperatorsMixin:
                 return True
             if registry.resolve_named_profile(type_name) is not None:
                 return True
+        # CQL 2.0 `define type` declarations (CQL20-E): a declared named
+        # class type is a valid target for is/as/cast.
+        declared = getattr(self.context, "declared_types", None)
+        if declared is not None and (
+            type_name in declared or bare in declared
+        ):
+            return True
         fhir_schema = getattr(self.context, "fhir_schema", None)
         if fhir_schema is not None:
             if bare in getattr(fhir_schema, "resources", {}):
@@ -1629,6 +1636,42 @@ class OperatorsMixin:
             raise TranslationError(
                 f"CQL type operator '{operator}' references unknown type '{type_name}'"
             )
+
+    def _resolve_declared_conversion(self, target_specifier, source_type_name):
+        """Resolve a user-declared CQL 2.0 conversion for a `convert X to T`.
+
+        Returns the conversion function name (possibly library-qualified) to
+        invoke, or None when no declared conversion applies. A declared
+        conversion matches when its to-type equals the requested target; with
+        multiple candidates the declared from-type must match the source's
+        static type (else ambiguous -> TranslationError).
+        """
+        conversions = getattr(self.context, "declared_conversions", None) or []
+        if not conversions:
+            return None
+        try:
+            target_full = self._type_specifier_name(target_specifier)
+        except Exception:
+            target_full = getattr(target_specifier, "name", "")
+        target_lower = (target_full or "").lower()
+        matches = [c for c in conversions if (c["to"] or "").lower() == target_lower]
+        if not matches:
+            return None
+        if len(matches) == 1:
+            return matches[0]["function"]
+        from_matches = [
+            c for c in matches
+            if source_type_name is not None
+            and (c["from"] or "").lower() == source_type_name.lower()
+        ]
+        if len(from_matches) == 1:
+            return from_matches[0]["function"]
+        if len(from_matches) > 1:
+            raise TranslationError(
+                f"Ambiguous declared conversion to '{target_full}': "
+                f"{[c['function'] for c in from_matches]}."
+            )
+        return None
 
     def _is_cql_conversion_unit_target(self, type_name: str) -> bool:
         return type_name.lower() in {
@@ -2928,6 +2971,20 @@ class OperatorsMixin:
                 target_type_name = self._type_specifier_name(expr.right)
             target_type_name = target_type_name.split(".")[-1].lower()
             source_type_name = self._static_structural_type_name(expr.left)
+            # CQL 2.0 define conversion (CQL20-E, trial-use): an explicit
+            # `convert X to T` may reference a user-declared conversion
+            # (`define implicit|explicit conversion from F to T using Func`).
+            # Honor the declared function when the source's static type
+            # matches the declared from-type, or when the built-in
+            # conversion table has no mapping for the target.
+            declared_conv = self._resolve_declared_conversion(
+                expr.right, source_type_name
+            )
+            if declared_conv is not None:
+                return self.translate(
+                    FunctionRef(name=declared_conv, arguments=[expr.left]),
+                    usage=ExprUsage.SCALAR,
+                )
             if target_type_name == "concept" and source_type_name is not None:
                 if self._structural_type_conforms(source_type_name, "List<Code>"):
                     concept_source = left

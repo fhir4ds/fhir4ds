@@ -453,6 +453,10 @@ class SQLTranslationContext:
     declared_contexts: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     # `define implicit|explicit conversion from A to B using F` declarations.
     declared_conversions: List[Dict[str, Any]] = field(default_factory=list)
+    # CQL 2.0 `define context` binding active for this library's
+    # `context` statement (None when not declared): name/context_type/
+    # key_elements of the declared context.
+    active_context_info: Optional[Dict[str, Any]] = None
 
     # Function definitions in current library
     _functions: Dict[str, FunctionInfo] = field(default_factory=dict)

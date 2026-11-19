@@ -461,3 +461,103 @@ related to Patient by { subject }
         assert "Wrapper" not in results
         assert "Inst" in results
 
+
+# ---------------------------------------------------------------------------
+# `define context` + `define conversion` (CQL 2.0 Defining Contexts /
+# Defining Conversions, trial-use)
+# ---------------------------------------------------------------------------
+
+class TestDefineContext:
+    def test_declared_context_registers_and_binds(self):
+        """`define context Patient of type FHIR.Patient with key { id }`
+        registers; the following `context Patient` statement binds the
+        declared type/key metadata (active_context_info)."""
+        cql = """library DC20 version '1.0.0'
+using FHIR version '4.0.1'
+define context Patient of type FHIR.Patient with key { id }
+context Patient
+define Probe: exists [Patient]
+"""
+        translator = CQLToSQLTranslator()
+        translator.translate_library(parse_cql(cql))
+        declared = translator._context.declared_contexts
+        assert "Patient" in declared
+        assert declared["Patient"]["context_type"] == "FHIR.Patient"
+        assert declared["Patient"]["key_elements"] == ["id"]
+        assert translator._context.active_context_info == {
+            "name": "Patient",
+            "context_type": "FHIR.Patient",
+            "key_elements": ["id"],
+        }
+
+    def test_context_without_declaration_has_no_binding(self):
+        cql = """library DC21 version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define Probe: exists [Patient]
+"""
+        translator = CQLToSQLTranslator()
+        translator.translate_library(parse_cql(cql))
+        assert translator._context.active_context_info is None
+
+    def test_multi_key_context_registers(self):
+        cql = """library DC22 version '1.0.0'
+using FHIR version '4.0.1'
+define context Encounter of type FHIR.Encounter with key { id, subject }
+context Unfiltered
+define Probe: 1 + 1
+"""
+        lib = parse_cql(cql)
+        (ci,) = [s for s in lib.statements if type(s).__name__ == "ContextInfoDefinition"]
+        assert ci.key_elements == ["id", "subject"]
+
+
+class TestDefineConversion:
+    def test_declared_conversion_drives_explicit_convert(self):
+        """`define implicit conversion from A to B using F` +
+        `convert a to B` lowers to the declared function invocation
+        (inlined library-local function)."""
+        cql = """library CV20 version '1.0.0'
+using FHIR version '4.0.1'
+define type Cels extends System.Any { v System.Decimal }
+define type Fahr extends System.Any { v System.Decimal }
+define function ToFahr(c Cels): Fahr { v: 32.0 + 9.0 * 10.0 }
+define implicit conversion from Cels to Fahr using ToFahr
+context Patient
+define Probe: convert Cels { v: 100.0 } to Fahr
+"""
+        results = translate_cql(cql)
+        sql = results["Probe"].to_sql()
+        # The declared conversion function's body is invoked (inlined).
+        assert "32.0 + 9.0 * 10.0" in sql, sql
+
+    def test_declared_conversion_registration(self):
+        cql = """library CV21 version '1.0.0'
+using FHIR version '4.0.1'
+define explicit conversion from FHIR.Period to Interval<System.DateTime> using FHIRHelpers.ToInterval
+context Patient
+define Probe: 1 + 1
+"""
+        translator = CQLToSQLTranslator()
+        translator.translate_library(parse_cql(cql))
+        (conv,) = translator._context.declared_conversions
+        assert conv == {
+            "implicit": False,
+            "from": "FHIR.Period",
+            "to": "Interval<System.DateTime>",
+            "function": "FHIRHelpers.ToInterval",
+            "access_level": "public",
+        }
+
+    def test_convert_without_matching_declaration_unchanged(self):
+        """A `convert` whose target has NO declared conversion keeps the
+        built-in lowering (regression guard)."""
+        cql = """library CV22 version '1.0.0'
+using FHIR version '4.0.1'
+context Unfiltered
+define Probe: convert '42' to Integer
+"""
+        results = translate_cql(cql)
+        assert "ToInteger" in results["Probe"].to_sql()
+
+

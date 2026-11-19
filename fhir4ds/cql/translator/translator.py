@@ -3695,6 +3695,15 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         # Set context from library
         if library.context:
             self._context.set_context_type(library.context.name)
+            # CQL 2.0 `define context X of type T with key { ... }` (CQL20-E,
+            # trial-use): when the library's context statement names a
+            # declared context, bind its type/key metadata so downstream
+            # surfaces (retrieve context correlation) can consult it.
+            declared = self._context.declared_contexts.get(library.context.name)
+            if declared is not None:
+                self._context.active_context_info = {
+                    "name": library.context.name, **declared,
+                }
 
     def _build_component_code_registry(self, library: Library) -> None:
         """Build dynamic component code to column mapping from library codes.
