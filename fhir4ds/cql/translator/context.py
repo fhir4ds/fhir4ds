@@ -444,6 +444,16 @@ class SQLTranslationContext:
     codesystem_versions: Dict[str, str] = field(default_factory=dict)
     codes: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
+    # CQL 2.0 model definitions (trial-use, chunk CQL20-E):
+    # `define type` named class types — name -> element list
+    # [(element_name, cql_type_str), ...] plus model metadata.
+    declared_types: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    # `define context <X> of type T with key { ... }` — context name ->
+    # {context_type, key_elements}.
+    declared_contexts: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    # `define implicit|explicit conversion from A to B using F` declarations.
+    declared_conversions: List[Dict[str, Any]] = field(default_factory=list)
+
     # Function definitions in current library
     _functions: Dict[str, FunctionInfo] = field(default_factory=dict)
     # Overloaded function storage: name -> list of all overloads
@@ -1093,6 +1103,9 @@ class SQLTranslationContext:
         if getattr(self, "_patient_property_defs", None):
             self._patient_property_defs.clear()
         self.codes.clear()
+        self.declared_types.clear()
+        self.declared_contexts.clear()
+        self.declared_conversions.clear()
         self._ctes.clear()
         self._patient_context = PatientContext()
         self._measurement_period = MeasurementPeriod()

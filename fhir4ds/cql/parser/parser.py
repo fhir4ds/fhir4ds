@@ -106,6 +106,11 @@ from ..parser.ast_nodes import (
     Quantity,
     Retrieve,
     RetrieveFilter,
+    TypeDefinition,
+    TypeElement,
+    ContextInfoDefinition,
+    ContextRelationship,
+    ConversionDefinition,
     ReturnClause,
     SingletonExpression,
     SkipExpression,
@@ -626,6 +631,32 @@ class CQLParser:
         ):
             access_level = self.advance().value
 
+        # CQL 2.0 model-definition statements (trial-use): `define type`,
+        # `define context <X> of type ...`, and
+        # `define implicit|explicit conversion ...`. These keywords lex as
+        # plain identifiers, so disambiguate against an expression define
+        # (whose name would be followed by ':') by lookahead.
+        _tok = self.current()
+        _tok_val = getattr(_tok, "value", "")
+        if (
+            _tok.type == TokenType.IDENTIFIER
+            and _tok_val == "type"
+            and self.peek(1).type in (TokenType.IDENTIFIER, TokenType.QUOTED_IDENTIFIER)
+        ):
+            return self._parse_type_definition(access_level)
+        if (
+            _tok.type == TokenType.CONTEXT
+            and self.peek(1).type != TokenType.COLON
+            and self.peek(2).type == TokenType.OF
+        ):
+            return self._parse_context_info_definition(access_level)
+        if (
+            _tok.type == TokenType.IDENTIFIER
+            and _tok_val in ("implicit", "explicit")
+            and getattr(self.peek(1), "value", "") == "conversion"
+        ):
+            return self._parse_conversion_definition(access_level)
+
         # Check for fluent function definition
         is_fluent = self.match(TokenType.FLUENT)
         if is_fluent:
@@ -642,6 +673,152 @@ class CQLParser:
 
         expression = self.parse_expression()
         return Definition(name=name, expression=expression, access_level=access_level)
+
+    def _parse_type_definition(self, access_level: Optional[str] = None) -> TypeDefinition:
+        """Parse a CQL 2.0 `define type` declaration (FHIR-34014, trial-use).
+
+        Grammar: 'define' accessModifier? 'type' qualifiedIdentifier
+        baseTypeSpecifier? typeElements? typeInfo contextRelationship*
+        """
+        self._expect_keyword("type")
+        name = self._parse_identifier_name()
+        while self.match_and_advance(TokenType.DOT):
+            # The grammar admits a qualified identifier; keep the full name
+            # (namespace-qualified declarations register under the last
+            # segment for local reference).
+            name = f"{name}.{self._parse_identifier_name()}"
+
+        base_type = None
+        if self._match_keyword("extends"):
+            base_type = self._parse_named_type_specifier()
+
+        elements = []
+        if self.match_and_advance(TokenType.LBRACE):
+            while not self.match(TokenType.RBRACE):
+                elem_name = self._parse_identifier_name()
+                elem_type = self.parse_type_specifier()
+                elements.append(TypeElement(name=elem_name, type_specifier=elem_type))
+                if not self.match_and_advance(TokenType.COMMA):
+                    break
+            self.expect(TokenType.RBRACE, "Expected '}' closing type elements")
+
+        # typeInfo clause: ('label' identifier)? ('identifier' STRING)?
+        # 'retrievable'? ('primary' 'code' 'path' simplePath)?
+        label = None
+        identifier = None
+        retrievable = False
+        primary_code_path = None
+        if self._match_keyword("label"):
+            label = self._parse_identifier_name()
+        if self._match_keyword("identifier"):
+            identifier = self.expect(
+                TokenType.STRING, "Expected string after 'identifier'"
+            ).value
+        if self._match_keyword("retrievable"):
+            retrievable = True
+        if self._match_keyword("primary"):
+            self._expect_lexeme("code")
+            self._expect_lexeme("path")
+            primary_code_path = self._parse_identifier_name()
+            while self.match_and_advance(TokenType.DOT):
+                primary_code_path = f"{primary_code_path}.{self._parse_identifier_name()}"
+
+        # contextRelationship*: 'related' 'to' qualifiedIdentifier 'by'
+        # '{' qualifiedIdentifierOrFunctionIdentifier (',' ...)* '}'
+        relationships = []
+        while self._match_keyword("related"):
+            self._expect_keyword("to")
+            ctx_name = self._parse_identifier_name()
+            while self.match_and_advance(TokenType.DOT):
+                ctx_name = f"{ctx_name}.{self._parse_identifier_name()}"
+            self._expect_keyword("by")
+            self.expect(TokenType.LBRACE, "Expected '{' after 'by'")
+            keys = [self._parse_identifier_name()]
+            while self.match_and_advance(TokenType.COMMA):
+                keys.append(self._parse_identifier_name())
+            self.expect(TokenType.RBRACE, "Expected '}' after relationship keys")
+            relationships.append(ContextRelationship(context=ctx_name, key_elements=keys))
+
+        return TypeDefinition(
+            name=name,
+            base_type=base_type,
+            elements=elements,
+            access_level=access_level or "public",
+            label=label,
+            identifier=identifier,
+            retrievable=retrievable,
+            primary_code_path=primary_code_path,
+            context_relationships=relationships,
+        )
+
+    def _parse_context_info_definition(
+        self, access_level: Optional[str] = None
+    ) -> ContextInfoDefinition:
+        """Parse a CQL 2.0 `define context X of type T with key { ... }`
+        model declaration (trial-use)."""
+        self.expect(TokenType.CONTEXT, "Expected 'context'")
+        name = self._parse_identifier_name()
+        self.expect(TokenType.OF, "Expected 'of'")
+        self._expect_keyword("type")
+        context_type = self._parse_named_type_specifier()
+        key_elements = []
+        if self.match_and_advance(TokenType.WITH):
+            self._expect_keyword("key")
+            self.expect(TokenType.LBRACE, "Expected '{' after 'key'")
+            key_elements = [self._parse_identifier_name()]
+            while self.match_and_advance(TokenType.COMMA):
+                key_elements.append(self._parse_identifier_name())
+            self.expect(TokenType.RBRACE, "Expected '}' after key elements")
+        return ContextInfoDefinition(
+            name=name, context_type=context_type, key_elements=key_elements
+        )
+
+    def _parse_conversion_definition(
+        self, access_level: Optional[str] = None
+    ) -> ConversionDefinition:
+        """Parse a CQL 2.0 `define implicit|explicit conversion from A to B
+        using Func` declaration (trial-use)."""
+        implicit_ = self.advance().value == "implicit"
+        self._expect_keyword("conversion")
+        self.expect(TokenType.FROM, "Expected 'from'")
+        from_type = self.parse_type_specifier()
+        self.expect(TokenType.TO, "Expected 'to'")
+        to_type = self.parse_type_specifier()
+        self.expect(TokenType.USING, "Expected 'using'")
+        func_name = self._parse_identifier_name()
+        while self.match_and_advance(TokenType.DOT):
+            func_name = f"{func_name}.{self._parse_identifier_name()}"
+        return ConversionDefinition(
+            from_type=from_type,
+            to_type=to_type,
+            function_name=func_name,
+            implicit_=implicit_,
+            access_level=access_level or "public",
+        )
+
+    def _match_keyword(self, keyword: str) -> bool:
+        """Match a plain-identifier lexeme (non-keyword grammar word)."""
+        tok = self.current()
+        if tok is not None and tok.type == TokenType.IDENTIFIER and tok.value == keyword:
+            self.advance()
+            return True
+        return False
+
+    def _expect_keyword(self, keyword: str):
+        tok = self.current()
+        if tok is None or tok.value != keyword:
+            got = getattr(tok, "value", "<eof>")
+            raise ParseError(message=f"Expected '{keyword}'. Got '{got}'")
+        self.advance()
+
+    def _expect_lexeme(self, word: str):
+        """Expect a lexeme by VALUE regardless of its token type (grammar
+        words that the lexer promotes to keywords, e.g. 'code')."""
+        tok = self.current()
+        if tok is None or tok.value != word:
+            got = getattr(tok, "value", "<eof>")
+            raise ParseError(message=f"Expected '{word}'. Got '{got}'")
+        self.advance()
 
     def _parse_function_definition(
         self, fluent: bool = False, access_level: Optional[str] = None

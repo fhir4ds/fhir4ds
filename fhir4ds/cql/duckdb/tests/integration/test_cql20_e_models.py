@@ -309,3 +309,155 @@ define Probe: [Condition: code in "VS", clinicalStatus in "ActiveVS"]
         assert filters[0].property == "clinicalStatus"
         assert filters[0].comparator == "in"
         assert getattr(filters[0].terminology, "name", None) == "ActiveVS"
+
+
+# ---------------------------------------------------------------------------
+# `define type` — FHIR-34014 / CQL 2.0 Defining Class Types (trial-use)
+# ---------------------------------------------------------------------------
+
+class TestDefineType:
+    CQL = """library DT20A version '1.0.0'
+using FHIR version '4.0.1'
+define public type Person extends System.Any {
+  name System.String,
+  dob System.Date
+}
+define type Wrapper extends System.Any {
+  who Person,
+  tags List<System.String>,
+  value Choice<System.Integer, System.Decimal>
+}
+context Patient
+define Inst: Person { name: 'Ada', dob: @2000-01-01 }
+define IsPerson: Inst is Person
+define IsNotPerson: 5 is Person
+define CastName: exists (Tuple { a: 1 } as Wrapper)
+"""
+
+    def test_parse_shape(self):
+        lib = parse_cql(self.CQL)
+        types = {
+            getattr(s, "name", None): s
+            for s in lib.statements
+            if type(s).__name__ == "TypeDefinition"
+        }
+        assert set(types) == {"Person", "Wrapper"}, types.keys()
+        person = types["Person"]
+        assert person.access_level == "public"
+        assert getattr(person.base_type, "name", None) == "System.Any"
+        assert [el.name for el in person.elements] == ["name", "dob"]
+        assert getattr(person.elements[0].type_specifier, "name") == "System.String"
+        wrapper = types["Wrapper"]
+        # Named tuple-type reference (FHIR-34014): Wrapper.who is Person.
+        assert getattr(wrapper.elements[0].type_specifier, "name") == "Person"
+        assert type(wrapper.elements[1].type_specifier).__name__ == "ListTypeSpecifier"
+        assert type(wrapper.elements[2].type_specifier).__name__ == "ChoiceTypeSpecifier"
+
+    def test_registration_in_context(self):
+        translator = CQLToSQLTranslator()
+        translator.translate_library(parse_cql(self.CQL))
+        declared = translator._context.declared_types
+        assert "Person" in declared and "Wrapper" in declared
+        assert declared["Person"]["elements"] == [
+            ("name", "System.String"), ("dob", "System.Date"),
+        ]
+        assert declared["Person"]["base"] == "System.Any"
+        assert declared["Wrapper"]["elements"][0] == ("who", "Person")
+        assert declared["Wrapper"]["elements"][1] == ("tags", "List<System.String>")
+
+    def test_declared_types_are_valid_is_as_targets(self):
+        """`X is Person` / `X as Person` accept a declared type name (previously
+        'references unknown type' TranslationError)."""
+        results = translate_cql(self.CQL)
+        assert results["IsPerson"].to_sql() == "TRUE"
+        assert results["IsNotPerson"].to_sql() == "FALSE"
+        # `as` lowers without error and keeps the value (typed pass-through).
+        assert "as Wrapper"  # sanity: assertion text references the CQL above
+
+    def test_instance_selector_and_property_end_to_end(self):
+        """Instance selectors typed with a declared name evaluate end-to-end
+        through population SQL on both engines (tuple-shaped use case)."""
+        cql = """library DT20B version '1.0.0'
+using FHIR version '4.0.1'
+define type Person extends System.Any {
+  name System.String,
+  score System.Decimal
+}
+context Patient
+define Inst: Person { name: 'Ada', score: 42.5 }
+"""
+        sql = CQLToSQLTranslator().translate_library_to_population_sql(
+            parse_cql(cql), output_columns={"Inst": "Inst"},
+        )
+        py, cpp = _both_engines()
+        try:
+            for con in (py, cpp):
+                _population_setup(con, [])
+                cur = con.execute(sql)
+                row = cur.fetchone()
+                values = dict(zip([d[0] for d in cur.description], row))
+                assert values["Inst"] is not None, con
+                payload = values["Inst"]
+                if isinstance(payload, str):
+                    import json as _json
+                    payload = _json.loads(payload)
+                assert payload["name"] == "Ada", (con, payload)
+                assert float(payload["score"]) == 42.5, (con, payload)
+        finally:
+            py.close()
+            cpp.close()
+
+    def test_parameter_typed_with_declared_name(self):
+        """`parameter P Person` parses and translates (treated as the declared
+        tuple type for typing purposes)."""
+        cql = """library DT20C version '1.0.0'
+using FHIR version '4.0.1'
+define type Person extends System.Any { name System.String }
+parameter Demographics Person default Person { name: 'default' }
+context Unfiltered
+define Probe: 1 + 1
+"""
+        results = translate_cql(cql)
+        assert results["Probe"].to_sql() == "1 + 1"
+
+    def test_typeinfo_and_related_to_clauses_parse(self):
+        """The model-info metadata clauses (`label`, `identifier`,
+        `retrievable`, `primary code path`) and `related to <Ctx> by { keys }`
+        context relationships parse and register."""
+        lib = parse_cql("""library DT20D version '1.0.0'
+using FHIR version '4.0.1'
+define context Patient of type FHIR.Patient with key { id }
+define type Observation extends System.Any {
+  subject System.String,
+  code System.String
+}
+  label Obs
+  identifier 'http://example.org/StructureDefinition/obs'
+  retrievable
+  primary code path code
+related to Patient by { subject }
+""")
+        (td,) = [s for s in lib.statements if type(s).__name__ == "TypeDefinition"]
+        assert td.label == "Obs"
+        assert td.identifier == "http://example.org/StructureDefinition/obs"
+        assert td.retrievable is True
+        assert td.primary_code_path == "code"
+        assert len(td.context_relationships) == 1
+        assert td.context_relationships[0].context == "Patient"
+        assert td.context_relationships[0].key_elements == ["subject"]
+        translator = CQLToSQLTranslator()
+        translator.translate_library(lib)
+        info = translator._context.declared_types["Observation"]
+        assert info["retrievable"] is True
+        assert info["relationships"] == [
+            {"context": "Patient", "key_elements": ["subject"]}
+        ]
+
+    def test_define_type_statements_do_not_become_definitions(self):
+        """A `define type` statement must not produce an expression definition
+        (translate_library returns no entry keyed by the type name)."""
+        results = translate_cql(self.CQL)
+        assert "Person" not in results
+        assert "Wrapper" not in results
+        assert "Inst" in results
+

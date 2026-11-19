@@ -3545,6 +3545,68 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             return resource_type
         return None
 
+    def _register_model_definitions(self, library: Library) -> None:
+        """Register CQL 2.0 model-definition statements (trial-use) into the
+        translation context.
+
+        ``define type`` declarations register as named tuple-shaped class
+        types (element name -> CQL type string) consultable by the type
+        operators (``is``/``as``), parameter/operand typing, and property
+        access. ``define context X of type T with key {...}`` registers the
+        context for a following ``context X`` statement. ``define
+        implicit|explicit conversion`` declarations are recorded for
+        conversion-site consultation.
+
+        Deferrals (documented in the chunk report): choice-type element
+        composition, FHIR-base-type inheritance with resource shapes, and
+        automatic implicit-conversion insertion are not implemented —
+        registration covers the tuple-shaped use cases the spec's own
+        examples exercise.
+        """
+        from .parser_shims import type_specifier_to_cql_string
+
+        for stmt in getattr(library, "statements", []) or []:
+            stmt_type = type(stmt).__name__
+            if stmt_type == "TypeDefinition":
+                self._context.declared_types[stmt.name] = {
+                    "elements": [
+                        (el.name, type_specifier_to_cql_string(el.type_specifier))
+                        for el in stmt.elements
+                    ],
+                    "base": (
+                        getattr(stmt.base_type, "name", None)
+                        if stmt.base_type is not None else None
+                    ),
+                    "label": stmt.label,
+                    "identifier": stmt.identifier,
+                    "retrievable": stmt.retrievable,
+                    "primary_code_path": stmt.primary_code_path,
+                    "relationships": [
+                        {
+                            "context": rel.context,
+                            "key_elements": list(rel.key_elements),
+                        }
+                        for rel in stmt.context_relationships
+                    ],
+                    "access_level": stmt.access_level,
+                }
+            elif stmt_type == "ContextInfoDefinition":
+                self._context.declared_contexts[stmt.name] = {
+                    "context_type": (
+                        getattr(stmt.context_type, "name", None)
+                        if stmt.context_type is not None else None
+                    ),
+                    "key_elements": list(stmt.key_elements),
+                }
+            elif stmt_type == "ConversionDefinition":
+                self._context.declared_conversions.append({
+                    "implicit": stmt.implicit_,
+                    "from": type_specifier_to_cql_string(stmt.from_type),
+                    "to": type_specifier_to_cql_string(stmt.to_type),
+                    "function": stmt.function_name,
+                    "access_level": stmt.access_level,
+                })
+
     def _setup_context(self, library: Library) -> None:
         """
         Initialize translation context from library declarations.
@@ -3557,6 +3619,12 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         # builder reads it to decide whether a profile-qualified retrieve
         # requires the canonical in `meta.profile`.
         self._context.strict_profiles = getattr(self, "_strict_profiles", True)
+
+        # CQL 2.0 model definitions (trial-use, chunk CQL20-E): register
+        # `define type` / `define context ... of type ...` /
+        # `define implicit|explicit conversion` declarations into the
+        # context so retrieves/properties/type-operators can consult them.
+        self._register_model_definitions(library)
 
         # CQL 2.0 #DefaultComparisonPrecision (FHIR-41326): resolve this
         # library's effective default from its own directive plus what the
