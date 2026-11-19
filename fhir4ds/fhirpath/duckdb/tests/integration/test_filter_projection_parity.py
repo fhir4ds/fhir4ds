@@ -259,6 +259,48 @@ def test_repeat_returns_only_new_projection_results_in_native_and_fallback(monke
         fallback.close()
 
 
+def test_repeat_all_keeps_all_projection_results_in_native_and_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CQL 2.0 / FHIRPath repeatAll (Appendix I: Repeat(X, element, true)).
+
+    Identical fixpoint iteration to repeat(), but the result keeps ALL
+    projection outputs — duplicate subtree projections are NOT
+    de-duplicated — while the work queue stays `=`-gated so iteration
+    terminates exactly where repeat() does.
+    """
+    cases = [
+        # two identical children: repeat collapses to one, repeatAll keeps both
+        (DUPLICATE_CHILDREN, "item.repeat(item).linkId", (["same"], '["same"]')),
+        (DUPLICATE_CHILDREN, "item.repeatAll(item).linkId", (["same", "same"], '["same","same"]')),
+        # a projection batch containing duplicates: verbatim in repeatAll
+        ("{}",
+         "1.repeatAll(iif($this < 3, $this + 1, {}))",
+         (["2", "3"], "[2,3]")),
+        ("{}", "'a'.repeatAll($this)", (["a", "a"], '["a","a"]')),
+        ("{}", "'a'.repeat($this)", (["a"], '["a"]')),
+        # deep navigation without duplicates: repeatAll == repeat
+        (QUESTIONNAIRE, "item.repeatAll(item).linkId", None),  # order-unpinned; compared for parity below
+    ]
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for resource, expression, expected in cases:
+            if expected is not None:
+                assert _json_result(native, resource, expression) == expected, expression
+                assert _json_result(fallback, resource, expression) == expected, expression
+            else:
+                # parity-only case: native and fallback must agree
+                assert (
+                    _json_result(native, resource, expression)
+                    == _json_result(fallback, resource, expression)
+                ), expression
+    finally:
+        native.close()
+        fallback.close()
+
+
 def test_oftype_fhir_primitive_subtypes_match_native_and_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

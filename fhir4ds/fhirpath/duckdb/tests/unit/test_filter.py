@@ -19,6 +19,7 @@ from ...functions.filter import (
     where,
     select,
     repeat,
+    repeat_all,
     first,
     last,
     tail,
@@ -179,6 +180,62 @@ class TestRepeat:
         col = FHIRPathCollection([{"linkId": "root"}])
         result = repeat(col, lambda x: [{"linkId": "child"}, {"linkId": "child"}])
         assert result.to_list() == [{"linkId": "child"}]
+
+
+class TestRepeatAll:
+    """Tests for the repeatAll() iteration function (CQL 2.0 Appendix I:
+    ``X.repeatAll(<element>) === Repeat(X, <element>, true)``).
+
+    Same fixpoint iteration as repeat(), but the RESULT keeps every
+    projection output (duplicates preserved); only the work queue is
+    gated on FHIRPath ``=`` newness, which guarantees termination.
+    """
+
+    def test_repeat_all_keeps_duplicate_projection_results(self) -> None:
+        """A projection batch with duplicates is emitted verbatim.
+
+        Both duplicates are NEW (unseen), so both are also queued; the
+        second pass projects each of them again, emitting another batch —
+        repeat() collapses all of this to one element.
+        """
+        col = FHIRPathCollection([{"linkId": "root"}])
+        result = repeat_all(col, lambda x: [{"linkId": "child"}, {"linkId": "child"}])
+        assert result.to_list() == [{"linkId": "child"}] * 4
+        assert repeat(col, lambda x: [{"linkId": "child"}, {"linkId": "child"}]).to_list() == [
+            {"linkId": "child"}
+        ]
+
+    def test_repeat_all_includes_every_projection_evaluation(self) -> None:
+        """Each projection evaluation contributes, even for seen values."""
+        col = FHIRPathCollection(["a"])
+        result = repeat_all(col, lambda x: x)
+        # pass 1: 'a' is new (emitted + queued); pass 2: 'a' is emitted
+        # again but not queued -> stop.
+        assert result.to_list() == ["a", "a"]
+
+    def test_repeat_all_terminates_on_constant_projection(self) -> None:
+        """Termination is guaranteed by the = gated work queue."""
+        col = FHIRPathCollection([1])
+        result = repeat_all(col, lambda x: x + 1 if isinstance(x, int) and x < 3 else None)
+        assert result.to_list() == [2, 3]
+
+    def test_repeat_all_empty_collection(self) -> None:
+        col = FHIRPathCollection([])
+        assert repeat_all(col, lambda x: x) == EMPTY
+
+    def test_repeat_all_distinct_sibling_duplicates(self) -> None:
+        """Two identical subtrees reached by one projection both appear."""
+        resource = {"item": [{"v": 1}, {"v": 1}]}
+        col = FHIRPathCollection(resource["item"])
+        result = repeat_all(col, lambda x: x.get("v") if isinstance(x, dict) else None)
+        assert result.to_list() == [1, 1]
+
+    def test_repeat_all_propagates_expression_errors(self) -> None:
+        def _bad(x):
+            raise ValueError("bad projection")
+
+        with pytest.raises(FHIRPathError):
+            repeat_all(FHIRPathCollection([1]), _bad)
 
 
 # =============================================================================

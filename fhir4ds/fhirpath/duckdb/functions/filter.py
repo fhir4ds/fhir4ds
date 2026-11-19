@@ -272,6 +272,83 @@ def repeat(
     return FHIRPathCollection(all_results)
 
 
+def repeat_all(
+    collection: FHIRPathCollection,
+    expression: Callable[[Any], Any] | str,
+    evaluator: Callable[[str, Any], Any] | None = None,
+    max_iterations: int = 1000,
+) -> FHIRPathCollection | EmptyCollectionSentinel:
+    """
+    Iterate an expression until no new results, keeping ALL results.
+
+    FHIRPath/CQL 2.0 repeatAll semantics (Appendix I:
+    ``X.repeatAll(<element>) === Repeat(X, <element>, true)``):
+
+    - Empty collection returns empty: {}.repeatAll(X) -> {}
+    - Expression is applied to each element; every projection output is
+      included in the result (duplicates preserved, order preserved)
+    - Only unseen (per FHIRPath ``=``) results continue the iteration,
+      which guarantees termination
+    - Contrast with repeat(): repeat de-duplicates its result with ``=``
+
+    Args:
+        collection: The starting collection.
+        expression: Either a callable or a FHIRPath expression string.
+        evaluator: Optional evaluator function for expression strings.
+        max_iterations: Safety limit to prevent infinite loops.
+
+    Returns:
+        Collection of ALL projection results or EMPTY if input is empty.
+    """
+    if collection.is_empty:
+        return EMPTY
+
+    all_results: list[Any] = []
+    seen: list[Any] = []
+    current_items = list(collection.values)
+
+    iteration = 0
+    while current_items:
+        if iteration >= max_iterations:
+            raise FHIRPathError("repeatAll() maximum iteration limit exceeded")
+        iteration += 1
+        new_items = []
+
+        for item in current_items:
+            try:
+                if callable(expression):
+                    result = expression(item)
+                elif evaluator is not None and isinstance(expression, str):
+                    result = evaluator(expression, item)
+                else:
+                    raise ValueError("expression must be callable or evaluator must be provided")
+
+                # Process result
+                if isinstance(result, FHIRPathCollection):
+                    result_items = result.values
+                elif isinstance(result, list):
+                    result_items = result
+                elif isinstance(result, EmptyCollectionSentinel):
+                    result_items = []
+                elif result is not None:
+                    result_items = [result]
+                else:
+                    result_items = []
+
+                for new_item in result_items:
+                    all_results.append(new_item)
+                    if not _contains_equal(seen, new_item):
+                        seen.append(new_item)
+                        new_items.append(new_item)
+
+            except (ValueError, TypeError, KeyError, AttributeError) as e:
+                raise FHIRPathError(f"repeatAll() expression evaluation failed: {e}") from e
+
+        current_items = new_items
+
+    return FHIRPathCollection(all_results)
+
+
 def _contains_equal(items: list[Any], candidate: Any) -> bool:
     """Check membership using FHIRPath `=` semantics."""
     from ...engine.invocations import equality as equality_invocations

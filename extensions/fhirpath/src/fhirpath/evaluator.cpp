@@ -5427,6 +5427,18 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 		chain_defined_vars_ = saved_chain;
 		return result;
 	}
+	if (name == "repeatAll") {
+		if (node.children.size() != 1) {
+			throw FHIRPathSpecError("repeatAll() takes exactly 1 projection argument");
+		}
+		auto saved_vars = defined_variables_;
+		auto saved_chain = chain_defined_vars_;
+		chain_defined_vars_.clear();
+		auto result = fn_repeat_all(*node.children[0], input, doc);
+		defined_variables_ = saved_vars;
+		chain_defined_vars_ = saved_chain;
+		return result;
+	}
 
 	// Single-argument functions
 	if (!node.children.empty()) {
@@ -8515,6 +8527,48 @@ FPCollection Evaluator::fn_repeat(const ASTNode &projection, const FPCollection 
 		work = next;
 		if (++iterations > 1000 || result.size() > 10000) {
 			throw FHIRPathSpecError("repeat() infinite loop detected");
+		}
+	}
+
+	return result;
+}
+
+FPCollection Evaluator::fn_repeat_all(const ASTNode &projection, const FPCollection &input, yyjson_doc *doc) {
+	// repeatAll (CQL 2.0 Appendix I: Repeat(X, element, true)): identical
+	// fixpoint iteration to repeat(), but the RESULT keeps every projection
+	// output (duplicates preserved); only the work queue is gated on
+	// fpValuesEqual-newness, which guarantees termination.
+	FPCollection result;
+	FPCollection seen;
+	FPCollection work = input;
+
+	size_t iterations = 0;
+	while (!work.empty()) {
+		FPCollection next;
+		for (const auto &item : work) {
+			FPCollection single_col = {item};
+			auto saved_chain = chain_defined_vars_;
+			chain_defined_vars_.clear();
+			auto projected = eval(projection, single_col, doc);
+			chain_defined_vars_ = saved_chain;
+			for (const auto &p : projected) {
+				result.push_back(p);
+				bool is_seen = false;
+				for (const auto &s : seen) {
+					if (fpValuesEqual(s, p)) {
+						is_seen = true;
+						break;
+					}
+				}
+				if (!is_seen) {
+					seen.push_back(p);
+					next.push_back(p);
+				}
+			}
+		}
+		work = next;
+		if (++iterations > 1000 || result.size() > 10000) {
+			throw FHIRPathSpecError("repeatAll() infinite loop detected");
 		}
 	}
 

@@ -124,6 +124,53 @@ def repeat_macro(ctx, data, expr):
     return res
 
 
+def repeat_all_macro(ctx, data, expr):
+    """FHIRPath repeatAll (CQL 2.0 Appendix I: Repeat(X, element, true)).
+
+    Same fixpoint iteration as repeat(), but the RESULT includes ALL
+    projection outputs (duplicates preserved) — only the work queue is
+    gated on `=`-equality newness, which is what guarantees termination.
+    """
+    if not isinstance(data, list):
+        return []
+
+    res = []
+    seen = []
+    items = data
+
+    missing = object()
+    old_index = ctx.get("$index", missing)
+    saved_vars = dict(ctx.get("vars", {}))
+    old_chain = ctx.get("_chain_defined_vars", missing)
+
+    try:
+        while len(items) != 0:
+            nxt = items[0]
+            items = items[1:]
+            ctx["vars"] = dict(saved_vars)
+            if old_chain is not missing:
+                ctx["_chain_defined_vars"] = set(old_chain)
+            lres = list(expr(nxt))
+            if len(lres) > 0:
+                res = res + lres
+                for l in lres:
+                    if not _contains_equal(ctx, seen, l):
+                        seen.append(l)
+                        items = items + [l]
+    finally:
+        ctx["vars"] = saved_vars
+        if old_chain is not missing:
+            ctx["_chain_defined_vars"] = old_chain
+        else:
+            ctx.pop("_chain_defined_vars", None)
+        if old_index is missing:
+            ctx.pop("$index", None)
+        else:
+            ctx["$index"] = old_index
+
+    return res
+
+
 def _contains_equal(ctx, items, candidate):
     # FHIRPath repeat() de-duplicates using the same semantic equality as `=`.
     from . import equality as equality_invocations
