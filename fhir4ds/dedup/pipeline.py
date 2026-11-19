@@ -22,13 +22,14 @@ Design grounding: FEATURE_TEMPORAL_DEDUP.md §2a/§2b/§2e, §3, §9.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Optional
 from zoneinfo import ZoneInfo
 
 from .category import Category
 from .codes import normalize_codes
+from .lexical import raw_code_texts, tier2_provenance, tier2_text_set
 from .temporal import (
     DEFAULT_TZ,
     NormalizedDate,
@@ -45,6 +46,7 @@ __all__ = [
     "DedupResult",
     "POC_TROPONIN",
     "VITAL_EXTENDED_WINDOW_LOINC",
+    "CODE_FALLBACK_MODES",
     "dedup_pass",
     "escalate",
     "partition",
@@ -131,6 +133,22 @@ class DedupRecord:
     value_key: str
     category: str
     secondary_ts: Optional[str]
+    # AMUX-145 tier-2 fields (defaulted for direct-construction back-compat).
+    # ``match_key`` is the SINGLE COALECED key (design redirect 2026-11-20):
+    # ("code", system, code) elements from authored codings + confident
+    # hybrid-index resolutions, plus ("text", normalized) elements ONLY
+    # when the record did not confidently resolve (text tier is LAST —
+    # resolved concepts outrank display equality). Attached in
+    # :func:`dedup_pass` once the concept index is known.
+    tier2_texts: frozenset[str] = frozenset()
+    code_provenance: str = "none"
+    resolved_concepts: dict = field(default_factory=dict)
+    match_key: frozenset = frozenset()
+
+    @property
+    def concept_keys(self) -> frozenset[tuple[str, str]]:
+        """Authored codings ∪ confidently resolved concepts."""
+        return self.code_keys | frozenset(self.resolved_concepts)
 
     @classmethod
     def from_resource(cls, resource: dict) -> "DedupRecord":
@@ -149,16 +167,19 @@ class DedupRecord:
             raise ValueError(f"resource {rid!r} missing resourceType")
         nd = normalize_temporal(resource)
         secondary = secondary_timestamp(resource)
+        code_keys = normalize_codes(resource)
         return cls(
             resource=resource,
             rid=rid,
             rtype=rtype,
             patient_ref=_patient_ref(resource),
             nd=nd,
-            code_keys=normalize_codes(resource),
+            code_keys=code_keys,
             value_key=normalize_value(resource),
             category=categorize_record(resource),
             secondary_ts=secondary.dt_utc if secondary is not None else None,
+            tier2_texts=tier2_text_set(resource),
+            code_provenance=tier2_provenance(resource, code_keys),
         )
 
 
@@ -208,16 +229,100 @@ def _sort_key(record: DedupRecord) -> tuple:
     )
 
 
-def _code_components(records: list[DedupRecord]) -> list[list[DedupRecord]]:
-    """Union-find over code-set intersection (mirrors matching/corpus.py's
-    deterministic components: sorted iteration, the smaller rid-root wins).
+#: AMUX-145 code-fallback cascade modes:
+#: - ``on`` (default): the tier-2 coalesced match key (hybrid index
+#:   resolution + text tier) is ACTIVE.
+#: - ``audit_only``: tier-2 compatibility is computed for the curation
+#:   queue but never unions.
+#: - ``off``: canonical-only (pre-feature behavior).
+CODE_FALLBACK_MODES = ("on", "audit_only", "off")
 
-    Two records union when their canonical code SETS share at least one
-    ``(system, code)`` pair — a LOINC-primary resource carrying a SNOMED
-    translation unions with its SNOMED-primary duplicate. Empty code sets
-    NEVER union (each such record is its own component).
+
+def _tier2_subtype(left: DedupRecord, right: DedupRecord) -> str:
+    """Joel addendum (2026-11-20): ``hybrid`` when at least one side of
+    the pair carried a usable coding (vocabulary disagreement — a
+    terminology problem); ``text_only`` when neither side did (missing
+    coded data — a source-data problem)."""
+    return "hybrid" if (left.code_keys or right.code_keys) else "text_only"
+
+
+def _pair_edge(left: DedupRecord, right: DedupRecord,
+               shared: frozenset) -> Optional[dict]:
+    """Build the union-edge record for a match-key intersection.
+
+    Tier (design redirect 2026-11-20): ``canonical`` when any shared
+    concept is an authored coding on BOTH sides; ``hybrid`` when a
+    shared concept was introduced by index resolution on at least one
+    side; ``text`` when only normalized-text tokens are shared.
+    """
+    concept_shared = sorted(
+        (element for element in shared if element[0] == "code"),
+        key=lambda element: (element[1], element[2]))
+    text_shared = sorted(
+        element for element in shared if element[0] == "text")
+    edge = {"edge": sorted((left.rid, right.rid))}
+    if concept_shared:
+        for element in concept_shared:
+            concept = (element[1], element[2])
+            if concept in left.code_keys and concept in right.code_keys:
+                edge["tier"] = "canonical"
+                return edge
+        # Shared concept exists only via resolution on at least one side.
+        edge["tier"] = "hybrid"
+        edge["subtype"] = _tier2_subtype(left, right)
+        for element in concept_shared:
+            concept = (element[1], element[2])
+            for record in sorted((left, right), key=lambda r: r.rid):
+                meta = record.resolved_concepts.get(concept)
+                if meta is not None:
+                    edge["resolved_by"] = record.rid
+                    edge["resolved_concept"] = list(concept)
+                    edge["score"] = meta["score"]
+                    edge["margin"] = meta["margin"]
+                    edge["index_version"] = meta["index_version"]
+                    break
+            if "resolved_concept" in edge:
+                break
+        return edge
+    if text_shared:
+        from .lexical import normalize_lexical_text
+        text_key = text_shared[0][1]
+        edge["tier"] = "text"
+        edge["subtype"] = _tier2_subtype(left, right)
+        edge["text_key"] = text_key
+        source_texts = {}
+        for record in (left, right):
+            source_texts[record.rid] = sorted(
+                t for t in raw_code_texts(record.resource)
+                if normalize_lexical_text(t) == text_key)
+        edge["source_texts"] = source_texts
+        return edge
+    return None
+
+
+def _code_components(records: list[DedupRecord], *,
+                     tier2_union: bool = False,
+                     tier2_compat: bool = False
+                     ) -> tuple[list[list[DedupRecord]], list[dict],
+                                list[dict]]:
+    """Union-find over the COALESCED match key (design redirect
+    2026-11-20), replacing the pre-redirect text-set any-intersection
+    matcher.
+
+    Two records union when their match-key sets share at least one
+    element. Canonical intersections (an authored coding on both sides)
+    always union — they never fall through to tier 2. Tier-2-only
+    intersections (a resolved concept bridging vocabularies, or shared
+    normalized text) union when ``tier2_union`` (mode ``on``); with
+    ``tier2_compat`` only (``audit_only``) they are returned as
+    suppressed candidates for the curation queue.
+
+    Returns ``(components, edges, suppressed_pairs)``; deterministic
+    (sorted rid order).
     """
     parent: dict[str, str] = {r.rid: r.rid for r in records}
+    edges: list[dict] = []
+    suppressed: list[dict] = []
 
     def find(x: str) -> str:
         root = x
@@ -229,49 +334,108 @@ def _code_components(records: list[DedupRecord]) -> list[list[DedupRecord]]:
 
     ordered = sorted(records, key=lambda r: r.rid)
     for i, left in enumerate(ordered):
-        if not left.code_keys:
-            continue
         for right in ordered[i + 1:]:
-            if not right.code_keys:
+            shared = left.match_key & right.match_key
+            if not shared:
                 continue
-            if left.code_keys.isdisjoint(right.code_keys):
+            edge = _pair_edge(left, right, shared)
+            if edge is None:
+                continue
+            if edge["tier"] != "canonical" and not tier2_union:
+                if tier2_compat:
+                    suppressed.append(edge)
                 continue
             rl, rr = find(left.rid), find(right.rid)
             if rl != rr:
                 # Deterministic: the lexicographically smaller root wins.
                 lo, hi = (rl, rr) if rl < rr else (rr, rl)
                 parent[hi] = lo
+                edges.append(edge)
 
     components: dict[str, list[DedupRecord]] = {}
     for record in ordered:
         components.setdefault(find(record.rid), []).append(record)
-    return [components[root] for root in sorted(components)]
+    return [components[root] for root in sorted(components)], edges, \
+        suppressed
 
 
-def partition(records: list[DedupRecord]) -> tuple[list[DedupRecord],
-                                                   list[list[DedupRecord]]]:
+def _validate_code_fallback(code_fallback: str) -> str:
+    if code_fallback not in CODE_FALLBACK_MODES:
+        raise ValueError(
+            f"code_fallback must be one of {CODE_FALLBACK_MODES}, "
+            f"got {code_fallback!r}")
+    return code_fallback
+
+
+def partition(records: list[DedupRecord], *,
+              code_fallback: str = "on"
+              ) -> tuple[list[DedupRecord], list[list[DedupRecord]]]:
     """Stage 1: partition records into duplicate-candidate groups.
 
     Exact axes: ``(patient_ref, resource_type, partition_date, value_key)``.
     WITHIN each bucket, records union when their canonical code sets
-    intersect (any-intersection matching via deterministic union-find).
+    intersect (any-intersection matching via deterministic union-find);
+    with ``code_fallback='on'`` (default), tier-2 lexical compatibility
+    ALSO unions (AMUX-145).
     Returns ``(singletons, multi_groups)``; groups sorted by key (then by
     first member rid inside a bucket's component list), members sorted by
     rid.
     """
+    singletons, multi_groups, _, _ = _partition_internal(
+        records, code_fallback=code_fallback,
+        attach_keys=True)
+    return singletons, multi_groups
+
+
+def _partition_internal(records: list[DedupRecord], *, code_fallback: str,
+                        attach_keys: bool = False
+                        ) -> tuple[list[DedupRecord],
+                                   list[list[DedupRecord]],
+                                   dict[str, list[dict]],
+                                   list[dict]]:
+    """Partition + cascade bookkeeping.
+
+    Returns ``(singletons, multi_groups, component_edges, suppressed)``:
+    ``component_edges`` maps each multi-group's lead rid to the union
+    edges inside that component (tier ``canonical`` / ``hybrid`` /
+    ``text``); ``suppressed`` carries tier-2-compatible same-bucket
+    pairs that did NOT union (audit_only mode), annotated with their
+    bucket key. ``attach_keys`` derives coalesced match keys for raw
+    (never-attached) records — dedup_pass attaches earlier because it
+    needs the records downstream.
+    """
+    mode = _validate_code_fallback(code_fallback)
+    if attach_keys:
+        from .concept_index import default_concept_index
+        records = _attach_match_keys(records, default_concept_index(),
+                                     mode)
     buckets: dict[tuple, list[DedupRecord]] = {}
     for record in records:
         buckets.setdefault(_sort_key(record), []).append(record)
     singletons: list[DedupRecord] = []
     multi_groups: list[list[DedupRecord]] = []
+    component_edges: dict[str, list[dict]] = {}
+    suppressed: list[dict] = []
     for key in sorted(buckets):
-        for component in _code_components(buckets[key]):
+        components, edges, supp = _code_components(
+            buckets[key],
+            tier2_union=mode == "on",
+            tier2_compat=mode in ("on", "audit_only"))
+        for edge in supp:
+            suppressed.append(dict(edge, bucket=list(key)))
+        for component in components:
             members = sorted(component, key=lambda r: r.rid)
+            member_ids = {m.rid for m in members}
             if len(members) == 1:
                 singletons.append(members[0])
-            else:
-                multi_groups.append(members)
-    return singletons, multi_groups
+                continue
+            multi_groups.append(members)
+            component_edges[members[0].rid] = sorted(
+                (e for e in edges
+                 if e["edge"][0] in member_ids
+                 and e["edge"][1] in member_ids),
+                key=lambda e: (e["tier"], e["edge"]))
+    return singletons, multi_groups, component_edges, suppressed
 
 
 # ---------------------------------------------------------------------------
@@ -587,14 +751,151 @@ def escalate(group: list[DedupRecord], *, default_tz: str = DEFAULT_TZ
 
 @dataclass
 class DedupResult:
-    """Outcome of one dedup pass (no survivorship yet — slice 3)."""
+    """Outcome of one dedup pass (no survivorship yet — slice 3).
+
+    AMUX-145 additions: ``cluster_edges`` (parallel to ``clusters``; the
+    union edges inside each final cluster — tier-1 canonical / tier-2
+    lexical with ``subtype``), ``curation_records`` (deterministic
+    tier-3 queue entries: ``unmatched`` + ``near_miss``), and ``records``
+    (the built DedupRecords, for proposer consumption).
+    """
 
     emitted: list[DedupRecord] = field(default_factory=list)
     clusters: list[list[DedupRecord]] = field(default_factory=list)
     stats: dict = field(default_factory=dict)
+    cluster_edges: list[list[dict]] = field(default_factory=list)
+    curation_records: list[dict] = field(default_factory=list)
+    records: list[DedupRecord] = field(default_factory=list)
 
 
-def dedup_pass(resources: list[dict], *, default_tz: str = DEFAULT_TZ
+def _codes_payload(record: DedupRecord) -> list[str]:
+    return sorted(f"{system}|{code}" for system, code in record.code_keys)
+
+
+def _near_miss_entry(records_by_rid: dict[str, DedupRecord],
+                     edge: dict, reason: str,
+                     bucket: object) -> dict:
+    left = records_by_rid[edge["edge"][0]]
+    right = records_by_rid[edge["edge"][1]]
+    entry = {
+        "kind": "near_miss",
+        "resource_type": left.rtype,
+        "rids": [edge["edge"][0], edge["edge"][1]],
+        "patient_ref": left.patient_ref,
+        "bucket": bucket,
+        "tier": edge.get("tier"),
+        "shared_texts": [edge["text_key"]] if "text_key" in edge else [],
+        "codes": {left.rid: _codes_payload(left),
+                  right.rid: _codes_payload(right)},
+        "reason": reason,
+        "subtype": edge.get("subtype"),
+    }
+    if "resolved_concept" in edge:
+        entry["shared_concept"] = edge["resolved_concept"]
+    return entry
+
+
+def _cross_bucket_near_misses(records: list[DedupRecord]) -> list[dict]:
+    """Same-patient, same-type record pairs sharing a tier-2 text whose
+    concept keys (authored codings + confident resolutions) are
+    disjoint/empty but which landed in DIFFERENT Stage-1 buckets
+    (corroboration failed on the date/value axis). These are exactly
+    the pairs tier 2 might rescue with better data."""
+    by_text: dict[tuple, list[DedupRecord]] = {}
+    for record in records:
+        if not record.tier2_texts:
+            continue
+        for text in record.tier2_texts:
+            by_text.setdefault(
+                (record.patient_ref or "", record.rtype, text),
+                []).append(record)
+    records_by_rid = {r.rid: r for r in records}
+    seen: set[tuple[str, str]] = set()
+    entries: list[dict] = []
+    for key in sorted(by_text):
+        group = sorted(by_text[key], key=lambda r: r.rid)
+        if len(group) < 2:
+            continue
+        for i, left in enumerate(group):
+            for right in group[i + 1:]:
+                if _sort_key(left) == _sort_key(right):
+                    continue  # same bucket — handled by the union path
+                if left.concept_keys and right.concept_keys \
+                        and not left.concept_keys.isdisjoint(
+                            right.concept_keys):
+                    continue  # concept-compatible — not a tier-2 case
+                pair = (min(left.rid, right.rid), max(left.rid, right.rid))
+                if pair in seen:
+                    continue
+                seen.add(pair)
+                edge = {"edge": list(pair),
+                        "tier": "text",
+                        "subtype": _tier2_subtype(left, right),
+                        "text_key": key[2]}
+                entries.append(_near_miss_entry(
+                    records_by_rid, edge, "cross_bucket", None))
+    return entries
+
+
+class _LazyDefaultIndex:
+    """Resolves against the default concept index, building it on first
+    use only (off mode never resolves, so it never pays the build)."""
+
+    def __init__(self) -> None:
+        self._index = None
+
+    def resolve(self, text):
+        if self._index is None:
+            from .concept_index import default_concept_index
+            self._index = default_concept_index()
+        return self._index.resolve(text)
+
+
+_NULL_INDEX = _LazyDefaultIndex()
+
+
+def _attach_match_keys(records: list[DedupRecord], index,
+                       mode: str) -> list[DedupRecord]:
+    """Derive each record's COALESCED match key (design redirect
+    2026-11-20): authored codings + confident hybrid-index resolutions,
+    plus normalized-text tokens ONLY when the record resolved nothing
+    confidently (text tier is LAST — resolved concepts outrank display
+    equality). In ``off`` mode the key is the authored codings alone
+    (canonical-only, pre-feature behavior)."""
+    cache: dict[str, object] = {}
+
+    def resolve(text: str):
+        if text not in cache:
+            cache[text] = index.resolve(text)
+        return cache[text]
+
+    out = []
+    for record in records:
+        resolved: dict[tuple[str, str], dict] = {}
+        if mode != "off":
+            for text in sorted(record.tier2_texts):
+                hit = resolve(text)
+                if hit is None:
+                    continue
+                meta = {"score": hit.score, "margin": hit.margin,
+                        "index_version": hit.index_version,
+                        "query": text}
+                existing = resolved.get(hit.concept)
+                if existing is None or (hit.score, text) < (
+                        existing["score"], existing["query"]):
+                    resolved[hit.concept] = meta
+        key = {("code", system, code) for system, code in record.code_keys}
+        key.update(("code", system, code)
+                   for system, code in resolved)
+        if mode != "off" and not resolved:
+            key.update(("text", text) for text in record.tier2_texts)
+        out.append(replace(
+            record, resolved_concepts=resolved, match_key=frozenset(key)))
+    return out
+
+
+def dedup_pass(resources: list[dict], *, default_tz: str = DEFAULT_TZ,
+               code_fallback: str = "on", concept_index=None
                ) -> DedupResult:
     """Full pipeline: normalize → partition → escalate.
 
@@ -602,21 +903,100 @@ def dedup_pass(resources: list[dict], *, default_tz: str = DEFAULT_TZ
     (Stage-1 singletons plus rows that escalated but did not cluster).
     ``clusters`` carries duplicate groups (size >= 2, each sorted by rid,
     cluster list sorted by first member rid). ``stats`` carries counts.
+
+    ``code_fallback`` (AMUX-145): ``"on"`` (default) activates the tier-2
+    coalesced match key — hybrid concept-index resolution bridging
+    vocabularies, then the conservative text tier; ``"audit_only"``
+    computes tier-2 compatibility for the curation queue without
+    merging; ``"off"`` restores canonical-only behavior.
+
+    ``concept_index``: optional :class:`~fhir4ds.dedup.concept_index.
+    ConceptIndex`; ``None`` uses the default versioned index built from
+    the in-repo ValueSet display fixtures.
     """
+    mode = _validate_code_fallback(code_fallback)
     records = [DedupRecord.from_resource(r) for r in resources]
-    singletons, multi_groups = partition(records)
+    # Off mode attaches canonical-only keys (the index is never consulted).
+    records = _attach_match_keys(
+        records,
+        concept_index if concept_index is not None else _NULL_INDEX,
+        mode)
+    records_by_rid = {r.rid: r for r in records}
+    singletons, multi_groups, component_edges, suppressed = \
+        _partition_internal(records, code_fallback=mode)
     emitted: list[DedupRecord] = list(
         sorted(singletons, key=lambda r: r.rid))
     clusters: list[list[DedupRecord]] = []
+    cluster_edges: list[list[dict]] = []
+    near_misses: list[dict] = []
     for group in multi_groups:
-        for cluster in escalate(group, default_tz=default_tz):
+        edges = component_edges.get(group[0].rid, [])
+        tier2_edges = [e for e in edges if e["tier"] != "canonical"]
+        escalated = escalate(group, default_tz=default_tz)
+        cluster_of: dict[str, int] = {}
+        for index, cluster in enumerate(escalated):
+            for record in cluster:
+                cluster_of[record.rid] = index
+        for cluster in escalated:
             if len(cluster) >= 2:
                 clusters.append(sorted(cluster, key=lambda r: r.rid))
+                member_ids = {r.rid for r in cluster}
+                cluster_edges.append(sorted(
+                    (e for e in edges
+                     if e["edge"][0] in member_ids
+                     and e["edge"][1] in member_ids),
+                    key=lambda e: (e["tier"], e["edge"])))
             else:
                 emitted.append(cluster[0])
+        if mode == "on":
+            # Tier-2-compatible pairs the Stage-2 temporal rules split:
+            # the corroboration tier did its job, time arbitrated no.
+            for edge in tier2_edges:
+                a, b = edge["edge"]
+                if cluster_of.get(a) != cluster_of.get(b):
+                    near_misses.append(_near_miss_entry(
+                        records_by_rid, edge, "temporal_rejected",
+                        list(_sort_key(records_by_rid[a]))))
+    for edge in suppressed:
+        near_misses.append(_near_miss_entry(
+            records_by_rid, edge, "mode_suppressed", edge["bucket"]))
+    if mode in ("on", "audit_only"):
+        near_misses.extend(_cross_bucket_near_misses(records))
+
+    # Tier-3 queue: unmatched = the never-canonical population (empty
+    # canonical code key), regardless of tier-2 eligibility.
+    unmatched = []
+    for record in sorted((r for r in records if not r.code_keys),
+                         key=lambda r: r.rid):
+        unmatched.append({
+            "kind": "unmatched",
+            "resource_type": record.rtype,
+            "rid": record.rid,
+            "patient_ref": record.patient_ref,
+            "code_field": (record.resource.get(
+                _code_field_name(record.rtype)) if _code_field_name(
+                    record.rtype) else None),
+            "tier2_texts": sorted(record.tier2_texts),
+        })
+
+    def queue_sort_key(entry: dict) -> tuple:
+        lead = entry.get("rid") or sorted(entry["rids"])[0]
+        return (entry["resource_type"], entry.get("patient_ref") or "",
+                lead)
+
+    curation_records = sorted(
+        unmatched + near_misses,
+        key=lambda e: (queue_sort_key(e), e["kind"]))
+
     emitted.sort(key=lambda r: r.rid)
-    clusters.sort(key=lambda c: c[0].rid)
+    pairs = sorted(zip(clusters, cluster_edges),
+                   key=lambda pair: pair[0][0].rid)
+    clusters = [c for c, _ in pairs]
+    cluster_edges = [e for _, e in pairs]
     duplicate_records = sum(len(c) for c in clusters)
+    tier2_union_count = sum(
+        1 for edges in component_edges.values() for e in edges
+        if e["tier"] != "canonical")
     return DedupResult(
         emitted=emitted,
         clusters=clusters,
@@ -628,5 +1008,21 @@ def dedup_pass(resources: list[dict], *, default_tz: str = DEFAULT_TZ
             "clusters": len(clusters),
             "duplicate_records": duplicate_records,
             "emitted": len(emitted),
+            "tier2_edges": sum(
+                1 for edges in cluster_edges for e in edges
+                if e["tier"] != "canonical"),
+            "tier2_merges": tier2_union_count,
+            "hybrid_resolutions": sum(
+                len(r.resolved_concepts) for r in records),
+            "curation_unmatched": len(unmatched),
+            "curation_near_miss": len(near_misses),
         },
+        cluster_edges=cluster_edges,
+        curation_records=curation_records,
+        records=records,
     )
+
+
+def _code_field_name(rtype: str) -> Optional[str]:
+    from .codes import _CODE_FIELD_BY_TYPE
+    return _CODE_FIELD_BY_TYPE.get(rtype)

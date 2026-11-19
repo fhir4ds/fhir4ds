@@ -148,13 +148,14 @@ def tier2_text_set(resource: dict) -> frozenset[str]:
 def tier2_provenance(resource: dict,
                      code_keys: Optional[frozenset] = None) -> str:
     """Record-level code provenance (FDD §5.1): ``canonical`` when the
-    canonical code key is non-empty; ``lexical`` when the key is empty but
-    a tier-2 text set exists; ``none`` otherwise."""
+    canonical code key is non-empty; ``text`` when the key is empty but
+    a tier-2 text set exists (eligible for hybrid resolution or the text
+    tier); ``none`` otherwise."""
     if code_keys is None:
         from .codes import normalize_codes
         code_keys = normalize_codes(resource)
     if code_keys:
         return "canonical"
     if tier2_text_set(resource):
-        return "lexical"
+        return "text"
     return "none"

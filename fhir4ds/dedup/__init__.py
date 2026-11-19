@@ -17,6 +17,21 @@ from __future__ import annotations
 
 from .category import Category, US_CORE_VITAL_LOINC, categorize
 from .codes import normalize_code, normalize_codes
+from .concept_index import (
+    ConceptIndex,
+    Resolution,
+    default_concept_index,
+)
+from .curation import (
+    CURATION_QUEUE_FILENAME,
+    DedupCodeProposer,
+    PROPOSER_INTERFACE_VERSION,
+    write_curation_queue,
+)
+from .lexical import (
+    normalize_lexical_text,
+    tier2_text_set,
+)
 from .audit import (
     DEDUP_AUDIT_DDL,
     create_dedup_audit_table,
@@ -69,6 +84,15 @@ __all__ = [
     "US_CORE_VITAL_LOINC",
     "POC_TROPONIN",
     "VITAL_EXTENDED_WINDOW_LOINC",
+    "ConceptIndex",
+    "Resolution",
+    "default_concept_index",
+    "CURATION_QUEUE_FILENAME",
+    "DedupCodeProposer",
+    "PROPOSER_INTERFACE_VERSION",
+    "write_curation_queue",
+    "normalize_lexical_text",
+    "tier2_text_set",
     "DedupRecord",
     "DedupResult",
     "DedupRunResult",
