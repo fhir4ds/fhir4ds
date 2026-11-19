@@ -478,4 +478,4 @@ class TestEngine:
 
 
 def test_version():
-    assert matching_version == "0.0.24"  # aligned with root per test_version doctrine
+    assert matching_version == "0.0.25"  # aligned with root per test_version doctrine

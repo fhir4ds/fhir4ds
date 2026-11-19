@@ -3,15 +3,20 @@
 Authored FIRST (red before implementation) per the FDD §8 contract in
 fhir4ds-private/docs/architecture/plans/FEATURE_DEDUP_CODE_FALLBACK.md.
 
-Joel scope correction (2026-11-20): the `code_fallback` merge tier is
-DEFAULT ON ("on"); "audit_only" and "off" remain selectable modes. Tests
-assert the ON behavior wherever the FDD's original default would have
-pinned audit_only.
+Joel scope correction (2026-11-20): the ``code_fallback`` merge tier is
+DEFAULT ON ("on"); "audit_only" and "off" remain selectable modes.
 
-Joel addendum (2026-11-20): tier-2 merges carry a SUBTYPE — `hybrid`
-(at least one side of the pair had a usable coding) vs `text_only`
-(neither side coded) — exposed on the merge provenance tag, the audit
-trail, and the curation queue.
+Joel DESIGN REDIRECT (2026-11-20, supersedes the FDD's original tier-2
+parallel-matcher): tier 2 is now a SINGLE COALECED MATCH KEY —
+canonical (system, code) intersection → hybrid retrieval (BM25 +
+char-trigram over a versioned multi-vocabulary display index) with a
+confidence+margin rule → conservative text tier LAST (resolved concepts
+outrank display equality). These tests assert the COALESCED behavior.
+
+Joel addendum (2026-11-20): tier-2 merges carry a SUBTYPE — ``hybrid``
+(at least one side of the pair had a usable coding) vs ``text_only``
+(neither side coded) — on the merge provenance tag, the audit trail,
+and the curation queue.
 """
 
 from __future__ import annotations
@@ -28,7 +33,8 @@ from fhir4ds.dedup.codes import normalize_codes
 
 LOINC = "http://loinc.org"
 LOCAL = "http://local.example.org"
-_SNOMED = "http://snomed.info/sct"
+SNOMED = "http://snomed.info/sct"
+CVX = "http://hl7.org/fhir/sid/cvx"
 _CAT_LAB = ("http://terminology.hl7.org/CodeSystem/observation-category")
 
 _REPO = Path(__file__).resolve().parents[3]
@@ -41,6 +47,29 @@ _CORPORA = {
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+
+def _index(*entries):
+    """Deterministic fixture concept index."""
+    from fhir4ds.dedup.concept_index import ConceptIndex
+    return ConceptIndex(entries)
+
+
+#: The canonical fixture index: real LOINC displays for the panel used
+#: throughout the cascade tests, plus decoys that pin non-merging.
+_TWIN_INDEX = lambda: _index(  # noqa: E731
+    {"system": LOINC, "code": "718-7", "display": "Hemoglobin"},
+    {"system": LOINC, "code": "4548-4", "display": "Hematocrit"},
+    {"system": LOINC, "code": "4547-1", "display": "Hemoglobin A1c"},
+    {"system": SNOMED, "code": "S9", "display": "Ambiguous Panel"},
+    {"system": LOINC, "code": "A1", "display": "Ambiguous Panel"},
+)
+
+#: An index that resolves NOTHING the fixtures ask about (pins the text
+#: tier deterministically).
+_EMPTY_INDEX = lambda: _index(  # noqa: E731
+    {"system": LOINC, "code": "0000-0", "display": "Unused Concept"},
+)
 
 
 def _lab(rid, effective, *, system=LOINC, code="718-7", display="Hemoglobin",
@@ -83,8 +112,7 @@ def _imm(rid, *, cvx, display="Varicella", subject="Patient/im"):
         "status": "completed",
         "patient": {"reference": subject},
         "vaccineCode": {"coding": [{
-            "system": "http://hl7.org/fhir/sid/cvx", "code": cvx,
-            "display": display}]},
+            "system": CVX, "code": cvx, "display": display}]},
         # deliberately NO occurrenceDateTime -> nd is None
     }
 
@@ -95,7 +123,7 @@ def _cluster_rids(result):
 
 def _tier2_edges(result):
     return [e for edges in result.cluster_edges for e in edges
-            if e["tier"] == 2]
+            if e["tier"] != "canonical"]
 
 
 def _queue_lines(path: Path):
@@ -145,7 +173,7 @@ class TestPhase05QuantityUnitZero:
             _lab("u0", "2024-05-01T10:00:00Z", value=100, unit="0"),
             _lab("u1", "2024-05-01T10:00:00Z", value=100, unit="0"),
         ]
-        result = dedup_pass(resources)
+        result = dedup_pass(resources, concept_index=_EMPTY_INDEX())
         assert result.stats["records"] == 2
         # Same bucket + same canonical code -> one duplicate cluster.
         assert _cluster_rids(result) == [["u0", "u1"]]
@@ -204,87 +232,98 @@ class TestLexicalNormalizer:
 
 
 # ---------------------------------------------------------------------------
-# Cascade mechanics (FDD §8 tests 7-14)
+# Cascade mechanics (FDD §8 tests 7-14, coalesced-design expectations)
 # ---------------------------------------------------------------------------
 
 
 class TestCascadeMechanics:
-    def test_07_local_code_twin_rescue(self):
-        """LOINC 718-7 vs local X123, both display 'Hemoglobin', full
-        corroboration -> ONE cluster, lexical provenance, audit names the
-        shared text key."""
+    def test_07_local_code_twin_rescues_via_hybrid_resolution(self):
+        """LOINC 718-7 vs local X123, both display 'Hemoglobin': the
+        local-coded side RESOLVES through the index to (LOINC, 718-7) so
+        both sides carry the same coalesced key -> ONE cluster, hybrid
+        provenance, audit names the resolved concept + index version."""
         resources = [
             _lab("t7a", "2024-05-01T10:00:00Z"),
             _lab("t7b", "2024-05-01T10:00:00Z", system=LOCAL, code="X123"),
         ]
-        assert _cluster_rids(dedup_pass(resources)) == [["t7a", "t7b"]]
-        result = dedup_pass(resources)
+        result = dedup_pass(resources, concept_index=_TWIN_INDEX())
+        assert _cluster_rids(result) == [["t7a", "t7b"]]
         edges = _tier2_edges(result)
         assert len(edges) == 1
-        assert edges[0]["text_key"] == "hemoglobin"
-        assert edges[0]["edge"] == ["t7a", "t7b"]
-        # audit: rule carries LEXICAL, evidence names the text key
+        assert edges[0]["tier"] == "hybrid"
+        assert edges[0]["subtype"] == "hybrid"
+        assert edges[0]["resolved_concept"] == [LOINC, "718-7"]
+        assert edges[0]["index_version"].startswith("format1+sha256:")
+        assert edges[0]["score"] >= 0.85
+        # audit: rule carries HYBRID, evidence names concept + index
         conn = duckdb.connect()
         try:
-            run = run_dedup(resources, "amux145-t7", conn=conn)
+            run_dedup(resources, "amux145-t7", conn=conn,
+                      concept_index=_TWIN_INDEX())
             rows = load_dedup_audit(conn, "amux145-t7")
         finally:
             conn.close()
         assert len(rows) == 1
-        assert "LEXICAL" in rows[0]["rule"]
+        assert "HYBRID:hybrid" in rows[0]["rule"]
         evidence = rows[0]["cluster_evidence"]
-        assert evidence["codeProvenance"].startswith("lexical")
-        tier2 = [e for e in evidence["codeEdges"] if e["tier"] == 2]
-        assert len(tier2) == 1
-        assert tier2[0]["text_key"] == "hemoglobin"
-        assert "source_texts" in tier2[0]
+        assert evidence["codeProvenance"] == "hybrid:hybrid"
+        hybrid = [e for e in evidence["codeEdges"]
+                  if e["tier"] == "hybrid"]
+        assert hybrid[0]["resolved_concept"] == [LOINC, "718-7"]
+        assert evidence["conceptIndex"]["version"] == \
+            edges[0]["index_version"]
 
     def test_08_raw_text_exact_subset(self):
         """Identical code.text only (no codings at all) with full
-        corroboration merges (Q2 default: yes)."""
+        corroboration merges through the TEXT tier (Q2 default: yes)."""
         resources = [
             _text_only_condition("t8a", "2024-03-10"),
             _text_only_condition("t8b", "2024-03-10"),
         ]
-        result = dedup_pass(resources)
+        result = dedup_pass(resources, concept_index=_EMPTY_INDEX())
         assert _cluster_rids(result) == [["t8a", "t8b"]]
-        assert _tier2_edges(result)[0]["subtype"] == "text_only"
+        edge = _tier2_edges(result)[0]
+        assert edge["tier"] == "text"
+        assert edge["subtype"] == "text_only"
+        assert edge["text_key"] == "chest pain"
 
     def test_09_canonical_wins_no_double_count(self):
         """Code-set-intersecting pair merges with canonical provenance
-        even when texts also match (no LEXICAL audit row/edge)."""
+        even when their displays also resolve through the index."""
         resources = [
             _lab("t9a", "2024-05-01T10:00:00Z", display="Hemoglobin"),
             _lab("t9b", "2024-05-01T10:00:00Z", display="Hemoglobin"),
         ]
-        result = dedup_pass(resources)
+        result = dedup_pass(resources, concept_index=_TWIN_INDEX())
         assert _cluster_rids(result) == [["t9a", "t9b"]]
         assert _tier2_edges(result) == []
         conn = duckdb.connect()
         try:
-            run_dedup(resources, "amux145-t9", conn=conn)
+            run_dedup(resources, "amux145-t9", conn=conn,
+                      concept_index=_TWIN_INDEX())
             rows = load_dedup_audit(conn, "amux145-t9")
         finally:
             conn.close()
         assert len(rows) == 1
-        assert "LEXICAL" not in rows[0]["rule"]
+        assert "HYBRID" not in rows[0]["rule"] and \
+            "TEXT" not in rows[0]["rule"]
         assert rows[0]["cluster_evidence"]["codeProvenance"] == "canonical"
 
     def test_10_corroboration_gate_different_value_key(self):
-        """Lexical-key match but DIFFERENT value_key (different buckets)
-        -> no merge + near_miss queue entry."""
+        """Text-compatible pair but DIFFERENT value_key (different
+        buckets) -> no merge + near_miss queue entry."""
         resources = [
             _lab("t10a", "2024-05-01T10:00:00Z", value=7.5),
             _lab("t10b", "2024-05-01T10:00:00Z", system=LOCAL, code="X123",
                  value=9.1),
         ]
-        result = dedup_pass(resources)
+        result = dedup_pass(resources, concept_index=_EMPTY_INDEX())
         assert result.clusters == []
         near = [e for e in result.curation_records
                 if e["kind"] == "near_miss"]
         assert len(near) == 1
         assert sorted(near[0]["rids"]) == ["t10a", "t10b"]
-        assert near[0]["shared_texts"] == ["Hemoglobin"]
+        assert near[0]["shared_texts"] == ["hemoglobin"]  # normalized key
         assert near[0]["codes"]["t10a"] == [f"{LOINC}|718-7"]
         assert near[0]["codes"]["t10b"] == [f"{LOCAL}|X123"]
 
@@ -295,7 +334,7 @@ class TestCascadeMechanics:
             _imm("t11a", cvx="146"),
             _imm("t11b", cvx="49"),
         ]
-        result = dedup_pass(resources)
+        result = dedup_pass(resources, concept_index=_EMPTY_INDEX())
         assert result.clusters == []
         assert len(result.emitted) == 2
         near = [e for e in result.curation_records
@@ -310,7 +349,7 @@ class TestCascadeMechanics:
             _lab("t12a", "2024-05-01T10:00:00Z"),
             _lab("t12b", "2024-05-01T10:45:00Z", system=LOCAL, code="X123"),
         ]
-        result = dedup_pass(resources)
+        result = dedup_pass(resources, concept_index=_EMPTY_INDEX())
         assert result.clusters == []
         near = [e for e in result.curation_records
                 if e["kind"] == "near_miss"]
@@ -330,14 +369,15 @@ class TestCascadeMechanics:
              "code": {"coding": []},
              "effectiveDateTime": "2024-05-01T10:00:00Z"},
         ]
-        result = dedup_pass(resources)
+        result = dedup_pass(resources, concept_index=_EMPTY_INDEX())
         assert result.clusters == []
         unmatched = [e for e in result.curation_records
                      if e["kind"] == "unmatched"]
         assert sorted(e["rid"] for e in unmatched) == ["t13a", "t13b"]
 
     def test_14_multi_coding_text_sets_any_intersection(self):
-        """Local twin carrying 2 codings, one display matching -> merge."""
+        """Local twin carrying 2 codings, one display resolving -> merge
+        through the resolved concept."""
         twin = _lab("t14a", "2024-05-01T10:00:00Z")
         twin["code"]["coding"].append(
             {"system": "http://local2.example.org", "code": "Y9",
@@ -346,8 +386,100 @@ class TestCascadeMechanics:
             twin,
             _lab("t14b", "2024-05-01T10:00:00Z", system=LOCAL, code="X123"),
         ]
-        result = dedup_pass(resources)
+        result = dedup_pass(resources, concept_index=_TWIN_INDEX())
         assert _cluster_rids(result) == [["t14a", "t14b"]]
+
+
+# ---------------------------------------------------------------------------
+# Hybrid-retrieval rules (design redirect: margin + index provenance)
+# ---------------------------------------------------------------------------
+
+
+class TestHybridRetrievalRules:
+    def test_margin_fallthrough_resolves_no_concept(self):
+        """An ambiguous display (two index entries share the same
+        normalized display -> top-2 tie -> zero margin) resolves to NO
+        concept: the pair can only merge through the TEXT tier (never a
+        wrong canonical concept), and the unresolved record carries text
+        tokens, not resolved concepts."""
+        from fhir4ds.dedup.concept_index import ConceptIndex
+        # the margin rule itself: exact display tie -> no resolution
+        assert _TWIN_INDEX().resolve("Ambiguous Panel") is None
+
+        ambiguous = _lab("mfa", "2024-05-01T10:00:00Z",
+                         system="http://nowhere.example.org", code="Z1",
+                         display="Ambiguous Panel")
+        coded = _lab("mfb", "2024-05-01T10:00:00Z", system=LOINC,
+                     code="A1", display="Ambiguous Panel")
+        result = dedup_pass([ambiguous, coded], concept_index=_TWIN_INDEX())
+        # both unresolved -> equal text + full corroboration -> the TEXT
+        # tier merges them (margin only blocks the CONCEPT assignment).
+        assert _cluster_rids(result) == [["mfa", "mfb"]]
+        edge = _tier2_edges(result)[0]
+        assert edge["tier"] == "text"
+        assert edge["subtype"] == "hybrid"  # mfb carried a usable code
+        # neither record stole a canonical concept from the tie
+        recs = {r.rid: r for r in result.records}
+        assert not recs["mfa"].resolved_concepts
+        assert not recs["mfb"].resolved_concepts
+        assert ("text", "ambiguous panel") in recs["mfa"].match_key
+
+    def test_resolved_concepts_outrank_display_equality(self):
+        """Records that resolve carry NO text tokens in their coalesced
+        key: equal display text can never merge two differently-resolved
+        records (text tier is LAST)."""
+        from fhir4ds.dedup.lexical import normalize_lexical_text
+        idx = _index(
+            {"system": LOINC, "code": "X1", "display": "Alpha Beta"},
+            {"system": SNOMED, "code": "S1", "display": "Alpha Gamma"},
+        )
+        resources = [
+            _lab("ra", "2024-05-01T10:00:00Z", system=LOCAL, code="L1",
+                 display="Alpha Beta"),
+            _lab("rb", "2024-05-01T10:00:00Z", system=LOCAL, code="L2",
+                 display="Alpha Gamma"),
+        ]
+        result = dedup_pass(resources, concept_index=idx)
+        # both resolved confidently to DIFFERENT concepts -> no merge,
+        # despite the ngram-similar displays.
+        assert result.clusters == []
+        recs = {r.rid: r for r in result.records}
+        for rid in ("ra", "rb"):
+            assert recs[rid].resolved_concepts
+            assert all(element[0] == "code"
+                       for element in recs[rid].match_key), (
+                "resolved records must not carry text tokens")
+
+    def test_index_version_provenance_in_audit_and_queue(self, tmp_path):
+        """Every hybrid merge records the index version + score/margin in
+        the audit trail; index version is content-derived (two indexes
+        with different entries yield different versions)."""
+        idx_a = _TWIN_INDEX()
+        idx_b = _index(
+            {"system": LOINC, "code": "718-7", "display": "Hemoglobin"},
+            {"system": LOINC, "code": "4548-4", "display": "Hematocrit"},
+        )
+        assert idx_a.index_version != idx_b.index_version
+        assert idx_a.checksum != idx_b.checksum
+
+        resources = [
+            _lab("iv1", "2024-05-01T10:00:00Z"),
+            _lab("iv2", "2024-05-01T10:00:00Z", system=LOCAL, code="X123"),
+        ]
+        conn = duckdb.connect()
+        try:
+            run_dedup(resources, "amux145-iv", conn=conn,
+                      output_dir=tmp_path, concept_index=idx_a)
+            rows = load_dedup_audit(conn, "amux145-iv")
+        finally:
+            conn.close()
+        evidence = rows[0]["cluster_evidence"]
+        resolutions = evidence["conceptIndex"]["resolutions"]
+        assert resolutions[0]["concept"] == [LOINC, "718-7"]
+        assert resolutions[0]["score"] >= 0.85
+        assert resolutions[0]["margin"] >= 0.15
+        assert (evidence["conceptIndex"]["version"]
+                == idx_a.index_version)
 
 
 # ---------------------------------------------------------------------------
@@ -360,15 +492,21 @@ def _mixed_corpus():
         # canonical pair (same LOINC code)
         _lab("m1", "2024-05-01T10:00:00Z"),
         _lab("m2", "2024-05-01T10:00:00Z"),
-        # lexical twin of m1/m2 (disjoint local code, same display)
+        # hybrid twin of m1/m2 (disjoint local code, display resolves)
         _lab("m3", "2024-05-01T10:00:00Z", system=LOCAL, code="X123"),
-        # text-only Condition pair
+        # text-only Condition pair (not in the index)
         _text_only_condition("m4", "2024-03-10"),
         _text_only_condition("m5", "2024-03-10"),
         # unrelated singletons
         _lab("m6", "2024-06-01T10:00:00Z", code="4548-4",
              display="Hematocrit"),
         _imm("m7", cvx="146"),
+        # near-miss pair: equal unresolvable text, DIFFERENT value keys
+        # (different buckets -> corroboration failure -> curation queue)
+        _lab("m8", "2024-07-01T10:00:00Z", system=LOCAL, code="L1",
+             display="Custom Local Panel"),
+        _lab("m9", "2024-07-01T10:00:00Z", system=LOCAL, code="L2",
+             display="Custom Local Panel", value=9.9),
     ]
 
 
@@ -385,15 +523,19 @@ class TestAuditProvenanceQueue:
             conn = duckdb.connect()
             try:
                 run_dedup(shuffled, f"amux145-det-{seed}", conn=conn,
-                          output_dir=out_dir)
+                          output_dir=out_dir, concept_index=_TWIN_INDEX())
                 audit = [
                     {k: v for k, v in row.items() if k != "run_id"}
                     for row in load_dedup_audit(conn, f"amux145-det-{seed}")
                 ]
             finally:
                 conn.close()
-            queue = (out_dir / "dedup_curation_queue.jsonl"
-                     ).read_text(encoding="utf-8")
+            queue_lines = (out_dir / "dedup_curation_queue.jsonl"
+                           ).read_text(encoding="utf-8").splitlines()
+            queue = json.dumps(
+                [{k: v for k, v in json.loads(line).items()
+                  if k != "run_id"} for line in queue_lines if line.strip()],
+                sort_keys=True)
             if reference_audit is None:
                 reference_audit, reference_queue = audit, queue
             assert audit == reference_audit, f"audit drift at seed {seed}"
@@ -406,7 +548,7 @@ class TestAuditProvenanceQueue:
         conn = duckdb.connect()
         try:
             run_dedup(resources, "amux145-shapes", conn=conn,
-                      output_dir=out_dir)
+                      output_dir=out_dir, concept_index=_TWIN_INDEX())
         finally:
             conn.close()
         entries = _queue_lines(out_dir / "dedup_curation_queue.jsonl")
@@ -428,26 +570,27 @@ class TestAuditProvenanceQueue:
         assert main == sorted(main, key=sort_key)
 
     def test_17_mixed_cluster_provenance(self):
-        """One canonical edge + one lexical edge in one cluster -> cluster
-        provenance lexical, evidence lists both edges."""
+        """One canonical edge + one hybrid edge in one cluster -> cluster
+        provenance hybrid, evidence lists both edges."""
         resources = [
             _lab("t17a", "2024-05-01T10:00:00Z"),
             _lab("t17b", "2024-05-01T10:00:00Z", system=LOCAL,
                  code="X123"),
             _lab("t17c", "2024-05-01T10:00:00Z"),
         ]
-        result = dedup_pass(resources)
+        result = dedup_pass(resources, concept_index=_TWIN_INDEX())
         assert _cluster_rids(result) == [["t17a", "t17b", "t17c"]]
         conn = duckdb.connect()
         try:
-            run_dedup(resources, "amux145-t17", conn=conn)
+            run_dedup(resources, "amux145-t17", conn=conn,
+                      concept_index=_TWIN_INDEX())
             rows = load_dedup_audit(conn, "amux145-t17")
         finally:
             conn.close()
         evidence = rows[0]["cluster_evidence"]
-        assert evidence["codeProvenance"].startswith("lexical")
-        tiers = sorted(e["tier"] for e in evidence["codeEdges"])
-        assert tiers == [1, 2]
+        assert evidence["codeProvenance"] == "hybrid:hybrid"
+        assert sorted(e["tier"] for e in evidence["codeEdges"]) == [
+            "canonical", "hybrid"]
 
     def test_18_proposer_interface(self, tmp_path):
         from fhir4ds.dedup.curation import (
@@ -468,14 +611,15 @@ class TestAuditProvenanceQueue:
         assert isinstance(PROPOSER_INTERFACE_VERSION, str)
 
         resources = _mixed_corpus()
-        baseline = _cluster_rids(dedup_pass(resources))
+        baseline = _cluster_rids(
+            dedup_pass(resources, concept_index=_TWIN_INDEX()))
 
         out_with = tmp_path / "with"
         out_with.mkdir()
         conn = duckdb.connect()
         try:
             run_dedup(resources, "amux145-prop", conn=conn,
-                      output_dir=out_with,
+                      output_dir=out_with, concept_index=_TWIN_INDEX(),
                       dedup_proposer=StubProposer())
         finally:
             conn.close()
@@ -484,7 +628,8 @@ class TestAuditProvenanceQueue:
         assert len(proposals) == 1
         assert proposals[0]["proposer"] == "StubProposer@9.9"
         # proposer cannot change cluster output
-        assert _cluster_rids(dedup_pass(resources)) == baseline
+        assert _cluster_rids(
+            dedup_pass(resources, concept_index=_TWIN_INDEX())) == baseline
 
         # default-off: no proposer -> no proposal lines
         out_without = tmp_path / "without"
@@ -492,7 +637,7 @@ class TestAuditProvenanceQueue:
         conn = duckdb.connect()
         try:
             run_dedup(resources, "amux145-noprop", conn=conn,
-                      output_dir=out_without)
+                      output_dir=out_without, concept_index=_TWIN_INDEX())
         finally:
             conn.close()
         entries = _queue_lines(out_without / "dedup_curation_queue.jsonl")
@@ -536,7 +681,8 @@ class TestRegressionAndMode:
         ]
         off = dedup_pass(resources, code_fallback="off")
         # Pre-feature equivalence: strip all lexical evidence and run in
-        # default mode — no text can match, so only canonical unions fire.
+        # default mode — no text can resolve or match, so only canonical
+        # unions fire.
         stripped = []
         for r in resources:
             r = json.loads(json.dumps(r))
@@ -546,7 +692,7 @@ class TestRegressionAndMode:
             stripped.append(r)
         baseline = dedup_pass(stripped)
         assert (_cluster_rids(off) == _cluster_rids(baseline))
-        # the lexical twins must NOT merge in off mode
+        # the tier-2 twins must NOT merge in off mode
         merged = {frozenset(r.rid for r in c) for c in off.clusters}
         assert frozenset({"t20a", "t20b"}) not in merged
         assert frozenset({"t20c", "t20d"}) not in merged
@@ -557,20 +703,23 @@ class TestRegressionAndMode:
             _lab("t21b", "2024-05-01T10:00:00Z", system=LOCAL,
                  code="X123"),
         ]
-        result = dedup_pass(resources, code_fallback="audit_only")
+        result = dedup_pass(resources, code_fallback="audit_only",
+                            concept_index=_TWIN_INDEX())
         assert result.clusters == []
         near = [e for e in result.curation_records
                 if e["kind"] == "near_miss"]
         assert len(near) == 1
         assert sorted(near[0]["rids"]) == ["t21a", "t21b"]
+        assert near[0]["tier"] == "hybrid"
+        assert near[0]["shared_concept"] == [LOINC, "718-7"]
 
     @pytest.mark.parametrize("corpus_name", sorted(_CORPORA))
     def test_22_default_mode_leaves_corpus_clusters_unchanged(
             self, corpus_name):
-        """Master-gate proxy: with tier 2 in its DEFAULT mode, cluster
-        output over the shipped DQM corpora is identical to off mode (the
-        full conformance gate is run out-of-band and recorded in
-        amux145_acceptance_green.txt)."""
+        """Master-gate proxy: with tier 2 in its DEFAULT mode (default
+        index), cluster output over the shipped DQM corpora is identical
+        to off mode (the full conformance gate is run out-of-band and
+        recorded in amux145_acceptance_green.txt)."""
         root = _CORPORA[corpus_name]
         if not root.is_dir():
             pytest.skip(f"corpus fixture missing: {root}")
@@ -600,39 +749,41 @@ class TestTier2Subtype:
             _text_only_condition("s2b", "2024-03-10"),
         ]
 
-        hybrid = dedup_pass(hybrid_resources)
-        text_only = dedup_pass(text_only_resources)
+        hybrid = dedup_pass(hybrid_resources, concept_index=_TWIN_INDEX())
+        text_only = dedup_pass(text_only_resources,
+                               concept_index=_EMPTY_INDEX())
 
         hybrid_edges = _tier2_edges(hybrid)
         text_edges = _tier2_edges(text_only)
-        assert [e["subtype"] for e in hybrid_edges] == ["hybrid"]
-        assert [e["subtype"] for e in text_edges] == ["text_only"]
+        assert [(e["tier"], e["subtype"]) for e in hybrid_edges] == [
+            ("hybrid", "hybrid")]
+        assert [(e["tier"], e["subtype"]) for e in text_edges] == [
+            ("text", "text_only")]
 
         # record-level provenance: coded records are canonical-eligible;
-        # coding-less records with text are lexical-only
+        # coding-less records with text are text-tier-eligible
         assert {DedupRecord.from_resource(r).code_provenance
                 for r in hybrid_resources} == {"canonical"}
         assert {DedupRecord.from_resource(r).code_provenance
-                for r in text_only_resources} == {"lexical"}
+                for r in text_only_resources} == {"text"}
 
-        # audit trail distinguishes the subtypes
+        # audit trail distinguishes tiers AND subtypes
         conn = duckdb.connect()
         try:
             run_dedup(hybrid_resources + text_only_resources, "amux145-sub",
-                      conn=conn, output_dir=tmp_path)
+                      conn=conn, output_dir=tmp_path,
+                      concept_index=_TWIN_INDEX())
             rows = load_dedup_audit(conn, "amux145-sub")
         finally:
             conn.close()
-        by_provenance = {r["cluster_evidence"]["codeProvenance"]
-                         for r in rows}
-        assert by_provenance == {"lexical:hybrid", "lexical:text_only"}
-        suffixes = sorted(
-            r["rule"].split("|")[-1] for r in rows)
-        assert suffixes == ["LEXICAL:hybrid", "LEXICAL:text_only"]
+        assert {r["cluster_evidence"]["codeProvenance"] for r in rows} \
+            == {"hybrid:hybrid", "text:text_only"}
+        assert sorted(r["rule"].split("|")[-1] for r in rows) == [
+            "HYBRID:hybrid", "TEXT:text_only"]
 
-        # curation queue entries carry the subtype
+        # curation queue entries carry the subtype (text-only records are
+        # canonical-unmatched but text-tier-eligible)
         entries = _queue_lines(tmp_path / "dedup_curation_queue.jsonl")
         unmatched = [e for e in entries if e["kind"] == "unmatched"]
-        # text-only records are canonical-unmatched but lexically eligible
         assert {e["rid"] for e in unmatched} == {"s2a", "s2b"}
-        assert all(e["tier2_texts"] == ["Chest pain"] for e in unmatched)
+        assert all(e["tier2_texts"] == ["chest pain"] for e in unmatched)
