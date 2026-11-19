@@ -4899,6 +4899,165 @@ static void InValuesetFunc(DataChunk &args, ExpressionState &state, Vector &resu
 	}
 }
 
+// ---------------------------------------------------------------------------
+// CQL 2.0 EquivalentIn / EquivalentContains (ValueSet) — FHIR-31675/33247.
+// Code `~` equivalence: code and system elements compare case-insensitively
+// with whitespace normalization (ASCII-lower approximation of casefold;
+// clinical codes and system URLs are ASCII). Cache entries are
+// "system|code" strings (or bare "code"); matching scans and compares
+// normalized forms, mirroring the Python
+// createEquivalentValuesetMembershipUdf surface.
+// ---------------------------------------------------------------------------
+
+static std::string EquivalentKey(const std::string &value) {
+	std::string out;
+	out.reserve(value.size());
+	bool pending_space = false;
+	for (char ch : value) {
+		if (std::isspace(static_cast<unsigned char>(ch))) {
+			if (!out.empty()) {
+				pending_space = true;
+			}
+			continue;
+		}
+		if (pending_space) {
+			out.push_back(' ');
+			pending_space = false;
+		}
+		out.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+	}
+	return out;
+}
+
+// Equivalent membership of (code, system) in the cache for valueset_url.
+// Returns 1 on a definitive match, 0 on no match, -1 when the String
+// overload is ambiguous (code present under multiple distinct systems).
+static int EquivalentCacheMatch(const std::string &code, const std::string &system,
+                                const std::string &valueset_url) {
+	auto it = g_valueset_cache.find(valueset_url);
+	if (it == g_valueset_cache.end()) {
+		return 0;
+	}
+	const std::string code_key = EquivalentKey(code);
+	const std::string system_key = EquivalentKey(system);
+	std::unordered_set<std::string> matched_system_keys;
+	for (const auto &entry : it->second) {
+		size_t sep = entry.rfind('|');
+		const std::string entry_system =
+		    (sep == std::string::npos) ? std::string() : entry.substr(0, sep);
+		const std::string entry_code =
+		    (sep == std::string::npos) ? entry : entry.substr(sep + 1);
+		if (EquivalentKey(entry_code) != code_key) {
+			continue;
+		}
+		if (entry_system.empty()) {
+			// Code-only cache entries match any source system (mirrors the
+			// Python ("", code_key) fallback).
+			return 1;
+		}
+		if (!system.empty()) {
+			if (EquivalentKey(entry_system) == system_key) {
+				return 1;
+			}
+		} else {
+			matched_system_keys.insert(EquivalentKey(entry_system));
+		}
+	}
+	if (system.empty()) {
+		if (matched_system_keys.size() == 1) {
+			return 1;
+		}
+		if (matched_system_keys.size() > 1) {
+			return -1;
+		}
+	}
+	return 0;
+}
+
+// cql_equivalent_in_valueset(resource VARCHAR, path VARCHAR, valueset_url
+// VARCHAR) -> BOOLEAN. Same 3VL contract as in_valueset (NULL on null
+// input / unloaded valueset / String-overload ambiguity); only the code
+// and system matching semantics differ (Code `~` equivalence).
+static void EquivalentInValuesetFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat res_data, path_data, url_data;
+	args.data[0].ToUnifiedFormat(count, res_data);
+	args.data[1].ToUnifiedFormat(count, path_data);
+	args.data[2].ToUnifiedFormat(count, url_data);
+
+	auto resources = UnifiedVectorFormat::GetData<string_t>(res_data);
+	auto paths = UnifiedVectorFormat::GetData<string_t>(path_data);
+	auto urls = UnifiedVectorFormat::GetData<string_t>(url_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = fhir4ds_compat::data<bool>(result);
+	auto &result_mask = fhir4ds_compat::validity(result);
+
+	std::shared_lock<std::shared_mutex> cache_read_lock(g_valueset_cache_mutex);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto r_idx = res_data.sel->get_index(i);
+		auto p_idx = path_data.sel->get_index(i);
+		auto u_idx = url_data.sel->get_index(i);
+
+		if (!res_data.validity.RowIsValid(r_idx) || !path_data.validity.RowIsValid(p_idx) ||
+		    !url_data.validity.RowIsValid(u_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+
+		auto resource_str = resources[r_idx].GetString();
+		auto path_str = paths[p_idx].GetString();
+		auto url_str = urls[u_idx].GetString();
+
+		if (g_valueset_cache.find(url_str) == g_valueset_cache.end()) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+
+		auto extraction = cql::extract_codes_with_not_done_valueset(resource_str, path_str, url_str);
+		const auto &codes = extraction.codes;
+		if (codes.empty()) {
+			if (extraction.has_not_done_valueset) {
+				result_data[i] = true;
+			} else {
+				result_data[i] = false;
+			}
+			continue;
+		}
+		bool found = false;
+		bool ambiguous = false;
+		for (const auto &code : codes) {
+			int match = EquivalentCacheMatch(code.code, code.system, url_str);
+			if (match == 1) {
+				found = true;
+				break;
+			}
+			if (match < 0) {
+				ambiguous = true;
+			}
+			auto norm_system = cql::normalize_system(code.system);
+			if (norm_system != code.system) {
+				int norm_match = EquivalentCacheMatch(code.code, norm_system, url_str);
+				if (norm_match == 1) {
+					found = true;
+					break;
+				}
+				if (norm_match < 0) {
+					ambiguous = true;
+				}
+			}
+		}
+		if (found) {
+			result_data[i] = true;
+		} else if (ambiguous) {
+			result_mask.SetInvalid(i);
+		} else {
+			result_data[i] = false;
+		}
+	}
+}
+
 static void ValuesetCacheClearFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	std::unique_lock<std::shared_mutex> lock(g_valueset_cache_mutex);
 	g_valueset_cache.clear();
@@ -9682,6 +9841,15 @@ static void LoadInternal(ExtensionLoader &loader) {
 	RegisterSpecialScalar(loader, "fhirpath_in_valueset",
 	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                      LogicalType::BOOLEAN, InValuesetFunc);
+	// CQL 2.0 EquivalentIn/EquivalentContains (ValueSet) membership
+	// (FHIR-31675/33247): Code `~` equivalence matching over the same
+	// valueset cache; the 1.5 `in` keeps the exact-match surface.
+	RegisterSpecialScalar(loader, "cql_equivalent_in_valueset",
+	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, EquivalentInValuesetFunc);
+	RegisterSpecialScalar(loader, "fhirpath_equivalent_in_valueset",
+	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, EquivalentInValuesetFunc);
 	RegisterSpecialScalar(loader, "cql_valueset_cache_clear", {}, LogicalType::BOOLEAN, ValuesetCacheClearFunc);
 	RegisterSpecialScalar(loader, "cql_valueset_cache_add",
 	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR},
