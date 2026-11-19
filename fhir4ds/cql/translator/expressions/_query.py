@@ -1861,13 +1861,83 @@ class QueryMixin:
         # string) distinguish exact vs equivalent membership CTEs; the
         # marker is stripped in build_retrieve_cte.
         marked_valueset = f"~{valueset}" if equivalent_terminology and valueset else valueset
+        # CQL 2.0 multi-filter retrieves (FHIR-31397): resolve each
+        # additional comma-separated filter to a (kind, target) and encode
+        # it onto the valueset string so retrieve keys/CTEs distinguish
+        # filtered retrieves (decoded into ANDed WHERE predicates in
+        # build_retrieve_cte).
+        for mf in getattr(node, "additional_filters", None) or []:
+            kind, target = self._resolve_additional_retrieve_filter(mf)
+            from ..cte_builder import encode_retrieve_filter
+            marked_valueset = (marked_valueset or "") + encode_retrieve_filter(
+                mf.property, kind, target
+            )
         # Return placeholder
         return RetrievePlaceholder(
             resource_type=resource_type,
-            valueset=marked_valueset,
+            valueset=marked_valueset or None,
             profile_url=profile_url,
             code_property=code_property,
         )
+
+    def _resolve_additional_retrieve_filter(self, mf) -> tuple:
+        """Resolve one CQL 2.0 multi-filter retrieve filter to (kind, target).
+
+        kind: 'in' (exact ValueSet membership), '~in' (equivalent
+        membership), 'code' (exact direct-code), '~code' (equivalent
+        direct-code). target: ValueSet URL or ``urn:cql:code:<system>|<code>``.
+        """
+        operand = mf.terminology
+        code_target = None
+        valueset_target = None
+
+        if isinstance(operand, CodeSelector):
+            cs_url = self.context.codesystems.get(operand.system, operand.system)
+            code_target = f"urn:cql:code:{cs_url}|{operand.code}"
+        else:
+            if isinstance(operand, Identifier):
+                name = operand.name
+            elif isinstance(operand, QualifiedIdentifier) and operand.parts:
+                name = operand.parts[-1]
+            elif isinstance(operand, Property) and isinstance(
+                getattr(operand, "source", None), Identifier
+            ):
+                name = operand.path
+            else:
+                name = str(operand)
+            code_info = self.context.codes.get(name)
+            if code_info:
+                cs_name = code_info.get("codesystem", "")
+                cs_url = self.context.codesystems.get(cs_name, cs_name)
+                code_target = f"urn:cql:code:{cs_url}|{code_info.get('code', '')}"
+            elif name in self.context.valuesets:
+                valueset_target = self.context.valuesets[name]
+            else:
+                # Unknown name: mirror the primary-filter fallback — treat
+                # as a ValueSet reference (URL or prefixed name).
+                from ..patterns.retrieve import _VALUESET_PREFIX_CONFIG
+                if name.startswith("http") or name.startswith("urn:"):
+                    valueset_target = name
+                else:
+                    default_prefix = _VALUESET_PREFIX_CONFIG.get(
+                        "default_prefix", "http://cts.nlm.nih.gov/fhir/ValueSet/"
+                    )
+                    valueset_target = f"{default_prefix}{name}"
+
+        comparator = mf.comparator
+        if comparator in ("=", "contains"):
+            if code_target is not None:
+                return "code", code_target
+            return "in", valueset_target
+        if comparator in ("~", "~contains"):
+            if code_target is not None:
+                return "~code", code_target
+            return "~in", valueset_target
+        # 'in' / '~in'
+        if code_target is not None:
+            return ("code" if comparator == "in" else "~code"), code_target
+        return comparator, valueset_target
+
 
     def _translate_query_source(self, node, boolean_context: bool = False) -> SQLExpression:
         """Handle: [Condition: "Diabetes"] D (the source with alias)"""

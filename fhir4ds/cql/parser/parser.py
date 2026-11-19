@@ -105,6 +105,7 @@ from ..parser.ast_nodes import (
     QuerySource,
     Quantity,
     Retrieve,
+    RetrieveFilter,
     ReturnClause,
     SingletonExpression,
     SkipExpression,
@@ -2481,6 +2482,7 @@ class CQLParser:
         terminology = None
         terminology_property = None
         navigation_path = None
+        additional_filters: list = []
 
         # Check for navigation (->) for related context retrieve
         if self.match_and_advance(TokenType.ARROW):
@@ -2496,8 +2498,58 @@ class CQLParser:
 
             terminology = self.parse_expression()
 
+            # CQL 2.0 multi-filter retrieve (FHIR-31397): comma-separated
+            # additional filters, each `<path> <comparator> <terminology>`
+            # (Logical Spec CodeFilterElement shape — explicit property and
+            # comparator; all filters ANDed).
+            while self.match_and_advance(TokenType.COMMA):
+                prop = self._parse_identifier_name()
+                while self.match_and_advance(TokenType.DOT):
+                    prop = f"{prop}.{self._parse_identifier_name()}"
+                comparator = self._parse_retrieve_filter_comparator()
+                operand = self.parse_expression()
+                additional_filters.append(
+                    RetrieveFilter(
+                        property=prop, comparator=comparator, terminology=operand
+                    )
+                )
+
         self.expect(TokenType.RBRACKET, "Expected ']'")
-        return Retrieve(type=resource_type, terminology=terminology, terminology_property=terminology_property, navigation_path=navigation_path, model=model_qualifier)
+        return Retrieve(
+            type=resource_type,
+            terminology=terminology,
+            terminology_property=terminology_property,
+            navigation_path=navigation_path,
+            model=model_qualifier,
+            additional_filters=additional_filters,
+        )
+
+    def _parse_retrieve_filter_comparator(self) -> str:
+        """Parse a multi-filter retrieve comparator: in / ~in / = / ~ /
+        contains / ~contains (the retrieve codeComparator set)."""
+        if self.match(TokenType.TILDE) and self.peek(1).type in (
+            TokenType.IN, TokenType.CONTAINS,
+        ):
+            self.advance()  # consume TILDE
+            if self.match_and_advance(TokenType.IN):
+                return "~in"
+            self.advance()  # CONTAINS
+            return "~contains"
+        if self.match_and_advance(TokenType.TILDE):
+            return "~"
+        if self.match_and_advance(TokenType.IN):
+            return "in"
+        if self.match_and_advance(TokenType.CONTAINS):
+            return "contains"
+        if self.match_and_advance(TokenType.EQUALS):
+            return "="
+        got = self.peek().value if self.peek() else "<eof>"
+        raise ParseError(
+            message=(
+                "Expected a retrieve filter comparator (in, ~in, =, ~, "
+                f"contains, ~contains) after the filter property; got '{got}'."
+            )
+        )
 
     def parse_tuple_expression(self) -> TupleExpression:
         """Parse a tuple literal expression."""

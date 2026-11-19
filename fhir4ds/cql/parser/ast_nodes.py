@@ -718,6 +718,32 @@ class QuerySource(ASTNode):
 
 
 @dataclass
+class RetrieveFilter(ASTNode):
+    """
+    Represents one additional comma-separated filter in a multi-filter
+    retrieve (CQL 2.0, FHIR-31397).
+
+    Example (inside ``[Condition: code in "VS", clinicalStatus in "Active"]``):
+        property: 'clinicalStatus'
+        comparator: 'in'
+        terminology: Identifier('Active')
+
+    Attributes:
+        property: The property path the filter applies to (required for
+            additional filters; the primary filter may default to the type's
+            primary code path).
+        comparator: One of 'in', '~in', '=', '~', 'contains', '~contains'
+            (the retrieve codeComparator set).
+        terminology: The terminology operand (value set / code reference /
+            code selector expression).
+    """
+
+    property: str
+    comparator: str
+    terminology: Expression
+
+
+@dataclass
 class Retrieve(Expression):
     """
     Represents a retrieve expression for accessing clinical data.
@@ -731,18 +757,24 @@ class Retrieve(Expression):
         [Condition: "Diabetes"]      -- Conditions with specific code
         [Observation: "LOINC|1234"]  -- Observations with LOINC code
         [Condition -> subject]       -- Related context retrieve via subject property
+        [Condition: code in "VS", clinicalStatus in "Active"]
+                                     -- CQL 2.0 multi-filter retrieve (FHIR-31397)
 
     Attributes:
         type: The resource/data type name.
         terminology: Optional terminology filter (value set, code, etc.).
         terminology_property: Property to match terminology against (e.g., 'code').
         navigation_path: Optional property path for related context retrieve (-> syntax).
+        additional_filters: CQL 2.0 comma-separated additional filters
+            (FHIR-31397); each carries an explicit property path and
+            comparator. All filters are ANDed into the retrieve predicate.
     """
 
     type: str
     terminology: Optional[Expression] = None
     terminology_property: Optional[str] = None
     navigation_path: Optional[str] = None
+    additional_filters: List[RetrieveFilter] = field(default_factory=list)
     # Model qualifier from authored CQL ([USQualityCore.MedicationRequest] →
     # "USQualityCore"). Preserved so the translator can resolve PROFILED
     # retrieves through the named-profile registry (e.g. the US Quality Core
@@ -1429,6 +1461,7 @@ __all__ = [
     "Query",
     "QuerySource",
     "Retrieve",
+    "RetrieveFilter",
     "WithClause",
     "LetClause",
     "SortClause",
