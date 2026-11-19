@@ -1301,6 +1301,14 @@ class FHIRDataLoader:
             if self.con not in _VALUESET_UDF_REGISTERED_CONNECTIONS:
                 udf_func = createValuesetMembershipUdf(self._valueset_udf_cache)
                 self.con.create_function("_in_valueset_python", udf_func, null_handling="special")
+                from fhir4ds.cql.duckdb.udf.valueset import (
+                    createEquivalentValuesetMembershipUdf,
+                )
+                self.con.create_function(
+                    "_cql_equivalent_in_valueset_python",
+                    createEquivalentValuesetMembershipUdf(self._valueset_udf_cache),
+                    null_handling="special",
+                )
                 with _CACHE_LOCK:
                     _VALUESET_UDF_REGISTERED_CONNECTIONS.add(self.con)
             self.con.execute(
@@ -1310,6 +1318,16 @@ class FHIRDataLoader:
             self.con.execute(
                 "CREATE OR REPLACE MACRO fhirpath_in_valueset(res, path, vs_url) AS "
                 "_in_valueset_python(res, path, vs_url)"
+            )
+            # CQL 2.0 EquivalentIn/EquivalentContains (ValueSet) membership:
+            # same live cache, Code `~` equivalence matching (FHIR-31675/33247).
+            self.con.execute(
+                "CREATE OR REPLACE MACRO cql_equivalent_in_valueset(res, path, vs_url) AS "
+                "_cql_equivalent_in_valueset_python(res, path, vs_url)"
+            )
+            self.con.execute(
+                "CREATE OR REPLACE MACRO fhirpath_equivalent_in_valueset(res, path, vs_url) AS "
+                "_cql_equivalent_in_valueset_python(res, path, vs_url)"
             )
         except (duckdb.CatalogException, duckdb.InvalidInputException) if duckdb else () as e:
             _logger.warning("Failed to refresh valueset UDF macros: %s", e)

@@ -300,6 +300,15 @@ def build_retrieve_cte(
     Returns:
         Tuple of (cte_name, cte_ast, column_info_map)
     """
+    # CQL 2.0 equivalent-terminology retrieves (FHIR-31392/31675:
+    # `[X: code ~in "VS"]`, `[X: path ~contains "Code"]`) arrive with a
+    # leading '~' marker on the valueset string so retrieve keys and CTE
+    # names distinguish them from the exact-match (1.5 `in`) retrieve on
+    # the same terminology. Strip it here and select equivalence-based
+    # membership semantics.
+    equivalent_terminology = bool(valueset) and valueset.startswith("~")
+    if equivalent_terminology:
+        valueset = valueset[1:]
     # (debug removed)
     # Normalize profile_urls: merge single profile_url into the list
     all_profile_urls: List[str] = []
@@ -373,6 +382,10 @@ def build_retrieve_cte(
         profile_suffix = _get_distinguishing_profile_suffix(all_profile_urls, profile_registry=_profile_registry)
         if profile_suffix:
             cte_name = f"{cte_name} ({profile_suffix})"
+    if equivalent_terminology:
+        # Distinct CTE name so an exact-match retrieve on the same
+        # terminology does not collide with the equivalence variant.
+        cte_name = f"{cte_name} (equiv)"
 
     logger.debug(f"  Generated CTE name: {cte_name}")
 
@@ -543,7 +556,20 @@ def build_retrieve_cte(
             effective_code_property = code_property or _TERMINOLOGY_PROPERTY_DEFAULTS.get(resource_type, "code")
             escaped_system = escape_fhirpath_string_literal(system_url)
             escaped_code = escape_fhirpath_string_literal(code_val)
-            fhirpath_expr = f"{effective_code_property}.coding.where(system='{escaped_system}' and code='{escaped_code}').exists()"
+            if equivalent_terminology:
+                # CQL 2.0 retrieve `~contains` comparator (FHIR-31392): the
+                # element at the code path equivalently-contains the declared
+                # code — Code `~` semantics. FHIRPath `~` is String
+                # equivalence (case-insensitive, whitespace-normalized) in
+                # both the native and fallback FHIRPath engines (FP-13
+                # doctrine), matching CQL Code equivalence on the
+                # code/system elements.
+                fhirpath_expr = (
+                    f"{effective_code_property}.coding.where(system ~ '{escaped_system}' "
+                    f"and code ~ '{escaped_code}').exists()"
+                )
+            else:
+                fhirpath_expr = f"{effective_code_property}.coding.where(system='{escaped_system}' and code='{escaped_code}').exists()"
             where_conditions.append(
                 SQLFunctionCall(
                     name="fhirpath_bool",
@@ -557,8 +583,12 @@ def build_retrieve_cte(
             # Use resource-type-specific code property path
             from ..translator.patterns.retrieve import _TERMINOLOGY_PROPERTY_DEFAULTS, _MEDICATION_REFERENCE_ALTERNATIVES
             effective_code_property = code_property or _TERMINOLOGY_PROPERTY_DEFAULTS.get(resource_type, "code")
+            # CQL 2.0 retrieve `~in` comparator (FHIR-31675): equivalent-based
+            # ValueSet membership on the code path (Code `~` semantics) vs
+            # the exact-match in_valueset surface of the 1.5 `in` retrieve.
+            membership_udf = "cql_equivalent_in_valueset" if equivalent_terminology else "in_valueset"
             primary_check = SQLFunctionCall(
-                name="in_valueset",
+                name=membership_udf,
                 args=[
                     SQLQualifiedIdentifier(parts=["r", "resource"]),
                     SQLLiteral(effective_code_property),
@@ -622,7 +652,7 @@ def build_retrieve_cte(
                                     )
                                 ),
                                 right=SQLFunctionCall(
-                                    name="in_valueset",
+                                    name=membership_udf,
                                     args=[
                                         SQLQualifiedIdentifier(parts=["m", "resource"]),
                                         SQLLiteral(target_code),

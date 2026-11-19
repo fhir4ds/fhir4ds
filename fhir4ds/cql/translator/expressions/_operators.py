@@ -9,6 +9,25 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 _logger = logging.getLogger(__name__)
 
 
+def _terminological_equivalence_key(value: Any) -> Any:
+    """String equivalence key for CQL Code ``~`` element comparison.
+
+    Mirrors ``_code_equivalence_key``'s element rule (CQL 1.5 §Equivalent,
+    Code): casefold + whitespace normalization; None stays None (null is
+    not equivalent to '').
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return value
+    return " ".join(value.split()).casefold()
+
+
+def _code_equivalence_fold(left: Any, right: Any) -> bool:
+    """Equivalent comparison of two Code system/code element values."""
+    return _terminological_equivalence_key(left) == _terminological_equivalence_key(right)
+
+
 def _is_patient_id_correlation(w) -> bool:
     """Return True if *w* is purely ``sub.patient_id = X.patient_id``."""
     from ...translator.types import SQLBinaryOp, SQLQualifiedIdentifier
@@ -2986,9 +3005,29 @@ class OperatorsMixin:
             return SQLBinaryOp(operator="OR", left=not_left, right=right)
 
         if operator in ("~contains", "~in"):
-            # CQL 2.0 equivalence membership (trial-use). List membership
-            # only; interval operands raise a typed error rather than
-            # silently using equality semantics.
+            # CQL 2.0 equivalence membership (trial-use). Two surfaces:
+            # 1. TERMINOLOGICAL overloads (FHIR-31675/33247): Code/Concept/
+            #    String/List ~in ValueSet|CodeSystem and the converse
+            #    ValueSet|CodeSystem ~contains <code> — equivalent-based
+            #    membership, routed through _translate_in_op with
+            #    equivalent=True (A ~in B ≡ B ~contains A per spec).
+            # 2. List membership (CQL20-A chunk): element-wise equivalence.
+            vocab_ast = expr.right if operator == "~in" else expr.left
+            if self._is_terminology_reference(vocab_ast):
+                # Normalize to the `in` orientation (code ~in vocab).
+                swapped = (
+                    expr if operator == "~in"
+                    else BinaryExpression(operator="~in", left=expr.right, right=expr.left)
+                )
+                swapped_left = left if operator == "~in" else right
+                swapped_right = right if operator == "~in" else left
+                in_result = self._translate_in_op(
+                    "~in", swapped_left, swapped_right, swapped, boolean_context,
+                    equivalent=True,
+                )
+                return self._maybe_wrap_age_membership_audit(
+                    in_result, swapped, swapped_left, swapped_right
+                )
             list_sql, elem_sql = (
                 (left, right) if operator == "~contains" else (right, left)
             )
@@ -4332,8 +4371,18 @@ class OperatorsMixin:
             result = SQLUnaryOp(operator="NOT", operand=result)
         return result
 
-    def _translate_in_op(self, operator, left, right, expr, boolean_context) -> SQLExpression:
-        """Extracted from _translate_binary_expression."""
+    def _translate_in_op(self, operator, left, right, expr, boolean_context, equivalent: bool = False) -> SQLExpression:
+        """Extracted from _translate_binary_expression.
+
+        ``equivalent=True`` selects CQL 2.0 EquivalentIn/EquivalentContains
+        semantics (FHIR-31675/33247): ValueSet membership routes through
+        ``cql_equivalent_in_valueset`` (Code ``~`` equivalence: code+system
+        compared case-insensitively with whitespace normalization) and
+        CodeSystem comparisons equivalence-normalize the system. The legacy
+        1.5 ``in`` keeps the exact-match ``in_valueset`` surface.
+        """
+        # CQL 2.0 ~in/~contains ValueSet membership UDF (equivalence-based).
+        _membership_udf = "cql_equivalent_in_valueset" if equivalent else "in_valueset"
         def _code_entries_from_ast(node) -> Optional[list[dict[str, Any]]]:
             if isinstance(node, Literal) and node.value is None:
                 return []
@@ -4596,6 +4645,12 @@ class OperatorsMixin:
         vs_url: Optional[str] = None
         if isinstance(expr.right, Identifier):
             vs_name = expr.right.name
+        elif isinstance(expr.right, QualifiedIdentifier) and expr.right.parts:
+            # Library-qualified ValueSet reference (e.g. Common."Example VS").
+            # Included libraries' valuesets are merged into this context by
+            # name, so the last path segment resolves (same doctrine as the
+            # retrieve translator's QualifiedIdentifier branch).
+            vs_name = expr.right.parts[-1]
         elif isinstance(expr.right, ParameterPlaceholder):
             # Function inlining substitutes ValueSet parameters with ParameterPlaceholder
             # whose sql_expr is the translated argument (typically SQLIdentifier for valueset names)
@@ -4611,7 +4666,7 @@ class OperatorsMixin:
             if static_code_entries is not None:
                 return _or_chain([
                     SQLFunctionCall(
-                        name="in_valueset",
+                        name=_membership_udf,
                         args=[_synthetic_code_resource(entry), SQLLiteral("code"), SQLLiteral(vs_url)],
                     )
                     for entry in static_code_entries
@@ -4620,7 +4675,7 @@ class OperatorsMixin:
             if static_string_codes is not None:
                 return _or_chain([
                     SQLFunctionCall(
-                        name="in_valueset",
+                        name=_membership_udf,
                         args=[
                             _synthetic_code_resource({"system": "", "code": code}),
                             SQLLiteral("code"),
@@ -4657,7 +4712,7 @@ class OperatorsMixin:
                     from_clause=SQLAlias(
                         expr=_inner_from, alias="_ivt"),
                     where=SQLFunctionCall(
-                        name="in_valueset",
+                        name=_membership_udf,
                         args=[
                             SQLIdentifier(name=_iv_param),
                             path_arg,
@@ -4668,7 +4723,7 @@ class OperatorsMixin:
                 return SQLExists(
                     subquery=SQLSubquery(query=_iv_select))
             return SQLFunctionCall(
-                name="in_valueset",
+                name=_membership_udf,
                 args=[resource_arg, path_arg, SQLLiteral(vs_url)],
             )
 
@@ -4683,6 +4738,19 @@ class OperatorsMixin:
                 return SQLLiteral(value=False)
             static_code_entries = _code_entries_from_ast(expr.left)
             if static_code_entries is not None:
+                if equivalent:
+                    # CQL 2.0 EquivalentIn (CodeSystem): Code `~` equivalence
+                    # compares the system element case-insensitively with
+                    # whitespace normalization (CQL 1.5 §Equivalent Code).
+                    return SQLLiteral(
+                        value=any(
+                            _code_equivalence_fold(
+                                _normalize_code_entry(entry).get("system", ""),
+                                codesystem_url,
+                            )
+                            for entry in static_code_entries
+                        )
+                    )
                 return SQLLiteral(
                     value=any(
                         _normalize_code_entry(entry).get("system", "") == codesystem_url
@@ -4706,8 +4774,9 @@ class OperatorsMixin:
                 # "If the code argument is null, the result is false" rule.
                 if all(code == "" for code in static_string_codes):
                     return SQLLiteral(value=False)
+                op_spelling = "'~in'" if equivalent else "'in'"
                 raise TranslationError(
-                    f"String 'in CodeSystem' membership for "
+                    f"String {op_spelling} CodeSystem membership for "
                     f"{expr.right.name!r} ({codesystem_url!r}) is unsupported: "
                     f"CQL requires a terminology service to verify code "
                     f"membership in an externally-defined code system. "
@@ -4724,10 +4793,21 @@ class OperatorsMixin:
                 if isinstance(path_arg, SQLLiteral) and isinstance(path_arg.value, str):
                     escaped_system = escape_fhirpath_string_literal(codesystem_url)
                     path = path_arg.value
-                    fhirpath_expr = (
-                        f"({path}.coding.where(system='{escaped_system}').exists() "
-                        f"or {path}.where(system='{escaped_system}').exists())"
-                    )
+                    if equivalent:
+                        # CQL 2.0 EquivalentIn (CodeSystem): FHIRPath `~` is
+                        # String equivalence (case-insensitive,
+                        # whitespace-normalized) in both the native and
+                        # fallback FHIRPath engines (FP-13 doctrine), matching
+                        # CQL Code `~` system-element semantics.
+                        fhirpath_expr = (
+                            f"({path}.coding.where(system ~ '{escaped_system}').exists() "
+                            f"or {path}.where(system ~ '{escaped_system}').exists())"
+                        )
+                    else:
+                        fhirpath_expr = (
+                            f"({path}.coding.where(system='{escaped_system}').exists() "
+                            f"or {path}.where(system='{escaped_system}').exists())"
+                        )
                     return SQLFunctionCall(
                         name="fhirpath_bool",
                         args=[resource_arg, SQLLiteral(fhirpath_expr)],
@@ -9557,6 +9637,29 @@ class OperatorsMixin:
             result = SQLCast(expression=result, target_type=narrow, try_cast=True)
         return self._maybe_wrap_audit_comparison(result, operator, left, right)
 
+
+    def _is_terminology_reference(self, node: Any) -> bool:
+        """True when ``node`` statically references a ValueSet or CodeSystem.
+
+        CQL 2.0 EquivalentIn/EquivalentContains terminological overloads can
+        "only be invoked by referencing a defined codesystem or valueset or
+        CodeSystem/ValueSet-valued expression" — resolve Identifier /
+        QualifiedIdentifier (including define-alias chains) through the same
+        resolvers the legacy ``in`` path uses.
+        """
+        if isinstance(node, Identifier):
+            name: Optional[str] = node.name
+        elif isinstance(node, QualifiedIdentifier) and node.parts:
+            name = node.parts[-1]
+        else:
+            return False
+        if self.context.is_alias(name):
+            return False
+        if self._resolve_valueset_identifier(name) is not None:
+            return True
+        if self._resolve_codesystem_identifier(name) is not None:
+            return True
+        return False
 
     def _resolve_valueset_identifier(self, ident_name: str, _depth: int = 0) -> Optional[str]:
         """Resolve a valueset identifier to its canonical URL."""

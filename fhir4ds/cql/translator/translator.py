@@ -58,6 +58,7 @@ from ..parser.ast_nodes import (
     NamedTypeSpecifier,
     ParameterDefinition,
     Property,
+    QualifiedIdentifier,
     Query,
     QuerySource,
     Retrieve,
@@ -2601,6 +2602,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         valueset = None
         code_property = None
         valueset_name = None
+        equivalent_terminology = False
 
         if terminology:
             if isinstance(terminology, str):
@@ -2611,20 +2613,49 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 )
                 valueset = f"urn:cql:code:{cs_url}|{terminology.code}"
             else:
+                equivalent_terminology = False
                 if isinstance(terminology, Identifier):
                     valueset_name = terminology.name
                 elif (
                     isinstance(terminology, BinaryExpression)
-                    and terminology.operator in ("in", "~", "=")
+                    and terminology.operator in ("in", "~", "=", "~in", "~contains")
                 ):
+                    # CQL 2.0 (FHIR-31392/31675): `~in` = equivalent ValueSet
+                    # membership on the path; `~contains` = the element at
+                    # the path equivalently-contains the declared code.
+                    equivalent_terminology = terminology.operator in ("~in", "~contains")
                     left = terminology.left
                     if isinstance(left, Identifier):
                         code_property = left.name
                     right = terminology.right
-                    if isinstance(right, Identifier):
-                        valueset_name = right.name
+                    if terminology.operator == "~contains":
+                        right_name = (
+                            right.name
+                            if isinstance(right, Identifier)
+                            else (
+                                right.parts[-1]
+                                if isinstance(right, QualifiedIdentifier) and right.parts
+                                else None
+                            )
+                        )
+                        code_info = self._context.codes.get(right_name) if right_name else None
+                        if code_info is None:
+                            from ..errors import TranslationError as _TE
+                            raise _TE(
+                                f"Retrieve '~contains' comparator requires a declared "
+                                f"code reference on the right side; got {right!r}."
+                            )
+                        cs_name = code_info.get("codesystem", "")
+                        cs_url = self._context.codesystems.get(cs_name, cs_name)
+                        valueset = (
+                            f"urn:cql:code:{cs_url}|{code_info.get('code', '')}"
+                        )
+                        valueset_name = None
                     else:
-                        valueset_name = str(right)
+                        if isinstance(right, Identifier):
+                            valueset_name = right.name
+                        else:
+                            valueset_name = str(right)
                     # QA-019 (iter 3, 2026-09-28): `[Obs: "8480-6" in "LOINC"]`
                     # with a declared CODESYSTEM must resolve to direct-code
                     # membership (`urn:cql:code:<cs_url>|<code>`), not the
@@ -2679,6 +2710,12 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                     "http://cts.nlm.nih.gov/fhir/ValueSet/",
                 )
                 valueset = f"{default_prefix}{valueset}"
+
+        if equivalent_terminology and valueset:
+            # '~' marker distinguishes the equivalence CTE from the
+            # exact-match retrieve on the same terminology (stripped in
+            # build_retrieve_cte).
+            valueset = f"~{valueset}"
 
         cte_name, _cte_ast, _columns = build_retrieve_cte(
             resource_type=resource_type,

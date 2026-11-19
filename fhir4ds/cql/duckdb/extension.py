@@ -462,6 +462,16 @@ def _register_python_supplements(
             return None
         con.create_function("in_valueset", _in_valueset_placeholder, null_handling="special")
 
+        # CQL 2.0 EquivalentIn/EquivalentContains (ValueSet) placeholder —
+        # same no-data contract as in_valueset (NULL = membership unknown).
+        def _equivalent_in_valueset_placeholder(resource: str | None, path: str, valueset_url: str) -> bool | None:
+            return None
+        con.create_function(
+            "cql_equivalent_in_valueset",
+            _equivalent_in_valueset_placeholder,
+            null_handling="special",
+        )
+
 
 def register(con: "duckdb.DuckDBPyConnection", include_fhirpath: bool = True) -> None:
     """

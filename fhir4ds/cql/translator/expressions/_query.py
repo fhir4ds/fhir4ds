@@ -1739,6 +1739,7 @@ class QueryMixin:
         terminology = getattr(node, 'terminology', None)
         valueset = None
         code_property = None
+        equivalent_terminology = False
 
         if terminology:
             if isinstance(terminology, str):
@@ -1764,38 +1765,70 @@ class QueryMixin:
                     valueset_name = terminology.path
                 elif isinstance(terminology, QualifiedIdentifier) and terminology.parts:
                     valueset_name = terminology.parts[-1]
-                elif isinstance(terminology, BinaryExpression) and terminology.operator in ('in', '~', '='):
+                elif isinstance(terminology, BinaryExpression) and terminology.operator in ('in', '~', '=', '~in', '~contains'):
                     # Handle: [Resource: codePath in "ValueSet Name"]
                     # Handle: [Resource: code = "Code Name"]
+                    # CQL 2.0 (FHIR-31392/31675): [Resource: codePath ~in "VS"]
+                    #   — equivalent-based ValueSet membership on the path.
+                    # CQL 2.0 (FHIR-31392): [Resource: codePath ~contains "Code"]
+                    #   — the element at codePath equivalently-contains the
+                    #   declared code (retrieve form of EquivalentContains;
+                    #   "contexts where one argument refers to a structure and
+                    #   so cannot be reversed").
+                    equivalent_terminology = terminology.operator in ('~in', '~contains')
                     left = terminology.left
                     if isinstance(left, Identifier):
                         code_property = left.name
                     right = terminology.right
-                    if isinstance(right, Identifier):
-                        valueset_name = right.name
-                    else:
-                        valueset_name = str(right)
-                    # QA-019 (iter 3, 2026-09-28): right operand naming a
-                    # declared CODESYSTEM means the LEFT operand is the code
-                    # VALUE — resolve to direct-code membership instead of
-                    # the in_valueset path (which fabricates an NLM ValueSet
-                    # URL for a codesystem name). Mirrors translator.py
-                    # `_translate_retrieve_terminology`.
-                    if valueset_name is not None and valueset_name not in (
-                        self.context.valuesets,
-                        self.context.codes,
-                    ):
-                        cs_url = self.context.codesystems.get(valueset_name)
-                        if cs_url is not None:
-                            left_value = (
-                                left.value
-                                if isinstance(left, Literal)
-                                else getattr(left, "name", None)
+                    if terminology.operator == '~contains':
+                        # Right operand is the CODE being tested (a declared
+                        # code reference; a bare string literal has no system
+                        # and cannot form a code membership test).
+                        right_name = (
+                            right.name if isinstance(right, Identifier)
+                            else (right.parts[-1] if isinstance(right, QualifiedIdentifier) and right.parts else None)
+                        )
+                        code_info = self.context.codes.get(right_name) if right_name else None
+                        if code_info:
+                            cs_name = code_info.get("codesystem", "")
+                            cs_url = self.context.codesystems.get(cs_name, cs_name)
+                            code_val = code_info.get("code", "")
+                            valueset = f"urn:cql:code:{cs_url}|{code_val}"
+                            valueset_name = None
+                        else:
+                            raise TranslationError(
+                                f"Retrieve '~contains' comparator requires a declared "
+                                f"code reference on the right side; got "
+                                f"{right!r}. Declare it with `code \"name\": 'value' "
+                                f"from \"CodeSystem\"` and reference it by quoted "
+                                f"identifier: [Resource: path ~contains \"name\"]."
                             )
-                            if isinstance(left_value, str):
-                                valueset = f"urn:cql:code:{cs_url}|{left_value}"
-                                code_property = None
-                                valueset_name = None
+                    else:
+                        if isinstance(right, Identifier):
+                            valueset_name = right.name
+                        else:
+                            valueset_name = str(right)
+                        # QA-019 (iter 3, 2026-09-28): right operand naming a
+                        # declared CODESYSTEM means the LEFT operand is the code
+                        # VALUE — resolve to direct-code membership instead of
+                        # the in_valueset path (which fabricates an NLM ValueSet
+                        # URL for a codesystem name). Mirrors translator.py
+                        # `_translate_retrieve_terminology`.
+                        if valueset_name is not None and valueset_name not in (
+                            self.context.valuesets,
+                            self.context.codes,
+                        ):
+                            cs_url = self.context.codesystems.get(valueset_name)
+                            if cs_url is not None:
+                                left_value = (
+                                    left.value
+                                    if isinstance(left, Literal)
+                                    else getattr(left, "name", None)
+                                )
+                                if isinstance(left_value, str):
+                                    valueset = f"urn:cql:code:{cs_url}|{left_value}"
+                                    code_property = None
+                                    valueset_name = None
                 else:
                     valueset_name = str(terminology)
 
@@ -1820,12 +1853,18 @@ class QueryMixin:
                 default_prefix = _VALUESET_PREFIX_CONFIG.get("default_prefix", "http://cts.nlm.nih.gov/fhir/ValueSet/")
                 valueset = f"{default_prefix}{valueset}"
 
+        # Return placeholder. CQL 2.0 equivalent-terminology retrieves
+        # (`code ~in "VS"` / `path ~contains "Code"`) carry a leading '~'
+        # marker on the valueset string so retrieve keys (built from this
+        # string) distinguish exact vs equivalent membership CTEs; the
+        # marker is stripped in build_retrieve_cte.
+        marked_valueset = f"~{valueset}" if equivalent_terminology and valueset else valueset
         # Return placeholder
         return RetrievePlaceholder(
             resource_type=resource_type,
-            valueset=valueset,
+            valueset=marked_valueset,
             profile_url=profile_url,
-            code_property=code_property
+            code_property=code_property,
         )
 
     def _translate_query_source(self, node, boolean_context: bool = False) -> SQLExpression:
