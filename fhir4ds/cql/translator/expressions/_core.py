@@ -755,6 +755,13 @@ class CoreMixin:
         symbol = self.context.lookup_symbol(name)
         if symbol:
             if symbol.symbol_type == "parameter":
+                # CQL 2.0 include `bind` clause (FHIR-33126): the bound
+                # expression replaces every reference to the parameter
+                # inside the included library, and overrides any
+                # environment-supplied value.
+                bound_expr = getattr(self.context, "_parameter_bound_expressions", {}).get(name)
+                if bound_expr is not None:
+                    return bound_expr
                 # Generic interval parameter binding lookup
                 parameter_bindings = getattr(self.context, "_parameter_bindings", {})
                 has_binding = name in parameter_bindings

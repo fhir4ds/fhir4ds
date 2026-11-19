@@ -205,6 +205,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         closure_loaded: bool = False,
         terminology_endpoint: Optional[Any] = None,
         strict_profiles: bool = True,
+        _inherited_comparison_precision: Optional[tuple] = None,
     ) -> None:
         """
         Initialize the translator.
@@ -237,6 +238,12 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 conjunct is omitted and the retrieve matches the base resource
                 type instead — use it for data that does not populate
                 ``meta.profile``. The negation-profile exclusion is unaffected.
+            _inherited_comparison_precision: Internal — CQL 2.0
+                #DefaultComparisonPrecision (FHIR-41326) propagation.
+                ``(effective_precision, parents_own_clause)`` passed to an
+                INCLUDED library's translator by the includer, or None.
+                Consumed in _setup_context together with the library's own
+                directive; never set by external callers.
         """
         from .model_config import ModelConfig, DEFAULT_MODEL_CONFIG
         self._model_config = model_config or DEFAULT_MODEL_CONFIG
@@ -249,6 +256,10 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
 
         self._connection = connection
         self._strict_profiles = strict_profiles
+        # CQL 2.0 #DefaultComparisonPrecision propagation (CQL20-D).
+        self._inherited_comparison_precision = _inherited_comparison_precision
+        # (precision, clause) this library's OWN directive declares, or None.
+        self._own_comparison_directive: Optional[tuple] = None
         self._use_fhirpath_udfs = use_fhirpath_udfs
         self._library_loader = library_loader
         # Shared cache across all translator instances in the recursion.
@@ -447,6 +458,11 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
 
         # Process includes
         self._process_includes(library, self._context)
+
+        # CQL 2.0 @constraint evaluation (FHIR-48682): after parameters and
+        # includes are processed so constraint expressions see the same
+        # parameter bindings as the library body.
+        self._evaluate_parameter_constraints(library)
 
         # Build dynamic component code registry (Tier 7: E2)
         # Extract component codes from library and included libraries
@@ -800,6 +816,12 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                     self._context.set_parameter_binding(param_name, param_value)
 
         self._process_includes(library, self._context)
+
+        # CQL 2.0 @constraint evaluation (FHIR-48682) — runtime parameters
+        # are bound above, so constraints on bound/default parameters are
+        # enforced here (compile time for static defaults, evaluation-
+        # request time for supplied values).
+        self._evaluate_parameter_constraints(library)
 
         # Validate that all declared parameters have bindings
         for param in library.parameters:
@@ -3536,6 +3558,31 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         # requires the canonical in `meta.profile`.
         self._context.strict_profiles = getattr(self, "_strict_profiles", True)
 
+        # CQL 2.0 #DefaultComparisonPrecision (FHIR-41326): resolve this
+        # library's effective default from its own directive plus what the
+        # includer propagated. Precision-less temporal comparisons in this
+        # library lower at this precision (CQL20-D).
+        from .directives import (
+            parse_comparison_precision_directive,
+            resolve_effective_comparison_precision,
+        )
+
+        own_directive = parse_comparison_precision_directive(
+            getattr(library, "directives", None) or []
+        )
+        effective_prec, own_clause = resolve_effective_comparison_precision(
+            own_directive, self._inherited_comparison_precision
+        )
+        self._context.default_comparison_precision = effective_prec
+        # (prec, clause) the includes of THIS library receive: its own
+        # declaration when present (one-level clause semantics), else the
+        # inherited pair only if the parent's clause explicitly reached
+        # this library — which resolve_* already folded; propagate (prec,
+        # own_clause).
+        self._own_comparison_directive = (
+            (effective_prec, own_clause) if effective_prec is not None else None
+        )
+
         # Set up code systems before value sets so ValueSet codesystems
         # overrides can be resolved into structured CodeSystem references.
         for cs in library.codesystems:
@@ -3655,6 +3702,136 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 # No special-case for "Measurement Period" — set_parameter_binding is sufficient
             elif has_default and param.name not in context._parameter_bindings:
                 context.set_parameter_binding(param.name, param.default)
+
+    def _evaluate_parameter_constraints(self, library: Library) -> None:
+        """Evaluate CQL 2.0 ``@constraint``-tagged defines (FHIR-48682).
+
+        A constraint define is an expression required to be true (or null
+        — null counts as satisfied per the spec's SQL/XQuery convention)
+        whenever any expression of the library is evaluated.
+
+        Timing: constraints whose parameters are all statically known
+        (CQL default values or concrete runtime bindings — the
+        evaluate_measure case, where bindings are set before translation)
+        are evaluated HERE, at translation time, on ``self._connection``.
+        Constraints that still depend on unbound parameters (e.g. the
+        ``(None, None)`` interval placeholders of a raw
+        ``translate_library`` call without runtime parameters) cannot be
+        evaluated at translate time and are skipped with a debug log —
+        their evaluation belongs to the evaluation request.
+
+        Severity handling: ``error`` → typed TranslationError carrying the
+        ``@message`` text; ``warning`` → WARNING log only.
+        """
+        constraints = getattr(library, "parameter_constraints", None) or []
+        if not constraints:
+            return
+
+        statements_by_name = {
+            stmt.name: stmt
+            for stmt in library.statements
+            if isinstance(stmt, Definition) and not isinstance(stmt, FunctionDefinition)
+        }
+        connection = getattr(self._context, "_connection", None) or self._connection
+
+        for constraint in constraints:
+            name = constraint.definition_name
+            stmt = statements_by_name.get(name)
+            if stmt is None:
+                raise TranslationError(
+                    f"@constraint tag references define '{name}', which is "
+                    f"not a top-level expression definition of library "
+                    f"'{library.identifier}' [CQL 2.0, FHIR-48682]"
+                )
+            if connection is None:
+                _logger.debug(
+                    "Parameter constraint '%s' on library '%s' skipped: no "
+                    "connection available for translate-time evaluation",
+                    name,
+                    library.identifier,
+                )
+                continue
+
+            from .types import SQLParameterRef
+
+            def _has_param_refs(node) -> bool:
+                if node is None:
+                    return False
+                if isinstance(node, SQLParameterRef):
+                    return True
+                if isinstance(node, (list, tuple)):
+                    return any(_has_param_refs(c) for c in node)
+                if not hasattr(node, "__dataclass_fields__"):
+                    return False
+                return any(
+                    _has_param_refs(getattr(node, f, None))
+                    for f in node.__dataclass_fields__
+                )
+
+            try:
+                sql_expr = self.translate_expression(stmt.expression, self._context)
+            except TranslationError:
+                raise
+            except Exception as exc:  # pragma: no cover - defensive
+                raise TranslationError(
+                    f"Failed to translate parameter constraint '{name}': {exc}"
+                ) from exc
+
+            sql_text = sql_expr.to_sql()
+            # Template placeholders for unbound interval parameters look
+            # like {mp_start}/{<param>_start}; JSON literals inside string
+            # SQL values also contain braces, so match the placeholder
+            # shape specifically.
+            import re as _re
+
+            _placeholder = _re.search(r"\{[A-Za-z_][A-Za-z0-9_]*\}", sql_text)
+            if (
+                _has_param_refs(sql_expr)
+                or "getvariable" in sql_text
+                or _placeholder is not None
+            ):
+                _logger.debug(
+                    "Parameter constraint '%s' on library '%s' deferred to "
+                    "evaluation-request time (depends on unbound parameters)",
+                    name,
+                    library.identifier,
+                )
+                continue
+
+            from ..translator.types import SQLRaw  # noqa: F401  (shape guard)
+
+            query = f"SELECT ({sql_text})"
+            try:
+                rows = connection.execute(query).fetchall()
+            except Exception as exc:
+                raise TranslationError(
+                    f"Failed to evaluate parameter constraint '{name}': {exc}"
+                ) from exc
+            if not rows:
+                continue
+            value = rows[0][0]
+            # null (SQL NULL) counts as SATISFIED per the spec convention.
+            if value is False:
+                message = constraint.message or f"Parameter constraint '{name}' violated"
+                if constraint.severity == "error":
+                    raise TranslationError(
+                        f"Parameter constraint '{name}' violated: {message} "
+                        f"[CQL 2.0, FHIR-48682]"
+                    )
+                _logger.warning(
+                    "Parameter constraint '%s' violated (warning severity): %s",
+                    name,
+                    message,
+                )
+            elif value is None or value is True:
+                continue
+            else:
+                _logger.debug(
+                    "Parameter constraint '%s' evaluated to non-boolean %r; "
+                    "treated as satisfied (null convention)",
+                    name,
+                    value,
+                )
 
     def _parameter_type_name(self, type_spec: Any) -> str:
         """Return canonical CQL text for a parameter type specifier."""

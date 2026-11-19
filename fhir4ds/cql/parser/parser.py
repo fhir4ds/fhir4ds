@@ -31,6 +31,29 @@ _logger = logging.getLogger(__name__)
 _UNSET = object()
 
 
+# CQL 2.0 directives (FHIR-41326): comparison precisions supported by
+# #DefaultComparisonPrecision. 'week' is deliberately absent — CQL §8
+# timing comparisons "involving weeks are not supported".
+_COMPARISON_PRECISIONS = (
+    "year", "month", "day", "hour", "minute", "second", "millisecond",
+)
+
+# Token type names accepted as an unquoted directive value (temporal
+# precision keywords, singular and plural).
+_DIRECTIVE_PRECISION_TOKENS = {
+    "YEAR", "MONTH", "WEEK", "DAY", "HOUR", "MINUTE", "SECOND", "MILLISECOND",
+    "YEARS", "MONTHS", "WEEKS", "DAYS", "HOURS", "MINUTES", "SECONDS",
+    "MILLISECONDS",
+}
+
+# Token type names accepted as a directive NAME (keywordIdentifier-class
+# tokens that may legally appear as directive identifiers).
+_DIRECTIVE_NAME_TOKENS = {
+    "YEAR", "MONTH", "WEEK", "DAY", "HOUR", "MINUTE", "SECOND", "MILLISECOND",
+    "DATE", "TIME", "CODE", "CONCEPT", "DEFAULT", "VERSION", "DISPLAY",
+}
+
+
 def _version_display(version: Optional[str]) -> str:
     return f"'{version}'" if version is not None else "(no version)"
 
@@ -52,6 +75,7 @@ from ..parser.ast_nodes import (
     DateTimeLiteral,
     Definition,
     DifferenceBetween,
+    Directive,
     DistinctExpression,
     DurationBetween,
     ExistsExpression,
@@ -231,6 +255,12 @@ class CQLParser:
 
         This is the main entry point for parsing CQL source code.
         """
+        # CQL 2.0 directives (trial-use, FHIR-41326): zero or more '#'
+        # directives may precede the library declaration.
+        directives: List[Directive] = []
+        while self.check(TokenType.HASH):
+            directives.append(self._parse_directive())
+
         # Parse library declaration
         self.expect(TokenType.LIBRARY, "Expected 'library' declaration")
         identifier = self._parse_identifier_name()
@@ -245,7 +275,7 @@ class CQLParser:
             version_token = self.expect(TokenType.STRING, "Expected version string")
             version = version_token.value
 
-        library = Library(identifier=identifier, version=version)
+        library = Library(identifier=identifier, version=version, directives=directives)
 
         # Parse library body
         while not self.check(TokenType.EOF):
@@ -316,6 +346,111 @@ class CQLParser:
                 )
             library_versions[inc.path] = inc.version
 
+    def _parse_directive(self) -> Directive:
+        """Parse a CQL 2.0 ``#`` directive (trial-use, FHIR-41326).
+
+        Grammar (HL7/cql master ``cql.g4``)::
+
+            directive : '#' identifier (':' STRING)? ;
+
+        The Developer's Guide additionally shows unquoted values and, for
+        ``#DefaultComparisonPrecision``, an inclusion-behavior clause::
+
+            #DefaultComparisonPrecision: minutes
+            #DefaultComparisonPrecision: 'minutes' check included libraries
+
+        Both spellings are accepted: the value may be a quoted STRING or a
+        temporal-precision keyword, optionally followed by one of the three
+        ``<default|override|check> included libraries`` clauses.
+        """
+        hash_token = self.expect(TokenType.HASH, "Expected '#' directive")
+        name_token = self.current()
+        if name_token.type not in (TokenType.IDENTIFIER, TokenType.QUOTED_IDENTIFIER) and not (
+            name_token.type.name in _DIRECTIVE_NAME_TOKENS
+        ):
+            raise ParseError(
+                f"Expected directive identifier after '#' at line "
+                f"{name_token.line}, column {name_token.column}",
+                position=(name_token.line, name_token.column),
+            )
+        name = name_token.value
+        self.advance()
+
+        value: Optional[str] = None
+        inclusion_behavior: Optional[str] = None
+
+        if self.match_and_advance(TokenType.COLON):
+            value_token = self.current()
+            if value_token.type == TokenType.STRING:
+                value = value_token.value
+                self.advance()
+            elif value_token.type.name in _DIRECTIVE_PRECISION_TOKENS:
+                value = value_token.value.lower()
+                # Normalize plural precision spellings to the singular
+                # comparison precision ('minutes' -> 'minute').
+                if value.endswith("s") and value[:-1] in _COMPARISON_PRECISIONS:
+                    value = value[:-1]
+                self.advance()
+            else:
+                raise ParseError(
+                    f"Expected a quoted string or precision value after "
+                    f"'#:{name}:' at line {value_token.line}, column "
+                    f"{value_token.column}",
+                    position=(value_token.line, value_token.column),
+                )
+
+            # Optional inclusion-behavior clause (only meaningful for
+            # DefaultComparisonPrecision; rejected elsewhere below).
+            behavior = self._try_parse_inclusion_behavior()
+            if behavior is not None:
+                inclusion_behavior = behavior
+                if name != "DefaultComparisonPrecision":
+                    raise ParseError(
+                        f"Inclusion behavior '{inclusion_behavior}' is only "
+                        f"valid on the #DefaultComparisonPrecision directive "
+                        f"(found on #{name}) [CQL 2.0, FHIR-41326]",
+                        position=(hash_token.line, hash_token.column),
+                    )
+
+        return Directive(name=name, value=value, inclusion_behavior=inclusion_behavior)
+
+    def _try_parse_inclusion_behavior(self) -> Optional[str]:
+        """Parse an optional ``<default|override|check> included libraries`` clause.
+
+        Returns the clause string (e.g. ``default included libraries``) or
+        None when the next tokens do not form one.
+        """
+        first = self.current()
+        if first.type == TokenType.DEFAULT:
+            mode = "default"
+        elif first.type == TokenType.IDENTIFIER and first.value in ("override", "check"):
+            mode = first.value
+        else:
+            return None
+        self.advance()
+
+        included_token = self.current()
+        if included_token.type != TokenType.INCLUDED_IN or included_token.value != "included":
+            raise ParseError(
+                f"Expected 'included libraries' after '{mode}' in directive "
+                f"inclusion behavior at line {included_token.line}, column "
+                f"{included_token.column} [CQL 2.0, FHIR-41326]",
+                position=(included_token.line, included_token.column),
+            )
+        self.advance()
+
+        libraries_token = self.current()
+        if libraries_token.type != TokenType.IDENTIFIER or libraries_token.value != "libraries":
+            raise ParseError(
+                f"Expected 'libraries' after '{mode} included' in directive "
+                f"inclusion behavior at line {libraries_token.line}, column "
+                f"{libraries_token.column} [CQL 2.0, FHIR-41326]",
+                position=(libraries_token.line, libraries_token.column),
+            )
+        self.advance()
+
+        return f"{mode} included libraries"
+
     def _parse_library_element(self, library: Library) -> None:
         """Parse a library element (using, include, define, etc.)."""
         if self.match(TokenType.USING):
@@ -383,6 +518,7 @@ class CQLParser:
 
         version = None
         alias = None
+        bindings = None
 
         if self.match_and_advance(TokenType.VERSION):
             version_token = self.expect(TokenType.STRING, "Expected version string")
@@ -391,7 +527,48 @@ class CQLParser:
         if self.match_and_advance(TokenType.CALLED):
             alias = self._parse_identifier_name()
 
-        return IncludeDefinition(path=path, version=version, alias=alias)
+        # CQL 2.0 (FHIR-33126, trial-use): 'bind' tupleSelector supplying
+        # values for parameters in the included library:
+        #   include X called C bind { AsOf: end of "Measurement Period" }
+        if (
+            self.match(TokenType.IDENTIFIER)
+            and self.current().value == "bind"
+            and self.peek(1).type == TokenType.LBRACE
+        ):
+            self.advance()  # consume 'bind'
+            bindings = self._parse_bind_tuple_selector()
+
+        return IncludeDefinition(path=path, version=version, alias=alias, bindings=bindings)
+
+    def _parse_bind_tuple_selector(self):
+        """Parse the ``{ Param: expr, ... }`` tuple of an include ``bind`` clause."""
+        self.expect(TokenType.LBRACE, "Expected '{' to open bind clause")
+        bindings = {}
+        if self.match_and_advance(TokenType.RBRACE):
+            raise ParseError(
+                "Include bind clause must bind at least one parameter "
+                "(empty '{}' is not allowed) [CQL 2.0, FHIR-33126]"
+            )
+        while True:
+            name_token = self.current()
+            name = self._parse_identifier_name()
+            if name in bindings:
+                raise ParseError(
+                    f"Duplicate parameter binding '{name}' in include bind "
+                    f"clause at line {name_token.line}, column "
+                    f"{name_token.column} [CQL 2.0, FHIR-33126]",
+                    position=(name_token.line, name_token.column),
+                )
+            self.expect(
+                TokenType.COLON,
+                f"Expected ':' after parameter name '{name}' in bind clause",
+            )
+            bindings[name] = self.parse_expression()
+            if self.match_and_advance(TokenType.COMMA):
+                continue
+            self.expect(TokenType.RBRACE, "Expected '}' to close bind clause")
+            break
+        return bindings
 
     def parse_parameter_definition(self) -> ParameterDefinition:
         """Parse a parameter definition."""
@@ -3446,7 +3623,27 @@ def parse_cql(source: str) -> Library:
     lexer = Lexer(source)
     tokens = lexer.tokenize()
     parser = CQLParser(tokens)
-    return parser.parse_library()
+    library = parser.parse_library()
+
+    # CQL 2.0 parameter constraints (FHIR-48682, trial-use): the @constraint
+    # / @message / @constraintScope tags live in block comments the lexer
+    # skips, so they are extracted from the raw source and attached to the
+    # Library node here (single choke point).
+    from .annotations import extract_parameter_constraints, parse_library_tags
+
+    try:
+        library.parameter_constraints = extract_parameter_constraints(
+            parse_library_tags(source)
+        )
+    except ValueError as exc:
+        line = 1
+        column = 1
+        raise ParseError(
+            f"Invalid parameter constraint annotation: {exc}",
+            position=(line, column),
+        ) from exc
+
+    return library
 
 
 def parse_expression(source: str) -> Expression:

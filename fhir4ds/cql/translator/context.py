@@ -485,6 +485,19 @@ class SQLTranslationContext:
     # Populated from both runtime arguments and CQL default values.
     _parameter_bindings: Dict[str, Any] = field(default_factory=dict)
 
+    # CQL 2.0 include `bind` clauses (FHIR-33126): parameter name in an
+    # INCLUDED library → the SQL expression the bind expression translated
+    # to in the INCLUDING library's context. Checked BEFORE bindings (a
+    # bind clause "overrides any parameter values provided by the
+    # evaluation environment"). Only ever populated on child (included
+    # library) contexts.
+    _parameter_bound_expressions: Dict[str, Any] = field(default_factory=dict)
+
+    # CQL 2.0 #DefaultComparisonPrecision (FHIR-41326): the effective
+    # precision precision-less Date/DateTime/Time comparisons in THIS
+    # library are lowered at, or None for the spec default (millisecond).
+    default_comparison_precision: Optional[str] = None
+
     # Execution context type
     _context_type: str = "Unfiltered"
 
@@ -1084,6 +1097,8 @@ class SQLTranslationContext:
         self._patient_context = PatientContext()
         self._measurement_period = MeasurementPeriod()
         self._parameter_bindings = {}
+        self._parameter_bound_expressions = {}
+        self.default_comparison_precision = None
         self._context_type = "Unfiltered"
         self._definition_names.clear()
         self._included_definition_names.clear()

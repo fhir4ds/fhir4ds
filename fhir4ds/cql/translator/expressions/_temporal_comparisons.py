@@ -44,6 +44,27 @@ class TemporalComparisonMixin:
     other helpers available on ExpressionTranslator.
     """
 
+    def _default_comparison_precision_for(self, expr=None):
+        """Effective #DefaultComparisonPrecision for ONE comparison (CQL20-D).
+
+        CQL 2.0 (FHIR-41326): precision-less Date/DateTime/Time comparisons
+        in a library declaring ``#DefaultComparisonPrecision: <p>`` are
+        performed at ``<p>`` — a compile-time determination that applies
+        only where the author omitted an explicit precision (explicit
+        precision is untouched; the rewrite targets the precision-less
+        operator spellings only).
+
+        Returns None when no directive is in effect or the operands are
+        numeric/Quantity intervals (the precision-qualified lowering paths
+        are temporal-only; numeric bounds keep their dedicated comparators).
+        """
+        precision = getattr(self.context, "default_comparison_precision", None)
+        if precision is None:
+            return None
+        if expr is not None and self._numeric_interval_point_kind(expr):
+            return None
+        return precision
+
     def _numeric_interval_point_kind(self, expr) -> str | None:
         """Classify the point type of a no-precision same/same-or interval
         comparison when it is statically known to be NON-temporal.

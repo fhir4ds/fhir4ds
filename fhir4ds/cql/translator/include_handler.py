@@ -237,6 +237,7 @@ class IncludeHandlerMixin:
                 context.audit_mode,
                 context.audit_expressions,
                 model_key,
+                self._comparison_include_cache_component(inc),
             )
             if cache_key in self._library_cache:
                 cached = self._library_cache[cache_key]
@@ -289,6 +290,22 @@ class IncludeHandlerMixin:
             # Store the parsed AST on the library info for downstream analysis.
             lib_info.library_ast = included_library
 
+            # CQL 2.0 include `bind` clause (FHIR-33126): translate the bind
+            # expressions in the INCLUDING library's context. Bind
+            # expressions only have access to parameter definitions in the
+            # current library and may not contain retrieves.
+            bound_expressions = self._translate_include_bindings(
+                inc, included_library, library
+            )
+
+            # CQL 2.0 #DefaultComparisonPrecision propagation (FHIR-41326):
+            # what this include receives = (this library's effective
+            # precision, its own inclusion clause). None when this library
+            # has no effective default.
+            child_comparison_directive = getattr(
+                self, "_own_comparison_directive", None
+            )
+
             # Create a new translator instance, sharing the library cache and
             # resolving stack so that transitive dependencies are de-duplicated
             # and circular includes are detected.
@@ -312,6 +329,8 @@ class IncludeHandlerMixin:
                 strict_profiles=getattr(
                     self, "_strict_profiles", getattr(context, "strict_profiles", True)
                 ),
+                # CQL 2.0 #DefaultComparisonPrecision propagation (CQL20-D).
+                _inherited_comparison_precision=child_comparison_directive,
             )
 
             try:
@@ -327,8 +346,22 @@ class IncludeHandlerMixin:
                 for _name, _binding in context._parameter_bindings.items():
                     included_translator._context.set_parameter_binding(_name, _binding)
 
+                # CQL 2.0 bind clause: the bound expressions OVERRIDE any
+                # environment-supplied values for those parameters
+                # (FHIR-33126: "a bind clause on an included library
+                # overrides any parameter values provided by the
+                # evaluation environment").
+                included_translator._context._parameter_bound_expressions.update(
+                    bound_expressions
+                )
+
                 # Process includes recursively (for nested includes)
                 included_translator._process_includes(included_library, included_translator._context)
+
+                # CQL 2.0 @constraint evaluation for the INCLUDED library
+                # (FHIR-48682): constraints guard use of any expression of
+                # the library, including via include.
+                included_translator._evaluate_parameter_constraints(included_library)
 
                 # First pass: collect function definitions
                 for statement in included_library.statements:
@@ -385,6 +418,105 @@ class IncludeHandlerMixin:
                 raise TranslationError(
                     message=f"Failed to translate included library '{alias}': {e}",
                 ) from e
+
+    def _comparison_include_cache_component(self, inc) -> tuple:
+        """Cache-key component for #DefaultComparisonPrecision propagation.
+
+        Two includes of the same library under different effective
+        comparison precisions must not share a cached translation.
+        """
+        own = getattr(self, "_own_comparison_directive", None)
+        if own is None or own[0] is None:
+            return ()
+        return ("dcp", own[0], own[1] or "")
+
+    def _translate_include_bindings(
+        self, inc, included_library: Library, parent_library: Library
+    ) -> Dict[str, Any]:
+        """Translate a CQL 2.0 include ``bind`` clause (FHIR-33126).
+
+        Bind expressions are evaluated in the INCLUDING library's context:
+        they "only have access to parameter definitions in the current
+        library and may not contain any retrieve expressions". The bound
+        expression replaces every reference to the bound parameter inside
+        the included library's translation.
+
+        Returns:
+            Map of included-library parameter name → translated SQL
+            expression (empty when the include has no ``bind`` clause).
+
+        Raises:
+            TranslationError: On a bind key that is not a parameter of the
+                included library, a retrieve inside a bind expression, or
+                a reference to a non-parameter of the current library.
+        """
+        if not inc.bindings:
+            return {}
+
+        from ..parser.ast_nodes import (
+            Identifier,
+            QualifiedIdentifier,
+            Retrieve,
+            FunctionRef,
+        )
+        from .types import SQLExpression
+
+        parent_param_names = {p.name for p in parent_library.parameters}
+
+        included_param_names = {p.name for p in included_library.parameters}
+
+        def _validate_expr(node, param_name: str, _depth=0) -> None:
+            if node is None or _depth > 200:
+                return
+            if isinstance(node, Retrieve):
+                raise TranslationError(
+                    f"Include bind expression for parameter "
+                    f"'{param_name}' contains a retrieve — bind "
+                    f"expressions only have access to parameter definitions "
+                    f"of the including library [CQL 2.0, FHIR-33126]"
+                )
+            if isinstance(node, Identifier) and not isinstance(node, QualifiedIdentifier):
+                if node.name not in parent_param_names:
+                    raise TranslationError(
+                        f"Include bind expression for parameter "
+                        f"'{param_name}' references '{node.name}', which "
+                        f"is not a parameter of the including library — "
+                        f"bind expressions only have access to parameter "
+                        f"definitions of the including library "
+                        f"[CQL 2.0, FHIR-33126]"
+                    )
+            if isinstance(node, (list, tuple)):
+                for child in node:
+                    _validate_expr(child, param_name, _depth + 1)
+                return
+            if not hasattr(node, "__dataclass_fields__"):
+                return
+            for field_name in node.__dataclass_fields__:
+                _validate_expr(getattr(node, field_name, None), param_name, _depth + 1)
+
+        bound: Dict[str, SQLExpression] = {}
+        for name, bind_expr in inc.bindings.items():
+            if name not in included_param_names:
+                raise TranslationError(
+                    f"Include bind clause binds '{name}', which is not a "
+                    f"parameter of included library '{inc.path}' "
+                    f"[CQL 2.0, FHIR-33126]"
+                )
+
+            _validate_expr(bind_expr, name)
+
+            try:
+                sql_expr = self.translate_expression(bind_expr, self._context)
+            except TranslationError:
+                raise
+            except Exception as exc:
+                raise TranslationError(
+                    f"Failed to translate bind expression for parameter "
+                    f"'{name}' of included library '{inc.path}': {exc}"
+                ) from exc
+            bound[name] = sql_expr
+
+        return bound
 
     def _apply_included_library_results(
         self,

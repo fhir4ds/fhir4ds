@@ -3663,6 +3663,25 @@ class OperatorsMixin:
                 r = self._unwrap_precision_wrapper(right)
                 return SQLFunctionCall(name="intervalProperlyContains", args=[r, self._ensure_interval_varchar(left)])
             return SQLFunctionCall(name="intervalProperlyContains", args=[right, self._ensure_interval_varchar(left)])
+        # CQL 2.0 #DefaultComparisonPrecision (FHIR-41326, chunk CQL20-D):
+        # precision-less temporal comparison keywords lower exactly as if
+        # the author had written the precision explicitly. Explicit
+        # precision spellings never match these bare forms, so they are
+        # untouched. Numeric/Quantity intervals are excluded (their
+        # dedicated comparators are not precision-qualified).
+        _default_prec = self._default_comparison_precision_for(expr)
+        if _default_prec:
+            _rewrites = {
+                "before": f"before {_default_prec} of",
+                "after": f"after {_default_prec} of",
+                "on or before": f"on or before {_default_prec} of",
+                "on or after": f"on or after {_default_prec} of",
+                "same as": f"same {_default_prec} as",
+                "same or before": f"same {_default_prec} or before",
+                "same or after": f"same {_default_prec} or after",
+            }
+            operator = _rewrites.get(operator, operator)
+
         if operator == "before":
             return self._translate_before_op(operator, left, right, expr)
         if operator == "after":
@@ -8244,13 +8263,27 @@ class OperatorsMixin:
                 or self._is_timeofday_cql_expr(expr.right)
             )
         ):
-            cmp_result = SQLFunctionCall(
-                name="cqlDateTimeEqual",
-                args=[
-                    SQLCast(expression=left, target_type="VARCHAR"),
-                    SQLCast(expression=right, target_type="VARCHAR"),
-                ],
-            )
+            # CQL 2.0 #DefaultComparisonPrecision (FHIR-41326): equivalence
+            # compares "in the same way as equality", so the default
+            # precision applies here too.
+            _equiv_dcp = self._default_comparison_precision_for(expr)
+            if _equiv_dcp:
+                cmp_result = SQLFunctionCall(
+                    name="cqlSameAsP",
+                    args=[
+                        SQLCast(expression=left, target_type="VARCHAR"),
+                        SQLCast(expression=right, target_type="VARCHAR"),
+                        SQLLiteral(value=_equiv_dcp),
+                    ],
+                )
+            else:
+                cmp_result = SQLFunctionCall(
+                    name="cqlDateTimeEqual",
+                    args=[
+                        SQLCast(expression=left, target_type="VARCHAR"),
+                        SQLCast(expression=right, target_type="VARCHAR"),
+                    ],
+                )
             equiv_temporal = SQLCase(
                 when_clauses=[
                     (
@@ -8386,13 +8419,27 @@ class OperatorsMixin:
                 or self._is_timeofday_cql_expr(expr.right)
             )
         ):
-            cmp_result = SQLFunctionCall(
-                name="cqlDateTimeEqual",
-                args=[
-                    SQLCast(expression=left, target_type="VARCHAR"),
-                    SQLCast(expression=right, target_type="VARCHAR"),
-                ],
-            )
+            # CQL 2.0 #DefaultComparisonPrecision (FHIR-41326): equivalence
+            # compares "in the same way as equality", so the default
+            # precision applies here too.
+            _equiv_dcp = self._default_comparison_precision_for(expr)
+            if _equiv_dcp:
+                cmp_result = SQLFunctionCall(
+                    name="cqlSameAsP",
+                    args=[
+                        SQLCast(expression=left, target_type="VARCHAR"),
+                        SQLCast(expression=right, target_type="VARCHAR"),
+                        SQLLiteral(value=_equiv_dcp),
+                    ],
+                )
+            else:
+                cmp_result = SQLFunctionCall(
+                    name="cqlDateTimeEqual",
+                    args=[
+                        SQLCast(expression=left, target_type="VARCHAR"),
+                        SQLCast(expression=right, target_type="VARCHAR"),
+                    ],
+                )
             # Equivalence is null-safe: NULL (uncertain) -> False, never NULL.
             equiv_temporal = SQLCase(
                 when_clauses=[
@@ -8947,6 +8994,41 @@ class OperatorsMixin:
                     or self._is_timeofday_cql_expr(expr.right)
                 )
             ):
+                # CQL 2.0 #DefaultComparisonPrecision (FHIR-41326): lower
+                # precision-less symbolic comparisons on temporal operands
+                # at the library's default precision — same lowering the
+                # author-written precision spelling receives.
+                _dcp = self._default_comparison_precision_for(expr)
+                if _dcp:
+                    _prec_udf_map = {
+                        "<": "cqlBeforeP",
+                        ">": "cqlAfterP",
+                        "<=": "cqlSameOrBeforeP",
+                        ">=": "cqlSameOrAfterP",
+                        "=": "cqlSameAsP",
+                        "!=": "cqlSameAsP",  # negate below
+                        "<>": "cqlSameAsP",  # negate below
+                    }
+                    udf_name = _prec_udf_map.get(operator)
+                    if udf_name:
+                        result = SQLFunctionCall(
+                            name=udf_name,
+                            args=[
+                                SQLCast(expression=left, target_type="VARCHAR"),
+                                SQLCast(expression=right, target_type="VARCHAR"),
+                                SQLLiteral(value=_dcp),
+                            ],
+                        )
+                        if operator in ("!=", "<>"):
+                            result = SQLCase(
+                                when_clauses=[
+                                    (SQLUnaryOp(operator="IS NULL", operand=result, prefix=False),
+                                     SQLNull()),
+                                    (result, SQLLiteral(value=False)),
+                                ],
+                                else_clause=SQLLiteral(value=True),
+                            )
+                        return result
                 _udf_map = {
                     "<": "cqlBefore",
                     ">": "cqlAfter",

@@ -10,7 +10,7 @@ Reference: https://cql.hl7.org/05-libraries.html
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 
 # ==============================================================================
@@ -60,6 +60,33 @@ class TypeSpecifier(ASTNode):
 
 
 @dataclass
+class Directive(ASTNode):
+    """
+    Represents a CQL 2.0 library directive (trial-use, FHIR-41326 family).
+
+    Directives appear at the very beginning of a library, before the
+    ``library`` declaration::
+
+        #AllowFluent
+        #DefaultComparisonPrecision: 'minutes'
+        #DefaultComparisonPrecision: minutes default included libraries
+
+    Attributes:
+        name: The directive identifier (without the leading ``#``).
+        value: The directive value with the optional inclusion-behavior
+            suffix removed (``minutes`` for both ``'minutes'`` and
+            ``minutes check included libraries``), or None for a bare
+            ``#Name`` directive. Quoted values are unquoted.
+        inclusion_behavior: The optional ``default|override|check included
+            libraries`` clause, or None when absent.
+    """
+
+    name: str
+    value: Optional[str] = None
+    inclusion_behavior: Optional[str] = None
+
+
+@dataclass
 class Library(ASTNode):
     """
     Represents a CQL library definition.
@@ -75,6 +102,8 @@ class Library(ASTNode):
     Attributes:
         identifier: The library name/identifier.
         version: The library version string.
+        directives: CQL 2.0 ``#`` directives preceding the library
+            declaration (trial-use).
         using: List of using definitions (data model references).
         includes: List of include definitions (library references).
         codesystems: List of code system definitions.
@@ -88,6 +117,7 @@ class Library(ASTNode):
 
     identifier: str
     version: Optional[str] = None
+    directives: List[Directive] = field(default_factory=list)
     using: List[UsingDefinition] = field(default_factory=list)
     includes: List[IncludeDefinition] = field(default_factory=list)
     codesystems: List[CodeSystemDefinition] = field(default_factory=list)
@@ -99,6 +129,11 @@ class Library(ASTNode):
     statements: List[Union[Definition, FunctionDefinition]] = field(
         default_factory=list
     )
+    # CQL 2.0 @constraint tag sets (FHIR-48682, trial-use), attached by
+    # parse_cql from block comments (the lexer skips comments). Stored as
+    # plain dataclass values from ..parser.annotations; typed as Any to
+    # avoid an import cycle at module load.
+    parameter_constraints: List[Any] = field(default_factory=list)
 
 
 @dataclass
@@ -136,15 +171,25 @@ class IncludeDefinition(ASTNode):
     Example:
         include FHIRHelpers version '4.0.1' called FHIRHelpers
 
+    CQL 2.0 (FHIR-33126, trial-use) adds a ``bind`` clause supplying
+    values for parameters in the included library::
+
+        include ColorectalCancerElements called CCE
+          bind { AsOf: end of "Measurement Period" }
+
     Attributes:
         path: The library path/identifier.
         version: The library version string.
         alias: The local alias for the included library.
+        bindings: Optional map of included-library parameter name to the
+            bind expression (evaluated in the INCLUDING library's
+            context). None when no ``bind`` clause is present.
     """
 
     path: str
     version: Optional[str] = None
     alias: Optional[str] = None
+    bindings: Optional[Dict[str, Expression]] = None
 
 
 @dataclass
