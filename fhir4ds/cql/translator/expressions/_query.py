@@ -1728,7 +1728,9 @@ class QueryMixin:
             resource_type not in _spec_resource_types()
             and resource_type not in schema_types
         ):
-            from ...errors import TranslationError
+            # TranslationError is imported at module level (line 32); a local
+            # import here would shadow it and break other raises in this
+            # function scope (UnboundLocalError).
             raise TranslationError(
                 f"Unknown FHIR resource type '{resource_type}' in retrieve "
                 f"[{resource_type}]. Use a resource type from the FHIR "

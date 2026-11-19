@@ -50,7 +50,11 @@ VS_UNLOADED_URL = "http://example.org/fhir/ValueSet/vs20c-unloaded"
 # '8867-4'-vs-'8867-4'-style case/whitespace variants; the exact `in`
 # surface must not.
 _CACHE = {
-    VS_URL: {("http://loinc.org", "8867-4"), ("http://snomed.info/sct", "  DiabeTes ")},
+    VS_URL: {
+        ("http://loinc.org", "8867-4"),
+        ("http://loinc.org", "HearTRate"),
+        ("http://snomed.info/sct", "  DiabeTes "),
+    },
     VS_MULTI_URL: {
         ("http://loinc.org", "12345"),
         ("http://snomed.info/sct", "12345"),
@@ -99,12 +103,14 @@ def _both_engines():
 VALUESET_EQUIVALENCE_CASES = [
     # String overload: case-insensitive match against the cache entry.
     ("'8867-4' ~in \"VS\"", True),
+    ("'heartrate' ~in \"VS\"", True),  # cache holds 'HearTRate'
     ("'8867  -4' ~in \"VS\"", False),  # whitespace INSIDE the code is normalized, not stripped
-    # Code overload: equivalent code+system (cache stores '8867-4' under
-    # http://loinc.org; case/whitespace variants of BOTH match).
+    # Code overload: equivalent code+system (case/whitespace variants of
+    # code and/or system match).
     ("Code { code: '8867-4', system: 'http://loinc.org' } ~in \"VS\"", True),
     ("Code { code: '8867-4', system: 'HTTP://LOINC.ORG' } ~in \"VS\"", True),
     ("Code { code: '  diabetes ', system: 'http://snomed.info/sct' } ~in \"VS\"", True),
+    ("Code { code: 'HEARTRATE', system: 'http://loinc.org' } ~in \"VS\"", True),
     # Equivalent code but system genuinely absent from the ValueSet → false.
     ("Code { code: '8867-4', system: 'http://example.org/other' } ~in \"VS\"", False),
     # Spec: "If the code argument is null, the result is false."
@@ -156,9 +162,9 @@ define Probe: {expression}
 using FHIR version '4.0.1'
 valueset "VS": '{VS_URL}'
 context Unfiltered
-define EquivIn: '8867-4' ~in "VS"
-define ExactIn: '8867-4' in "VS"
-define EquivContains: "VS" ~contains '8867-4'
+define EquivIn: 'heartrate' ~in "VS"
+define ExactIn: 'heartrate' in "VS"
+define EquivContains: "VS" ~contains 'HEARTRATE'
 """
         py, cpp = _both_engines()
         try:
@@ -214,6 +220,7 @@ define Miss: exists ([Observation] O where 'zzz-nope' ~in "VS")
             "code": {"coding": [{"system": "http://loinc.org", "code": "8867-4"}]},
             "subject": {"reference": "Patient/p1"},
         })
+        patient = json.dumps({"resourceType": "Patient", "id": "p1"})
         py, cpp = _both_engines()
         try:
             for con in (py, cpp):
@@ -222,6 +229,10 @@ define Miss: exists ([Observation] O where 'zzz-nope' ~in "VS")
                     "resource JSON, patient_ref VARCHAR)"
                 )
                 con.execute("DELETE FROM resources")
+                con.execute(
+                    "INSERT INTO resources VALUES ('p1', 'Patient', ?::JSON, 'p1')",
+                    [patient],
+                )
                 con.execute(
                     "INSERT INTO resources VALUES ('o1', 'Observation', ?::JSON, 'p1')",
                     [obs],
@@ -291,7 +302,11 @@ class TestRetrieveComparators:
             "resource JSON, patient_ref VARCHAR)"
         )
         con.execute("DELETE FROM resources")
-        for r in resources:
+        patient = {
+            "resourceType": "Patient", "id": "p1",
+            "patient_ref": "p1",
+        }
+        for r in [patient, *resources]:
             con.execute(
                 "INSERT INTO resources VALUES (?, ?, ?::JSON, ?)",
                 [r["id"], r["resourceType"], json.dumps(r), r["patient_ref"]],
@@ -312,11 +327,12 @@ define ExactCount: Count([Condition: code in "VS"])
             parse_cql(cql),
             output_columns={"EquivCount": "EquivCount", "ExactCount": "ExactCount"},
         )
-        # Coding code '8867-4' (case-flipped) — equivalent to cache member
-        # '8867-4' under http://loinc.org, but not exactly equal.
+        # Coding code 'heartrate' (case-flipped from the cache member
+        # 'HearTRate' under http://loinc.org): equivalent but not exactly
+        # equal.
         cond = {
             "resourceType": "Condition", "id": "c1",
-            "code": {"coding": [{"system": "http://loinc.org", "code": "8867-4"}]},
+            "code": {"coding": [{"system": "http://loinc.org", "code": "heartrate"}]},
             "subject": {"reference": "Patient/p1"},
             "patient_ref": "p1",
         }
