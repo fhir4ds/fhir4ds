@@ -375,8 +375,8 @@ def partition(records: list[DedupRecord], *,
     Exact axes: ``(patient_ref, resource_type, partition_date, value_key)``.
     WITHIN each bucket, records union when their canonical code sets
     intersect (any-intersection matching via deterministic union-find);
-    with ``code_fallback='on'`` (default), tier-2 lexical compatibility
-    ALSO unions (AMUX-145).
+    with ``code_fallback='on'`` (default), the tier-2 coalesced match
+    key (hybrid index resolution + text tier) ALSO unions (AMUX-145).
     Returns ``(singletons, multi_groups)``; groups sorted by key (then by
     first member rid inside a bucket's component list), members sorted by
     rid.
@@ -754,10 +754,11 @@ class DedupResult:
     """Outcome of one dedup pass (no survivorship yet — slice 3).
 
     AMUX-145 additions: ``cluster_edges`` (parallel to ``clusters``; the
-    union edges inside each final cluster — tier-1 canonical / tier-2
-    lexical with ``subtype``), ``curation_records`` (deterministic
-    tier-3 queue entries: ``unmatched`` + ``near_miss``), and ``records``
-    (the built DedupRecords, for proposer consumption).
+    union edges inside each final cluster — tier ``canonical`` /
+    ``hybrid`` / ``text``, hybrid edges carrying subtype + index version
+    + score + margin), ``curation_records`` (deterministic tier-3 queue
+    entries: ``unmatched`` + ``near_miss``), and ``records`` (the built
+    DedupRecords, for proposer consumption).
     """
 
     emitted: list[DedupRecord] = field(default_factory=list)
