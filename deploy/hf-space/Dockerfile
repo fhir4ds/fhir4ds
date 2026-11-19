@@ -28,7 +28,11 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
-ARG DUCKDB_VERSION=1.5.5
+# duckdb pinned to a single ABI so the bundled C++ extension load is
+# deterministic. v0.0.25 defaults py3.11 to duckdb 2.0.x — the Space image
+# is python:3.11-slim, so pin 2.0.0 (the .duckdb2_extension bundle ships
+# in the wheel and loads automatically).
+ARG DUCKDB_VERSION=2.0.0
 RUN python -m pip install --no-cache-dir \
         "fhir4ds-v2[serve,hf]==0.0.25" \
         "duckdb==${DUCKDB_VERSION}"
