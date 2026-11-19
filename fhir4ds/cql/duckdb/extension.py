@@ -118,6 +118,11 @@ _PYTHON_PREFERRED_CPP_CONFLICTS = {
     "predecessorOf",
     "successorOf",
     "ToQuantity",
+    # CQL 2.0 additions (CQL20-A): the C++ mirrors serve the WASM/no-Python
+    # surface; the Python UDFs above stay the desktop conformance authority.
+    "RoundQuantity",
+    "RoundQuantityTo",
+    "Comparable",
 }
 
 

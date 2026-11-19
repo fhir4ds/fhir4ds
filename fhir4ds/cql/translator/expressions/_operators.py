@@ -775,6 +775,8 @@ def _is_quantity_expression(expr: SQLExpression) -> bool:
             "quantityAdd", "quantity_add", "quantitySubtract", "quantity_subtract",
             "quantityMultiply", "quantityDivide", "quantityTruncatedDivide",
             "quantityModulo", "quantityConvert", "quantity_convert",
+            # CQL 2.0 Round(Quantity) — result keeps Quantity shape
+            "RoundQuantity", "RoundQuantityTo",
         })
         if expr.name in _QUANTITY_RETURNING_FUNCS:
             return True

@@ -1187,6 +1187,95 @@ def quantityNegate(q_json: str | None) -> str | None:
     )
 
 
+def roundQuantity(q_json: str | None, precision: str | int | None = None) -> str | None:
+    """Round a Quantity's value (CQL 2.0 Round(Quantity[, precision])).
+
+    CQL 2.0 Appendix B §Round: "When invoked with a Quantity argument,
+    units are not impacted (i.e. the result has the same units as the
+    input)." The value rounds traditionally (ties away from zero, matching
+    the number Round doctrine Round(-0.5) = -1); precision null/omitted
+    is 0. Null quantity -> null.
+
+    Mirrors ``quantityNegate``: edit the raw JSON value and preserve the
+    unit/code/system fields verbatim (no pint round-trip, which would
+    rewrite calendar-duration keywords).
+    """
+    from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+
+    if not q_json:
+        return None
+    match = _JSON_VALUE_RE.search(q_json)
+    if not match:
+        return None
+    try:
+        current = Decimal(match.group(1))
+    except (InvalidOperation, TypeError):
+        return None
+    try:
+        prec = int(precision) if precision is not None else 0
+    except (TypeError, ValueError):
+        prec = 0
+    try:
+        quantum = Decimal(1).scaleb(-prec)
+        rounded = current.quantize(quantum, rounding=ROUND_HALF_UP)
+    except (InvalidOperation, ValueError):
+        return None
+    try:
+        data = orjson.loads(q_json)
+    except JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    unit = data.get("unit")
+    code = data.get("code") or unit or "1"
+    return (
+        '{"value":'
+        + str(float(rounded))
+        + ',"unit":'
+        + orjson.dumps(unit if unit is not None else code).decode("utf-8")
+        + ',"code":'
+        + orjson.dumps(code).decode("utf-8")
+        + ',"system":'
+        + orjson.dumps(
+            data.get("system", "http://unitsofmeasure.org")
+        ).decode("utf-8")
+        + "}"
+    )
+
+
+def _round_quantity_1arg(q_json: str | None) -> str | None:
+    return roundQuantity(q_json, None)
+
+
+def _round_quantity_2arg(q_json: str | None, precision) -> str | None:
+    return roundQuantity(q_json, precision)
+
+
+def quantityComparable(q1_json: str | None, q2_json: str | None) -> bool | None:
+    """CQL 2.0 Comparable(left Quantity, right Quantity) Boolean.
+
+    Appendix B §Comparable: "returns true if the left Quantity can be
+    compared to the right Quantity (i.e. the units are commensurable).
+    Otherwise, the result is false. ... If either argument is null, the
+    result is null."
+
+    Implementation: after the null-argument guard, comparable iff the
+    shared unit-aware comparison ladder reaches a determined outcome —
+    i.e. ``quantityCompare(q1, q2, '==')`` is non-null. All incomparable
+    unit pairs ('cm' vs 'cm2', calendar 'year' vs UCUM 'a', calendar vs
+    sub-week definite durations, unknown UCUM codes) return null from
+    quantityCompare and therefore false here. Values do not affect the
+    result beyond the must-be-present requirement.
+    """
+    q1_dict = _parse_quantity(q1_json)
+    q2_dict = _parse_quantity(q2_json)
+    if not q1_dict or not q2_dict:
+        return None
+    if q1_dict.get("value") is None or q2_dict.get("value") is None:
+        return None
+    return quantityCompare(q1_json, q2_json, "==") is not None
+
+
 def quantityAbs(q_json: str | None) -> str | None:
     """Absolute value of a quantity (CQL Abs on Quantity).
 
@@ -1497,6 +1586,19 @@ def registerQuantityUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     con.create_function("quantity_convert", quantityConvert, null_handling="special")  # Alias with snake_case
     con.create_function("quantityNegate", quantityNegate, null_handling="special")
     con.create_function("quantityAbs", quantityAbs, null_handling="special")
+    # CQL 2.0 Round(Quantity[, precision]) — value rounds, unit preserved.
+    con.create_function(
+        "RoundQuantity", _round_quantity_1arg,
+        parameters=["VARCHAR"], return_type="VARCHAR",
+        null_handling="special",
+    )
+    con.create_function(
+        "RoundQuantityTo", _round_quantity_2arg,
+        parameters=["VARCHAR", "BIGINT"], return_type="VARCHAR",
+        null_handling="special",
+    )
+    # CQL 2.0 Comparable(Quantity, Quantity) — unit commensurability.
+    con.create_function("Comparable", quantityComparable, null_handling="special")
     con.create_function("quantityMultiply", quantityMultiply, null_handling="special")
     con.create_function("quantityDivide", quantityDivide, null_handling="special")
     con.create_function("quantityTruncatedDivide", quantityTruncatedDivide, null_handling="special")

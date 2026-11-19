@@ -1900,14 +1900,14 @@ class FunctionsMixin:
             self._validate_static_string_operand(arg_nodes[0], "Indexer")
         elif bare_lower == "message":
             self._validate_message_signature_args(arg_nodes)
-        elif bare_lower in {"skip", "take"} and len(arg_nodes) >= 2:
+        elif bare_lower in {"skip", "take", "head"} and len(arg_nodes) >= 2:
             count_type = self._infer_static_cql_type_for_logical_operand(arg_nodes[1])
             normalized_count_type = (count_type or "Any").split(".")[-1]
             if normalized_count_type not in {"Any", "Integer"}:
                 raise TranslationError(
                     f"CQL {name} count argument must be Integer; got {count_type}"
                 )
-        if bare_lower in {"first", "last", "length", "tail", "skip", "take", "singletonfrom", "slice"} and arg_nodes:
+        if bare_lower in {"first", "last", "length", "tail", "skip", "take", "head", "singletonfrom", "slice"} and arg_nodes:
             # CQL-19 SKEPTIC QA-002: for a stored-list define reference
             # (`define G: Patient.name.given; Tail(G)`), inline the SOURCE
             # AST only when the alias is NOT itself a stored-list CTE —
@@ -1993,7 +1993,7 @@ class FunctionsMixin:
         if name.lower() in {"istrue", "isfalse"} and len(arg_nodes) == 1:
             args = [self.translate(arg_nodes[0], usage=ExprUsage.SCALAR, boolean_context=True)]
         elif (
-            bare_lower in {"tail", "skip", "take", "length", "singletonfrom"}
+            bare_lower in {"tail", "skip", "take", "head", "length", "singletonfrom"}
             and arg_nodes
             and (
                 self._is_list_typed_ast(arg_nodes[0])
@@ -2029,7 +2029,7 @@ class FunctionsMixin:
             else:
                 args = [_coerce_query_rows_to_list(self.translate(arg_nodes[0], usage=ExprUsage.LIST))]
             args.extend(self.translate(arg, usage=ExprUsage.SCALAR) for arg in arg_nodes[1:])
-        elif bare_lower in {"first", "last", "length", "tail", "skip", "take", "singletonfrom", "slice"} and arg_nodes and self._is_list_typed_ast(arg_nodes[0]):
+        elif bare_lower in {"first", "last", "length", "tail", "skip", "take", "head", "singletonfrom", "slice"} and arg_nodes and self._is_list_typed_ast(arg_nodes[0]):
             # CQL-19 SKEPTIC QA-002: a stored-list define reference already
             # translates (SCALAR) to the whole element list held in its CTE
             # value column — do NOT rows-coerce it (LIST(value) nests the
@@ -2059,7 +2059,7 @@ class FunctionsMixin:
         # promote to the list-valued fhirpath projection. No-op for every
         # non-fhirpath_text operand.
         if (
-            bare_lower in {"first", "last", "length", "tail", "skip", "take", "singletonfrom"}
+            bare_lower in {"first", "last", "length", "tail", "skip", "take", "head", "singletonfrom"}
             and args
         ):
             from ...translator.expressions._utils import _promote_fhirpath_text_list
@@ -2118,7 +2118,18 @@ class FunctionsMixin:
 
         # Step 2a: CQL Round — half-up semantics via custom macros
         # 1-arg → Round(x), 2-arg → RoundTo(x, precision)
-        if name == "Round":
+        # CQL 2.0 Quantity overloads (FHIR-51030): Round(2.54 'cm') → 3 'cm'
+        # — round the value, preserve the unit verbatim.
+        if name == "Round" and args and func.arguments:
+            _is_qty = (
+                func.arguments
+                and self._is_cql_quantity_expr(func.arguments[0])
+            ) or _is_quantity_expression(args[0])
+            if _is_qty:
+                if len(args) == 1:
+                    return SQLFunctionCall(name="RoundQuantity", args=args)
+                if len(args) == 2:
+                    return SQLFunctionCall(name="RoundQuantityTo", args=args)
             if args:
                 number_arg = self._fhirpath_number_projection(args[0])
                 if number_arg is not None:
@@ -2378,6 +2389,27 @@ class FunctionsMixin:
         # and promoted by the list-family handling above.
         if bare_lower == "slice" and 1 <= len(args) <= 3:
             return SQLFunctionCall(name="Slice", args=args)
+
+        # CQL 2.0 Tail with count (FHIR-40612): last-n elements — lower to
+        # the TailN macro (the zero-arg Tail macro keeps its 1.5 "all but
+        # first" semantics and 1-arg arity). Head(list, n) already passes
+        # through to the 2-arg Head macro registered in macros/list.py.
+        if bare_lower == "tail" and len(args) == 2:
+            return SQLFunctionCall(name="TailN", args=args)
+
+        # CQL 2.0 Comparable(Quantity, Quantity) (FHIR-55384): both
+        # operands must arrive as Quantity JSON — apply the implicit
+        # Integer/Long/Decimal -> Quantity('1') conversion (Table 9-E)
+        # to non-quantity-shaped operands.
+        if bare_lower == "comparable" and len(args) == 2:
+            from ..expressions._operators import _quantity_operand_for_arithmetic
+            args = [
+                _quantity_operand_for_arithmetic(
+                    arg, _is_quantity_expression(arg)
+                )
+                for arg in args
+            ]
+            return SQLFunctionCall(name="Comparable", args=args)
 
         # Step 3: Check registry for simple renames and parameterized translations
         strategy = function_registry.get(name, arity)
