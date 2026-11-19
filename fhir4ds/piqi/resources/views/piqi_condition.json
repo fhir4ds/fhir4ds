@@ -1,0 +1,64 @@
+{
+  "name": "piqi_condition",
+  "status": "draft",
+  "resource": "Condition",
+  "select": [
+    {
+      "column": [
+        {
+          "name": "element_id",
+          "path": "id",
+          "type": "id"
+        },
+        {
+          "name": "patient_id",
+          "path": "subject.reference.replace('urn:uuid:', '').split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "condition_text",
+          "path": "code.text",
+          "type": "string"
+        },
+        {
+          "name": "condition_codings",
+          "path": "code.coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "conditionStatus_text",
+          "path": "clinicalStatus.text",
+          "type": "string"
+        },
+        {
+          "name": "conditionStatus_codings",
+          "path": "clinicalStatus.coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "conditionType_text",
+          "path": "category.first().text",
+          "type": "string"
+        },
+        {
+          "name": "conditionType_codings",
+          "path": "category.first().coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "onsetDate",
+          "path": "onset.ofType(dateTime).toString()",
+          "type": "string"
+        },
+        {
+          "name": "resolutionDate",
+          "path": "abatement.ofType(dateTime).toString()",
+          "type": "string"
+        }
+      ]
+    }
+  ]
+}

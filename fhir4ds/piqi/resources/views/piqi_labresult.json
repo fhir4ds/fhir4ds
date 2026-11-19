@@ -1,0 +1,114 @@
+{
+  "name": "piqi_labresult",
+  "status": "draft",
+  "resource": "Observation",
+  "select": [
+    {
+      "column": [
+        {
+          "name": "element_id",
+          "path": "id",
+          "type": "id"
+        },
+        {
+          "name": "patient_id",
+          "path": "subject.reference.replace('urn:uuid:', '').split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "test_text",
+          "path": "code.text",
+          "type": "string"
+        },
+        {
+          "name": "test_codings",
+          "path": "code.coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "resultValue_text",
+          "path": "iif(value.ofType(Quantity).exists(), value.ofType(Quantity).value.toString(), iif(value.ofType(CodeableConcept).exists(), value.ofType(CodeableConcept).text, iif(value.ofType(string).exists(), value.ofType(string), iif(value.ofType(boolean).exists(), value.ofType(boolean).toString(), ''))))",
+          "type": "string"
+        },
+        {
+          "name": "resultValue_type",
+          "path": "iif(value.ofType(Quantity).exists(), 'NM', iif(value.ofType(CodeableConcept).exists(), 'CE', iif(value.ofType(string).exists(), 'ST', iif(value.ofType(boolean).exists(), 'ST', ''))))",
+          "type": "string"
+        },
+        {
+          "name": "resultValue_number",
+          "path": "value.ofType(Quantity).value",
+          "type": "decimal"
+        },
+        {
+          "name": "resultValue_number2",
+          "path": "component.first().value.ofType(Quantity).value",
+          "type": "decimal"
+        },
+        {
+          "name": "resultValue_codings",
+          "path": "value.ofType(CodeableConcept).coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "resultUnit_text",
+          "path": "value.ofType(Quantity).unit",
+          "type": "string"
+        },
+        {
+          "name": "interpretation_text",
+          "path": "interpretation.first().text",
+          "type": "string"
+        },
+        {
+          "name": "interpretation_codings",
+          "path": "interpretation.first().coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "referenceRange_text",
+          "path": "referenceRange.first().text",
+          "type": "string"
+        },
+        {
+          "name": "referenceRange_low_value",
+          "path": "referenceRange.first().low.value",
+          "type": "decimal"
+        },
+        {
+          "name": "referenceRange_high_value",
+          "path": "referenceRange.first().high.value",
+          "type": "decimal"
+        },
+        {
+          "name": "specimenType_text",
+          "path": "specimen.display",
+          "type": "string"
+        },
+        {
+          "name": "resultStatus_text",
+          "path": "iif(status = 'final', 'F', status)",
+          "type": "string"
+        },
+        {
+          "name": "performingSite_text",
+          "path": "performer.first().display",
+          "type": "string"
+        },
+        {
+          "name": "performedDateTime",
+          "path": "effective.ofType(dateTime).toString()",
+          "type": "string"
+        }
+      ]
+    }
+  ],
+  "where": [
+    {
+      "path": "category.where(coding.code = 'laboratory').exists()"
+    }
+  ]
+}

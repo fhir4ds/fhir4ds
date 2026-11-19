@@ -1,0 +1,34 @@
+{
+  "resourceType": "Library",
+  "id": "piqi-sam-healthassessment-assessment-ispopulated",
+  "url": "https://fhir4ds.org/piqi/Library/piqi-sam-healthassessment-assessment-ispopulated",
+  "name": "PIQI_SAM_HealthassessmentAssessmentIspopulated",
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "system": "http://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
+    ]
+  },
+  "relatedArtifact": [
+    {
+      "type": "depends-on",
+      "label": "view_piqi_health_assessment",
+      "resource": "https://fhir4ds.org/piqi/ViewDefinition/piqi_health_assessment"
+    }
+  ],
+  "parameter": [],
+  "content": [
+    {
+      "contentType": "application/sql;dialect=duckdb",
+      "data": "U0VMRUNUIHYucGF0aWVudF9pZCBBUyBwYXRpZW50X2lkLCB2LmVsZW1lbnRfaWQgQVMgZWxlbWVudF9pZCwKICAnSGVhbHRoQXNzZXNzbWVudCcgQVMgZGF0YV9jbGFzcywgJ2Fzc2Vzc21lbnQnIEFTIGVudGl0eSwgJ0F0dHJfSXNQb3B1bGF0ZWQnIEFTIHNhbV9tbmVtb25pYywKICBDQVNFIFdIRU4gQ09BTEVTQ0UoVFJJTShDQVNUKHYuYXNzZXNzbWVudF90ZXh0IEFTIFZBUkNIQVIpKSwgJycpIDw+ICcnIFRIRU4gJ3Bhc3MnIEVMU0UgJ2ZhaWwnIEVORCBBUyByZXN1bHQsCiAgQ0FTRSBXSEVOIENPQUxFU0NFKFRSSU0oQ0FTVCh2LmFzc2Vzc21lbnRfdGV4dCBBUyBWQVJDSEFSKSksICcnKSA8PiAnJyBUSEVOICdhc3Nlc3NtZW50IGlzIHBvcHVsYXRlZCcgRUxTRSAnYXNzZXNzbWVudCBpcyBub3QgcG9wdWxhdGVkJyBFTkQgQVMgZGV0YWlsCkZST00gInZpZXdfcGlxaV9oZWFsdGhfYXNzZXNzbWVudCIgdgpPUkRFUiBCWSB2LnBhdGllbnRfaWQsIHYuZWxlbWVudF9pZA=="
+    }
+  ]
+}

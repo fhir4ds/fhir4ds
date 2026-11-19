@@ -1,0 +1,103 @@
+{
+  "name": "piqi_vital_sign",
+  "status": "draft",
+  "resource": "Observation",
+  "select": [
+    {
+      "column": [
+        {
+          "name": "element_id",
+          "path": "id",
+          "type": "id"
+        },
+        {
+          "name": "patient_id",
+          "path": "subject.reference.replace('urn:uuid:', '').split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "vitalSign_text",
+          "path": "code.text",
+          "type": "string"
+        },
+        {
+          "name": "vitalSign_codings",
+          "path": "code.coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "resultValue_text",
+          "path": "(component.where(code.coding.code = '8480-5').first().value.ofType(Quantity).value.toString()) & '/' & (component.where(code.coding.code = '8462-4').first().value.ofType(Quantity).value.toString())",
+          "type": "string"
+        },
+        {
+          "name": "resultValue_type",
+          "path": "iif(component.exists(), 'SN', '')",
+          "type": "string"
+        },
+        {
+          "name": "resultValue_number",
+          "path": "component.where(code.coding.code = '8480-5').first().value.ofType(Quantity).value",
+          "type": "decimal"
+        },
+        {
+          "name": "resultValue_number2",
+          "path": "component.where(code.coding.code = '8462-4').first().value.ofType(Quantity).value",
+          "type": "decimal"
+        },
+        {
+          "name": "resultUnit_text",
+          "path": "component.first().value.ofType(Quantity).unit",
+          "type": "string"
+        },
+        {
+          "name": "interpretation_text",
+          "path": "interpretation.first().text",
+          "type": "string"
+        },
+        {
+          "name": "interpretation_codings",
+          "path": "interpretation.first().coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "referenceRange_text",
+          "path": "referenceRange.first().text",
+          "type": "string"
+        },
+        {
+          "name": "referenceRange_low_value",
+          "path": "referenceRange.first().low.value",
+          "type": "decimal"
+        },
+        {
+          "name": "referenceRange_high_value",
+          "path": "referenceRange.first().high.value",
+          "type": "decimal"
+        },
+        {
+          "name": "resultStatus_text",
+          "path": "iif(status = 'final', 'F', status)",
+          "type": "string"
+        },
+        {
+          "name": "performingSite_text",
+          "path": "performer.first().display",
+          "type": "string"
+        },
+        {
+          "name": "performedDateTime",
+          "path": "effective.ofType(dateTime).toString()",
+          "type": "string"
+        }
+      ]
+    }
+  ],
+  "where": [
+    {
+      "path": "category.where(coding.code = 'vital-signs').exists()"
+    }
+  ]
+}

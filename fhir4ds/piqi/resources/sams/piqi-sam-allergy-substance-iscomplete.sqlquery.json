@@ -1,0 +1,39 @@
+{
+  "resourceType": "Library",
+  "id": "piqi-sam-allergy-substance-iscomplete",
+  "url": "https://fhir4ds.org/piqi/Library/piqi-sam-allergy-substance-iscomplete",
+  "name": "PIQI_SAM_AllergySubstanceIscomplete",
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "system": "http://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
+    ]
+  },
+  "relatedArtifact": [
+    {
+      "type": "depends-on",
+      "label": "view_piqi_allergy",
+      "resource": "https://fhir4ds.org/piqi/ViewDefinition/piqi_allergy"
+    },
+    {
+      "type": "depends-on",
+      "label": "prereq_allergy_substance_ispopulated",
+      "resource": "https://fhir4ds.org/piqi/Library/piqi-sam-allergy-substance-ispopulated"
+    }
+  ],
+  "parameter": [],
+  "content": [
+    {
+      "contentType": "application/sql;dialect=duckdb",
+      "data": "U0VMRUNUIHYucGF0aWVudF9pZCBBUyBwYXRpZW50X2lkLCB2LmVsZW1lbnRfaWQgQVMgZWxlbWVudF9pZCwKICAnQWxsZXJneScgQVMgZGF0YV9jbGFzcywgJ3N1YnN0YW5jZScgQVMgZW50aXR5LCAnQ29uY2VwdF9Jc0NvbXBsZXRlJyBBUyBzYW1fbW5lbW9uaWMsCiAgQ0FTRSBXSEVOIGxlbihsaXN0X2ZpbHRlcihDT0FMRVNDRSh2LnN1YnN0YW5jZV9jb2RpbmdzLCBbXSksIGMgLT4gQ09BTEVTQ0UoanNvbl9leHRyYWN0X3N0cmluZyhjLCAnJC5jb2RlJyksICcnKSA8PiAnJyBBTkQgQ09BTEVTQ0UoanNvbl9leHRyYWN0X3N0cmluZyhjLCAnJC5zeXN0ZW0nKSwgJycpIDw+ICcnIEFORCBDT0FMRVNDRShqc29uX2V4dHJhY3Rfc3RyaW5nKGMsICckLmRpc3BsYXknKSwgJycpIDw+ICcnKSkgPiAwIFRIRU4gJ3Bhc3MnIEVMU0UgJ2ZhaWwnIEVORCBBUyByZXN1bHQsCiAgQ0FTRSBXSEVOIGxlbihsaXN0X2ZpbHRlcihDT0FMRVNDRSh2LnN1YnN0YW5jZV9jb2RpbmdzLCBbXSksIGMgLT4gQ09BTEVTQ0UoanNvbl9leHRyYWN0X3N0cmluZyhjLCAnJC5jb2RlJyksICcnKSA8PiAnJyBBTkQgQ09BTEVTQ0UoanNvbl9leHRyYWN0X3N0cmluZyhjLCAnJC5zeXN0ZW0nKSwgJycpIDw+ICcnIEFORCBDT0FMRVNDRShqc29uX2V4dHJhY3Rfc3RyaW5nKGMsICckLmRpc3BsYXknKSwgJycpIDw+ICcnKSkgPiAwIFRIRU4gJ3N1YnN0YW5jZSBoYXMgYXQgbGVhc3Qgb25lIGNvbXBsZXRlIGNvZGluZycgRUxTRSAnc3Vic3RhbmNlIGhhcyBubyBjb21wbGV0ZSBjb2RpbmcgKGNvZGUsIHN5c3RlbSBhbmQgZGlzcGxheSknIEVORCBBUyBkZXRhaWwKRlJPTSAidmlld19waXFpX2FsbGVyZ3kiIHYKSk9JTiAicHJlcmVxX2FsbGVyZ3lfc3Vic3RhbmNlX2lzcG9wdWxhdGVkIiBwIE9OIHAucGF0aWVudF9pZCA9IHYucGF0aWVudF9pZCBBTkQgcC5lbGVtZW50X2lkID0gdi5lbGVtZW50X2lkIEFORCBwLnJlc3VsdCA9ICdwYXNzJwpPUkRFUiBCWSB2LnBhdGllbnRfaWQsIHYuZWxlbWVudF9pZA=="
+    }
+  ]
+}

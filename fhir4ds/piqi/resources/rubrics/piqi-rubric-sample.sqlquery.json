@@ -1,0 +1,86 @@
+{
+  "resourceType": "Library",
+  "id": "piqi-rubric-sample",
+  "url": "https://fhir4ds.org/piqi/Library/piqi-rubric-sample",
+  "name": "PIQI_Rubric_Sample",
+  "title": "Sample Evaluation Rubric [RG p.7]",
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "system": "http://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
+    ]
+  },
+  "relatedArtifact": [
+    {
+      "type": "depends-on",
+      "label": "sam_1",
+      "resource": "https://fhir4ds.org/piqi/Library/piqi-sam-demographics-birthdate-isvaliddate"
+    },
+    {
+      "type": "depends-on",
+      "label": "cond_1",
+      "resource": "https://fhir4ds.org/piqi/Library/piqi-sam-demographics-birthdate-ispopulated"
+    },
+    {
+      "type": "depends-on",
+      "label": "prereq_1",
+      "resource": "https://fhir4ds.org/piqi/Library/piqi-sam-demographics-birthdate-ispopulated"
+    },
+    {
+      "type": "depends-on",
+      "label": "sam_2",
+      "resource": "https://fhir4ds.org/piqi/Library/piqi-sam-demographics-genderidentity-ispopulated"
+    }
+  ],
+  "parameter": [
+    {
+      "name": "patient_id",
+      "use": "in",
+      "min": 0,
+      "max": "1",
+      "type": "string"
+    }
+  ],
+  "content": [
+    {
+      "contentType": "application/sql;dialect=duckdb",
+      "data": "V0lUSCBpdGVtcyBBUyAoClNFTEVDVCBwYXRpZW50X2lkLCBlbGVtZW50X2lkLCAxIEFTIHNlcXVlbmNlLCAnRGVtb2dyYXBoaWNzJyBBUyBkYXRhX2NsYXNzLCAnYmlydGhEYXRlJyBBUyBlbnRpdHksIHJlc3VsdCwgZGV0YWlsLCBhdHRyaWJ1dGVkX21uZW1vbmljLCAnc2NvcmluZycgQVMgc2NvcmluZ19lZmZlY3QsIDEgQVMgd2VpZ2h0LCBGQUxTRSBBUyBjcml0aWNhbGl0eQpGUk9NICgKICBTRUxFQ1QgcC5wYXRpZW50X2lkIEFTIHBhdGllbnRfaWQsIHAuZWxlbWVudF9pZCBBUyBlbGVtZW50X2lkLCBDQVNFIFdIRU4gYS5yZXN1bHQgSVMgTk9UIE5VTEwgVEhFTiBhLnJlc3VsdCBXSEVOIHAucmVzdWx0ID0gJ2ZhaWwnIFRIRU4gJ2ZhaWwnIEVMU0UgTlVMTCBFTkQgQVMgcmVzdWx0LCBDQVNFIFdIRU4gYS5yZXN1bHQgSVMgTk9UIE5VTEwgVEhFTiBhLmRldGFpbCBXSEVOIHAucmVzdWx0ID0gJ2ZhaWwnIFRIRU4gcC5kZXRhaWwgRUxTRSBOVUxMIEVORCBBUyBkZXRhaWwsIENBU0UgV0hFTiBhLnJlc3VsdCBJUyBOT1QgTlVMTCBUSEVOICdBdHRyX0lzVmFsaWREYXRlJyBXSEVOIHAucmVzdWx0ID0gJ2ZhaWwnIFRIRU4gJ0F0dHJfSXNQb3B1bGF0ZWQnIEVMU0UgTlVMTCBFTkQgQVMgYXR0cmlidXRlZF9tbmVtb25pYwogIEZST00gInByZXJlcV8xIiBwCkxFRlQgSk9JTiAic2FtXzEiIGEgT04gYS5wYXRpZW50X2lkID0gcC5wYXRpZW50X2lkIEFORCBhLmVsZW1lbnRfaWQgPSBwLmVsZW1lbnRfaWQgQU5EIGEuZGF0YV9jbGFzcyA9IHAuZGF0YV9jbGFzcyBBTkQgYS5lbnRpdHkgPSBwLmVudGl0eQogIEpPSU4gImNvbmRfMSIgYyBPTiBjLnBhdGllbnRfaWQgPSBwLnBhdGllbnRfaWQgQU5EIGMuZWxlbWVudF9pZCA9IHAuZWxlbWVudF9pZAogIFdIRVJFIFRSVUUgQU5EIGMucmVzdWx0ID0gJ3Bhc3MnCikgdApXSEVSRSB0LnJlc3VsdCBJUyBOT1QgTlVMTApVTklPTiBBTEwKU0VMRUNUIHBhdGllbnRfaWQsIGVsZW1lbnRfaWQsIDIgQVMgc2VxdWVuY2UsICdEZW1vZ3JhcGhpY3MnIEFTIGRhdGFfY2xhc3MsICdnZW5kZXJJZGVudGl0eScgQVMgZW50aXR5LCByZXN1bHQsIGRldGFpbCwgYXR0cmlidXRlZF9tbmVtb25pYywgJ2luZm9ybWF0aW9uYWwnIEFTIHNjb3JpbmdfZWZmZWN0LCAwIEFTIHdlaWdodCwgRkFMU0UgQVMgY3JpdGljYWxpdHkKRlJPTSAoCiAgU0VMRUNUIGEucGF0aWVudF9pZCBBUyBwYXRpZW50X2lkLCBhLmVsZW1lbnRfaWQgQVMgZWxlbWVudF9pZCwgYS5yZXN1bHQgQVMgcmVzdWx0LCBhLmRldGFpbCBBUyBkZXRhaWwsICdBdHRyX0lzUG9wdWxhdGVkJyBBUyBhdHRyaWJ1dGVkX21uZW1vbmljCiAgRlJPTSAic2FtXzIiIGEKICAKICBXSEVSRSBUUlVFIAopIHQKV0hFUkUgdC5yZXN1bHQgSVMgTk9UIE5VTEwKKQpTRUxFQ1QgcGF0aWVudF9pZCwgZWxlbWVudF9pZCwgc2VxdWVuY2UsIGRhdGFfY2xhc3MsIGVudGl0eSwgYXR0cmlidXRlZF9tbmVtb25pYywgc2NvcmluZ19lZmZlY3QsIHdlaWdodCwgY3JpdGljYWxpdHksIHJlc3VsdCwgZGV0YWlsCkZST00gaXRlbXMKV0hFUkUgKCRwYXRpZW50X2lkIElTIE5VTEwgT1IgcGF0aWVudF9pZCA9ICRwYXRpZW50X2lkKQpPUkRFUiBCWSBwYXRpZW50X2lkLCBzZXF1ZW5jZSwgZWxlbWVudF9pZA=="
+    }
+  ],
+  "piqiCriteria": [
+    {
+      "sequence": 1,
+      "description": "Check if patient birth date is a valid date.",
+      "data_class": "Demographics",
+      "entity": "birthDate",
+      "sam": "demographics-birthdate-isvaliddate",
+      "sam_mnemonic": "Attr_IsValidDate",
+      "scoring_effect": "scoring",
+      "weight": 1,
+      "criticality": false,
+      "condition_sam": "demographics-birthdate-ispopulated",
+      "prereq_sam": "demographics-birthdate-ispopulated"
+    },
+    {
+      "sequence": 2,
+      "description": "Verify if patient gender is populated.",
+      "data_class": "Demographics",
+      "entity": "genderIdentity",
+      "sam": "demographics-genderidentity-ispopulated",
+      "sam_mnemonic": "Attr_IsPopulated",
+      "scoring_effect": "informational",
+      "weight": 0,
+      "criticality": false,
+      "condition_sam": "",
+      "prereq_sam": ""
+    }
+  ]
+}

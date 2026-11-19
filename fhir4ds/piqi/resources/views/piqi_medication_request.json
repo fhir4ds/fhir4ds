@@ -1,0 +1,89 @@
+{
+  "name": "piqi_medication_request",
+  "status": "draft",
+  "resource": "MedicationRequest",
+  "select": [
+    {
+      "column": [
+        {
+          "name": "element_id",
+          "path": "id",
+          "type": "id"
+        },
+        {
+          "name": "patient_id",
+          "path": "subject.reference.replace('urn:uuid:', '').split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "medication_text",
+          "path": "medication.ofType(CodeableConcept).text",
+          "type": "string"
+        },
+        {
+          "name": "medication_codings",
+          "path": "medication.ofType(CodeableConcept).coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "startDate",
+          "path": "authoredOn.toString()",
+          "type": "string"
+        },
+        {
+          "name": "doseAmount",
+          "path": "dosageInstruction.first().doseAndRate.first().doseQuantity.value",
+          "type": "decimal"
+        },
+        {
+          "name": "doseAmountUnit_text",
+          "path": "dosageInstruction.first().doseAndRate.first().doseQuantity.unit",
+          "type": "string"
+        },
+        {
+          "name": "doseRoute_text",
+          "path": "dosageInstruction.first().route.text",
+          "type": "string"
+        },
+        {
+          "name": "doseRoute_codings",
+          "path": "dosageInstruction.first().route.coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "doseQuantity",
+          "path": "dispenseRequest.quantity.value",
+          "type": "decimal"
+        },
+        {
+          "name": "doseQuantityUnit",
+          "path": "dispenseRequest.quantity.unit",
+          "type": "string"
+        },
+        {
+          "name": "instructions",
+          "path": "dosageInstruction.first().text",
+          "type": "string"
+        },
+        {
+          "name": "indication_text",
+          "path": "reasonCode.first().text",
+          "type": "string"
+        },
+        {
+          "name": "indication_codings",
+          "path": "reasonCode.first().coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "fillStatus_text",
+          "path": "status",
+          "type": "code"
+        }
+      ]
+    }
+  ]
+}

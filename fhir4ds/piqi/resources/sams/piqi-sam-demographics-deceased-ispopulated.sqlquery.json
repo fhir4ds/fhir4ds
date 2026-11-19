@@ -1,0 +1,34 @@
+{
+  "resourceType": "Library",
+  "id": "piqi-sam-demographics-deceased-ispopulated",
+  "url": "https://fhir4ds.org/piqi/Library/piqi-sam-demographics-deceased-ispopulated",
+  "name": "PIQI_SAM_DemographicsDeceasedIspopulated",
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "system": "http://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
+    ]
+  },
+  "relatedArtifact": [
+    {
+      "type": "depends-on",
+      "label": "view_piqi_demographics",
+      "resource": "https://fhir4ds.org/piqi/ViewDefinition/piqi_demographics"
+    }
+  ],
+  "parameter": [],
+  "content": [
+    {
+      "contentType": "application/sql;dialect=duckdb",
+      "data": "U0VMRUNUIHYucGF0aWVudF9pZCBBUyBwYXRpZW50X2lkLCB2LmVsZW1lbnRfaWQgQVMgZWxlbWVudF9pZCwKICAnRGVtb2dyYXBoaWNzJyBBUyBkYXRhX2NsYXNzLCAnZGVjZWFzZWQnIEFTIGVudGl0eSwgJ0F0dHJfSXNQb3B1bGF0ZWQnIEFTIHNhbV9tbmVtb25pYywKICBDQVNFIFdIRU4gQ09BTEVTQ0UoVFJJTShDQVNUKHYuZGVjZWFzZWRfdGV4dCBBUyBWQVJDSEFSKSksICcnKSA8PiAnJyBUSEVOICdwYXNzJyBFTFNFICdmYWlsJyBFTkQgQVMgcmVzdWx0LAogIENBU0UgV0hFTiBDT0FMRVNDRShUUklNKENBU1Qodi5kZWNlYXNlZF90ZXh0IEFTIFZBUkNIQVIpKSwgJycpIDw+ICcnIFRIRU4gJ2RlY2Vhc2VkIGlzIHBvcHVsYXRlZCcgRUxTRSAnZGVjZWFzZWQgaXMgbm90IHBvcHVsYXRlZCcgRU5EIEFTIGRldGFpbApGUk9NICJ2aWV3X3BpcWlfZGVtb2dyYXBoaWNzIiB2Ck9SREVSIEJZIHYucGF0aWVudF9pZCwgdi5lbGVtZW50X2lk"
+    }
+  ]
+}

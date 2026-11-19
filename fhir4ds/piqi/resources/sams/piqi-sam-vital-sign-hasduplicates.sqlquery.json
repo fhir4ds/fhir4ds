@@ -1,0 +1,34 @@
+{
+  "resourceType": "Library",
+  "id": "piqi-sam-vital-sign-hasduplicates",
+  "url": "https://fhir4ds.org/piqi/Library/piqi-sam-vital-sign-hasduplicates",
+  "name": "PIQI_SAM_VitalSignHasduplicates",
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "system": "http://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
+    ]
+  },
+  "relatedArtifact": [
+    {
+      "type": "depends-on",
+      "label": "view_piqi_vital_sign",
+      "resource": "https://fhir4ds.org/piqi/ViewDefinition/piqi_vital_sign"
+    }
+  ],
+  "parameter": [],
+  "content": [
+    {
+      "contentType": "application/sql;dialect=duckdb",
+      "data": "V0lUSCBncnAgQVMgKAogIFNFTEVDVCB2LnBhdGllbnRfaWQgQVMgcGF0aWVudF9pZCwgdml0YWxTaWduX3RleHQsIHBlcmZvcm1lZERhdGVUaW1lLCBjb3VudCgqKSBBUyBjLCBzdHJpbmdfYWdnKHYuZWxlbWVudF9pZCwgJywgJyBPUkRFUiBCWSB2LmVsZW1lbnRfaWQpIEFTIGlkcwogIEZST00gInZpZXdfcGlxaV92aXRhbF9zaWduIiB2IEdST1VQIEJZIHYucGF0aWVudF9pZCwgdml0YWxTaWduX3RleHQsIHBlcmZvcm1lZERhdGVUaW1lCikKU0VMRUNUIGcucGF0aWVudF9pZCBBUyBwYXRpZW50X2lkLCBOVUxMIEFTIGVsZW1lbnRfaWQsCiAgJ1ZpdGFsU2lnbicgQVMgZGF0YV9jbGFzcywgJ1ZpdGFsU2lnbicgQVMgZW50aXR5LCAnQ2xhc3NfSGFzRHVwbGljYXRlcycgQVMgc2FtX21uZW1vbmljLAogIENBU0UgV0hFTiBTVU0oQ0FTRSBXSEVOIGcuYyA+IDEgVEhFTiAxIEVMU0UgMCBFTkQpID4gMCBUSEVOICdwYXNzJyBFTFNFICdmYWlsJyBFTkQgQVMgcmVzdWx0LAogIENBU0UgV0hFTiBTVU0oQ0FTRSBXSEVOIGcuYyA+IDEgVEhFTiAxIEVMU0UgMCBFTkQpID4gMCBUSEVOICdkdXBsaWNhdGUgZWxlbWVudHM6ICcgfHwgc3RyaW5nX2FnZyhDQVNFIFdIRU4gZy5jID4gMSBUSEVOIGcuaWRzIEVORCwgJzsgJyBPUkRFUiBCWSBnLmlkcykgRUxTRSAnbm8gZHVwbGljYXRlIGVsZW1lbnRzIGRldGVjdGVkJyBFTkQgQVMgZGV0YWlsCkZST00gZ3JwIGcgR1JPVVAgQlkgZy5wYXRpZW50X2lkIE9SREVSIEJZIGcucGF0aWVudF9pZA=="
+    }
+  ]
+}

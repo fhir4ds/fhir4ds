@@ -1,0 +1,39 @@
+{
+  "resourceType": "Library",
+  "id": "piqi-sam-demographics-birthdate-isvaliddate",
+  "url": "https://fhir4ds.org/piqi/Library/piqi-sam-demographics-birthdate-isvaliddate",
+  "name": "PIQI_SAM_DemographicsBirthdateIsvaliddate",
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "system": "http://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
+    ]
+  },
+  "relatedArtifact": [
+    {
+      "type": "depends-on",
+      "label": "view_piqi_demographics",
+      "resource": "https://fhir4ds.org/piqi/ViewDefinition/piqi_demographics"
+    },
+    {
+      "type": "depends-on",
+      "label": "prereq_demographics_birthdate_ispopulated",
+      "resource": "https://fhir4ds.org/piqi/Library/piqi-sam-demographics-birthdate-ispopulated"
+    }
+  ],
+  "parameter": [],
+  "content": [
+    {
+      "contentType": "application/sql;dialect=duckdb",
+      "data": "U0VMRUNUIHYucGF0aWVudF9pZCBBUyBwYXRpZW50X2lkLCB2LmVsZW1lbnRfaWQgQVMgZWxlbWVudF9pZCwKICAnRGVtb2dyYXBoaWNzJyBBUyBkYXRhX2NsYXNzLCAnYmlydGhEYXRlJyBBUyBlbnRpdHksICdBdHRyX0lzVmFsaWREYXRlJyBBUyBzYW1fbW5lbW9uaWMsCiAgQ0FTRSBXSEVOIFRSWV9DQVNUKENPQUxFU0NFKENBU1Qodi5iaXJ0aERhdGUgQVMgVkFSQ0hBUiksICcnKSBBUyBEQVRFKSBJUyBOT1QgTlVMTCBBTkQgcmVnZXhwX21hdGNoZXMoQ09BTEVTQ0UoQ0FTVCh2LmJpcnRoRGF0ZSBBUyBWQVJDSEFSKSwgJycpLCAnXlswLTldezR9LVswLTldezJ9LVswLTldezJ9JCcpIFRIRU4gJ3Bhc3MnIEVMU0UgJ2ZhaWwnIEVORCBBUyByZXN1bHQsCiAgQ0FTRSBXSEVOIFRSWV9DQVNUKENPQUxFU0NFKENBU1Qodi5iaXJ0aERhdGUgQVMgVkFSQ0hBUiksICcnKSBBUyBEQVRFKSBJUyBOT1QgTlVMTCBBTkQgcmVnZXhwX21hdGNoZXMoQ09BTEVTQ0UoQ0FTVCh2LmJpcnRoRGF0ZSBBUyBWQVJDSEFSKSwgJycpLCAnXlswLTldezR9LVswLTldezJ9LVswLTldezJ9JCcpIFRIRU4gJ2JpcnRoRGF0ZSBpcyBhIHZhbGlkIGRhdGUnIEVMU0UgJ2JpcnRoRGF0ZSBpcyBub3QgYSB2YWxpZCBkYXRlJyBFTkQgQVMgZGV0YWlsCkZST00gInZpZXdfcGlxaV9kZW1vZ3JhcGhpY3MiIHYKSk9JTiAicHJlcmVxX2RlbW9ncmFwaGljc19iaXJ0aGRhdGVfaXNwb3B1bGF0ZWQiIHAgT04gcC5wYXRpZW50X2lkID0gdi5wYXRpZW50X2lkIEFORCBwLmVsZW1lbnRfaWQgPSB2LmVsZW1lbnRfaWQgQU5EIHAucmVzdWx0ID0gJ3Bhc3MnCk9SREVSIEJZIHYucGF0aWVudF9pZCwgdi5lbGVtZW50X2lk"
+    }
+  ]
+}
