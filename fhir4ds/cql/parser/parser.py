@@ -26,6 +26,14 @@ from typing import Callable, List, Optional, Union
 from ..errors import ParseError
 
 _logger = logging.getLogger(__name__)
+
+# Sentinel distinguishing "not yet seen" from a None (unversioned) reference.
+_UNSET = object()
+
+
+def _version_display(version: Optional[str]) -> str:
+    return f"'{version}'" if version is not None else "(no version)"
+
 from ..parser.ast_nodes import (
     AliasRef,
     AggregateClause,
@@ -92,6 +100,16 @@ from ..parser.ast_nodes import (
     ChoiceTypeSpecifier,
 )
 from ..parser.lexer import Lexer, Token, TokenType
+
+# Bare date-time precision keywords that may appear as a `convert .. to`
+# unit target (CQL 2.0 grammar: unit : dateTimePrecision |
+# pluralDateTimePrecision | STRING).
+_PRECISION_UNIT_TOKENS = (
+    TokenType.YEAR, TokenType.MONTH, TokenType.WEEK, TokenType.DAY,
+    TokenType.HOUR, TokenType.MINUTE, TokenType.SECOND, TokenType.MILLISECOND,
+    TokenType.YEARS, TokenType.MONTHS, TokenType.WEEKS, TokenType.DAYS,
+    TokenType.HOURS, TokenType.MINUTES, TokenType.SECONDS, TokenType.MILLISECONDS,
+)
 
 
 class CQLParser:
@@ -233,7 +251,70 @@ class CQLParser:
         while not self.check(TokenType.EOF):
             self._parse_library_element(library)
 
+        self._check_multiple_versions(library)
+
         return library
+
+    def _check_multiple_versions(self, library: Library) -> None:
+        """CQL 2.0 (FHIR-57620) multi-version constraints.
+
+        Developer's Guide (post-reconciliation 2.0 text):
+
+        * "A given library SHALL NOT include multiple versions of the same
+          library."
+        * "Multiple versions of the same model SHALL NOT be referenced in
+          the same library."
+
+        Only explicitly-DIFFERENT version specifiers are "multiple
+        versions"; an unversioned reference alongside a versioned one is
+        left to the implementation environment (it resolves to whatever
+        version the environment supplies). Discrepancies arriving
+        transitively through included libraries are also an
+        implementation-environment concern and are not checked here.
+        """
+        model_versions: dict[str, Optional[str]] = {}
+        for using in library.using:
+            # Compare on the unqualified model name: the same model may be
+            # referenced with or without namespace qualifiers.
+            unqualified = using.model.rsplit(".", 1)[-1]
+            seen = model_versions.get(unqualified, _UNSET)
+            if (
+                seen is not _UNSET
+                and seen is not None
+                and using.version is not None
+                and seen != using.version
+            ):
+                token = self.current()
+                raise ParseError(
+                    "Multiple versions of the same model SHALL NOT be "
+                    f"referenced in the same library (model '{unqualified}' "
+                    f"referenced with version "
+                    f"{_version_display(seen)} and "
+                    f"{_version_display(using.version)}) "
+                    "[CQL 2.0, FHIR-57620]",
+                    position=(token.line, token.column),
+                )
+            model_versions[unqualified] = using.version
+
+        library_versions: dict[str, Optional[str]] = {}
+        for inc in library.includes:
+            seen = library_versions.get(inc.path, _UNSET)
+            if (
+                seen is not _UNSET
+                and seen is not None
+                and inc.version is not None
+                and seen != inc.version
+            ):
+                token = self.current()
+                raise ParseError(
+                    "A library SHALL NOT include multiple versions of the "
+                    f"same library ('{inc.path}' included with version "
+                    f"{_version_display(seen)} and "
+                    f"{_version_display(inc.version)}) "
+                    "[CQL 2.0, FHIR-57620]",
+                    position=(token.line, token.column),
+                )
+            library_versions[inc.path] = inc.version
 
     def _parse_library_element(self, library: Library) -> None:
         """Parse a library element (using, include, define, etc.)."""
@@ -270,13 +351,24 @@ class CQLParser:
         """Parse a using definition (e.g., 'using FHIR version \"4.0.1\"')."""
         self.expect(TokenType.USING, "Expected 'using'")
         model = self._parse_identifier_name()
+        # FHIR-31019 (CQL 2.0): qualified model names — hl7.fhir.us.core.USCore
+        while self.match(TokenType.DOT):
+            self.advance()  # consume DOT
+            model = f"{model}.{self._parse_identifier_name()}"
+
         version = None
+        alias = None
 
         if self.match_and_advance(TokenType.VERSION):
             version_token = self.expect(TokenType.STRING, "Expected version string")
             version = version_token.value
 
-        return UsingDefinition(model=model, version=version)
+        # FHIR-48762 (CQL 2.0): model aliases — `using X version 'y' called Z`.
+        # When absent, the unqualified model name is the local identifier.
+        if self.match_and_advance(TokenType.CALLED):
+            alias = self._parse_identifier_name()
+
+        return UsingDefinition(model=model, version=version, alias=alias)
 
     def parse_include_definition(self) -> IncludeDefinition:
         """Parse an include definition."""
@@ -1275,6 +1367,19 @@ class CQLParser:
                 # Convert-to-Quantity-unit: `convert X to 'm2'` (quoted UCUM
                 # unit target; used by the us-cql-ig shared libraries).
                 # Lowered to quantityConvert by the translator.
+                unit = self.advance().value
+                return BinaryExpression(
+                    operator="convert",
+                    left=operand,
+                    right=Literal(value=unit, type="String"),
+                )
+            if self.match(*_PRECISION_UNIT_TOKENS):
+                # CQL 2.0 grammar (FHIR-52783 surface):
+                #   'convert' expression 'to' (typeSpecifier | unit)
+                # where `unit` also admits bare date-time precision keywords
+                # (year..millisecond, singular and plural). The reference
+                # implementation lowers unit targets to ConvertQuantity, so
+                # parse them exactly like the quoted-unit form.
                 unit = self.advance().value
                 return BinaryExpression(
                     operator="convert",

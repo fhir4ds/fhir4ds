@@ -265,6 +265,27 @@ class IncludeHandlerMixin:
             included_library = _copy.deepcopy(self._load_required_library(inc.path, alias))
             self._qualify_library_local_codes(included_library, alias)
 
+            # CQL 2.0 (FHIR-57620): a versioned include references a specific
+            # library version. Our loader resolves by identifier (the
+            # implementation-environment choice), so surface a discrepancy
+            # between the include's version specifier and the loaded
+            # library's declared version as a WARNING rather than an error —
+            # raise only for direct multiple-version references, which the
+            # parser already rejects.
+            if (
+                inc.version is not None
+                and getattr(included_library, "version", None) is not None
+                and inc.version != included_library.version
+            ):
+                _logger.warning(
+                    "Include version discrepancy: library '%s' included with "
+                    "version '%s' but the loaded library declares version "
+                    "'%s'",
+                    inc.path,
+                    inc.version,
+                    included_library.version,
+                )
+
             # Store the parsed AST on the library info for downstream analysis.
             lib_info.library_ast = included_library
 

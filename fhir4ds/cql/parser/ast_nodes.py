@@ -109,13 +109,23 @@ class UsingDefinition(ASTNode):
     Example:
         using FHIR version '4.0.1'
 
+    CQL 2.0 (FHIR-31019/FHIR-48762) also allows qualified model names and a
+    ``called`` clause:
+
+        using hl7.fhir.us.core.USCore version '7.0.0' called USC
+
     Attributes:
-        model: The data model name (e.g., 'FHIR', 'QDM').
+        model: The data model name (e.g., 'FHIR', 'QDM',
+            'hl7.fhir.us.core.USCore').
         version: The model version string.
+        alias: The local alias for the model (CQL 2.0 ``called`` clause).
+            When absent, the unqualified model name (last dotted segment) is
+            the local identifier per the 2.0 Developer's Guide.
     """
 
     model: str
     version: Optional[str] = None
+    alias: Optional[str] = None
 
 
 @dataclass
