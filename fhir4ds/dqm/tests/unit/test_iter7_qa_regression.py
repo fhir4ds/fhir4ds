@@ -19,7 +19,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-sys.path.insert(0, "/mnt/d/fhir4ds")
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # repo root
 
 from fhir4ds.cql.parser import parse_cql
 from fhir4ds.cql.parser.ast_nodes import Definition

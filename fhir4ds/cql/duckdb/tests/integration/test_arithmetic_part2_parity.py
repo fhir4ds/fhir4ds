@@ -144,8 +144,12 @@ using FHIR version '4.0.1'
 context Patient
 define InvalidBoundary: {expression}
 """
-        with pytest.raises(ValueError):
-            translate_cql(cql)
+        # Superseded behavior (2.0-era translator): static temporal boundary
+        # underflow/overflow now FOLDS to SQL NULL at translation instead of
+        # raising; the official conformance suite (2029/2037 gate) accepts
+        # this. Pinned here so the fold cannot silently change again.
+        translated = translate_cql(cql)
+        assert translated["InvalidBoundary"].to_sql().strip().upper() == "NULL"
 
 
 def test_cql_arithmetic_part2_duckdb_surface_matches_cpp_registration() -> None:
@@ -266,11 +270,14 @@ def test_cql_arithmetic_part2_duckdb_surface_matches_cpp_registration() -> None:
             10.0,
             "mg",
         )
+        # Corpus-pinned (TruncatedDivide10By5DQuantity): quantity div cancels
+        # units -> dimensionless '1' (both engines agree); only mod preserves
+        # the left operand unit.
         assert_quantity(
             "SELECT quantityTruncatedDivide('{\"value\":10,\"code\":\"mg\"}', "
             "'{\"value\":3,\"code\":\"g\"}')",
             0.0,
-            "mg",
+            "1",
         )
         assert_quantity(
             "SELECT quantityModulo('{\"value\":10,\"code\":\"g\"}', "
@@ -282,7 +289,7 @@ def test_cql_arithmetic_part2_duckdb_surface_matches_cpp_registration() -> None:
             "SELECT quantityTruncatedDivide('{\"value\":10,\"code\":\"g\"}', "
             "'{\"value\":3000,\"code\":\"mg\"}')",
             3.0,
-            "g",
+            "1",
         )
     finally:
         py.close()
@@ -346,21 +353,24 @@ define SuccDecimalQuantity: successor of 1.0 'cm'
     expected = {
         "PredIntegerQuantity": (Decimal("0"), "cm"),
         "SuccIntegerQuantity": (Decimal("2"), "cm"),
-        "PredDecimalQuantity": (Decimal("0.99999999"), "cm"),
-        "SuccDecimalQuantity": (Decimal("1.00000001"), "cm"),
+        "PredDecimalQuantity": (Decimal("0.9"), "cm"),
+        "SuccDecimalQuantity": (Decimal("1.1"), "cm"),
     }
 
     def quantity_tuple(payload: str) -> tuple[Decimal, str]:
         parsed = json.loads(payload)
         return Decimal(str(parsed["value"])), parsed["code"]
 
+    # Decimal-authored quantities step by 10^-fractional-scale of the authored
+    # text (cql-tests 2.0 PredecessorOf1DPrecision / PredecessorOf1QCMPrecision:
+    # predecessor of 1.0 is 0.9, superseding the older flat 1e-8 step).
     direct_cases = {
         "SELECT predecessorOf('{\"value\":\"5\",\"code\":\"mg\"}')": None,
         "SELECT successorOf('{\"value\":\"5\",\"code\":\"mg\"}')": None,
         "SELECT predecessorOf('{\"value\":1,\"code\":\"cm\"}')": (Decimal("0"), "cm"),
         "SELECT successorOf('{\"value\":1,\"code\":\"cm\"}')": (Decimal("2"), "cm"),
-        "SELECT predecessorOf('{\"value\":1.0,\"code\":\"cm\"}')": (Decimal("0.99999999"), "cm"),
-        "SELECT successorOf('{\"value\":1.0,\"code\":\"cm\"}')": (Decimal("1.00000001"), "cm"),
+        "SELECT predecessorOf('{\"value\":1.0,\"code\":\"cm\"}')": (Decimal("0.9"), "cm"),
+        "SELECT successorOf('{\"value\":1.0,\"code\":\"cm\"}')": (Decimal("1.1"), "cm"),
     }
 
     py = _python_only_connection()
@@ -399,9 +409,9 @@ define SingletonQuantitySucc: successor of singleton from { 1.0 'cm' }
         "MaxQuantity": (Decimal("99999999999999999999.99999999"), "1"),
         "MinQuantity": (Decimal("-99999999999999999999.99999999"), "1"),
         "QueryQuantityPred": (Decimal("0"), "cm"),
-        "QueryQuantitySucc": (Decimal("1.00000001"), "cm"),
+        "QueryQuantitySucc": (Decimal("1.1"), "cm"),
         "SingletonQuantityPred": (Decimal("0"), "cm"),
-        "SingletonQuantitySucc": (Decimal("1.00000001"), "cm"),
+        "SingletonQuantitySucc": (Decimal("1.1"), "cm"),
     }
 
     py = _python_only_connection()
@@ -424,8 +434,12 @@ using FHIR version '4.0.1'
 context Patient
 define Invalid: {expression}
 """
-        with pytest.raises(ValueError):
-            translate_cql(cql)
+        # Superseded behavior (2.0-era translator): static temporal boundary
+        # underflow/overflow now FOLDS to SQL NULL at translation instead of
+        # raising; the official conformance suite (2029/2037 gate) accepts
+        # this. Pinned here so the fold cannot silently change again.
+        translated = translate_cql(cql)
+        assert translated["InvalidBoundary"].to_sql().strip().upper() == "NULL"
 
     with no_python_connection() as con:
         assert con.execute("SELECT predecessorOf('5')").fetchone()[0] == "4.99999999"

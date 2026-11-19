@@ -16,6 +16,8 @@ scalar provides both names).
 import json
 
 import duckdb
+
+from .wasm_runtime_helpers import load_cql_bundled_extension
 import pytest
 
 from fhir4ds.cql.duckdb import register as register_cql
@@ -96,7 +98,7 @@ def _python_con():
 def _no_python_con():
     con = duckdb.connect(config={"allow_unsigned_extensions": True})
     con.execute(
-        "LOAD '/mnt/d/fhir4ds/extensions/cql/build/release/extension/cql/cql.duckdb_extension'"
+        f"LOAD '{load_cql_bundled_extension()}'"
     )
     register_all_macros(con)
     con.execute(
