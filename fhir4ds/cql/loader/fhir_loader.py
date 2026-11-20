@@ -1029,6 +1029,10 @@ class FHIRDataLoader:
         systems = []
         code_values = []
         displays = []
+        # Every loaded ValueSet URL, including ones with zero codes, so the
+        # cache refresh can register loaded-but-empty ValueSets (membership
+        # False) instead of leaving them conflated with unloaded (NULL).
+        loaded_urls: List[str] = []
         for index, vs in enumerate(valuesets):
             if vs is None:
                 raise TypeError(f"valuesets[{index}] must be a ValueSet object or dict, got None")
@@ -1066,6 +1070,7 @@ class FHIRDataLoader:
                 raise ValueError(f"valuesets[{index}] must include a non-empty string 'url'")
             if not isinstance(codes, list):
                 raise TypeError(f"valuesets[{index}].codes must be a list, got {type(codes).__name__}")
+            loaded_urls.append(vs_url)
 
             if not codes:
                 _logger.warning(
@@ -1152,8 +1157,9 @@ class FHIRDataLoader:
 
         # Scope the cache refresh to the ValueSets just written; a full-table
         # re-read per call made incremental loading quadratic in ValueSet count.
+        # loaded_urls (not valueset_urls) so empty ValueSets are included.
         self._refresh_in_valueset_udf(
-            table_name, urls=sorted(set(valueset_urls)) or None
+            table_name, urls=sorted(set(loaded_urls)) or None
         )
         return total_codes
 
@@ -1290,6 +1296,11 @@ class FHIRDataLoader:
         else:
             for url in scoped_urls:
                 self._valueset_udf_cache.pop(url, None)
+            # Loaded-but-empty ValueSets keep a key with zero entries so the
+            # UDFs answer False (loaded, definitively not a member) instead
+            # of NULL (unknown/unloaded) — same contract as the native cache.
+            for url in scoped_urls:
+                self._valueset_udf_cache.setdefault(url, set())
         for vs_url, system, code in rows:
             norm_sys = SystemResolver.normalize(system) if system else ""
             self._valueset_udf_cache.setdefault(vs_url, set()).add((norm_sys, code or ""))
@@ -1399,6 +1410,19 @@ class FHIRDataLoader:
                         f"SELECT cql_valueset_cache_add(valueset_url, system, code) "
                         f"FROM {quoted_table_name} "
                         f"WHERE valueset_url IN ({placeholders})",
+                        chunk,
+                    ).fetchall()
+                    # Loaded-but-empty ValueSets: mark the url as present in
+                    # the native cache with zero entries (NULL code is the
+                    # marker) so membership answers False (loaded, not a
+                    # member) instead of NULL (unknown) — mirrors the Python
+                    # cache's empty-set key.
+                    self.con.execute(
+                        f"SELECT cql_valueset_cache_add(u.url, NULL, NULL) "
+                        f"FROM (SELECT unnest([{placeholders}]) AS url) u "
+                        f"WHERE NOT EXISTS ("
+                        f"SELECT 1 FROM {quoted_table_name} t "
+                        f"WHERE t.valueset_url = u.url)",
                         chunk,
                     ).fetchall()
             # Remove stale Python macros from prior refreshes so SQL resolves to

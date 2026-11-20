@@ -639,10 +639,18 @@ def createValuesetMembershipUdf(
     """
     normalized_by_url: Dict[str, tuple[Any, int, Set[tuple]]] = {}
 
-    def _normalized(url: str) -> Set[tuple]:
+    def _normalized(url: str) -> Set[tuple] | None:
+        """Normalized entries for ``url``, or None when NOT loaded.
+
+        Distinguishes not-loaded (key absent -> None, membership NULL per
+        CQL 3VL) from loaded-but-empty (key present, zero entries -> empty
+        set, membership False), matching the native cache semantics where
+        an url present in ``g_valueset_cache`` with zero entries answers
+        False.
+        """
         entries = valueset_codes_cache.get(url)
-        if not entries:
-            return set()
+        if entries is None:
+            return None
         cached = normalized_by_url.get(url)
         if cached is not None and cached[0] is entries and cached[1] == len(entries):
             return cached[2]
@@ -665,7 +673,7 @@ def createValuesetMembershipUdf(
 
         try:
             vs_codes = _normalized(valueset_url)
-            if not vs_codes:
+            if vs_codes is None:
                 if not valueset_codes_cache:
                     _logger.warning(
                         "in_valueset called but no valueset data is loaded. "
@@ -774,16 +782,21 @@ def createEquivalentValuesetMembershipUdf(
     """
     normalized_by_url: Dict[str, tuple[Any, int, Dict[tuple, Dict[tuple, tuple]]]] = {}
 
-    def _normalized(url: str) -> Dict[tuple, Dict[tuple, tuple]]:
+    def _normalized(url: str) -> Dict[tuple, Dict[tuple, tuple]] | None:
         """Map equivalence-keyed cache entries back to their raw pairs.
 
         Result shape: ``{ (syskey, codekey): { raw_sys_key: raw_pair } }``
         where ``raw_sys_key`` collapses entries that share an equivalence
         key so multi-system ambiguity detection stays exact.
+
+        Returns None when the ValueSet is NOT loaded (key absent —
+        membership NULL per CQL 3VL) and an empty dict when it is loaded
+        with zero entries (membership False), matching the native
+        EquivalentInValuesetFunc loaded-empty semantics.
         """
         entries = valueset_codes_cache.get(url)
-        if not entries:
-            return {}
+        if entries is None:
+            return None
         cached = normalized_by_url.get(url)
         if cached is not None and cached[0] is entries and cached[1] == len(entries):
             return cached[2]
@@ -811,7 +824,7 @@ def createEquivalentValuesetMembershipUdf(
 
         try:
             index = _normalized(valueset_url)
-            if not index:
+            if index is None:
                 if not valueset_codes_cache:
                     _logger.warning(
                         "cql_equivalent_in_valueset called but no valueset data "

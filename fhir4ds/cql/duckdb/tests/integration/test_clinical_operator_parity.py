@@ -957,3 +957,138 @@ def test_cql_clinical_explorer_dynamic_code_equal_and_aggregates_regression() ->
     finally:
         py.close()
         cpp.close()
+
+
+# ---------------------------------------------------------------------------
+# Loaded-but-EMPTY ValueSet vs not-loaded (CQL 3VL) — AMUX-152 finding #11
+# ---------------------------------------------------------------------------
+
+def test_cql_empty_loaded_valueset_is_false_not_null_amux152() -> None:
+    """A ValueSet that is LOADED with zero codes must answer membership
+    False (definitively not a member), while a ValueSet that is NOT loaded
+    answers NULL (unknown) — on both the Python UDF and the native C++
+    cache surfaces.
+
+    Previously the Python ``_normalized`` helpers treated a cache key with
+    zero entries the same as a missing key, conflating loaded-empty with
+    unloaded and returning NULL for both (the native cache, where the url
+    key exists with zero entries, already answered False).
+    """
+    from fhir4ds.cql.duckdb.udf.valueset import (
+        createEquivalentValuesetMembershipUdf,
+    )
+
+    empty_url = "http://example.org/fhir/ValueSet/empty-vs"
+    loaded_url = "http://example.org/fhir/ValueSet/loaded-vs"
+    unloaded_url = "http://example.org/fhir/ValueSet/unloaded-vs"
+
+    cql = f"""library EmptyVSAmux152 version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+valueset EmptyVS: '{empty_url}'
+valueset LoadedVS: '{loaded_url}'
+valueset UnloadedVS: '{unloaded_url}'
+define StringInEmptyVS: '8867-4' in EmptyVS
+define StringInLoadedVS: '1234-5' in LoadedVS
+define StringInUnloadedVS: '8867-4' in UnloadedVS
+define EquivalentInEmptyVS: '8867-4' ~in EmptyVS
+define EquivalentInUnloadedVS: '8867-4' ~in UnloadedVS
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "StringInEmptyVS": False,        # loaded, empty -> False
+        "StringInLoadedVS": False,       # loaded, code absent -> False
+        "StringInUnloadedVS": None,      # not loaded -> NULL (3VL)
+        "EquivalentInEmptyVS": False,    # loaded, empty -> False
+        "EquivalentInUnloadedVS": None,  # not loaded -> NULL (3VL)
+    }
+
+    def _make_cpp_con():
+        con = duckdb.connect(config={"allow_unsigned_extensions": True})
+        register(con, include_fhirpath=True)
+        con.execute("SELECT cql_valueset_cache_clear()")
+        # NULL code is the loaded-but-empty marker (mirrors a ValueSet
+        # loaded with zero codes).
+        con.execute("SELECT cql_valueset_cache_add(?, NULL, NULL)", [empty_url])
+        con.execute(
+            "SELECT cql_valueset_cache_add(?, ?, ?)",
+            [loaded_url, "http://loinc.org", "8867-4"],
+        )
+        return con
+
+    def _make_py_con():
+        con = duckdb.connect(config={"allow_unsigned_extensions": True})
+        _register_python_supplements(con, cpp_loaded=False, include_fhirpath=True)
+        cache = {
+            empty_url: set(),
+            loaded_url: {("http://loinc.org", "8867-4")},
+        }
+        con.remove_function("in_valueset")
+        con.create_function(
+            "in_valueset", createValuesetMembershipUdf(cache), null_handling="special"
+        )
+        con.remove_function("cql_equivalent_in_valueset")
+        con.create_function(
+            "cql_equivalent_in_valueset",
+            createEquivalentValuesetMembershipUdf(cache),
+            null_handling="special",
+        )
+        return con
+
+    for con_factory in (_make_cpp_con, _make_py_con):
+        con = con_factory()
+        try:
+            for name, want in expected.items():
+                sql = f"SELECT {translated[name].to_sql()} AS v"
+                got = con.execute(sql).fetchone()[0]
+                assert got == want, f"{con_factory.__name__} {name}: want {want}, got {got}"
+        finally:
+            con.close()
+
+
+def test_fhir_loader_registers_empty_valuesets_as_loaded_amux152() -> None:
+    """End-to-end loader contract: ``load_valuesets`` with a zero-code
+    ValueSet leaves a loaded-empty marker so membership answers False.
+
+    Exercises the Python-UDF cache path (empty-set key) on a Python-only
+    connection; the native path is covered by the marker query in
+    ``_refresh_cpp_in_valueset_cache`` and the dual-backend test above.
+    """
+    from fhir4ds.cql.loader import FHIRDataLoader
+
+    empty_url = "http://example.org/fhir/ValueSet/loader-empty-vs"
+
+    con = duckdb.connect(
+        ":memory:", config={"allow_unsigned_extensions": True}
+    )
+    _register_python_supplements(con, cpp_loaded=False, include_fhirpath=False)
+    try:
+        loader = FHIRDataLoader(con)
+        # A ValueSet resource whose expansion yields zero codes.
+        total = loader.load_valuesets([
+            {
+                "resourceType": "ValueSet",
+                "url": empty_url,
+                "status": "active",
+                "expansion": {"contains": []},
+            }
+        ])
+        assert total == 0
+        got = con.execute(
+            "SELECT in_valueset(?, 'code', ?)",
+            ['{"code": "8867-4", "system": "http://loinc.org"}', empty_url],
+        ).fetchone()[0]
+        assert got is False, (
+            f"loaded-but-empty ValueSet must answer False, got {got!r}"
+        )
+        # A URL never loaded still answers NULL (unknown).
+        got_unloaded = con.execute(
+            "SELECT in_valueset(?, 'code', ?)",
+            ['{"code": "8867-4", "system": "http://loinc.org"}',
+             "http://example.org/fhir/ValueSet/never-loaded"],
+        ).fetchone()[0]
+        assert got_unloaded is None, (
+            f"not-loaded ValueSet must answer NULL, got {got_unloaded!r}"
+        )
+    finally:
+        con.close()
