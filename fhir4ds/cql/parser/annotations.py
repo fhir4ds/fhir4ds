@@ -59,8 +59,12 @@ class AnnotationTag:
 _TAG_LINE_RE = re.compile(r"^[ \t]*@([A-Za-z_][A-Za-z0-9_]*)(?::(.*))?$")
 # NOTE: all three identifier alternatives MUST be capture groups —
 # parse_library_tags reads group(3) for simple (unquoted) define names.
+# The optional public/private access modifier (PAR-008) is skipped so
+# tags attach to the real define name, not the modifier keyword
+# (AMUX-152 #12).
 _DEFINE_RE = re.compile(
-    r"^\s*define\s+(?:\"([^\"]+)\"|`([^`]+)`|([A-Za-z_][A-Za-z0-9_]*))"
+    r"^\s*define\s+(?:public\s+|private\s+)?"
+    r"(?:\"([^\"]+)\"|`([^`]+)`|([A-Za-z_][A-Za-z0-9_]*))"
 )
 
 

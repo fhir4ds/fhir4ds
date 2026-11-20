@@ -233,6 +233,16 @@ class IncludeHandlerMixin:
                 inc.path,
                 inc.version or "",
                 bindings_key,
+                # CQL 2.0 include `bind` clause (FHIR-33126, AMUX-152 #6):
+                # the include's OWN bind overrides produce a different
+                # translation of the same library — a cache key without
+                # them makes a differently-bound include reuse the first
+                # include's bound expressions (repr of the dataclass AST
+                # is deterministic per parse).
+                tuple(sorted(
+                    (name, repr(expr))
+                    for name, expr in (inc.bindings or {}).items()
+                )),
                 self._use_fhirpath_udfs,
                 context.audit_mode,
                 context.audit_expressions,

@@ -1115,6 +1115,10 @@ class SQLTranslationContext:
         self._measurement_period = MeasurementPeriod()
         self._parameter_bindings = {}
         self._parameter_bound_expressions = {}
+        # CQL 2.0 declared-context binding (CQL20-E, AMUX-152 #16): reset
+        # so a REUSED context never leaks the previous library's declared
+        # context into the next translation.
+        self.active_context_info = None
         self.default_comparison_precision = None
         self._context_type = "Unfiltered"
         self._definition_names.clear()

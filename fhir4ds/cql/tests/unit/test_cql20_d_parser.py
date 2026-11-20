@@ -203,3 +203,56 @@ define C: 1
     def test_untagged_library_has_no_constraints(self):
         lib = parse_cql("library T\ndefine X: 1")
         assert lib.parameter_constraints == []
+
+
+class TestAmux152Batch3:
+    """AMUX-152 batch 3: parser/context hygiene (#12, #15)."""
+
+    def test_constraint_extracted_on_public_define_amux152_12(self):
+        """AMUX-152 #12: @constraint tags on `define public C:` must be
+        extracted — the annotation scanner's _DEFINE_RE must accept the
+        optional public/private access modifier (PAR-008 grammar)."""
+        lib = parse_cql(
+            "library T\n/*\n@constraint: error\n*/\ndefine public C: 1\n"
+        )
+        assert len(lib.parameter_constraints) == 1, (
+            "access-modified define skipped by the annotation scanner: "
+            f"{lib.parameter_constraints}"
+        )
+        assert lib.parameter_constraints[0].definition_name == "C"
+
+    def test_constraint_extracted_on_private_define_amux152_12(self):
+        lib = parse_cql(
+            "library T\n/*\n@constraint: warning\n*/\ndefine private C: 1\n"
+        )
+        assert len(lib.parameter_constraints) == 1
+        assert lib.parameter_constraints[0].severity == "warning"
+        assert lib.parameter_constraints[0].definition_name == "C"
+
+    def test_unversioned_using_does_not_mask_later_conflict_amux152_15(self):
+        """AMUX-152 #15: an unversioned `using` must NOT overwrite the
+        stored version with None — a later differently-versioned reference
+        to the same model is still a multiple-version conflict
+        (CQL 2.0, FHIR-57620)."""
+        with pytest.raises(ParseError, match="[Mm]ultiple versions"):
+            parse_cql(
+                "library T\nusing FHIR version '4.0.1'\nusing FHIR\n"
+                "using FHIR version '4.0.0'\ndefine X: 1\n"
+            )
+
+    def test_unversioned_include_does_not_mask_later_conflict_amux152_15(self):
+        with pytest.raises(ParseError, match="[Mm]ultiple versions"):
+            parse_cql(
+                "library T\ninclude L version '1'\ninclude L\n"
+                "include L version '2'\ndefine X: 1\n"
+            )
+
+    def test_unversioned_alongside_versioned_still_allowed_amux152_15(self):
+        """The implementation-environment case stays legal: unversioned +
+        SAME version, and a lone unversioned reference, both parse."""
+        lib = parse_cql(
+            "library T\nusing FHIR version '4.0.1'\nusing FHIR\ndefine X: 1\n"
+        )
+        assert lib is not None
+        lib2 = parse_cql("library T2\nusing FHIR\ndefine X: 1\n")
+        assert lib2 is not None

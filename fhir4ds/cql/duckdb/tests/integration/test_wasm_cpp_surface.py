@@ -315,8 +315,11 @@ def test_cql_browser_interval_and_boundary_udfs_run_without_python_fallback(cpp_
             "SELECT quantityTruncatedDivide('{\"value\":10,\"code\":\"mg\"}', '{\"value\":3,\"code\":\"g\"}')"
         ).fetchone()[0]
     )
+    # Corpus-pinned (TruncatedDivide10By5DQuantity): quantity div cancels
+    # units -> dimensionless '1' on BOTH engines; only mod preserves the
+    # left operand unit (see test_arithmetic_part2_parity.py).
     assert q_div_mg["value"] == 0.0
-    assert q_div_mg["code"] == "mg"
+    assert q_div_mg["code"] == "1"
     q_mod_g = json.loads(
         cpp_only_con.execute(
             "SELECT quantityModulo('{\"value\":10,\"code\":\"g\"}', '{\"value\":3000,\"code\":\"mg\"}')"
@@ -330,7 +333,7 @@ def test_cql_browser_interval_and_boundary_udfs_run_without_python_fallback(cpp_
         ).fetchone()[0]
     )
     assert q_div_g["value"] == 3.0
-    assert q_div_g["code"] == "g"
+    assert q_div_g["code"] == "1"
     assert cpp_only_con.execute(
         "SELECT dateAddQuantity('2026-01-01T', '{\"value\":6,\"unit\":\"month\"}')"
     ).fetchone()[0] == "2026-07-01T"

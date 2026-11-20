@@ -330,7 +330,15 @@ class CQLParser:
                     "[CQL 2.0, FHIR-57620]",
                     position=(token.line, token.column),
                 )
-            model_versions[unqualified] = using.version
+            model_versions[unqualified] = (
+                using.version
+                # AMUX-152 #15: an unversioned reference must NOT
+                # overwrite a stored version with None — that masks a
+                # later differently-versioned reference as no-conflict.
+                # Keep the first non-None version.
+                if (using.version is not None or seen is _UNSET)
+                else seen
+            )
 
         library_versions: dict[str, Optional[str]] = {}
         for inc in library.includes:
@@ -350,7 +358,11 @@ class CQLParser:
                     "[CQL 2.0, FHIR-57620]",
                     position=(token.line, token.column),
                 )
-            library_versions[inc.path] = inc.version
+            # AMUX-152 #15: keep the first non-None version — an
+            # unversioned include must not mask a later version conflict.
+            library_versions[inc.path] = (
+                inc.version if (inc.version is not None or seen is _UNSET) else seen
+            )
 
     def _parse_directive(self) -> Directive:
         """Parse a CQL 2.0 ``#`` directive (trial-use, FHIR-41326).

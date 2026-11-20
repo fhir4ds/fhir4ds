@@ -174,3 +174,53 @@ class TestParameterBindingInIncludes:
         # library's context per spec) must succeed for a literal.
         bindings = tr._translate_include_bindings(inc, child, host)
         assert "AsOf" in bindings
+
+
+class TestAmux152Batch3:
+    """AMUX-152 batch 3: include-cache bind key (#6) and context reset (#16)."""
+
+    def test_distinct_bind_clauses_do_not_share_cached_translation_amux152_6(self):
+        """AMUX-152 #6 (FHIR-33126): two includes of the SAME library with
+        DIFFERENT bind clauses must not share one cached translation — the
+        cache key must include the include's own bind clause, or the second
+        include silently reuses the first's bound expressions."""
+        child = parse_cql(
+            "library Child version '1.0'\nusing FHIR version '4.0.1'\n"
+            'parameter "AsOf" DateTime\ncontext Patient\ndefine Mark: AsOf\n'
+        )
+        libs = {"Child": child}
+
+        def loader(name):
+            return libs.get(name)
+
+        parent = parse_cql(
+            "library Host version '1.0'\nusing FHIR version '4.0.1'\n"
+            "include Child called C1 bind { AsOf: @2024-07-01 }\n"
+            "include Child called C2 bind { AsOf: @2025-03-01 }\n"
+            "context Patient\n"
+            "define A: C1.Mark\ndefine B: C2.Mark\n"
+        )
+        translator = CQLToSQLTranslator(library_loader=loader)
+        translator.translate_library(parent)
+        a_sql = translator._included_definitions["C1.Mark"].to_sql()
+        b_sql = translator._included_definitions["C2.Mark"].to_sql()
+        assert "2024-07-01" in a_sql and "2025-03-01" not in a_sql, a_sql
+        assert "2025-03-01" in b_sql and "2024-07-01" not in b_sql, b_sql
+
+    def test_context_clear_resets_active_context_info_amux152_16(self):
+        """AMUX-152 #16: SQLTranslationContext.clear() must reset
+        active_context_info — a reused context otherwise leaks the previous
+        library's declared-context binding across translations."""
+        from fhir4ds.cql.translator.context import SQLTranslationContext
+
+        ctx = SQLTranslationContext(resource_type="Patient")
+        assert ctx.active_context_info is None
+        ctx.active_context_info = {
+            "name": "Facility",
+            "context_type": "Facility",
+            "key_elements": [{"path": "id"}],
+        }
+        ctx.clear()
+        assert ctx.active_context_info is None, (
+            "clear() leaks the stale declared-context binding"
+        )
