@@ -105,6 +105,19 @@
       "terminologyServerStatus": "active"
     },
     {
+      "mnemonic": "ICD10PCS",
+      "name": "International Classification of Diseases, Tenth Revision, Procedure Coding System",
+      "identifier": "http://hl7.org/fhir/sid/icd-10-pcs",
+      "aliases": [
+        "2.16.840.1.113883.6.4",
+        "ICD-10-PCS",
+        "ICD10PCS",
+        "http://hl7.org/fhir/sid/icd-10-pcs",
+        "urn:oid:2.16.840.1.113883.6.4"
+      ],
+      "terminologyServerStatus": "active"
+    },
+    {
       "mnemonic": "ICD9CM",
       "name": "International Classification of Diseases, Ninth Revision, Clinical Modification",
       "identifier": "http://hl7.org/fhir/sid/icd-9-cm",

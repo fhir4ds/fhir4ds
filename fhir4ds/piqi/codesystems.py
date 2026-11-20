@@ -45,6 +45,9 @@ _SYSTEM_NAMES: dict[str, str] = {
     "http://hl7.org/fhir/sid/icd-10-cm": (
         "International Classification of Diseases, Tenth Revision, "
         "Clinical Modification"),
+    "http://hl7.org/fhir/sid/icd-10-pcs": (
+        "International Classification of Diseases, Tenth Revision, "
+        "Procedure Coding System"),
     "http://hl7.org/fhir/sid/icd-10": (
         "International Classification of Diseases, Tenth Revision"),
     "http://hl7.org/fhir/sid/icd-9-cm": (
@@ -84,6 +87,9 @@ _EXTRA_ALIASES: dict[str, tuple[str, ...]] = {
     "http://hl7.org/fhir/sid/icd-10-cm": ("ICD-10-CM", "I10",
                                           "2.16.840.1.113883.6.90",
                                           "urn:oid:2.16.840.1.113883.6.90"),
+    "http://hl7.org/fhir/sid/icd-10-pcs": ("ICD-10-PCS",
+                                           "2.16.840.1.113883.6.4",
+                                           "urn:oid:2.16.840.1.113883.6.4"),
     "http://hl7.org/fhir/sid/icd-9-cm": ("ICD-9-CM", "I9",
                                          "2.16.840.1.113883.6.103",
                                          "urn:oid:2.16.840.1.113883.6.103"),
@@ -91,6 +97,35 @@ _EXTRA_ALIASES: dict[str, tuple[str, ...]] = {
         "RxNorm", "RXNORM", "2.16.840.1.113883.6.88",
         "urn:oid:2.16.840.1.113883.6.88"),
     "http://unitsofmeasure.org": ("UCUM", "ucum"),
+}
+
+
+#: ENVIRONMENT SYSTEM ALIASES — declarative DATA, not code behavior.
+#:
+#: Local/proprietary code-system URIs that are KNOWN, for a specific
+#: export environment, to carry the vocabulary of a standard system.
+#: Recognition consults this table only AFTER every standard spelling
+#: (see :func:`resolve_code_system`), and a recognized-via-alias
+#: verdict is distinguishable via :func:`environment_alias_target`.
+#:
+#: Current table: the MIMIC-IV-FHIR demo (2026-11-20 alias-rerun) —
+#: its ICD codes sit under mimic-wrapped CodeSystem URIs, and the
+#: ``mimic-medication-ndc`` referenced-Medication codes are NDC.
+#: Proprietary MIMIC systems (``mimic-medication-name``,
+#: ``mimic-medication-formulary-drug-cd``, ``mimic-medication-poe-iv``,
+#: ``mimic-d-items``, ...) deliberately have NO entry: their codes have
+#: no standard counterpart (translation-required tier).
+ENVIRONMENT_ALIASES: dict[str, str] = {
+    "http://mimic.mit.edu/fhir/mimic/CodeSystem/mimic-diagnosis-icd9":
+        "http://hl7.org/fhir/sid/icd-9-cm",
+    "http://mimic.mit.edu/fhir/mimic/CodeSystem/mimic-diagnosis-icd10":
+        "http://hl7.org/fhir/sid/icd-10-cm",
+    "http://mimic.mit.edu/fhir/mimic/CodeSystem/mimic-procedure-icd9":
+        "http://hl7.org/fhir/sid/icd-9-cm",
+    "http://mimic.mit.edu/fhir/mimic/CodeSystem/mimic-procedure-icd10":
+        "http://hl7.org/fhir/sid/icd-10-pcs",
+    "http://mimic.mit.edu/fhir/mimic/CodeSystem/mimic-medication-ndc":
+        "http://hl7.org/fhir/sid/ndc",
 }
 
 
@@ -102,6 +137,7 @@ def _mnemonic_for(url: str) -> str:
         "http://snomed.info/sct": "SNOMEDCT",
         "http://www.nlm.nih.gov/research/umls/rxnorm": "RXNORM",
         "http://hl7.org/fhir/sid/icd-10-cm": "ICD10CM",
+        "http://hl7.org/fhir/sid/icd-10-pcs": "ICD10PCS",
         "http://hl7.org/fhir/sid/icd-10": "ICD10",
         "http://hl7.org/fhir/sid/icd-9-cm": "ICD9CM",
         "http://hl7.org/fhir/sid/icd-9": "ICD9",
@@ -174,12 +210,41 @@ def _lookup_index() -> dict[str, dict]:
     return index
 
 
+def environment_alias_target(value: object) -> _t.Optional[str]:
+    """Canonical URL of the standard system an ENVIRONMENT alias maps
+    to, or ``None`` when ``value`` is not an environment alias (i.e.
+    it is either a standard spelling or unrecognized). This is the
+    cheap provenance check: a verdict reached via
+    :func:`resolve_code_system` on an alias spelling reports the
+    canonical entry, and this function distinguishes that path."""
+    if not isinstance(value, str) or not value:
+        return None
+    if value in ENVIRONMENT_ALIASES:
+        return ENVIRONMENT_ALIASES[value]
+    upper = value.upper()
+    for alias, canonical in ENVIRONMENT_ALIASES.items():
+        if alias.upper() == upper:
+            return canonical
+    return None
+
+
+def _environment_alias_entry(value: object) -> _t.Optional[dict]:
+    target = environment_alias_target(value)
+    if target is None:
+        return None
+    return _lookup_index().get(target)
+
+
 def resolve_code_system(value: object) -> _t.Optional[dict]:
     """Resolve any valid identifier spelling to the registry entry.
 
     Returns ``None`` for unrecognized/non-string/empty values. Lookup
     is exact first, then upper-cased, then OID-normalized via the
-    shared :class:`SystemResolver` (module-level cache; stdlib-only).
+    shared :class:`SystemResolver` (module-level cache; stdlib-only),
+    and only THEN — after every standard spelling — the environment
+    alias table (:data:`ENVIRONMENT_ALIASES`, consulted last so a
+    spelling that collides with a standard one always resolves
+    standard-side).
     """
     if not isinstance(value, str) or not value:
         return None
@@ -191,14 +256,14 @@ def resolve_code_system(value: object) -> _t.Optional[dict]:
     try:
         from ..cql.duckdb.udf.system_resolver import SystemResolver
     except Exception:  # pragma: no cover - defensive
-        return None
+        return _environment_alias_entry(value)
     normalized = SystemResolver.normalize(value)
     if isinstance(normalized, str):
         if normalized in index:
             return index[normalized]
         if normalized.upper() in index:
             return index[normalized.upper()]
-    return None
+    return _environment_alias_entry(value)
 
 
 def is_recognized_code_system(value: object) -> bool:
@@ -210,8 +275,14 @@ def recognized_system_strings() -> tuple[str, ...]:
     """Every identifier/alias/mnemonic spelling the registry recognizes
     (deterministic, sorted). This closure is what the
     ``Concept_HasRecognizedCodeSystem`` SQL embeds — a coding whose
-    ``system`` equals ANY of these strings is recognized."""
-    return tuple(sorted(_lookup_index().keys()))
+    ``system`` equals ANY of these strings is recognized. Includes the
+    ENVIRONMENT alias spellings (:data:`ENVIRONMENT_ALIASES`) so the
+    author-time closure recognizes alias-mapped systems."""
+    spellings = set(_lookup_index().keys())
+    for alias in ENVIRONMENT_ALIASES:
+        spellings.add(alias)
+        spellings.add(alias.upper())
+    return tuple(sorted(spellings))
 
 
 def registry_document() -> dict:
@@ -221,6 +292,8 @@ def registry_document() -> dict:
 
 __all__ = [
     "code_system_registry",
+    "ENVIRONMENT_ALIASES",
+    "environment_alias_target",
     "resolve_code_system",
     "is_recognized_code_system",
     "recognized_system_strings",
