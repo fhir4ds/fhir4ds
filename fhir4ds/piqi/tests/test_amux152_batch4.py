@@ -89,6 +89,18 @@ class TestAmux152Batch4Injection:
         body = base64.b64decode(lib["content"][0]["data"]).decode()
         assert "999" not in body
 
+    def test_authored_strings_are_quoted_literals_amux152_17_review(self):
+        """Batch-4 review: EVERY string interpolated into the rubric SQL
+        (data_class, entity, attributed mnemonics) is emitted as a quoted
+        SQL literal — defense in depth beyond the scoring_effect
+        allowlist, so no interpolation site is a future injection seam."""
+        lib, _ = build_rubric("quote", "quote probe", [dict(self._CRITERION)])
+        body = base64.b64decode(lib["content"][0]["data"]).decode()
+        assert "'Demographics' AS data_class" in body
+        assert "'birthDate' AS entity" in body
+        assert "'Attr_IsValidDate' END AS attributed_mnemonic" in body \
+            or "'Attr_IsValidDate' AS attributed_mnemonic" in body
+
 
 # ===========================================================================
 # #21 — duplicate sequence values
@@ -145,6 +157,15 @@ class TestAmux152Batch4CustomSamDict:
         # packaged behavior unchanged
         packed = run_sam(con, "piqi-sam-labresult-resultvalue-ispopulated")
         assert packed[0]["sam_mnemonic"] == "Attr_IsPopulated"
+
+    def test_custom_dict_cannot_shadow_packaged_canonical_amux152_22(self):
+        """Batch-4 review: a custom dict whose url CLAIMS a packaged
+        canonical is rejected loudly — it must never silently replace the
+        packaged SAM's body for its own or any dependency resolution."""
+        sam = get_sam("labresult-resultvalue-ispopulated")
+        con = fx.make_connection([fx.PATIENT_IG_P11])
+        with pytest.raises(ValueError, match="packaged canonical"):
+            run_sam(con, dict(sam))  # same url as the packaged SAM
 
 
 # ===========================================================================

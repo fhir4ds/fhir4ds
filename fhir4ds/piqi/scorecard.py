@@ -134,17 +134,31 @@ def run_sam(connection, sam, *, patient_id: _t.Optional[str] = None) -> list[dic
             ).encode("utf-8")).decode("ascii"),
         }],
     }
-    # AMUX-152 #22: a CUSTOM SAM dict (non-packaged url) must still
-    # materialize — resolve the dict itself by identity/url, and fall
-    # back to the packaged registry for every other canonical (views,
-    # prerequisite SAMs). Packaged behavior is unchanged.
+    # AMUX-152 #22 (+ batch-4 review): a CUSTOM SAM dict (non-packaged
+    # url) must still materialize — resolve the dict itself by
+    # identity/url as a FALLBACK, with the packaged registry ALWAYS
+    # taking precedence so a dict can never shadow a packaged canonical.
+    # A dict that CLAIMS a packaged url is rejected loudly instead of
+    # silently replacing the packaged SAM's semantics.
     _packaged = piqi_resolver()
     _own = {canonical: sam_dict}
+    if not isinstance(sam, str):
+        try:
+            _packaged(canonical)
+        except KeyError:
+            pass
+        else:
+            raise ValueError(
+                "custom SAM dict reuses the packaged canonical "
+                f"{canonical!r}; give it a unique url")
 
     def _resolver(resolved_canonical: str) -> dict:
-        if resolved_canonical in _own:
-            return _own[resolved_canonical]
-        return _packaged(resolved_canonical)
+        try:
+            return _packaged(resolved_canonical)
+        except KeyError:
+            if resolved_canonical in _own:
+                return _own[resolved_canonical]
+            raise
 
     rows = SQLQueryRunner(connection, _resolver).execute(
         wrapper, {"patient_id": patient_id})

@@ -991,8 +991,13 @@ def _prereq_chain(spec: SAMSpec, by_id: dict[str, SAMSpec]) -> list[SAMSpec]:
     prerequisite of the assigned SAM.
     """
     chain: list[SAMSpec] = []
+    seen: set[str] = set()
     cur = spec
     while cur.prereq is not None:
+        if cur.prereq in seen:  # batch-4 review: a cyclic catalog must
+            raise ValueError(  # fail loudly, not hang the build
+                f"cyclic prerequisite chain at {cur.prereq!r}")
+        seen.add(cur.prereq)
         cur = by_id[cur.prereq]
         chain.append(cur)
     chain.reverse()
@@ -1100,18 +1105,18 @@ def build_rubric(name: str, description: str,
                 f"WHEN p{k}.result = 'fail' THEN p{k}.detail"
                 for k in range(len(chain)))
             attrib_case = "CASE " + " ".join(
-                f"WHEN p{k}.result = 'fail' THEN '{lvl.mnemonic}'"
+                f"WHEN p{k}.result = 'fail' THEN {_sql_literal(lvl.mnemonic)}"
                 for k, lvl in enumerate(chain))
             result_case += " WHEN a.result IS NOT NULL THEN a.result ELSE NULL END"
             detail_case += (" WHEN a.result IS NOT NULL THEN a.detail "
                             "ELSE NULL END")
-            attrib_case += f" ELSE '{mnem}' END"
+            attrib_case += f" ELSE {_sql_literal(mnem)} END"
         else:
             frm = f"FROM {_q(sam_label)} a"
             pid, eid = "a.patient_id", "a.element_id"
             result_case = "a.result"
             detail_case = "a.detail"
-            attrib_case = f"'{mnem}'"
+            attrib_case = _sql_literal(mnem)
 
         cond_join = ""
         cond_where = ""
@@ -1122,7 +1127,8 @@ def build_rubric(name: str, description: str,
 
         selects.append(
             f"SELECT patient_id, element_id, "
-            f"{seq} AS sequence, '{dc}' AS data_class, '{ent}' AS entity, "
+            f"{seq} AS sequence, {_sql_literal(dc)} AS data_class, "
+            f"{_sql_literal(ent)} AS entity, "
             f"result, detail, attributed_mnemonic, "
             f"{_sql_literal(effect)} AS scoring_effect, "
             f"{weight} AS weight, {crit} AS criticality\n"
