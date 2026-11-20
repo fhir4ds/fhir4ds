@@ -28,7 +28,14 @@ reasonCode any-intersection     5
 
 **Merge**: score >= 60 AND temporal core present (overlap >= 80% or
 adjacency). **Hard negative**: identical class=EMER encounters with
-disjoint periods >= 2h apart never merge regardless of score. **Queue**:
+disjoint periods >= 2h apart never merge regardless of score. **CR-003
+(Joel decision 2026-11-20, option a)**: the veto also constrains the
+CLUSTER — before a merge edge is admitted, the resulting cluster must
+contain no vetoed pair (vetoes precomputed per patient-group; edges
+admitted in sorted-pair order, deterministic). Refused edges are
+recorded with reason ``would_create_vetoed_pair`` plus the refused and
+vetoed rids (curation queue kind ``encounter_edge_refused`` + the
+``encounter_refused_edges`` stat). **Queue**:
 score >= 30 with >= 2 corroborators (or >= 60 without a core) →
 near-miss curation entry (``kind: "encounter_near_miss"``).
 
@@ -339,6 +346,12 @@ def encounter_pass(resources: list[dict], *,
     ``patient_membership``); ``None`` treats every patient reference as
     its own group (identity). Grouping happens BEFORE any pairing, so
     cross-patient encounters can never merge.
+
+    CR-003: within a group, merge edges are admitted under the veto
+    constraint — an edge whose admission would place a vetoed (EMER
+    hard-negative) pair inside one cluster is refused and audit-recorded
+    (``encounter_edge_refused`` curation entry with reason
+    ``would_create_vetoed_pair``).
     """
     features: dict[str, EncounterFeatures] = {}
     records: list[DedupRecord] = []
@@ -389,6 +402,7 @@ def encounter_pass(resources: list[dict], *,
             })
 
     merge_edges: list[dict] = []
+    refused_edges: list[dict] = []
     for key in sorted(groups):
         members = groups[key]
         parent: dict[str, str] = {r.rid: r.rid for r in members}
@@ -401,7 +415,14 @@ def encounter_pass(resources: list[dict], *,
                 parent[x], x = root, parent[x]
             return root
 
-        group_edges: list[dict] = []
+        # CR-003: precompute the per-pair scores AND the vetoed pairs
+        # (EMER hard negatives) for this patient-group BEFORE any edge is
+        # admitted, so cluster admission can be constrained: a merge edge
+        # is refused when the resulting cluster would contain a vetoed
+        # pair (union-find transitivity must not defeat the veto).
+        # Pairs iterate in sorted order — deterministic admission order.
+        scored_pairs: dict[tuple[str, str], dict] = {}
+        vetoed_pairs: list[tuple[str, str]] = []
         for i, left in enumerate(members):
             for right in members[i + 1:]:
                 if left.nd is None or right.nd is None:
@@ -411,33 +432,70 @@ def encounter_pass(resources: list[dict], *,
                     features[right.rid], default_tz)
                 if scored is None:
                     continue
-                edge = {"edge": sorted((left.rid, right.rid)),
-                        "patient_group": key, **scored}
-                merges = (scored["score"] >= ENCOUNTER_MERGE_THRESHOLD
-                          and scored["core"]
-                          and not scored["hard_negative"])
-                near_miss = (not merges and not scored["hard_negative"]
-                             and scored["score"] >= 30
-                             and (scored["corroborators"] >= 2
-                                  or scored["score"]
-                                  >= ENCOUNTER_MERGE_THRESHOLD))
-                if merges:
+                pair = (min(left.rid, right.rid), max(left.rid, right.rid))
+                scored_pairs[pair] = scored
+                if scored["hard_negative"]:
+                    vetoed_pairs.append(pair)
+
+        group_edges: list[dict] = []
+        for (left_rid, right_rid) in sorted(scored_pairs):
+            scored = scored_pairs[(left_rid, right_rid)]
+            left = next(r for r in members if r.rid == left_rid)
+            right = next(r for r in members if r.rid == right_rid)
+            edge = {"edge": [left_rid, right_rid],
+                    "patient_group": key, **scored}
+            merges = (scored["score"] >= ENCOUNTER_MERGE_THRESHOLD
+                      and scored["core"]
+                      and not scored["hard_negative"])
+            near_miss = (not merges and not scored["hard_negative"]
+                         and scored["score"] >= 30
+                         and (scored["corroborators"] >= 2
+                              or scored["score"]
+                              >= ENCOUNTER_MERGE_THRESHOLD))
+            if merges:
+                rl, rr = find(left_rid), find(right_rid)
+                if rl == rr:
+                    # Redundant edge inside an admitted cluster — safe.
                     group_edges.append(edge)
                     merge_edges.append(edge)
-                    rl, rr = find(edge["edge"][0]), find(edge["edge"][1])
-                    if rl != rr:
-                        lo, hi = (rl, rr) if rl < rr else (rr, rl)
-                        parent[hi] = lo
-                elif near_miss:
-                    curation.append({
-                        "kind": "encounter_near_miss",
+                    continue
+                # Constrained admission (CR-003): refuse the edge when the
+                # union would place any vetoed pair inside one cluster.
+                conflict = None
+                for veto in sorted(vetoed_pairs):
+                    vl, vr = find(veto[0]), find(veto[1])
+                    if (vl, vr) in ((rl, rr), (rr, rl)):
+                        conflict = veto
+                        break
+                if conflict is not None:
+                    refused = {
+                        "kind": "encounter_edge_refused",
                         "resource_type": "Encounter",
-                        "rids": edge["edge"],
-                        "patient_ref": left.patient_ref,
+                        "rids": [left_rid, right_rid],
+                        "patient_group": key,
+                        "reason": "would_create_vetoed_pair",
+                        "vetoed_pair": [conflict[0], conflict[1]],
                         "score": scored["score"],
                         "signals": scored["signals"],
                         "corroborators": scored["corroborators"],
-                    })
+                    }
+                    refused_edges.append(refused)
+                    curation.append(refused)
+                    continue
+                group_edges.append(edge)
+                merge_edges.append(edge)
+                lo, hi = (rl, rr) if rl < rr else (rr, rl)
+                parent[hi] = lo
+            elif near_miss:
+                curation.append({
+                    "kind": "encounter_near_miss",
+                    "resource_type": "Encounter",
+                    "rids": edge["edge"],
+                    "patient_ref": left.patient_ref,
+                    "score": scored["score"],
+                    "signals": scored["signals"],
+                    "corroborators": scored["corroborators"],
+                })
         components: dict[str, list[DedupRecord]] = {}
         for record in members:
             components.setdefault(find(record.rid), []).append(record)
@@ -476,6 +534,7 @@ def encounter_pass(resources: list[dict], *,
             "encounter_patient_groups": len(groups),
             "encounter_near_miss": sum(
                 1 for e in curation if e["kind"] == "encounter_near_miss"),
+            "encounter_refused_edges": len(refused_edges),
         },
         cluster_edges=cluster_edges,
         curation_records=curation,
