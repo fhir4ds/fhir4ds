@@ -31,3 +31,7 @@ test-results/
 # ONC-derived patient-matching test fixtures (fetched, never committed)
 fhir4ds/matching/tests/fixtures/onc/*
 !fhir4ds/matching/tests/fixtures/onc/README.md
+
+# MIMIC-IV-FHIR demo corpus (realism harness; fetched via
+# fhir4ds/realism/fetch_mimic_demo.sh, NEVER committed)
+tests/data/mimic-iv-fhir-demo/
