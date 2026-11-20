@@ -32,6 +32,24 @@ def quote_identifier(name: str) -> str:
     return f'"{name}"'
 
 
+def quote_sql_identifier(name: str) -> str:
+    """Escape-and-quote a PHYSICAL DuckDB identifier (schema/table/column).
+
+    Unlike the strict :func:`quote_identifier` (logical-model names that
+    must satisfy the safe-identifier allowlist), physical DDL identifiers
+    such as runner schemas, view names, and introspected result columns may
+    legitimately be mixed-case, contain spaces, or collide with SQL reserved
+    words. This quoter accepts any non-empty string identifier and makes it
+    safe by doubling embedded double quotes — the same doctrine as
+    ``fhir4ds.sources.base.quote_identifier`` (AMUX-152 #27).
+    """
+    if not isinstance(name, str) or not name:
+        raise ValueError(
+            f"Invalid SQL identifier: {name!r} (non-empty string required)"
+        )
+    return '"' + name.replace('"', '""') + '"'
+
+
 def pluralize_resource(resource: str) -> str:
     """Convert a FHIR resource type to its pluralized table name.
 

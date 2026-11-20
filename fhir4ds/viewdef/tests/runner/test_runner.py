@@ -93,13 +93,16 @@ class TestPrimitives:
 
     def test_materialize_views(self, con, family_dir):
         created = materialize_views(con, family_dir, ["person-view"], "resources", schema="fam")
-        assert created == {"person-view": 'fam."person"'}
+        # AMUX-152 #27: schema is quoted now ('"fam"' ≡ fam in DuckDB)
+        assert created == {"person-view": '"fam"."person"'}
         rows = con.execute('SELECT count(*) FROM fam."person"').fetchone()[0]
         assert rows == 2
 
     def test_compose_union(self, con, family_dir):
+        # AMUX-152 #27: compose_union takes BARE child names (quoted inside)
         children = materialize_views(con, family_dir, ["obs-view", "imm-view"], "resources", schema="fam")
-        name = compose_union(con, [children[s] for s in children], "events", schema="fam")
+        stems = ["obs-view", "imm-view"]
+        name = compose_union(con, [s.replace("-view", "").replace("-", "_") for s in stems], "events", schema="fam")
         n = con.execute(f"SELECT count(*) FROM {name}").fetchone()[0]
         assert n == 2
 
@@ -273,3 +276,53 @@ class TestPureTextRendering:
         plan = build_composition_plan(family_dir / "manifest.json")
         with _pytest.raises(ValueError, match="missing columns"):
             render_composition_ddl(plan, {}, sql_by_view={})
+
+
+class TestQuotingRoundTripAmux152:
+    """AMUX-152 #27: identifiers needing quoting (mixed case, spaces,
+    reserved words) round-trip through the runner primitives."""
+
+    def test_materialize_views_quoting_needing_identifiers(self, con, family_dir):
+        created = materialize_views(
+            con, family_dir, ["person-view"], "resources",
+            schema="My Schema", table_name="order",
+        )
+        assert created == {"person-view": '"My Schema"."order"'}
+        rows = con.execute('SELECT count(*) FROM "My Schema"."order"').fetchone()[0]
+        assert rows == 2
+
+    def test_compose_union_quoting_needing_identifiers(self, con, family_dir):
+        # distinct quoting-needing names per child (table_name is shared
+        # across stems, so materialize one at a time)
+        materialize_views(con, family_dir, ["obs-view"], "resources",
+                          schema="My Schema", table_name="select all")
+        materialize_views(con, family_dir, ["imm-view"], "resources",
+                          schema="My Schema", table_name="group by")
+        ref = compose_union(con, ["select all", "group by"], "full join", schema="My Schema")
+        assert ref == '"My Schema"."full join"'
+        n = con.execute(f"SELECT count(*) FROM {ref}").fetchone()[0]
+        assert n == 2
+
+    def test_projection_sql_quotes_columns_and_coerces_defaults(self):
+        from fhir4ds.viewdef.runner import _projection_sql
+        sql = _projection_sql(
+            "SELECT 1 AS \"order\", NULL AS \"visit id\"",
+            ["order", "visit id"],
+            hash_keys=["order"],
+            defaults={"visit id": 0},
+        )
+        assert '"order"' in sql and '"visit id"' in sql
+        # hash/TRY_CAST reference the QUOTED column names
+        assert 'hash("order")' in sql
+        assert 'TRY_CAST("visit id" AS BIGINT), 0)' in sql
+
+    def test_run_composition_quoting_needing_schema(self, con, family_dir):
+        # rewrite the manifest with a quoting-needing view_schema
+        m = json.loads((family_dir / "manifest.json").read_text())
+        m["view_schema"] = "OMOP Schema"
+        (family_dir / "manifest.json").write_text(json.dumps(m))
+        created = run_composition(con, family_dir / "manifest.json", "resources")
+        ref = created["events"]
+        assert ref == '"OMOP Schema"."events"'
+        n = con.execute(f"SELECT count(*) FROM {ref}").fetchone()[0]
+        assert n == 2

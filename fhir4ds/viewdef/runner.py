@@ -44,9 +44,15 @@ from typing import Dict, List, Optional, Sequence
 
 from .parser import parse_view_definition
 from .generator import SQLGenerator
+from .utils import quote_sql_identifier as _q
 
 _HASH_MASK = "9223372036854775807"
 _SQLQUERY_DIR = "sqlqueries"
+
+
+def _qualified(schema: str, name: str) -> str:
+    """Quoted ``<schema>.<name>`` reference (AMUX-152 #27 doctrine)."""
+    return f"{_q(schema)}.{_q(name)}"
 
 
 def _library_sql(path: Path) -> str:
@@ -139,13 +145,14 @@ def materialize_views(
     Each stem's generated SQL becomes ``<schema>.<table_name or stem>``
     (stems normalized: '-'/'.json' -> '_'). Views are CREATE OR REPLACE.
     """
-    con.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    con.execute(f"CREATE SCHEMA IF NOT EXISTS {_q(schema)}")
     created: Dict[str, str] = {}
     for stem in stems:
         sql = generate_view_sql(vd_dir / f"{stem}.json", source_table, view_schema=schema)
         name = (table_name or stem).replace("-view", "").replace("-", "_").replace(".", "_")
-        con.execute(f'CREATE OR REPLACE VIEW {schema}."{name}" AS\n{sql}')
-        created[stem] = f'{schema}."{name}"'
+        ref = _qualified(schema, name)
+        con.execute(f"CREATE OR REPLACE VIEW {ref} AS\n{sql}")
+        created[stem] = ref
     return created
 
 
@@ -155,10 +162,17 @@ def compose_union(
     target: str,
     schema: str = "omop",
 ) -> str:
-    """Create the table-level UNION ALL view over materialized children."""
-    union_sql = "\nUNION ALL\n".join(f"SELECT * FROM {t}" for t in child_tables)
-    con.execute(f'CREATE OR REPLACE VIEW {schema}."{target}" AS\n{union_sql}')
-    return f'{schema}."{target}"'
+    """Create the table-level UNION ALL view over materialized children.
+
+    ``child_tables`` are BARE view names materialized in ``schema``
+    (AMUX-152 #27: names are quoted here, never interpolated raw; pass
+    names, not pre-quoted references).
+    """
+    refs = [_qualified(schema, c) for c in child_tables]
+    union_sql = "\nUNION ALL\n".join(f"SELECT * FROM {t}" for t in refs)
+    ref = _qualified(schema, target)
+    con.execute(f"CREATE OR REPLACE VIEW {ref} AS\n{union_sql}")
+    return ref
 
 
 def _result_columns(con, sql: str) -> List[str]:
@@ -176,14 +190,18 @@ def _projection_sql(
     defaults = defaults or {}
     exprs = []
     for col in columns:
+        ref = _q(col)
         if col in hash_keys:
-            exprs.append(f"CAST(hash({col}) & {_HASH_MASK} AS BIGINT) AS {col}")
+            exprs.append(f"CAST(hash({ref}) & {_HASH_MASK} AS BIGINT) AS {ref}")
         elif col in defaults:
+            # AMUX-152 #27: defaults are literal ints — coerce, never
+            # interpolate caller text raw.
             exprs.append(
-                f"CAST(COALESCE(TRY_CAST({col} AS BIGINT), {defaults[col]}) AS BIGINT) AS {col}"
+                f"CAST(COALESCE(TRY_CAST({ref} AS BIGINT), "
+                f"{int(defaults[col])}) AS BIGINT) AS {ref}"
             )
         else:
-            exprs.append(col)
+            exprs.append(ref)
     return f"SELECT {', '.join(exprs)} FROM (\n{select_sql}\n)"
 
 
@@ -323,7 +341,7 @@ def build_composition_plan(manifest_path: Path) -> dict:
             "type": "view",
             "role": role,
             "name": name,
-            "table_sql": f'{schema}."{name}"',
+            "table_sql": _qualified(schema, name),
             "stem": stem,
             "projection": projection,
         }
@@ -354,7 +372,7 @@ def build_composition_plan(manifest_path: Path) -> dict:
             "type": "union",
             "role": "union",
             "table": table,
-            "table_sql": f'{schema}."{table}"',
+            "table_sql": _qualified(schema, table),
             "children": children,
             "projection": projections.get(table) or None,
         })
@@ -389,7 +407,7 @@ def build_composition_plan(manifest_path: Path) -> dict:
                 "type": "sqlquery",
                 "role": "table",
                 "table": table,
-                "table_sql": f'{schema}."{table}"',
+                "table_sql": _qualified(schema, table),
                 "stem": sql_entries[table],
                 "projection": projections.get(table) or None,
             })
@@ -479,7 +497,7 @@ def render_composition_ddl(
                 )
             continue  # already created by the plain-view pass
         # union step
-        children = [f'{schema}."{c}"' for c in step["children"]]
+        children = [_qualified(schema, c) for c in step["children"]]
         first_cols = columns_by_view.get(step["children"][0])
         if first_cols is None:
             raise ValueError(f"missing columns for union child {step['children'][0]!r}")
@@ -515,7 +533,7 @@ def run_composition(con, manifest_path: Path, source_table: str) -> Dict[str, st
     created: Dict[str, str] = {}
     join_targets: Dict[str, str] = {}
 
-    con.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    con.execute(f"CREATE SCHEMA IF NOT EXISTS {_q(schema)}")
     for step in plan["steps"]:
         if step["type"] == "sqlquery":
             sql = _library_sql(vd_dir / _SQLQUERY_DIR / f'{step["stem"]}.json')
@@ -548,7 +566,7 @@ def run_composition(con, manifest_path: Path, source_table: str) -> Dict[str, st
             continue
 
         # union step
-        child_tables = [f'{schema}."{c}"' for c in step["children"]]
+        child_tables = [_qualified(schema, c) for c in step["children"]]
         first_cols = _result_columns(con, f"SELECT * FROM {child_tables[0]}")
         for t in child_tables[1:]:
             cols = _result_columns(con, f"SELECT * FROM {t}")
