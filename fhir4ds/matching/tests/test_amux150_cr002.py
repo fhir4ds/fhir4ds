@@ -172,11 +172,10 @@ class TestOrganizationEnforcement:
 
     def test_org_identifier_rules_under_budget_still_link_alone(self):
         """Over-enforcement guard: O3 (tax_id + org_name, P = 2e-9) stays
-        under the 1e-8 budget — no corroboration required. NOTE (finding,
-        reported): O2 (CLIA alone, P = 1e-7) EXCEEDS the 1e-8 org budget —
-        it links here only because the matching org_name corroborates
-        (combined 2e-9); a CLIA-only pair with no agreeing name is refused
-        under CR-002."""
+        under the 1e-8 budget — no corroboration required. O2 (CLIA)
+        RETUNED to authored P = 1e-8 (Joel decision 2026-11-20, FHIR4-18):
+        CLIA is a CMS-issued facility-unique identifier, so it links ALONE
+        with no corroborator; a DISAGREEING CLIA never fires O2 at all."""
         conn = duckdb.connect()
         _index_org(conn, _org("o3", name="General Hospital",
                               tax="123456789"))
@@ -184,25 +183,22 @@ class TestOrganizationEnforcement:
                                        tax="123456789"))
         assert (result.outcome, result.rule_id) == ("match", "O3")
         assert result.threshold_enforcement is None
-        # O2 corroborated by the agreeing org_name
-        _index_org(conn, _org("o1", name="Springfield Lab",
-                              clia="22D1234567"))
-        result = _match_org(conn, _org("o2", name="Springfield Lab",
-                                       clia="22D1234567"))
+        # O2 links ALONE: identical CLIA, no name on either side
+        _index_org(conn, _org("o1", clia="22D1234567"))
+        result = _match_org(conn, _org("o2", clia="22D1234567"))
         assert (result.outcome, result.rule_id) == ("match", "O2")
-        assert result.threshold_enforcement is not None
-        assert result.threshold_enforcement["required"] is True
-        assert result.threshold_enforcement["satisfied"] is True
-        assert result.threshold_enforcement["corroborating_fields"] \
-            == ["org_name"]
-        # CLIA with a DISAGREEING name has no corroborator -> refused
+        assert result.threshold_enforcement is None
+        # ...and with names that DISAGREE (no corroboration needed at 1e-8)
         _index_org(conn, _org("o9", name="Springfield Lab",
-                              clia="22D1234567"))
+                              clia="22D2039876"))
         result = _match_org(conn, _org("o10", name="Shelbyville Lab",
-                                       clia="22D1234567"))
+                                       clia="22D2039876"))
+        assert (result.outcome, result.rule_id) == ("match", "O2")
+        # CLIA MISMATCH: a different CLIA never fires O2 -> refused
+        _index_org(conn, _org("o11", clia="22D3111122"))
+        result = _match_org(conn, _org("o12", clia="99D9876543"))
+        result = _match_org(conn, _org("o12", clia="99D9876543"))
         assert result.outcome == "no_match"
-        assert result.threshold_enforcement is not None
-        assert result.threshold_enforcement["satisfied"] is False
         conn.close()
 
     def test_disagreeing_phone_is_not_corroboration(self):

@@ -78,13 +78,15 @@ _E, _F = EXACT, FUZZY
 
 
 def _rule(rule_id, fields, desc, p_fuzzy_fields=frozenset(),
-          guards=(), enabled=True) -> MatchRule:
+          guards=(), enabled=True, p_override=None) -> MatchRule:
     return MatchRule(
         rule_id=rule_id,
         fields=tuple(fields),
-        p_collision=p_collision(tuple(fields)),
-        p_collision_fuzzy=p_collision(tuple(fields),
-                                      fuzzy_fields=p_fuzzy_fields),
+        p_collision=(p_override if p_override is not None
+                     else p_collision(tuple(fields))),
+        p_collision_fuzzy=(p_override if p_override is not None
+                           else p_collision(tuple(fields),
+                                            fuzzy_fields=p_fuzzy_fields)),
         p_fuzzy_fields=p_fuzzy_fields,
         description=desc,
         guards=guards,
@@ -134,7 +136,16 @@ PRACTITIONER_RULES: RuleSet = _ruleset(sorted(
 ORGANIZATION_RULES: RuleSet = _ruleset(sorted(
     [
         _rule("O1", [("npi", _E)], "NPI (rare but decisive)"),
-        _rule("O2", [("clia", _E)], "CLIA"),
+        # O2 retune (Joel decision 2026-11-20, FHIR4-18): CLIA links ALONE.
+        # The generic table entry (FIELD_U_PROBS["clia"] = 1e-7) exceeds the
+        # 1e-8 org budget, which made CR-002 demand an org_name corroborator
+        # for a facility-unique identifier. CLIA numbers are CMS-issued and
+        # unique per laboratory/facility (10-digit, category + state + serial),
+        # so modeling the collision P at 1e-8 — at budget, like practitioner
+        # NPI's 1e-9 sit under theirs — is defensible and is the authored
+        # intent of the rule. Authored-P override, NOT an engine change.
+        _rule("O2", [("clia", _E)], "CLIA (facility-unique; links alone)",
+              p_override=1e-8),
         _rule(
             "O3",
             [("tax_id", _E), ("org_name", _F)],
