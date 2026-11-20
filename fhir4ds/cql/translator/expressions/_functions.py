@@ -1900,7 +1900,7 @@ class FunctionsMixin:
             self._validate_static_string_operand(arg_nodes[0], "Indexer")
         elif bare_lower == "message":
             self._validate_message_signature_args(arg_nodes)
-        elif bare_lower in {"skip", "take", "head"} and len(arg_nodes) >= 2:
+        elif bare_lower in {"skip", "take", "head", "tail"} and len(arg_nodes) >= 2:
             count_type = self._infer_static_cql_type_for_logical_operand(arg_nodes[1])
             normalized_count_type = (count_type or "Any").split(".")[-1]
             if normalized_count_type not in {"Any", "Integer"}:

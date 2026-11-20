@@ -87,6 +87,71 @@ if TYPE_CHECKING:
     from ...translator.expressions import ExpressionTranslator
 
 
+def resolve_additional_retrieve_filter(mf, context) -> tuple:
+    """Resolve one CQL 2.0 multi-filter retrieve filter to (kind, target).
+
+    kind: 'in' (exact ValueSet membership), '~in' (equivalent membership),
+    'code' (exact direct-code), '~code' (equivalent direct-code). target:
+    ValueSet URL or ``urn:cql:code:<system>|<code>``.
+
+    Shared by the retrieve translation (``_query.py``) AND the
+    function-promotion pre-scan (``translator.py::
+    _retrieve_promotion_source``) so both encode additional filters onto
+    the valueset key identically — a divergence keys a promoted function
+    against the UNFILTERED CTE name (AMUX-152 #7).
+    """
+    operand = mf.terminology
+    code_target = None
+    valueset_target = None
+
+    if isinstance(operand, CodeSelector):
+        cs_url = context.codesystems.get(operand.system, operand.system)
+        code_target = f"urn:cql:code:{cs_url}|{operand.code}"
+    else:
+        if isinstance(operand, Identifier):
+            name = operand.name
+        elif isinstance(operand, QualifiedIdentifier) and operand.parts:
+            name = operand.parts[-1]
+        elif isinstance(operand, Property) and isinstance(
+            getattr(operand, "source", None), Identifier
+        ):
+            name = operand.path
+        else:
+            name = str(operand)
+        code_info = context.codes.get(name)
+        if code_info:
+            cs_name = code_info.get("codesystem", "")
+            cs_url = context.codesystems.get(cs_name, cs_name)
+            code_target = f"urn:cql:code:{cs_url}|{code_info.get('code', '')}"
+        elif name in context.valuesets:
+            valueset_target = context.valuesets[name]
+        else:
+            # Unknown name: mirror the primary-filter fallback — treat
+            # as a ValueSet reference (URL or prefixed name).
+            from ..patterns.retrieve import _VALUESET_PREFIX_CONFIG
+            if name.startswith("http") or name.startswith("urn:"):
+                valueset_target = name
+            else:
+                default_prefix = _VALUESET_PREFIX_CONFIG.get(
+                    "default_prefix", "http://cts.nlm.nih.gov/fhir/ValueSet/"
+                )
+                valueset_target = f"{default_prefix}{name}"
+
+    comparator = mf.comparator
+    if comparator in ("=", "contains"):
+        if code_target is not None:
+            return "code", code_target
+        return "in", valueset_target
+    if comparator in ("~", "~contains"):
+        if code_target is not None:
+            return "~code", code_target
+        return "~in", valueset_target
+    # 'in' / '~in'
+    if code_target is not None:
+        return ("code" if comparator == "in" else "~code"), code_target
+    return comparator, valueset_target
+
+
 def _demoted_rows_source_cte(sql_expr) -> "str | None":
     """Recognize the scalar LIMIT-1 demotion of a RESOURCE_ROWS definition.
 
@@ -1887,57 +1952,7 @@ class QueryMixin:
         membership), 'code' (exact direct-code), '~code' (equivalent
         direct-code). target: ValueSet URL or ``urn:cql:code:<system>|<code>``.
         """
-        operand = mf.terminology
-        code_target = None
-        valueset_target = None
-
-        if isinstance(operand, CodeSelector):
-            cs_url = self.context.codesystems.get(operand.system, operand.system)
-            code_target = f"urn:cql:code:{cs_url}|{operand.code}"
-        else:
-            if isinstance(operand, Identifier):
-                name = operand.name
-            elif isinstance(operand, QualifiedIdentifier) and operand.parts:
-                name = operand.parts[-1]
-            elif isinstance(operand, Property) and isinstance(
-                getattr(operand, "source", None), Identifier
-            ):
-                name = operand.path
-            else:
-                name = str(operand)
-            code_info = self.context.codes.get(name)
-            if code_info:
-                cs_name = code_info.get("codesystem", "")
-                cs_url = self.context.codesystems.get(cs_name, cs_name)
-                code_target = f"urn:cql:code:{cs_url}|{code_info.get('code', '')}"
-            elif name in self.context.valuesets:
-                valueset_target = self.context.valuesets[name]
-            else:
-                # Unknown name: mirror the primary-filter fallback — treat
-                # as a ValueSet reference (URL or prefixed name).
-                from ..patterns.retrieve import _VALUESET_PREFIX_CONFIG
-                if name.startswith("http") or name.startswith("urn:"):
-                    valueset_target = name
-                else:
-                    default_prefix = _VALUESET_PREFIX_CONFIG.get(
-                        "default_prefix", "http://cts.nlm.nih.gov/fhir/ValueSet/"
-                    )
-                    valueset_target = f"{default_prefix}{name}"
-
-        comparator = mf.comparator
-        if comparator in ("=", "contains"):
-            if code_target is not None:
-                return "code", code_target
-            return "in", valueset_target
-        if comparator in ("~", "~contains"):
-            if code_target is not None:
-                return "~code", code_target
-            return "~in", valueset_target
-        # 'in' / '~in'
-        if code_target is not None:
-            return ("code" if comparator == "in" else "~code"), code_target
-        return comparator, valueset_target
-
+        return resolve_additional_retrieve_filter(mf, self.context)
 
     def _translate_query_source(self, node, boolean_context: bool = False) -> SQLExpression:
         """Handle: [Condition: "Diabetes"] D (the source with alias)"""

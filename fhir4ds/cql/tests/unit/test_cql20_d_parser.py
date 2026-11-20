@@ -18,11 +18,37 @@ class TestDirectiveParsing:
         assert d.inclusion_behavior is None
 
     def test_quoted_string_value(self):
+        lib = parse_cql("#DefaultComparisonPrecision: 'minute'\nlibrary T")
+        d = lib.directives[0]
+        assert d.name == "DefaultComparisonPrecision"
+        assert d.value == "minute"
+        assert d.inclusion_behavior is None
+
+    def test_quoted_plural_precision_normalized_amux152_5(self):
+        """AMUX-152 #5: the directive grammar accepts quoted precision
+        strings, and the quoted form is equivalent to the unquoted one —
+        a quoted PLURAL must singularize exactly like the token branch
+        ('minutes' -> 'minute'), or the translator's precision validation
+        rejects the library."""
         lib = parse_cql("#DefaultComparisonPrecision: 'minutes'\nlibrary T")
         d = lib.directives[0]
         assert d.name == "DefaultComparisonPrecision"
-        assert d.value == "minutes"
+        assert d.value == "minute", (
+            f"quoted plural must normalize to the singular precision, got {d.value!r}"
+        )
         assert d.inclusion_behavior is None
+
+    def test_quoted_plural_precision_translates_amux152_5(self):
+        from fhir4ds.cql.translator import translate_cql
+
+        results = translate_cql(
+            "#DefaultComparisonPrecision: 'hours'\n"
+            "library DP152 version '1.0.0'\n"
+            "using FHIR version '4.0.1'\n"
+            "context Patient\n"
+            "define Probe: 1 + 1\n"
+        )
+        assert "Probe" in results
 
     def test_unquoted_precision_value_normalized(self):
         lib = parse_cql("#DefaultComparisonPrecision: minutes\nlibrary T")

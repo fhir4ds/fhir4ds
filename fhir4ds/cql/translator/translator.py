@@ -2739,6 +2739,24 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             # build_retrieve_cte).
             valueset = f"~{valueset}"
 
+        # CQL 2.0 multi-filter retrieves (FHIR-31397): encode the
+        # additional filters onto the valueset key EXACTLY like the
+        # retrieve translation (_query.py) does, so build_retrieve_cte
+        # derives the same filtered CTE name — without this the
+        # promotion pre-scan keys the function against the UNFILTERED
+        # CTE and the promotion falls back to inline expansion
+        # (AMUX-152 #7).
+        for mf in getattr(node, "additional_filters", None) or []:
+            from ..translator.expressions._query import (
+                resolve_additional_retrieve_filter,
+            )
+            from ..translator.cte_builder import encode_retrieve_filter
+
+            kind, target = resolve_additional_retrieve_filter(mf, self._context)
+            valueset = (valueset or "") + encode_retrieve_filter(
+                mf.property, kind, target
+            )
+
         cte_name, _cte_ast, _columns = build_retrieve_cte(
             resource_type=resource_type,
             valueset=valueset,

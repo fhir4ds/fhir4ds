@@ -389,6 +389,14 @@ class CQLParser:
             value_token = self.current()
             if value_token.type == TokenType.STRING:
                 value = value_token.value
+                # Normalize plural precision spellings to the singular
+                # comparison precision ('minutes' -> 'minute'), exactly
+                # like the unquoted token branch — the directive grammar
+                # accepts quoted precision strings and the quoted form is
+                # equivalent to the unquoted one (AMUX-152 #5).
+                lowered = value.lower()
+                if lowered.endswith("s") and lowered[:-1] in _COMPARISON_PRECISIONS:
+                    value = lowered[:-1]
                 self.advance()
             elif value_token.type.name in _DIRECTIVE_PRECISION_TOKENS:
                 value = value_token.value.lower()

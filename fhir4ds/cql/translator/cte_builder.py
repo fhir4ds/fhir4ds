@@ -6,6 +6,7 @@ This module creates retrieve CTEs with precomputed columns.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from typing import Dict, List, Optional, Set, Tuple, TYPE_CHECKING
 
@@ -306,9 +307,19 @@ def decode_retrieve_filters(valueset: Optional[str]) -> tuple:
 
 
 def _multi_filter_label(filters: list) -> str:
-    """Distinguishing CTE-name suffix for a multi-filter retrieve."""
-    props = ", ".join(p for p, _, _ in filters)
-    return f"[{props}]"
+    """Distinguishing CTE-name suffix for a multi-filter retrieve.
+
+    Property names ALONE are not distinguishing: two retrieves over the
+    same type+valueset whose additional filters share a property but differ
+    in comparator or target (`clinicalStatus in "A"` vs
+    `clinicalStatus in "B"`) must not collide onto one CTE (AMUX-152 #8).
+    Each filter therefore carries a stable hash of its comparator+target.
+    """
+    parts = []
+    for prop, kind, target in filters:
+        digest = hashlib.sha1(f"{kind}|{target}".encode("utf-8")).hexdigest()[:8]
+        parts.append(f"{prop}#{digest}")
+    return f"[{', '.join(parts)}]"
 
 
 def build_retrieve_cte(

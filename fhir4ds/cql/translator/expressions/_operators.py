@@ -1642,10 +1642,18 @@ class OperatorsMixin:
 
         Returns the conversion function name (possibly library-qualified) to
         invoke, or None when no declared conversion applies. A declared
-        conversion matches when its to-type equals the requested target; with
-        multiple candidates the declared from-type must match the source's
-        static type (else ambiguous -> TranslationError).
+        conversion matches when its to-type equals the requested target AND
+        its from-type matches the source's static type (a bare ``System.``
+        prefix on either side is normalized away — AMUX-152 #3). The
+        single-candidate shortcut applies only when the from-type matches
+        (or the source's static type is unknown).
         """
+        def _norm_type(t: Optional[str]) -> str:
+            low = (t or "").strip().lower()
+            if low.startswith("system."):
+                low = low[len("system."):]
+            return low
+
         conversions = getattr(self.context, "declared_conversions", None) or []
         if not conversions:
             return None
@@ -1653,17 +1661,27 @@ class OperatorsMixin:
             target_full = self._type_specifier_name(target_specifier)
         except Exception:
             target_full = getattr(target_specifier, "name", "")
-        target_lower = (target_full or "").lower()
-        matches = [c for c in conversions if (c["to"] or "").lower() == target_lower]
+        target_lower = _norm_type(target_full)
+        matches = [
+            c for c in conversions
+            if _norm_type(c["to"]) == target_lower and target_lower != ""
+        ]
         if not matches:
             return None
-        if len(matches) == 1:
-            return matches[0]["function"]
+        # Normalize the source type once; with a known static source type
+        # even a SINGLE candidate must match its declared from-type
+        # (`convert 'hello' to Fahr` must not lower to a Cels->Fahr body).
+        source_lower = _norm_type(source_type_name)
         from_matches = [
             c for c in matches
-            if source_type_name is not None
-            and (c["from"] or "").lower() == source_type_name.lower()
+            if source_lower != "" and _norm_type(c["from"]) == source_lower
         ]
+        if source_lower == "":
+            # Source static type unknown: cannot statically disprove the
+            # single candidate; keep the 2.0-era convenience.
+            if len(matches) == 1:
+                return matches[0]["function"]
+            return None
         if len(from_matches) == 1:
             return from_matches[0]["function"]
         if len(from_matches) > 1:

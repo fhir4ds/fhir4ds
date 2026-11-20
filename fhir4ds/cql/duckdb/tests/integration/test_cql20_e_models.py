@@ -46,6 +46,17 @@ _CACHE = {
     },
 }
 
+# AMUX-152 batch 2 (#8): two distinct status ValueSets so same-property /
+# different-target additional filters must NOT share one CTE.
+VS_ACTIVE_ONLY_URL = "http://example.org/fhir/ValueSet/vs20e-active-only"
+VS_RECUR_ONLY_URL = "http://example.org/fhir/ValueSet/vs20e-recur-only"
+_CACHE[VS_ACTIVE_ONLY_URL] = {
+    ("http://terminology.hl7.org/CodeSystem/condition-clinical", "active"),
+}
+_CACHE[VS_RECUR_ONLY_URL] = {
+    ("http://terminology.hl7.org/CodeSystem/condition-clinical", "recurrence"),
+}
+
 
 def _py_con() -> duckdb.DuckDBPyConnection:
     con = duckdb.connect(config={"allow_unsigned_extensions": True})
@@ -559,5 +570,136 @@ define Probe: convert '42' to Integer
 """
         results = translate_cql(cql)
         assert "ToInteger" in results["Probe"].to_sql()
+
+
+# ---------------------------------------------------------------------------
+# AMUX-152 batch 2 — CQL 2.0 translator correctness (#3, #7, #8, #14)
+# ---------------------------------------------------------------------------
+
+class TestAmux152Batch2:
+    def test_single_declared_conversion_requires_from_type_match_amux152_3(self):
+        """AMUX-152 #3: the single-candidate shortcut in convert resolution
+        must still check the declared FROM type against the source's static
+        type. With only ``Cels -> Fahr`` declared, ``convert 'hello' to Fahr``
+        (source String) must NOT lower to the Cels conversion body."""
+        cql = """library CV152a version '1.0.0'
+using FHIR version '4.0.1'
+define type Cels extends System.Any { v System.Decimal }
+define type Fahr extends System.Any { v System.Decimal }
+define function ToFahr(c Cels): Fahr { v: 32.0 + 9.0 * 10.0 }
+define implicit conversion from Cels to Fahr using ToFahr
+context Patient
+define Probe: convert 'hello' to Fahr
+"""
+        sql = translate_cql(cql)["Probe"].to_sql()
+        assert "32.0" not in sql, (
+            f"String source must not lower to the Cels conversion body: {sql}"
+        )
+
+    def test_declared_conversion_from_type_system_prefix_normalized_amux152_3(self):
+        """AMUX-152 #3: declared conversion from-types may carry the
+        ``System.`` prefix; comparison against the source's static type must
+        normalize it, both for the single-candidate shortcut and the
+        multi-candidate from-type match."""
+        cql = """library CV152b version '1.0.0'
+using FHIR version '4.0.1'
+define type Fahr extends System.Any { v System.Decimal }
+define function FromString(s String): Fahr { v: 1.0 }
+define function FromDecimal(d Decimal): Fahr { v: 2.0 }
+define implicit conversion from System.String to Fahr using FromString
+define implicit conversion from System.Decimal to Fahr using FromDecimal
+context Patient
+define Str: convert 'x' to Fahr
+define Dec: convert 5.5 to Fahr
+"""
+        results = translate_cql(cql)
+        str_sql = results["Str"].to_sql()
+        dec_sql = results["Dec"].to_sql()
+        assert "1.0" in str_sql and "2.0" not in str_sql, str_sql
+        assert "2.0" in dec_sql and "1.0" not in dec_sql, dec_sql
+
+    def test_multi_filter_promotion_key_includes_filters_amux152_7(self, caplog):
+        """AMUX-152 #7: `_retrieve_promotion_source` must encode the
+        retrieve's additional filters into the valueset key exactly like the
+        retrieve translation does, or the function-promotion pre-scan keys
+        the promoted function against the UNFILTERED CTE name and the
+        promotion falls back to inline expansion ('never emitted
+        (unresolvable dependencies)')."""
+        cql = f"""library MF152g version '1.0.0'
+using FHIR version '4.0.1'
+valueset "VS": '{VS_URL}'
+valueset "ActiveVS": '{VS_STATUS_URL}'
+context Patient
+define function Tag(c Condition): {{ id: c.id }}
+define D1: First(([Condition: code in "VS", clinicalStatus in "ActiveVS"] C return Tag(C)))
+define D2: First(([Condition: code in "VS", clinicalStatus in "ActiveVS"] C return Tag(C)))
+define D3: First(([Condition: code in "VS", clinicalStatus in "ActiveVS"] C return Tag(C)))
+"""
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="fhir4ds.cql.translator.translator"):
+            CQLToSQLTranslator().translate_library_to_population_sql(parse_cql(cql))
+        never_emitted = [
+            r for r in caplog.records if "was never emitted" in r.getMessage()
+        ]
+        assert not never_emitted, (
+            "function promotion keyed the unfiltered CTE and fell back to inline: "
+            + "\n".join(r.getMessage() for r in never_emitted)
+        )
+
+    def test_same_property_different_filter_targets_distinct_ctes_amux152_8(self):
+        """AMUX-152 #8: two retrieves that differ only in the TARGET of an
+        additional filter on the SAME property must get distinct CTEs — the
+        multi-filter label may not use property names alone."""
+        cql = f"""library MF152h version '1.0.0'
+using FHIR version '4.0.1'
+valueset "VS": '{VS_URL}'
+valueset "ActiveOnly": '{VS_ACTIVE_ONLY_URL}'
+valueset "RecurOnly": '{VS_RECUR_ONLY_URL}'
+context Patient
+define ActiveCount: Count([Condition: code in "VS", clinicalStatus in "ActiveOnly"])
+define RecurCount: Count([Condition: code in "VS", clinicalStatus in "RecurOnly"])
+"""
+        resources = [
+            self._cond("c1", "8867-4", "http://loinc.org", "active"),
+            self._cond("c2", "8867-4", "http://loinc.org", "active"),
+            self._cond("c3", "8867-4", "http://loinc.org", "recurrence"),
+        ]
+        results = _run_population(
+            cql, resources,
+            {"ActiveCount": "ActiveCount", "RecurCount": "RecurCount"},
+        )
+        for engine in ("py", "cpp"):
+            assert results[engine]["ActiveCount"] == 2, (engine, results[engine])
+            assert results[engine]["RecurCount"] == 1, (engine, results[engine])
+
+    @staticmethod
+    def _cond(cid: str, code: str, system: str, clinical_status: str) -> dict:
+        return {
+            "resourceType": "Condition", "id": cid,
+            "code": {"coding": [{"system": system, "code": code}]},
+            "clinicalStatus": {
+                "coding": [{
+                    "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                    "code": clinical_status,
+                }]
+            },
+            "subject": {"reference": "Patient/p1"},
+            "patient_ref": "p1",
+        }
+
+    def test_tail_string_count_rejected_amux152_14(self):
+        """AMUX-152 #14 (FHIR-40612): the two-argument Tail(list, count)
+        must enforce the Integer count type statically like Skip/Take/Head;
+        `Tail({1,2,3}, '2')` is a translation error, not a lowered call."""
+        from fhir4ds.cql.errors import TranslationError
+
+        cql = """library TL152 version '1.0.0'
+using FHIR version '4.0.1'
+context Unfiltered
+define Probe: Tail({1, 2, 3}, '2')
+"""
+        with pytest.raises(TranslationError, match="[Tt]ail"):
+            CQLToSQLTranslator().translate_library_to_population_sql(parse_cql(cql))
 
 
