@@ -140,6 +140,31 @@ class TestEncounterStrategy:
         ])
         assert _clusters(result) == []
 
+    def test_39b_hard_negative_veto_mechanism_fires(self):
+        # Code-review pin (AMUX-150): the EMER-disjoint->=2h veto must be
+        # REACHABLE — the veto runs BEFORE the adjacency candidate gate
+        # (scoring it after the gate would be dead logic, since a scored
+        # disjoint pair always has gap <= 15 min).
+        from fhir4ds.dedup.encounter import (
+            EncounterFeatures, _encounter_nd, _score_pair)
+        a = _enc("a", "2024-03-05T08:00:00Z", "2024-03-05T09:00:00Z",
+                 klass="EMER", participants=["dr1"])
+        b = _enc("b", "2024-03-05T14:00:00Z", "2024-03-05T15:00:00Z",
+                 klass="EMER", participants=["dr1"])
+        scored = _score_pair(
+            _encounter_nd(a), _encounter_nd(b),
+            EncounterFeatures.from_resource(a),
+            EncounterFeatures.from_resource(b), "UTC")
+        assert scored is not None and scored["hard_negative"] is True
+        # A NON-emergency disjoint pair is simply not a candidate (None),
+        # not a veto.
+        b_amb = _enc("b", "2024-03-05T14:00:00Z", "2024-03-05T15:00:00Z",
+                     klass="AMB", participants=["dr1"])
+        assert _score_pair(
+            _encounter_nd(a), _encounter_nd(b_amb),
+            EncounterFeatures.from_resource(a),
+            EncounterFeatures.from_resource(b_amb), "UTC") is None
+
     def test_40_cross_patient_never_merges(self):
         result = encounter_pass([
             _enc("e1", "2024-03-05T10:00:00Z", "2024-03-05T11:00:00Z",

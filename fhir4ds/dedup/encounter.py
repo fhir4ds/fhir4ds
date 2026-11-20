@@ -256,6 +256,26 @@ def _score_pair(a_nd, b_nd, a: EncounterFeatures, b: EncounterFeatures,
     if relationship == "unknown":
         # Unknown periods never union; corroboration weight 0.
         return None
+    # Hard negative FIRST (FDD §4.3): identical class=EMER encounters
+    # disjoint >= 2h apart never merge regardless of score. This check
+    # runs BEFORE the adjacency candidate gate — a disjoint pair is only
+    # scored as a candidate when gap <= 15 min, so evaluating the veto
+    # after the gate could never fire (it would be dead logic).
+    hard_negative = (relationship == "disjoint"
+                     and a.is_emergency and b.is_emergency
+                     and period_overlap(a_nd, b_nd,
+                                        max_gap=_HARD_NEGATIVE_MIN_GAP)
+                     == "disjoint")
+    if hard_negative:
+        return {
+            "score": 0,
+            "signals": {},
+            "core": False,
+            "corroborators": 0,
+            "hard_negative": True,
+            "relationship": relationship,
+            "overlap_fraction": 0.0,
+        }
     if relationship == "disjoint":
         # Candidate only when same-day adjacent (ED-to-admit handoffs).
         if period_overlap(a_nd, b_nd, max_gap=_ADJACENCY_MAX_GAP) \
@@ -290,16 +310,12 @@ def _score_pair(a_nd, b_nd, a: EncounterFeatures, b: EncounterFeatures,
                         if name not in ("overlap_containment",
                                         "overlap_partial", "adjacency"))
     score = sum(signals.values())
-    hard_negative = (a.is_emergency and b.is_emergency
-                     and period_overlap(a_nd, b_nd,
-                                        max_gap=_HARD_NEGATIVE_MIN_GAP)
-                     == "disjoint")
     return {
         "score": score,
         "signals": signals,
         "core": core,
         "corroborators": corroborators,
-        "hard_negative": hard_negative,
+        "hard_negative": False,
         "relationship": relationship,
         "overlap_fraction": (overlap_fraction(a_nd, b_nd)
                              if relationship == "overlap" else 0.0),
@@ -336,7 +352,6 @@ def encounter_pass(resources: list[dict], *,
         records.append(_encounter_record(resource, default_tz))
         features[rid] = EncounterFeatures.from_resource(resource)
 
-    records_by_rid = {r.rid: r for r in records}
     membership = membership or {}
 
     def group_key(record: DedupRecord) -> Optional[str]:
