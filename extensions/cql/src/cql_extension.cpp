@@ -5623,11 +5623,21 @@ static void ValuesetCacheAddFunc(DataChunk &args, ExpressionState &state, Vector
 	for (idx_t i = 0; i < count; i++) {
 		auto u_idx = url_data.sel->get_index(i);
 		auto c_idx = code_data.sel->get_index(i);
-		if (!url_data.validity.RowIsValid(u_idx) || !code_data.validity.RowIsValid(c_idx)) {
+		if (!url_data.validity.RowIsValid(u_idx)) {
 			result_mask.SetInvalid(i);
 			continue;
 		}
 		std::string url = urls[u_idx].GetString();
+		// NULL code with a valid url is the loaded-but-empty marker: the
+		// ValueSet is loaded with zero codes, so membership questions must
+		// answer False (definitively not a member) instead of NULL
+		// (unknown/unloaded). Mirrors the Python UDF's cache contract where
+		// a key with an empty set means "loaded, empty".
+		if (!code_data.validity.RowIsValid(c_idx)) {
+			g_valueset_cache[url];
+			result_data[i] = true;
+			continue;
+		}
 		std::string code = codes[c_idx].GetString();
 		std::string system;
 		auto s_idx = system_data.sel->get_index(i);
@@ -8144,12 +8154,18 @@ static void RoundQuantityToFunc(DataChunk &args, ExpressionState &state, Vector 
 	for (idx_t i = 0; i < count; i++) {
 		auto a_idx = a_data.sel->get_index(i);
 		auto b_idx = b_data.sel->get_index(i);
-		if (!a_data.validity.RowIsValid(a_idx) || !b_data.validity.RowIsValid(b_idx)) {
+		// CQL 2.0 §Round / CQL-11 doctrine: null precision is precision 0.
+		// A null quantity argument still yields null; a null precision does
+		// NOT (matches the Python authority roundQuantity(q, None)).
+		if (!a_data.validity.RowIsValid(a_idx)) {
 			result_mask.SetInvalid(i);
 			continue;
 		}
-		auto res = cql::quantity_round(a_vals[a_idx].GetString(),
-		                               static_cast<int>(b_vals[b_idx]));
+		int64_t precision = 0;
+		if (b_data.validity.RowIsValid(b_idx)) {
+			precision = b_vals[b_idx];
+		}
+		auto res = cql::quantity_round(a_vals[a_idx].GetString(), precision);
 		if (!res) {
 			result_mask.SetInvalid(i);
 			continue;

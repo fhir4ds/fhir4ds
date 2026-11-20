@@ -912,20 +912,148 @@ Optional<std::string> quantity_negate(const std::string &q_json) {
 	return format_quantity_json(*q);
 }
 
-Optional<std::string> quantity_round(const std::string &q_json, int precision) {
+// Exact decimal rounding helpers for quantity_round. The Quantity value's
+// raw JSON digits are the exact decimal evidence (mirrors the Python
+// authority, which rounds the raw JSON text with Decimal ROUND_HALF_UP);
+// binary64 midpoint ties such as Round(2.675 'mg', 2) must round to 2.68,
+// which the old scaled-double path got wrong (2.675 * 100 = 267.49999...).
+static bool round_digits_increment(std::string &digits) {
+	// Add 1 to a digit string in place; returns false on success.
+	int i = static_cast<int>(digits.size()) - 1;
+	for (; i >= 0; --i) {
+		if (digits[i] == '9') {
+			digits[i] = '0';
+		} else {
+			digits[i] = static_cast<char>(digits[i] + 1);
+			return false;
+		}
+	}
+	digits.insert(digits.begin(), '1');
+	return false;
+}
+
+static bool all_digits(const std::string &s) {
+	for (char ch : s) {
+		if (ch < '0' || ch > '9') {
+			return false;
+		}
+	}
+	return true;
+}
+
+Optional<std::string> quantity_round(const std::string &q_json, int64_t precision) {
 	auto q = parse_quantity_json(q_json);
 	if (!q) return NullOpt<std::string>();
 	// Traditional round (ties away from zero), matching the number Round
-	// doctrine: Round(-0.5) = -1, Round(2.54) = 3.
-	double m = 1.0;
-	for (int i = 0; i < (precision < 0 ? -precision : precision); i++) {
-		m *= 10.0;
+	// doctrine: Round(-0.5) = -1, Round(2.54) = 3. Null precision (handled
+	// by the UDF wrapper) and omitted precision are precision 0.
+	// Clamp to a sane decimal bound: text rounding is naturally exact, and
+	// any |precision| beyond the 30-integer-digit/8-scale Decimal extent
+	// behaves as identity (positive) or zero (negative) anyway. This also
+	// removes the old int-loop UB (INT_MIN negation, unbounded spins).
+	if (precision > 38) precision = 38;
+	if (precision < -38) precision = -38;
+
+	// Extract the raw value token from the JSON so rounding operates on the
+	// authored decimal digits, not on the binary64 double.
+	std::string token;
+	{
+		size_t pos = q_json.find("\"value\"");
+		if (pos != std::string::npos) {
+			size_t p = pos + 7;
+			while (p < q_json.size() && (q_json[p] == ' ' || q_json[p] == ':')) p++;
+			size_t start = p;
+			while (p < q_json.size() && (q_json[p] == '-' || q_json[p] == '+' || q_json[p] == '.' ||
+			                             (q_json[p] >= '0' && q_json[p] <= '9') ||
+			                             q_json[p] == 'e' || q_json[p] == 'E')) {
+				p++;
+			}
+			token = q_json.substr(start, p - start);
+		}
 	}
-	// precision >= 0: scale up, round, scale back down.
-	// precision <  0: scale down, round, scale back up (tens/hundreds...).
-	double scaled = (precision < 0) ? q->value / m : q->value * m;
-	double rounded = (scaled >= 0) ? std::floor(scaled + 0.5) : std::ceil(scaled - 0.5);
-	q->value = (precision < 0) ? rounded * m : rounded / m;
+
+	double result_value;
+	bool neg = false;
+	std::string int_part;
+	std::string frac_part;
+	bool text_ok = false;
+	if (!token.empty() && token.find('e') == std::string::npos && token.find('E') == std::string::npos) {
+		std::string t = token;
+		if (!t.empty() && (t[0] == '-' || t[0] == '+')) {
+			neg = (t[0] == '-');
+			t = t.substr(1);
+		}
+		size_t dot = t.find('.');
+		if (dot == std::string::npos) {
+			int_part = t;
+			frac_part = "";
+		} else {
+			int_part = t.substr(0, dot);
+			frac_part = t.substr(dot + 1);
+		}
+		if (all_digits(int_part) && all_digits(frac_part) && !int_part.empty()) {
+			// strip leading zeros, keep at least one digit
+			size_t nz = int_part.find_first_not_of('0');
+			int_part = (nz == std::string::npos) ? "0" : int_part.substr(nz);
+			text_ok = true;
+		}
+	}
+
+	if (text_ok) {
+		std::string kept_digits; // integer + kept-fraction digits
+		size_t kept_frac;
+		if (precision >= 0) {
+			kept_frac = static_cast<size_t>(precision);
+			if (kept_frac > frac_part.size()) {
+				kept_frac = frac_part.size();
+			}
+			if (static_cast<size_t>(precision) >= frac_part.size()) {
+				// Identity: no digits are dropped.
+				kept_digits = int_part + frac_part;
+			} else {
+				bool round_up = frac_part[static_cast<size_t>(precision)] >= '5';
+				kept_digits = int_part + frac_part.substr(0, kept_frac);
+				if (round_up) {
+					round_digits_increment(kept_digits);
+				}
+			}
+		} else {
+			int64_t drop = -precision;
+			kept_frac = 0;
+			if (static_cast<int64_t>(int_part.size()) <= drop) {
+				kept_digits = "0"; // everything rounds (or truncates) to zero
+			} else {
+				size_t keep = static_cast<size_t>(static_cast<int64_t>(int_part.size()) - drop);
+				bool round_up = int_part[keep] >= '5';
+				kept_digits = int_part.substr(0, keep);
+				if (round_up) {
+					round_digits_increment(kept_digits);
+				}
+			}
+		}
+		std::string text = neg ? "-" : "";
+		if (kept_digits.size() > kept_frac) {
+			text += kept_digits.substr(0, kept_digits.size() - kept_frac);
+		} else {
+			text += "0";
+		}
+		if (kept_frac > 0) {
+			std::string f = kept_digits.substr(kept_digits.size() - kept_frac);
+			text += "." + f;
+		}
+		result_value = std::strtod(text.c_str(), nullptr);
+	} else {
+		// Exponent-notation or unparsable-text fallback: double math with a
+		// bounded multiplier (no loop, so no INT_MIN / unbounded-spin UB).
+		double m = std::pow(10.0, static_cast<double>(precision));
+		double scaled = (precision < 0) ? q->value / m : q->value * m;
+		double rounded = (scaled >= 0) ? std::floor(scaled + 0.5) : std::ceil(scaled - 0.5);
+		result_value = (precision < 0) ? rounded * m : rounded / m;
+	}
+	if (!std::isfinite(result_value)) {
+		return NullOpt<std::string>();
+	}
+	q->value = result_value;
 	return format_quantity_json(*q);
 }
 

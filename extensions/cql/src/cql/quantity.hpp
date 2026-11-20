@@ -27,8 +27,10 @@ Optional<std::string> quantity_multiply(const std::string &q1_json, const std::s
 Optional<std::string> quantity_divide(const std::string &q1_json, const std::string &q2_json);
 Optional<std::string> quantity_negate(const std::string &q_json);
 // CQL 2.0 Round(Quantity[, precision]): round the value (ties away from
-// zero), preserve the unit. Null precision is 0.
-Optional<std::string> quantity_round(const std::string &q_json, int precision);
+// zero, exact on the raw decimal digits), preserve the unit. Null
+// precision is 0 (handled by the UDF wrapper). Precision is int64 and
+// internally clamped — the old int loop had negation/spin UB.
+Optional<std::string> quantity_round(const std::string &q_json, int64_t precision);
 // CQL 2.0 Comparable(Quantity, Quantity): true iff the units are
 // commensurable (a '==' comparison would be determined). Null argument
 // -> NullOpt.
