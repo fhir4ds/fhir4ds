@@ -1003,6 +1003,12 @@ Optional<std::string> quantity_round(const std::string &q_json, int64_t precisio
 		std::string kept_digits; // integer + kept-fraction digits
 		size_t kept_frac;
 		if (precision >= 0) {
+			// Python-authority parity: the Decimal context has 28 digits of
+			// precision, so quantize raises InvalidOperation (-> null) when
+			// the result coefficient would exceed 28 digits.
+			if (static_cast<int64_t>(int_part.size()) + precision > 28) {
+				return NullOpt<std::string>();
+			}
 			kept_frac = static_cast<size_t>(precision);
 			if (kept_frac > frac_part.size()) {
 				kept_frac = frac_part.size();
@@ -1030,6 +1036,16 @@ Optional<std::string> quantity_round(const std::string &q_json, int64_t precisio
 					round_digits_increment(kept_digits);
 				}
 			}
+		}
+		// Same 28-digit coefficient guard after rounding (a carry can add a
+		// digit; Python's quantize raises InvalidOperation there too).
+		if (kept_digits.size() > 28) {
+			return NullOpt<std::string>();
+		}
+		if (precision < 0 && static_cast<int64_t>(int_part.size()) > -precision) {
+			// Negative precision scales back up: the dropped integer places
+			// are zeros (1250 at precision -2 keeps mantissa '13' -> '1300').
+			kept_digits.append(static_cast<size_t>(-precision), '0');
 		}
 		std::string text = neg ? "-" : "";
 		if (kept_digits.size() > kept_frac) {

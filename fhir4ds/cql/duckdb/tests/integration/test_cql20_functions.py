@@ -110,6 +110,148 @@ class TestRoundQuantity:
             cpp.close()
 
 
+def _cpp_only_connection():
+    """WASM-style surface: only the compiled C++ extensions, no Python UDFs.
+
+    Used to exercise the native ``RoundQuantityTo`` directly — on desktop
+    ``register()`` connections the Python authority shadows it via
+    ``_PYTHON_PREFERRED_CPP_CONFLICTS``.
+    """
+    import shutil
+    import tempfile
+    from pathlib import Path
+
+    root = Path(__file__).resolve()
+    for parent in root.parents:
+        if (parent / "extensions").exists() and (parent / "fhir4ds").exists():
+            root = parent
+            break
+    else:
+        raise RuntimeError("Could not locate repository root")
+    extension_paths = [
+        root / "extensions" / "fhirpath" / "build" / "release" / "extension"
+        / "fhirpath" / "fhirpath.duckdb_extension",
+        root / "extensions" / "cql" / "build" / "release" / "extension"
+        / "cql" / "cql.duckdb_extension",
+    ]
+    missing = [str(p) for p in extension_paths if not p.exists()]
+    if missing:
+        pytest.skip(f"C++ extensions are not built: {missing}")
+    tmpdir = tempfile.mkdtemp()
+    con = duckdb.connect(":memory:", config={"allow_unsigned_extensions": "true"})
+    for src in extension_paths:
+        import os
+
+        load_path = os.path.join(tmpdir, src.name)
+        shutil.copy2(src, load_path)
+        con.execute(f"LOAD '{load_path}'")
+    return con
+
+
+_Q = '{"value":%s,"unit":"mg","code":"mg","system":"http://unitsofmeasure.org"}'
+
+
+class TestRoundQuantityNativeSurface:
+    """AMUX-152 finding #4: the native (WASM-path) ``RoundQuantityTo`` must
+    match the Python authority — exact decimal midpoint ties (no IEEE-754
+    double rounding), NULL precision = precision 0, and no int-loop UB at
+    extreme precisions."""
+
+    @pytest.mark.parametrize(
+        "value_text,precision,expected",
+        [
+            ("2.675", 2, 2.68),      # exact-decimal midpoint tie (was 2.67 in binary64)
+            ("-2.675", 2, -2.68),    # ties away from zero, negative
+            ("0.125", 2, 0.13),      # another representable-in-binary tie
+            ("1.005", 2, 1.01),
+            ("2.5", 0, 3.0),
+            ("-2.5", 0, -3.0),
+            ("2.675", 8, 2.675),   # precision beyond digits (within Decimal window): identity
+            ("1250", -2, 1300.0),  # negative precision, tie away from zero
+            ("1234.5", -2, 1200.0),  # negative precision, truncation down
+        ],
+    )
+    def test_native_matches_python_authority(self, value_text, precision, expected):
+        import json
+
+        q = _Q % value_text
+        py = _python_only_connection()
+        cpp = _cpp_only_connection()
+        try:
+            py_raw = py.execute(
+                "SELECT RoundQuantityTo(?, ?)", [q, precision]
+            ).fetchone()[0]
+            cpp_raw = cpp.execute(
+                "SELECT RoundQuantityTo(?, ?)", [q, precision]
+            ).fetchone()[0]
+            assert py_raw is not None and cpp_raw is not None
+            py_val = json.loads(py_raw)["value"]
+            cpp_val = json.loads(cpp_raw)["value"]
+            assert py_val == pytest.approx(expected, abs=1e-9), py_raw
+            assert cpp_val == py_val, f"cpp {cpp_raw!r} != py {py_raw!r}"
+        finally:
+            py.close()
+            cpp.close()
+
+    def test_native_null_precision_is_precision_zero(self):
+        import json
+
+        q = _Q % "2.675"
+        py = _python_only_connection()
+        cpp = _cpp_only_connection()
+        try:
+            for con in (py, cpp):
+                null_prec = con.execute(
+                    "SELECT RoundQuantityTo(?, NULL)", [q]
+                ).fetchone()[0]
+                zero_prec = con.execute(
+                    "SELECT RoundQuantityTo(?, 0)", [q]
+                ).fetchone()[0]
+                assert null_prec is not None, "null precision must not null the result"
+                assert json.loads(null_prec)["value"] == pytest.approx(
+                    json.loads(zero_prec)["value"], abs=1e-9
+                )
+        finally:
+            py.close()
+            cpp.close()
+
+    def test_native_null_quantity_still_null(self):
+        cpp = _cpp_only_connection()
+        try:
+            assert cpp.execute(
+                "SELECT RoundQuantityTo(NULL, 2)"
+            ).fetchone()[0] is None
+        finally:
+            cpp.close()
+
+    def test_native_extreme_precision_no_UB(self):
+        """INT_MIN precision previously negated an int for the multiply
+        loop (UB) and could spin; the clamped text path must stay bounded.
+        Positive precision beyond the 28-digit Decimal coefficient window
+        returns NULL (matching the Python authority, whose quantize raises
+        InvalidOperation); huge negative precision clamps to zero."""
+        import json
+
+        cpp = _cpp_only_connection()
+        try:
+            for prec in (
+                -9223372036854775808,
+                9223372036854775807,
+                -99,
+                99,
+            ):
+                raw = cpp.execute(
+                    "SELECT RoundQuantityTo(?, ?)", [_Q % "123.45", prec]
+                ).fetchone()[0]
+                if prec < 0:
+                    assert raw is not None, prec
+                    assert abs(json.loads(raw)["value"]) == 0.0, (prec, raw)
+                else:
+                    assert raw is None, (prec, raw)
+        finally:
+            cpp.close()
+
+
 # ---------------------------------------------------------------------------
 # Comparable(Quantity, Quantity) — FHIR-55384 / CQL 2.0 Appendix B §Comparable
 # ---------------------------------------------------------------------------
