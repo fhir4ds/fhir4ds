@@ -271,18 +271,152 @@ def build_mimic_rubric() -> tuple[dict, list[dict]]:
         crit(21, "VitalSign", "vitalSign",
              "vitalsign-vitalsign-iscomplete",
              desc="Vital sign concept complete (control)"),
-        crit(30, "Condition", "condition", "condition-condition-iscomplete",
-             desc="Condition concept has one complete coding"),
-        crit(40, "Procedure", "procedure", "procedure-procedure-iscomplete",
-             desc="Procedure concept has one complete coding"),
-        crit(50, "Medication", "medication",
-             "medication-medication-iscomplete",
-             desc="Medication concept has one complete coding"),
     ]
+    # Widen to the full coding family on the auto-coding target classes:
+    # Concept_HasCode / HasCodeSystem / HasDisplay / IsComplete plus the
+    # SAM that MOVES for mimic-wrapped local-system codings,
+    # Concept_HasRecognizedCodeSystem (FHIR4-24 no-strip comparison).
+    seq = 30
+    for dc, ent, prefix in (
+            ("Condition", "condition", "condition-condition"),
+            ("Procedure", "procedure", "procedure-procedure"),
+            ("Medication", "medication", "medication-medication")):
+        criteria.extend([
+            crit(seq, dc, ent, f"{prefix}-hascode",
+                 desc=f"{dc} concept carries a coding code"),
+            crit(seq + 1, dc, ent, f"{prefix}-hascodesystem",
+                 desc=f"{dc} concept carries a coding system"),
+            crit(seq + 2, dc, ent, f"{prefix}-hasdisplay",
+                 desc=f"{dc} concept carries a coding display"),
+            crit(seq + 3, dc, ent, f"{prefix}-hasrecognizedcodesystem",
+                 desc=f"{dc} concept system is recognized"),
+            crit(seq + 4, dc, ent, f"{prefix}-iscomplete",
+                 desc=f"{dc} concept has one complete coding"),
+        ])
+        seq += 10
+    criteria.append(
+        crit(19, "LabResult", "test",
+             "labresult-test-hasrecognizedcodesystem",
+             desc="Lab test concept system is recognized (control: LOINC)"))
+    criteria.sort(key=lambda c: c["sequence"])
     return build_rubric(
         "mimic-autocoding",
         "MIMIC demo coding-centric rubric (PIQI auto-coding experiment)",
         criteria)
+
+
+# ── no-strip mode: raw-corpus augmentation statistics ─────────────────
+
+#: CodeableConcept paths reported by :func:`augmentation_stats` (the
+#: auto-coding target classes of the no-strip experiment).
+RAW_STATS_PATHS: dict[str, str] = {
+    "Condition": "code",
+    "Procedure": "code",
+    "MedicationRequest": "medicationCodeableConcept",
+}
+
+
+def _is_autocoded_coding(coding: dict) -> bool:
+    from fhir4ds.cql.loader.autocoding_extension import (
+        AUTOCODING_EXTENSION_URLS,
+    )
+    return any(isinstance(e, dict) and e.get("url") in AUTOCODING_EXTENSION_URLS
+               for e in (coding.get("extension") or []))
+
+
+def augmentation_stats(resources: list[dict],
+                       paths: Optional[dict[str, str]] = None) -> dict:
+    """Per-class augmentation bookkeeping for the RAW (no-strip) corpus.
+
+    For each auto-coding target class: how many resources are in the
+    slice, how many received an autocoding append, and — for the
+    unaugmented ones — why the system-aware AutoCoder (FHIR4-24) did
+    not touch them: ``inv4_skipped_standard`` (every coding entry uses
+    a standard terminology system; INV-4 preserved) vs
+    ``mimic_wrapped_eligible`` (non-standard-system coding present but
+    no augmentation happened — no query text or no match above the
+    grade threshold).
+    """
+    from fhir4ds.cql.terminology.system_mappings import is_standard_code_system
+
+    paths = paths or RAW_STATS_PATHS
+    per_class: dict[str, dict[str, int]] = {}
+
+    def entry(rt: str) -> dict[str, int]:
+        return per_class.setdefault(
+            rt, {"resources": 0, "augmented": 0,
+                 "inv4_skipped_standard": 0, "mimic_wrapped_eligible": 0})
+
+    for r in resources:
+        rt = r.get("resourceType")
+        path = paths.get(rt)
+        if not path:
+            continue
+        e = entry(rt)
+        e["resources"] += 1
+        cc = r.get(path)
+        if not isinstance(cc, dict):
+            continue
+        codings = [c for c in cc.get("coding") or []
+                   if isinstance(c, dict)]
+        if any(_is_autocoded_coding(c) for c in codings):
+            e["augmented"] += 1
+            continue
+        coded_systems = [c.get("system") for c in codings if c.get("code")]
+        if not coded_systems:
+            continue  # text-only/uncoded and unaugmented: no match found
+        if all(isinstance(s, str) and is_standard_code_system(s)
+               for s in coded_systems):
+            e["inv4_skipped_standard"] += 1
+        else:
+            e["mimic_wrapped_eligible"] += 1
+    return {"per_class": dict(sorted(per_class.items()))}
+
+
+def append_invariants(originals: list[dict], augmented: list[dict],
+                      paths: Optional[dict[str, str]] = None) -> dict:
+    """Gold-free quality evidence for the no-strip run: verify the
+    AutoCoder APPENDED rather than replaced.
+
+    For each resource present in both lists (joined by (type, id)) the
+    original CodeableConcept codings must appear byte-identical and in
+    position at the FRONT of the augmented coding list (no extension
+    added to them), and every ADDED coding must carry
+    ``userSelected == False`` and the autocoding provenance extension.
+    """
+    paths = paths or RAW_STATS_PATHS
+    by_key = {(r.get("resourceType"), r.get("id")): r for r in augmented}
+    replaced = user_selected = no_provenance = 0
+    violations: list[str] = []
+    for o in originals:
+        key = (o.get("resourceType"), o.get("id"))
+        path = paths.get(key[0])
+        if not path:
+            continue
+        a = by_key.get(key)
+        if a is None:
+            continue
+        o_cc, a_cc = o.get(path), a.get(path)
+        if not isinstance(o_cc, dict) or not isinstance(a_cc, dict):
+            continue
+        o_codings = o_cc.get("coding") or []
+        a_codings = a_cc.get("coding") or []
+        if a_codings[:len(o_codings)] != o_codings:
+            replaced += 1
+            if len(violations) < 10:
+                violations.append(
+                    f"{'/'.join(str(k) for k in key)}: original codings "
+                    f"not preserved verbatim at the front of coding[]")
+            continue
+        for coding in a_codings[len(o_codings):]:
+            if coding.get("userSelected") is not False:
+                user_selected += 1
+            if not _is_autocoded_coding(coding):
+                no_provenance += 1
+    return {"originals_replaced_or_removed": replaced,
+            "appended_without_user_selected_false": user_selected,
+            "appended_without_provenance": no_provenance,
+            "violations": violations}
 
 
 # ── evaluation ────────────────────────────────────────────────────────
@@ -555,8 +689,18 @@ def run_benchmark(corpus_path: Union[str, Path], output_dir: Union[str, Path],
                   skip_autocoding: bool = False,
                   phase: str = "all",
                   http_base_url: Optional[str] = None,
-                  min_match_grade: str = "certain") -> dict:
+                  min_match_grade: str = "certain",
+                  no_strip: bool = False,
+                  _test_endpoint=None) -> dict:
     """Run one phase (or all phases) of the experiment.
+
+    Two modes: **strip** (default; the constructed-BEFORE experiment
+    with exact-recovery gold) and **no-strip** (``no_strip=True`` /
+    ``--no-strip``; the production path — baseline PIQI on the
+    AS-SHIPPED slice, autocoding of the RAW corpus with the DEFAULT
+    system-aware AutoCoder, then after PIQI. No exact-recovery gold
+    exists there — originals remain in place; quality evidence is the
+    appended-not-replaced invariant plus spot-checks).
 
     Phases exist because the medterm4ds inference stack (torch/SapBERT)
     and the DuckDB native fhirpath extension do not coexist reliably in
@@ -585,7 +729,11 @@ def run_benchmark(corpus_path: Union[str, Path], output_dir: Union[str, Path],
     slice_resources = build_slice(corpus, num_patients)
 
     census = census_text_only(slice_resources)
-    stripped, gold = strip_codings(slice_resources, stripping)
+    if no_strip:
+        stripped: list[dict] = []
+        gold: list[dict] = []
+    else:
+        stripped, gold = strip_codings(slice_resources, stripping)
     rubric = build_mimic_rubric()
 
     # The PIQI evaluations register the DuckDB NATIVE fhirpath
@@ -594,8 +742,14 @@ def run_benchmark(corpus_path: Union[str, Path], output_dir: Union[str, Path],
     # the `after` phase only needs its own evaluation.
     _runs_piqi_legs = phase in ("piqi", "all")
 
+    _, rubric_criteria = rubric
     report: dict[str, Any] = {
         "experiment": "piqi-autocoding",
+        "mode": "no_strip" if no_strip else "strip",
+        "rubric": [{"sequence": c["sequence"],
+                    "data_class": c["data_class"], "sam": c["sam"],
+                    "scoring_effect": c["scoring_effect"]}
+                   for c in rubric_criteria],
         "corpus_path": str(corpus_path),
         "num_patients": num_patients,
         "stripping_spec": {
@@ -611,18 +765,24 @@ def run_benchmark(corpus_path: Union[str, Path], output_dir: Union[str, Path],
                 for r in slice_resources).items())),
         },
         "text_only_census": census,
-        "stripped": {
-            "total": len(stripped),
-            "unique_query_texts": len({g["text"] for g in gold}),
-            "by_type": dict(sorted(Counter(
-                g["resourceType"] for g in gold).items())),
-        },
+        "stripped": (
+            {"total": 0,
+             "note": ("no-strip mode: the AS-SHIPPED slice is autocoded "
+                      "with the default system-aware AutoCoder; there is "
+                      "no exact-recovery gold (originals remain in "
+                      "place)")}
+            if no_strip else
+            {"total": len(stripped),
+             "unique_query_texts": len({g["text"] for g in gold}),
+             "by_type": dict(sorted(Counter(
+                 g["resourceType"] for g in gold).items()))}),
         "unmapped_classes": unmapped_classes(slice_resources),
     }
 
     if _runs_piqi_legs:
         report["baseline"] = evaluate_slice(slice_resources, rubric)
 
+    if _runs_piqi_legs and not no_strip:
         # BEFORE = the slice with stripped resources REPLACING their
         # originals
         stripped_keys = {(g["resourceType"], g["id"]) for g in gold}
@@ -645,6 +805,78 @@ def run_benchmark(corpus_path: Union[str, Path], output_dir: Union[str, Path],
                 if isinstance(cc, dict):
                     cc["coding"] = copy.deepcopy(g["codings"])
         report["ceiling"] = evaluate_slice(ceiling_corpus, rubric)
+
+    if no_strip:
+        if phase == "piqi":
+            report["gold_accuracy"] = None
+            _dump_jsonl(out / "nostrip_slice.jsonl", slice_resources)
+            (out / "report.partial.json").write_text(
+                json.dumps(report, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8")
+            return report
+
+        if phase == "autocode":
+            partial_path = out / "report.partial.json"
+            report = json.loads(partial_path.read_text(encoding="utf-8"))
+            working = _load_jsonl(out / "nostrip_slice.jsonl")
+            originals = copy.deepcopy(working)
+            endpoint = (_test_endpoint or _make_endpoint(
+                http_base_url, breaker_threshold=10 ** 9))
+            stats = run_autocoder(working, endpoint,
+                                  min_match_grade=min_match_grade,
+                                  search_mode=search_mode)
+            stats["endpoint"] = ("test_stub" if _test_endpoint else
+                                 (http_base_url or "in_process"))
+            report["autocoding"] = stats
+            report["gold_accuracy"] = None
+            report["augmentation"] = augmentation_stats(working)
+            report["append_invariants"] = append_invariants(
+                originals, working)
+            _dump_jsonl(out / "augmented.jsonl", working)
+            partial_path.write_text(
+                json.dumps(report, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8")
+            return report
+
+        if phase == "after":
+            partial_path = out / "report.partial.json"
+            report = json.loads(partial_path.read_text(encoding="utf-8"))
+            augmented = _load_jsonl(out / "augmented.jsonl")
+            augmented_keys = {(r.get("resourceType"), r.get("id"))
+                              for r in augmented}
+            after_corpus = [
+                r for r in slice_resources
+                if (r.get("resourceType"), r.get("id"))
+                not in augmented_keys] + augmented
+            report["after"] = evaluate_slice(after_corpus, rubric)
+            report["recovery"] = recovery_table(report["baseline"],
+                                                report["after"])
+            (out / "piqi_autocoding_report.json").write_text(
+                json.dumps(report, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8")
+            return report
+
+        # phase == "all" (no-strip): single-process path
+        if not skip_autocoding:
+            endpoint = (_test_endpoint or _make_endpoint(http_base_url))
+            stats = run_autocoder(slice_resources, endpoint,
+                                  min_match_grade=min_match_grade,
+                                  search_mode=search_mode)
+            report["autocoding"] = stats
+            report["gold_accuracy"] = None
+            report["augmentation"] = augmentation_stats(slice_resources)
+            report["after"] = evaluate_slice(slice_resources, rubric)
+            report["recovery"] = recovery_table(report["baseline"],
+                                                report["after"])
+        else:
+            report["autocoding"] = None
+            report["gold_accuracy"] = None
+            report["after"] = None
+            report["recovery"] = None
+        (out / "piqi_autocoding_report.json").write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8")
+        return report
 
     if phase == "piqi":
         _dump_jsonl(out / "stripped.jsonl", stripped)
@@ -767,9 +999,14 @@ def summarize(report: dict) -> str:
         f"{report['slice']['resources']} resources",
         f"  text-only CodeableConcepts in slice: "
         f"{report['text_only_census']['text_only_total']}",
-        f"  stripped for BEFORE corpus: {report['stripped']['total']} "
-        f"({report['stripped']['unique_query_texts']} unique texts)",
     ]
+    stripped = report.get("stripped") or {}
+    if stripped.get("total"):
+        lines.append(
+            f"  stripped for BEFORE corpus: {stripped['total']} "
+            f"({stripped['unique_query_texts']} unique texts)")
+    elif report.get("mode") == "no_strip":
+        lines.append("  mode: no-strip (raw corpus autocoded in place)")
     for leg in ("baseline", "before", "after", "ceiling"):
         s = report.get(leg)
         if not s:
@@ -781,10 +1018,11 @@ def summarize(report: dict) -> str:
     if rec:
         lines.append(f"  recovery: {rec['total_fails_recovered']} fails "
                      f"recovered, {rec['total_new_failures']} new fails")
-        gap = (report["ceiling"]["total_item_score"]
-               - report["after"]["total_item_score"])
-        lines.append(f"  after vs ceiling: {gap} items short of the "
-                     "fully-coded counterfactual")
+        if report.get("ceiling") and report.get("after"):
+            gap = (report["ceiling"]["total_item_score"]
+                   - report["after"]["total_item_score"])
+            lines.append(f"  after vs ceiling: {gap} items short of the "
+                         "fully-coded counterfactual")
     gold = report.get("gold_accuracy")
     if gold:
         lines.append(
@@ -821,6 +1059,13 @@ def main(argv: Optional[list[str]] = None) -> int:
               "(ablation: lexical vs semantic vs hybrid). Default hybrid "
               "matches the shipped AutoCoder default."))
     parser.add_argument(
+        "--no-strip", action="store_true",
+        help=("Production-path mode: skip the strip phase entirely. Baseline "
+              "PIQI on the AS-SHIPPED slice, autocode the RAW corpus with "
+              "the DEFAULT system-aware AutoCoder (INV-4 skips only "
+              "standard-coded concepts), then after PIQI. No "
+              "exact-recovery gold (originals remain in place)."))
+    parser.add_argument(
         "--phase", choices=["all", "piqi", "autocode", "after"],
         default="all",
         help=("Phase isolation: medterm4ds (torch) and the DuckDB native "
@@ -835,7 +1080,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                            phase=args.phase,
                            http_base_url=args.http_base_url,
                            min_match_grade=args.min_match_grade,
-                           search_mode=args.search_mode)
+                           search_mode=args.search_mode,
+                           no_strip=args.no_strip)
     if args.phase != "autocode":
         print(summarize(report))
     return 0

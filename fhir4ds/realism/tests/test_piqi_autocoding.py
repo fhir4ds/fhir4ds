@@ -9,16 +9,20 @@ path — without requiring medterm4ds or the MIMIC corpus.
 
 from __future__ import annotations
 
+import json
 import unittest
 
 from fhir4ds.realism.piqi_autocoding import (
     DEFAULT_STRIPPING,
+    append_invariants,
+    augmentation_stats,
     build_mimic_rubric,
     build_slice,
     census_text_only,
     gold_accuracy,
     recovery_table,
     run_autocoder,
+    run_benchmark,
     strip_codings,
     unmapped_classes,
 )
@@ -288,12 +292,34 @@ class TestPerClassIndex(unittest.TestCase):
 class TestRubricAndUnmapped(unittest.TestCase):
     def test_mimic_rubric_builds_and_resolves_catalog(self):
         library, criteria = build_mimic_rubric()
-        self.assertEqual(len(criteria), 15)
+        self.assertEqual(len(criteria), 28)
         self.assertTrue(library["url"].endswith("piqi-rubric-mimic-autocoding"))
         # every criterion resolved to a real SAM spec (build_rubric raises
         # KeyError on unknown ids, ValueError on class/entity mismatch)
         self.assertEqual({c["scoring_effect"] for c in criteria},
                          {"scoring", "informational"})
+
+    def test_mimic_rubric_includes_recognized_system_family(self):
+        _, criteria = build_mimic_rubric()
+        sams = {c["sam"] for c in criteria}
+        # the SAM that should MOVE for mimic-wrapped (non-standard-system)
+        # codings on every coding-centric class
+        for iid in ("condition-condition-hasrecognizedcodesystem",
+                    "procedure-procedure-hasrecognizedcodesystem",
+                    "medication-medication-hasrecognizedcodesystem",
+                    "labresult-test-hasrecognizedcodesystem"):
+            self.assertIn(iid, sams)
+        # full coding family present for Condition/Procedure/Medication
+        for prefix in ("condition-condition", "procedure-procedure",
+                       "medication-medication"):
+            for suffix in ("hascode", "hascodesystem", "hasdisplay",
+                           "iscomplete", "hasrecognizedcodesystem"):
+                self.assertIn(f"{prefix}-{suffix}", sams)
+        # structural controls kept
+        for iid in ("demographics-birthdate-isvaliddate",
+                    "vitalsign-vitalsign-hascode",
+                    "labresult-resultvalue-isnumeric"):
+            self.assertIn(iid, sams)
 
     def test_unmapped_classes_document_gaps(self):
         corpus = [_patient("p1"), _condition("c1", "p1", "a", "s", "A"),
@@ -303,6 +329,137 @@ class TestRubricAndUnmapped(unittest.TestCase):
         self.assertIn("Patient", out["covered_types"])
         self.assertIn("Condition", out["covered_types"])
         self.assertEqual(out["unmapped"], {"Encounter": 1, "Specimen": 1})
+
+
+class TestNoStripPhases(unittest.TestCase):
+    def setUp(self):
+        import json
+        import tempfile
+        from pathlib import Path
+        self.tmp = tempfile.TemporaryDirectory()
+        self.out = Path(self.tmp.name)
+        self.mimic_condition = {
+            "resourceType": "Condition", "id": "cm1",
+            "subject": {"reference": "Patient/p1"},
+            "code": {"coding": [{
+                "code": "99591",
+                "system": "https://fhir.mimic.mit.edu/CodeSystem/mimic-diagnosis-icd9cm",
+                "display": "Sepsis"}]}}
+        self.standard_condition = {
+            "resourceType": "Condition", "id": "cs1",
+            "subject": {"reference": "Patient/p1"},
+            "code": {"coding": [{
+                "code": "91302008", "system": "http://snomed.info/sct",
+                "display": "Sepsis"}]}}
+        self.mimic_med = {
+            "resourceType": "MedicationRequest", "id": "m1",
+            "subject": {"reference": "Patient/p1"},
+            "medicationCodeableConcept": {"coding": [{
+                "code": "Ondansetron",
+                "system": "https://fhir.mimic.mit.edu/CodeSystem/mimic-medication-name"}]}}
+        self.corpus = [_patient("p1"), self.mimic_condition,
+                       self.standard_condition, self.mimic_med]
+        corpus_file = self.out / "corpus.jsonl"
+        corpus_file.write_text(
+            "".join(json.dumps(r) + "\n" for r in self.corpus),
+            encoding="utf-8")
+        self.corpus_path = str(corpus_file)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _phase(self, phase, endpoint=StubEndpoint()):
+        return run_benchmark(self.corpus_path, self.out, phase=phase,
+                             no_strip=True, num_patients=1,
+                             _test_endpoint=endpoint)
+
+    def test_piqi_phase_scores_as_shipped_slice(self):
+        rep = self._phase("piqi")
+        self.assertEqual(rep["mode"], "no_strip")
+        self.assertIn("baseline", rep)
+        self.assertNotIn("before", rep)
+        self.assertNotIn("ceiling", rep)
+        self.assertIsNone(rep["gold_accuracy"])
+        self.assertEqual(rep["stripped"]["total"], 0)
+        # the saved working corpus is the RAW slice: codings intact
+        rows = [json.loads(l) for l in
+                (self.out / "nostrip_slice.jsonl").read_text().splitlines()]
+        by_id = {r["id"]: r for r in rows}
+        self.assertEqual(
+            by_id["cm1"]["code"]["coding"][0]["system"],
+            "https://fhir.mimic.mit.edu/CodeSystem/mimic-diagnosis-icd9cm")
+        # rubric composition documented in the report
+        self.assertIn("rubric", rep)
+        sams = {c["sam"] for c in rep["rubric"]}
+        self.assertIn("condition-condition-hasrecognizedcodesystem", sams)
+
+    def test_autocode_phase_augments_raw_mimic_wrapped_only(self):
+        self._phase("piqi")
+        rep = self._phase("autocode")
+        stats = rep["augmentation"]
+        cond = stats["per_class"]["Condition"]
+        self.assertEqual(cond["resources"], 2)
+        self.assertEqual(cond["augmented"], 1)   # mimic-wrapped only
+        self.assertEqual(cond["inv4_skipped_standard"], 1)
+        med = stats["per_class"]["MedicationRequest"]
+        self.assertEqual(med["augmented"], 1)
+        # appended-not-replaced invariant on the raw corpus
+        inv = rep["append_invariants"]
+        self.assertEqual(inv["originals_replaced_or_removed"], 0)
+        self.assertEqual(inv["appended_without_user_selected_false"], 0)
+        self.assertEqual(inv["appended_without_provenance"], 0)
+
+    def test_after_phase_reports_recovery_vs_baseline(self):
+        self._phase("piqi")
+        self._phase("autocode")
+        rep = self._phase("after")
+        self.assertIn("after", rep)
+        self.assertIn("recovery", rep)
+        self.assertIsNotNone(rep["recovery"]["per_sam"])
+        final = json.loads(
+            (self.out / "piqi_autocoding_report.json").read_text())
+        self.assertEqual(final["mode"], "no_strip")
+
+
+class TestAugmentationHelpers(unittest.TestCase):
+    def _raw(self):
+        return [
+            _condition("c1", "p1", "99591", "mimic-icd", "Sepsis"),
+            _condition("c2", "p1", "91302008", "http://snomed.info/sct",
+                       "Sepsis"),
+        ]
+
+    def test_augmentation_stats_counts_augmented_and_skipped(self):
+        import copy
+        resources = self._raw()
+        # augment the FIRST condition only (deep-copied corpus semantics:
+        # run the stub coder over the single-resource list)
+        originals = copy.deepcopy(resources)
+        run_autocoder([resources[0]], StubEndpoint())
+        stats = augmentation_stats(resources)
+        cond = stats["per_class"]["Condition"]
+        self.assertEqual(cond["resources"], 2)
+        self.assertEqual(cond["augmented"], 1)
+        self.assertEqual(cond["inv4_skipped_standard"], 1)
+        return resources, originals
+
+    def test_append_invariants_pass_on_stub_output(self):
+        resources, originals = self.test_augmentation_stats_counts_augmented_and_skipped()
+        inv = append_invariants(originals, resources)
+        self.assertEqual(inv["originals_replaced_or_removed"], 0)
+        self.assertEqual(inv["appended_without_user_selected_false"], 0)
+        self.assertEqual(inv["appended_without_provenance"], 0)
+        # original mimic coding still first in the list, extension-free
+        codings = resources[0]["code"]["coding"]
+        self.assertEqual(codings[0]["system"], "mimic-icd")
+        self.assertNotIn("extension", codings[0])
+
+    def test_append_invariants_flags_tampering(self):
+        resources, originals = self.test_augmentation_stats_counts_augmented_and_skipped()
+        # tamper: drop the original coding (replacement, not append)
+        resources[0]["code"]["coding"] = resources[0]["code"]["coding"][-1:]
+        inv = append_invariants(originals, resources)
+        self.assertEqual(inv["originals_replaced_or_removed"], 1)
 
 
 if __name__ == "__main__":
