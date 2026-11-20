@@ -1,8 +1,8 @@
 ---
-title: "Testing Data-Quality Tooling Against Real Hospital Data: MIMIC-IV Meets fhir4ds"
-description: "Synthetic test corpora are clean by construction — which is exactly why they hide real defects. We built a corruption harness, pointed it and the full fhir4ds data-quality stack at MIMIC-IV-FHIR, and let real ICU data grade our homework."
+title: "Real ICU Data Grading Data-Quality Tooling: Deduplication and Auto-Coding on MIMIC-IV"
+description: "Synthetic test corpora are clean by construction — which is exactly why they hide real defects. We pointed fhir4ds deduplication and the PIQI scorecard at MIMIC-IV-FHIR, then ran a before/after auto-coding experiment with real ground truth."
 authors: joel
-tags: [fhir, data-quality, patient-matching, deduplication, mimic, benchmarking]
+tags: [fhir, data-quality, deduplication, mimic, benchmarking]
 date: 2026-11-20T12:00:00Z
 slug: /realism-benchmark-mimic
 unlisted: true
@@ -10,48 +10,51 @@ unlisted: true
 
 Every healthcare data tool ships with a test corpus. Ours did too — thousands of fixtures, every one hand-constructed to be *correct*. Then we pointed the stack at real hospital data for the first time, and within minutes it found a crash our clean corpus had been quietly hiding for months.
 
-This post is about what happened next: how we turned real clinical data into a rigorous benchmark, and what the exercise taught us about testing data-quality tooling.
+This post is about what happened next: what real ICU data does to resource deduplication, and a before/after experiment where an auto-coder had to reconstruct stripped clinical codes from free text — graded against the codes we removed.
 
 {/* truncate */}
 
 ## The problem with clean test data
 
-fhir4ds ships four data-quality engines: patient matching (demographic rules producing FHIR Linkage resources), resource deduplication (temporal clustering over coded clinical events), PIQI scorecards (pass/fail data-quality assessments), and a code-fallback resolver that reconciles vocabulary disagreements. All of them were validated against synthetic corpora — the ONC patient-matching test set, CMS eCQM fixtures, and our own constructed cases.
+fhir4ds ships a data-quality stack: resource deduplication (temporal clustering over coded clinical events), PIQI scorecards (pass/fail data-quality assessments per data class), and an auto-coder that augments text-only `CodeableConcepts` with terminology codes via medterm4ds. All of it was validated against synthetic corpora — CMS eCQM fixtures and our own constructed cases.
 
-That validation is real, but it has a structural blind spot: **synthetic data is clean by construction.** It never contains the weird UCUM unit spellings, the 800K-observation corpora, or the identity quirks that a Boston ICU produces over a decade. A tool that scores perfectly on synthetic data has proven it handles the cases its authors imagined.
+That validation is real, but it has a structural blind spot: **synthetic data is clean by construction.** It never contains the weird UCUM unit spellings, the repeated clinical events, or the real missingness a Boston ICU produces over a decade. A tool that scores perfectly on synthetic data has proven it handles the cases its authors imagined.
 
-## Two ideas, one harness
+So we built a realism harness (`fhir4ds.realism`) — corpus-agnostic, deterministic, seeded — around the MIMIC-IV-FHIR demo: the Beth Israel ICU dataset converted to FHIR R4, 100 patients and roughly 900K resources of genuinely messy clinical content. (The harness can also inject seeded duplicate patients for matching experiments, but that is not what this post is about. MIMIC's identities are de-identification artifacts — `Patient_10007795`, birth dates in the 2080s — so it is not a patient-matching corpus and we don't use it as one.)
 
-We built `fhir4ds/realism/` around two pieces:
-
-**1. A realism corpus.** MIMIC-IV-FHIR is the Beth Israel ICU dataset converted to FHIR R4 — genuinely messy clinical content (real LOINC/RxNorm distributions, real timing, real missingness), publicly available, 100 patients and ~900K resources in the demo. It has one problem as a *matching* benchmark: no two records refer to the same entity, so there's nothing to match. The patient identities are de-identification artifacts — names are literally `Patient_10007795`, birth dates shifted into the 2080s.
-
-**2. A corruption harness.** So we make duplicates on purpose. The harness takes any FHIR corpus and injects known duplicates through eight seeded, deterministic corruption profiles: name typos (Damerau-Levenshtein-1), nickname substitutions (Robert→Bob), transliterations (the hard ones — Mohammed→Muhummad, DL≥2), birth-date shifts, address moves, phone-digit flips, MRN variants, and stacks of several at once. Each injected pair is gold-labeled with the profiles applied; every untouched real patient stays in the pool as an honest negative. Same seed, byte-identical benchmark.
-
-For MIMIC we first *realisticize* the identities — generate plausible names from our nickname corpus, rebase the shifted birth dates — because you can't corrupt a name that was never real.
-
-## What the real data found immediately
+## The crash that real data found in minutes
 
 We ran the deduplication leg over the full MIMIC corpus before injecting anything, and it crashed. Not on logic — on units. MIMIC microbiology uses UCUM annotations like `#/hpf` (per high-power field), and the unit-conversion library raises a bare `AssertionError` for some of these spellings. Our clean corpora had never once produced that spelling. Real data produced it in the first thousand resources.
 
 That's the whole argument in one anecdote: **the crash was invisible from synthetic data and surfaced in minutes from real data.** (Fixed same day, with a regression test — `REALISM-F1` if you're reading our commit log.)
 
-## The results
+## Resource deduplication on real repeated clinical events
 
-With the crash fixed, the full benchmark on a 20-patient MIMIC slice (15 injected duplicates, seed 2026):
+With the crash fixed, deduplication over the full corpus found **46,469 duplicate clusters** — and here is the part synthetic corpora can never give you: **we didn't inject a single one.** These are real repeated clinical events — the same lab drawn and re-reported, the same vitals streamed from the monitor, the same medication administered and documented twice. Every cluster is a genuine redundancy a downstream analyst would otherwise double-count.
 
-**Patient matching: precision 1.0, recall 1.0.** Every injected duplicate found, zero false merges of real patients. Per-profile recall: clean copies 1.0, birth-date shifts 1.0, nickname substitutions 1.0, name typos 1.0.
+Two results mattered most:
 
-And one documented miss: **transliteration variants at DL≥2** (`Mohammed`→`Muhummad` as the only signal on an identifier-less patient) are not caught by the current rule set. Single-edit variants (`Mohammed`→`Mohammad`) are caught by fuzzy name rules; two-edit transliterations are not. We pinned this as a known gap rather than hiding it — it's precisely the case where hand-maintained name lists are structurally reactive, and it's the motivation for our name-embedding experiment (equivalent-name embeddings trained on variant pairs, scored through the same probabilistic rules — the approach ComplyAdvantage published 88%-recall numbers for earlier this year).
+- **Zero cross-patient clusters.** The hard safety invariant: not one of the 46,469 clusters spans two patients. Deduplication that merges two people's data is worse than no deduplication.
+- **A curation queue with something real in it.** 216,739 near-miss pairs (looks-alike-but-not-merged, routed for review), 7,650 vocabulary-unmatched resources, and 1,065 unresolved medication references — queued for human review rather than silently bucketed. On our synthetic corpora that same queue had always been empty. The code-fallback tier we built for exactly this population had never seen a real member of it until now.
 
-**Deduplication on real data:** 46,469 clusters across the corpus, **zero cross-patient clusters** (the hard safety invariant), and a curation queue that finally had something real in it — 216,739 near-miss pairs, 7,650 vocabulary-unmatched resources, 1,065 unresolved medication references routed for review rather than silently bucketed. On our synthetic corpora that same queue had been empty. The code-fallback tier we built for exactly this population had never seen a real member of it until now.
+## The auto-coding experiment: PIQI before and after
+
+The second experiment is the one with real ground truth. MIMIC's export is fully coded — we found **zero text-only CodeableConcepts** in a 12-patient slice — so we manufactured the legacy situation every EHR migration actually faces: we stripped the codings from 1,643 coded resources (669 conditions, 494 procedures, 480 lab results, keeping the display text as `code.text`), ran the PIQI scorecard, let the auto-coder reconstruct codes from that text, and re-ran the identical scorecard. Because *we* removed the codes, we know exactly what the right answer was — ground-truth auto-coding accuracy on real ICU text, not a vibe.
+
+We ran two configurations: the shipped strict default (only `certain`-grade matches are written) and a recall-oriented arm (`probable` and better).
+
+**The scorecard legs.** On the 12-patient slice (86,224 resources, 98,202 scored items), PIQI as-is scored **38.5** — and that number is itself a finding: the deductions are dominated by genuinely absent lab result values and units, the kind of real-world incompleteness synthetic corpora never model. After stripping, the coding-dependent assessments failed exactly as predicted (`Concept_IsComplete` on all 1,643 stripped elements, plus the lab `Concept_Has*` family). A counterfactual "ceiling" run — the stripped corpus with its original codings quietly re-attached — scored **41.7**, which isolates the 3,083 items that purely represent lost codings.
+
+**Recovery.** The strict arm wrote codings for 28 elements (all conditions, every one a `certain`-grade SNOMED match) and recovered 28 items — right codes, conservative posture, zero new failures. The recall arm wrote 3,366 codings across 1,216 of the 1,643 stripped elements (74% coverage) and recovered **2,188 of the 3,083 fail items — 71% of the coding gap — with zero new failures**: nothing that passed before regressed, including the plausibility checks.
+
+**Ground truth.** This is the number you can only get by removing codes you already have. The stripped corpus's original codings split into two populations: 224 procedures whose originals are **SNOMED** codes, and everything else whose originals are MIMIC-local dictionaries (ICD-9/10 diagnosis codes, local lab item ids). On the standard-terminology subset, the auto-coder recovered the **exact original (system, code) pair for 224 of 224 — 100% top-1 exact recovery**. On the local-dictionary subset, exact match is impossible by construction — the engine doesn't know MIMIC's private dictionaries — and instead it returns standard SNOMED/LOINC equivalents. Spot-checking those: "Anemia in chronic kidney disease" (ICD-9 local) → SNOMED 707323002 *Anemia in chronic kidney disease*; "Portal vein thrombosis" → SNOMED 17920008 *Portal vein thrombosis*. That is precisely the EHR-migration promise: legacy local codes become addressable standard terminology, with the original text preserved and every generated coding carrying machine-readable provenance (engine, version, search mode, score, match grade, `userSelected=false`).
 
 ## Why this matters more than another synthetic suite
 
 Three things made this exercise worth more than another constructed test suite:
 
 1. **Real data finds real defects.** The unit-crash class — a library raising an unexpected exception type on legitimate input — simply doesn't exist in data you wrote yourself.
-2. **Gold labels without hand-labeling.** The corruption harness converts *any* real corpus into a matching benchmark. You get real clinical context underneath and known-truth duplicates on top — strictly better than either alone.
-3. **The gaps you find are the honest ones.** "Perfect on synthetic, transliteration-blind on real" is an accurate self-portrait. "Perfect on synthetic" alone is marketing.
+2. **Real redundancy needs no injection.** 46,469 genuine duplicate clusters with zero cross-patient merges is a validation synthetic duplicates can approximate but never earn.
+3. **The gaps you find are the honest ones.** Measured recovery rates against known-truth codes — including where the auto-coder can't reach — are an accurate self-portrait. "Perfect on synthetic" alone is marketing.
 
-The harness ships in fhir4ds (`fhir4ds.realism`), works on any FHIR NDJSON or bundle corpus, and every profile is deterministic and seeded. Point it at your own exports — the interesting bugs are the ones your test data doesn't contain.
+Both experiments ship in fhir4ds: the realism harness (`fhir4ds.realism`) works on any FHIR NDJSON or bundle corpus, and the PIQI auto-coding benchmark (`fhir4ds.realism.piqi_autocoding`) is deterministic and repeatable. Point them at your own exports — the interesting bugs are the ones your test data doesn't contain.
