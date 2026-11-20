@@ -1,0 +1,37 @@
+{
+  "name": "piqi_servicerequest",
+  "status": "draft",
+  "resource": "ServiceRequest",
+  "select": [
+    {
+      "column": [
+        {
+          "name": "element_id",
+          "path": "id",
+          "type": "id"
+        },
+        {
+          "name": "patient_id",
+          "path": "subject.reference.replace('urn:uuid:', '').split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "order_text",
+          "path": "code.text",
+          "type": "string"
+        },
+        {
+          "name": "order_codings",
+          "path": "code.coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "orderDate",
+          "path": "authoredOn.toString()",
+          "type": "string"
+        }
+      ]
+    }
+  ]
+}

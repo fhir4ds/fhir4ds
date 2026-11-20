@@ -37,6 +37,11 @@
           "type": "string"
         },
         {
+          "name": "resultValue_hasType",
+          "path": "((value.ofType(Quantity) | value.ofType(CodeableConcept) | value.ofType(string) | value.ofType(boolean) | value.ofType(integer) | value.ofType(Range) | value.ofType(Ratio) | value.ofType(SampledData) | value.ofType(time) | value.ofType(dateTime) | value.ofType(Period))).exists()",
+          "type": "boolean"
+        },
+        {
           "name": "resultValue_number",
           "path": "value.ofType(Quantity).value",
           "type": "decimal"
@@ -55,6 +60,11 @@
         {
           "name": "resultUnit_text",
           "path": "value.ofType(Quantity).unit",
+          "type": "string"
+        },
+        {
+          "name": "orderRef",
+          "path": "basedOn.first().reference",
           "type": "string"
         },
         {

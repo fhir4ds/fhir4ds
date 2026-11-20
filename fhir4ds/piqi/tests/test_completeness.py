@@ -246,9 +246,179 @@ def test_b1_class_hasduplicates_remaining_classes():
 
 
 def test_b1_has_type_ghost_not_implemented():
-    """ObservationValue_HasType is a guide ghost (SG references, never
-    defines) — a Joel decision; it must NOT appear in the catalog."""
-    assert "ObservationValue_HasType" not in _catalog_mnemonics()
+    """SUPERSEDED by Batch 6 (Joel 2026-11-20): ObservationValue_HasType
+    is now IMPLEMENTED per the recorded inferred semantics — kept here
+    renamed to document the history; see the b6 tests below."""
+    from fhir4ds.piqi.authoring import build_sam_catalog
+
+    ids = {s.instance_id for s in build_sam_catalog()}
+    assert any(i.endswith("hastype") for i in ids), \
+        "batch 6 implements ObservationValue_HasType (see b6 tests)"
+
+
+# ===========================================================================
+# Batch 6 — Joel-approved decision items (2026-11-20)
+# ===========================================================================
+def test_b6_hastype_passes_on_populated_arm_fails_on_absent():
+    """ObservationValue_HasType per the RECORDED interpretation (Joel,
+    2026-11-20): passes when the ObservationValue has a populated
+    value[x] arm in the recognized FHIR R4 inventory (Quantity,
+    CodeableConcept, string, boolean, integer, Range, Ratio,
+    SampledData, time, dateTime, Period); no arm -> fail."""
+    from fhir4ds.piqi import build_sam_catalog
+
+    con = fx.make_connection([
+        fx.PATIENT_IG_P11,
+        fx.GLUCOSE_OBS_IG_P15,               # Quantity arm
+        fx.lab_obs("lab-str", "abc"),        # string arm
+        fx.lab_obs("lab-none", None),        # NO value arm -> remove below
+        fx.HEALTH_ASSESSMENT_IG_P13,         # CodeableConcept arm
+    ])
+    # lab_obs with value None yields no value[x] fields
+    import json as _json
+
+    def _ins(res):
+        con.execute("INSERT INTO resources VALUES (?)",
+                    [_json.dumps(res)])
+
+    _ins({"resourceType": "Observation", "id": "lab-none",
+          "status": "final",
+          "category": [{"coding": [{"code": "laboratory"}]}],
+          "code": {"text": "T", "coding": [{"code": "0"}]},
+          "subject": {"reference": "Patient/pat-1"},
+          "effectiveDateTime": "2020-07-10"})
+    res = _results(run_sam(con, "piqi-sam-labresult-resultvalue-hastype"))
+    assert res["lab-1"] == "pass"       # NM (Quantity)
+    assert res["lab-str"] == "pass"     # ST (string)
+    assert res["lab-none"] == "fail"    # no value[x] arm
+    res = _results(run_sam(
+        con, "piqi-sam-healthassessment-resultvalue-hastype"))
+    assert res["ha-1"] == "pass"
+    # vital-sign BP panel counts (component SN arm)
+    con2 = fx.make_connection([fx.PATIENT_IG_P11, fx.BP_OBS_IG_P20])
+    assert _results(run_sam(
+        con2, "piqi-sam-vitalsign-resultvalue-hastype"))["vs-bp-1"] == "pass"
+    # a recognized non-text arm the earlier views did not expose:
+    # valueDateTime
+    _ins({"resourceType": "Observation", "id": "lab-dt",
+          "status": "final",
+          "category": [{"coding": [{"code": "laboratory"}]}],
+          "code": {"text": "T", "coding": [{"code": "0"}]},
+          "subject": {"reference": "Patient/pat-1"},
+          "valueDateTime": "2020-07-10T10:30:00"})
+    assert _results(run_sam(con, "piqi-sam-labresult-resultvalue-hastype"))["lab-dt"] == "pass"
+    # HasType is the typed-SAM prerequisite for MatchesType/IsQualitative
+    specs = {s.instance_id: s for s in build_sam_catalog()}
+    assert specs["labresult-resultvalue-matchestype"].prereq == \
+        "labresult-resultvalue-hastype"
+    assert specs["labresult-resultvalue-isqualitative"].prereq == \
+        "labresult-resultvalue-hastype"
+
+
+def test_b6_labresult_order_via_servicerequest():
+    """[IG p.15] order (CodableConcept) + orderDate (Simple) extracted
+    from Observation.basedOn -> ServiceRequest (code + authoredOn)."""
+    sr = {
+        "resourceType": "ServiceRequest", "id": "sr-1", "status": "active",
+        "intent": "order", "subject": {"reference": "Patient/pat-1"},
+        "code": fx._cc("Glucose panel",
+                       {"code": "51986-0", "display": "Glucose panel",
+                        "system": fx.LOINC}),
+        "authoredOn": "2020-07-09",
+    }
+    obs = fx.lab_obs("lab-ord", "x", extra={
+        "basedOn": [{"reference": "ServiceRequest/sr-1"}]})
+    con = fx.make_connection([fx.PATIENT_IG_P11, sr, obs])
+    assert _results(run_sam(
+        con, "piqi-sam-labresult-order-ispopulated"))["lab-ord"] == "pass"
+    assert _results(run_sam(
+        con, "piqi-sam-labresult-order-hascode"))["lab-ord"] == "pass"
+    assert _results(run_sam(con, "piqi-sam-labresult-orderdate-ispopulated"))["lab-ord"] == "pass"
+    assert _results(run_sam(con, "piqi-sam-labresult-orderdate-isvaliddate"))["lab-ord"] == "pass"
+    # absence handled gracefully: MIMIC labs largely lack basedOn ->
+    # the ROOT populated SAM reports an honest FAIL row, and every
+    # downstream SAM is row-absent (prerequisite unpopulated)
+    con2 = fx.make_connection([fx.PATIENT_IG_P11, fx.GLUCOSE_OBS_IG_P15])
+    assert _results(run_sam(
+        con2, "piqi-sam-labresult-order-ispopulated"))["lab-1"] == "fail"
+    assert run_sam(con2, "piqi-sam-labresult-order-hascode") == []
+    assert run_sam(con2, "piqi-sam-labresult-orderdate-isvaliddate") == []
+    # a basedOn pointing at a MISSING ServiceRequest is honest absence too
+    con3 = fx.make_connection([
+        fx.PATIENT_IG_P11,
+        fx.lab_obs("lab-dangle", "x",
+                   extra={"basedOn": [{"reference": "ServiceRequest/nope"}]})])
+    assert _results(run_sam(
+        con3, "piqi-sam-labresult-order-ispopulated"))["lab-dangle"] == "fail"
+
+
+def test_b6_medication_source_union():
+    """[IG p.18] Medication class unions MedicationRequest with
+    MedicationStatement / Dispense / Administration — medication code +
+    temporal fields flow into the Medication SAMs."""
+    statement = {
+        "resourceType": "MedicationStatement", "id": "stmt-1",
+        "status": "active", "subject": {"reference": "Patient/pat-1"},
+        "medicationCodeableConcept": fx._cc(
+            "metformin 500 MG",
+            {"code": "859964", "display": "metformin 500 MG",
+             "system": "RXNORM"}),
+        "effectiveDateTime": "2020-08-01",
+        "dosage": [{"text": "1 tab BID",
+                    "doseAndRate": [{"doseQuantity": {"value": 500,
+                                                      "unit": "mg"}}]}],
+    }
+    dispense = {
+        "resourceType": "MedicationDispense", "id": "disp-1",
+        "status": "completed", "subject": {"reference": "Patient/pat-1"},
+        "medicationCodeableConcept": fx._cc(
+            "insulin glargine",
+            {"code": "311471", "display": "insulin glargine",
+             "system": "RXNORM"}),
+        "whenHandedOver": "2020-09-01",
+        "quantity": {"value": 2, "unit": "vials"},
+    }
+    administration = {
+        "resourceType": "MedicationAdministration", "id": "admin-1",
+        "status": "completed", "subject": {"reference": "Patient/pat-1"},
+        "medicationCodeableConcept": fx._cc(
+            "heparin", {"code": "(identity)", "system": "RXNORM"}),
+        "effectiveDateTime": "2020-09-02T08:00:00",
+        "dosage": [{"dose": {"value": 5000, "unit": "U"}}],
+    }
+    con = fx.make_connection([
+        fx.PATIENT_IG_P18_PATIENT if hasattr(fx, "PATIENT_IG_P18_PATIENT")
+        else fx.PATIENT_IG_P11,
+        fx.MEDICATION_IG_P18, statement, dispense, administration])
+    res = _results(run_sam(con, "piqi-sam-medication-medication-hascode"))
+    assert res["med-1"] == "pass"
+    assert res["stmt-1"] == "pass"
+    assert res["disp-1"] == "pass"
+    res = _results(run_sam(con, "piqi-sam-medication-medication-hascodesystem"))
+    assert set(res) == {"med-1", "stmt-1", "disp-1", "admin-1"}
+    # startDate flows per source (authoredOn / effective / whenHandedOver)
+    res = _results(run_sam(con, "piqi-sam-medication-startdate-ispopulated"))
+    assert res["med-1"] == "pass"
+    assert res["stmt-1"] == "pass"
+    assert res["disp-1"] == "pass"
+    assert res["admin-1"] == "pass"
+    # doseAmount: request+statement dosage, administration dosage.dose
+    res = _results(run_sam(con, "piqi-sam-medication-doseamount-isnumeric"))
+    assert res["admin-1"] == "pass"
+    # Class_HasDuplicates sees the UNION — SG semantics: pass MEANS
+    # duplicates found; the 4 fixtures are DISTINCT meds -> fail (good)
+    rows = run_sam(con, "piqi-sam-medication-hasduplicates")
+    assert rows and rows[0]["result"] == "fail"
+    assert "no duplicate elements" in rows[0]["detail"]
+    # two identical MedicationStatement rows -> duplicates detected
+    # across sources (union proof)
+    dup = dict(statement)
+    dup["id"] = "stmt-1-dup"
+    con.execute("INSERT INTO resources VALUES (?)",
+                [__import__("json").dumps(dup)])
+    rows = run_sam(con, "piqi-sam-medication-hasduplicates")
+    assert rows[0]["result"] == "pass"
+    assert "stmt-1" in rows[0]["detail"]
 
 
 # ===========================================================================
@@ -511,6 +681,45 @@ def test_b4_parameterized_sam_declares_parameters():
     assert not any("matchesregex" in k for k in generate_all())
 
 
+def test_b4_authoring_surface_rejects_sql_in_entities_and_columns():
+    """Code-review regression (build_rubric lesson, AMUX-152 #17 family):
+    ``entity`` and ``column`` reach SQL literal/identifier positions in
+    the parameterized-SAM body — a fragment in either slot is an
+    injection, and must raise a typed ValueError, not emit SQL."""
+    from fhir4ds.piqi import build_parameterized_sam
+
+    with pytest.raises(ValueError, match="entity"):
+        build_parameterized_sam(
+            "Attr_InList", "LabResult", "x' UNION SELECT 'pwned' --")
+    with pytest.raises(ValueError, match="column"):
+        build_parameterized_sam(
+            "Attr_MatchesRegex", "LabResult", "test",
+            column="x, (SELECT 'pwned') AS z --")
+    # clean identifiers still accepted
+    sam = build_parameterized_sam(
+        "Attr_InList", "LabResult", "resultStatus", column="resultStatus_text")
+    assert sam["id"]
+
+
+def test_b5_terminology_surface_rejects_sql_in_entities():
+    """Code-review regression: run_terminology_sam interpolates
+    ``<entity>_codings`` as a column identifier — a fragment is an
+    injection and must raise, not reach the SQL parser. Unknown data
+    classes also fail with the documented ValueError."""
+    from fhir4ds.piqi import run_terminology_sam
+
+    con = fx.make_connection([fx.PATIENT_IG_P11])
+    with pytest.raises(ValueError, match="entity"):
+        run_terminology_sam(
+            con, "Concept_IsValidMember", data_class="LabResult",
+            entity="test) FROM resources; --",
+            valueset="http://example.org/ValueSet/vitals")
+    with pytest.raises(ValueError, match="data class"):
+        run_terminology_sam(
+            con, "Concept_IsValidMember", data_class="NotAClass",
+            entity="test", valueset="http://example.org/ValueSet/vitals")
+
+
 # ===========================================================================
 # Batch 5 — terminology SAMs (endpoint PROTOCOL; stub in tests)
 # ===========================================================================
@@ -586,7 +795,7 @@ def test_b5_valid_member_via_local_valueset_cache():
 
     con = fx.make_connection([fx.PATIENT_IG_P11, fx.MONOCYTES_OBS_SG_P16])
     con.execute(
-        "CREATE TABLE valueset_codes (url VARCHAR, system VARCHAR, "
+        "CREATE TABLE valueset_codes (valueset_url VARCHAR, system VARCHAR, "
         "code VARCHAR, display VARCHAR)")
     con.execute(
         "INSERT INTO valueset_codes VALUES "
@@ -604,7 +813,7 @@ def test_b5_is_consistent_local_cache_display():
 
     con = fx.make_connection([fx.PATIENT_IG_P11, fx.MONOCYTES_OBS_SG_P16])
     con.execute(
-        "CREATE TABLE valueset_codes (url VARCHAR, system VARCHAR, "
+        "CREATE TABLE valueset_codes (valueset_url VARCHAR, system VARCHAR, "
         "code VARCHAR, display VARCHAR)")
     # display matches the fixture's LOINC coding display
     con.execute(

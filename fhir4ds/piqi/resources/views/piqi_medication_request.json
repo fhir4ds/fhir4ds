@@ -32,6 +32,11 @@
           "type": "string"
         },
         {
+          "name": "endDate",
+          "path": "iif(false, '', {})",
+          "type": "string"
+        },
+        {
           "name": "doseAmount",
           "path": "dosageInstruction.first().doseAndRate.first().doseQuantity.value",
           "type": "decimal"

@@ -70,7 +70,29 @@ _VALUE_TYPE_CHAIN = (
     "iif(value.ofType(string).exists(), 'ST', "
     "iif(value.ofType(boolean).exists(), 'ST', ''))))"
 )
+
+#: Batch 6 (Joel 2026-11-20, recorded interpretation): the recognized
+#: FHIR R4 Observation.value[x] inventory — Quantity, CodeableConcept,
+#: string, boolean, integer, Range, Ratio, SampledData, time, dateTime,
+#: Period. ObservationValue_HasType passes when ANY of these arms is
+#: populated; no arm (or an arm outside the inventory) fails.
+_HAS_TYPE_ARMS = (
+    "(value.ofType(Quantity) | value.ofType(CodeableConcept) | "
+    "value.ofType(string) | value.ofType(boolean) | value.ofType(integer) | "
+    "value.ofType(Range) | value.ofType(Ratio) | value.ofType(SampledData) | "
+    "value.ofType(time) | value.ofType(dateTime) | value.ofType(Period))"
+)
+_HAS_TYPE_PATH = f"({_HAS_TYPE_ARMS}).exists()"
+_VS_HAS_TYPE_PATH = f"(component | {_HAS_TYPE_ARMS}).exists()"
 _RESULT_STATUS = "iif(status = 'final', 'F', status)"
+
+#: Always-empty FHIRPath column paths for union-schema columns a source
+#: resource does not carry (lazy iif — the then-branch is never
+#: evaluated; the {} else-branch yields an empty collection -> NULL).
+_EMPTY_STR_PATH = "iif(false, '', {})"
+_EMPTY_CODINGS_PATH = "iif(false, {}.first().coding, {})"
+_EMPTY_DEC_PATH = "iif(false, 0, {})"
+
 
 _SYSTOLIC = ("component.where(code.coding.code = '8480-5').first()"
              ".value.ofType(Quantity).value")
@@ -133,6 +155,8 @@ VIEWS["piqi_labresult"] = {
         *_concept_columns("test", "code.text", "code.coding"),
         {"name": "resultValue_text", "path": _VALUE_TEXT_CHAIN, "type": "string"},
         {"name": "resultValue_type", "path": _VALUE_TYPE_CHAIN, "type": "string"},
+        {"name": "resultValue_hasType", "path": _HAS_TYPE_PATH,
+         "type": "boolean"},
         {"name": "resultValue_number", "path": "value.ofType(Quantity).value",
          "type": "decimal"},
         {"name": "resultValue_number2",
@@ -140,6 +164,10 @@ VIEWS["piqi_labresult"] = {
         {"name": "resultValue_codings", "path": "value.ofType(CodeableConcept).coding",
          "type": "Coding", "collection": True},
         {"name": "resultUnit_text", "path": "value.ofType(Quantity).unit",
+         "type": "string"},
+        # Batch 6: order/orderDate cross-resource prerequisites — the
+        # basedOn reference tail joins the packaged ServiceRequest view
+        {"name": "orderRef", "path": "basedOn.first().reference",
          "type": "string"},
         *_concept_columns("interpretation", "interpretation.first().text",
                           "interpretation.first().coding"),
@@ -167,6 +195,8 @@ VIEWS["piqi_vital_sign"] = {
         {"name": "resultValue_text", "path": _VS_TEXT, "type": "string"},
         {"name": "resultValue_type",
          "path": "iif(component.exists(), 'SN', '')", "type": "string"},
+        {"name": "resultValue_hasType", "path": _VS_HAS_TYPE_PATH,
+         "type": "boolean"},
         {"name": "resultValue_number", "path": _VS_NUMBER, "type": "decimal"},
         {"name": "resultValue_number2", "path": _DIASTOLIC, "type": "decimal"},
         {"name": "resultUnit_text", "path": _VS_UNIT, "type": "string"},
@@ -194,6 +224,8 @@ VIEWS["piqi_health_assessment"] = {
         *_concept_columns("assessment", "code.text", "code.coding"),
         {"name": "resultValue_text", "path": _VALUE_TEXT_CHAIN, "type": "string"},
         {"name": "resultValue_type", "path": _VALUE_TYPE_CHAIN, "type": "string"},
+        {"name": "resultValue_hasType", "path": _HAS_TYPE_PATH,
+         "type": "boolean"},
         {"name": "resultValue_codings", "path": "value.ofType(CodeableConcept).coding",
          "type": "Coding", "collection": True},
         {"name": "resultUnit_text", "path": "value.ofType(Quantity).unit",
@@ -206,6 +238,24 @@ VIEWS["piqi_health_assessment"] = {
          # 'performedDateTime'. No SAM binds this column today; keep the
          # guide spellings verbatim (documented, not churned).
          "path": "effective.ofType(dateTime).toString()", "type": "string"},
+    ],
+}
+
+#: Batch 6 [IG p.15]: order (CodableConcept = ServiceRequest.code) and
+#: orderDate (ServiceRequest.authoredOn, "date the order was requested")
+#: live on the ORDER resource, not the Observation. ViewDefinitions are
+#: single-resource, so the extraction is a packaged ServiceRequest view
+#: joined by the basedOn anchored tail (loader resolve() doctrine) in
+#: the order SAM bodies.
+VIEWS["piqi_servicerequest"] = {
+    "resource": "ServiceRequest",
+    "columns": [
+        {"name": "element_id", "path": "id", "type": "id"},
+        {"name": "patient_id",
+         "path": "subject.reference.replace('urn:uuid:', '').split('/').last()",
+         "type": "string"},
+        *_concept_columns("order", "code.text", "code.coding"),
+        {"name": "orderDate", "path": "authoredOn.toString()", "type": "string"},
     ],
 }
 
@@ -281,6 +331,9 @@ VIEWS["piqi_medication_request"] = {
         *_concept_columns("medication", "medication.ofType(CodeableConcept).text",
                           "medication.ofType(CodeableConcept).coding"),
         {"name": "startDate", "path": "authoredOn.toString()", "type": "string"},
+        # [IG p.18] endDate — no MedicationRequest source field (batch 6
+        # union note: arrives with MedicationStatement effectivePeriod.end)
+        {"name": "endDate", "path": _EMPTY_STR_PATH, "type": "string"},
         {"name": "doseAmount",
          "path": "dosageInstruction.first().doseAndRate.first()"
                  ".doseQuantity.value", "type": "decimal"},
@@ -298,6 +351,105 @@ VIEWS["piqi_medication_request"] = {
         *_concept_columns("indication", "reasonCode.first().text",
                           "reasonCode.first().coding"),
         {"name": "fillStatus_text", "path": "status", "type": "code"},
+    ],
+}
+
+# Batch 6 [IG p.18]: the other three Medication source resources.
+# Schema matches piqi_medication_request BY NAME (the SAM union selects
+# by name); attributes a source does not carry are honest NULLs.
+# NOTE (documented gap): IG `adherence` has NO R4 source on any of the
+# four resources (MedicationStatement.adherence is R5+).
+
+def _vs_effective_start() -> str:
+    return ("iif(effective.ofType(dateTime).exists(), "
+            "effective.ofType(dateTime).toString(), "
+            "iif(effective.ofType(Period).exists(), "
+            "effective.ofType(Period).start, ''))")
+
+
+VIEWS["piqi_medication_statement"] = {
+    "resource": "MedicationStatement",
+    "columns": [
+        {"name": "element_id", "path": "id", "type": "id"},
+        {"name": "patient_id",
+         "path": "subject.reference.replace('urn:uuid:', '').split('/').last()",
+         "type": "string"},
+        *_concept_columns("medication", "medication.ofType(CodeableConcept).text",
+                          "medication.ofType(CodeableConcept).coding"),
+        {"name": "startDate", "path": _vs_effective_start(), "type": "string"},
+        {"name": "endDate",
+         "path": "iif(effective.ofType(Period).exists(), "
+                 "effective.ofType(Period).end, '')", "type": "string"},
+        {"name": "doseAmount",
+         "path": "dosage.first().doseAndRate.first().doseQuantity.value",
+         "type": "decimal"},
+        {"name": "doseAmountUnit_text",
+         "path": "dosage.first().doseAndRate.first().doseQuantity.unit",
+         "type": "string"},
+        *_concept_columns("doseRoute", "dosage.first().route.text",
+                          "dosage.first().route.coding"),
+        {"name": "doseQuantity", "path": _EMPTY_DEC_PATH, "type": "decimal"},
+        {"name": "doseQuantityUnit", "path": _EMPTY_STR_PATH, "type": "string"},
+        {"name": "instructions", "path": "dosage.first().text", "type": "string"},
+        *_concept_columns("indication", "reasonCode.first().text",
+                          "reasonCode.first().coding"),
+        {"name": "fillStatus_text", "path": _EMPTY_STR_PATH, "type": "string"},
+    ],
+}
+
+VIEWS["piqi_medication_dispense"] = {
+    "resource": "MedicationDispense",
+    "columns": [
+        {"name": "element_id", "path": "id", "type": "id"},
+        {"name": "patient_id",
+         "path": "subject.reference.replace('urn:uuid:', '').split('/').last()",
+         "type": "string"},
+        *_concept_columns("medication", "medication.ofType(CodeableConcept).text",
+                          "medication.ofType(CodeableConcept).coding"),
+        {"name": "startDate", "path": "whenHandedOver.toString()",
+         "type": "string"},
+        {"name": "endDate", "path": _EMPTY_STR_PATH, "type": "string"},
+        {"name": "doseAmount",
+         "path": "dosageInstruction.first().doseAndRate.first()"
+                 ".doseQuantity.value", "type": "decimal"},
+        {"name": "doseAmountUnit_text",
+         "path": "dosageInstruction.first().doseAndRate.first()"
+                 ".doseQuantity.unit", "type": "string"},
+        *_concept_columns("doseRoute", "dosageInstruction.first().route.text",
+                          "dosageInstruction.first().route.coding"),
+        {"name": "doseQuantity", "path": "quantity.value", "type": "decimal"},
+        {"name": "doseQuantityUnit", "path": "quantity.unit", "type": "string"},
+        {"name": "instructions", "path": "dosageInstruction.first().text",
+         "type": "string"},
+        *_concept_columns("indication", _EMPTY_STR_PATH, _EMPTY_CODINGS_PATH),
+        # fillStatus is native to the dispense transaction (its status)
+        {"name": "fillStatus_text", "path": "status", "type": "code"},
+    ],
+}
+
+VIEWS["piqi_medication_administration"] = {
+    "resource": "MedicationAdministration",
+    "columns": [
+        {"name": "element_id", "path": "id", "type": "id"},
+        {"name": "patient_id",
+         "path": "subject.reference.replace('urn:uuid:', '').split('/').last()",
+         "type": "string"},
+        *_concept_columns("medication", "medication.ofType(CodeableConcept).text",
+                          "medication.ofType(CodeableConcept).coding"),
+        {"name": "startDate", "path": _vs_effective_start(), "type": "string"},
+        {"name": "endDate", "path": _EMPTY_STR_PATH, "type": "string"},
+        {"name": "doseAmount", "path": "dosage.first().dose.value",
+         "type": "decimal"},
+        {"name": "doseAmountUnit_text", "path": "dosage.first().dose.unit",
+         "type": "string"},
+        *_concept_columns("doseRoute", "dosage.first().route.text",
+                          "dosage.first().route.coding"),
+        {"name": "doseQuantity", "path": _EMPTY_DEC_PATH, "type": "decimal"},
+        {"name": "doseQuantityUnit", "path": _EMPTY_STR_PATH, "type": "string"},
+        {"name": "instructions", "path": _EMPTY_STR_PATH, "type": "string"},
+        *_concept_columns("indication", "reasonCode.first().text",
+                          "reasonCode.first().coding"),
+        {"name": "fillStatus_text", "path": _EMPTY_STR_PATH, "type": "string"},
     ],
 }
 
@@ -403,11 +555,93 @@ def _sql_literal(value: str) -> str:
     return quote_sql_literal(value)
 
 
+#: Batch 6 [IG p.18]: the Medication data class unions ALL FOUR source
+#: resources the IG names ("medication statement; medication dispense or
+#: medication administration" + MedicationRequest). ViewDefinitions are
+#: single-resource, so the union happens in the SAM FROM clause over the
+#: four identically-shaped source views (SELECT-by-name, position-safe).
+MEDICATION_SOURCE_VIEWS = (
+    "piqi_medication_request",
+    "piqi_medication_statement",
+    "piqi_medication_dispense",
+    "piqi_medication_administration",
+)
+
+_MEDICATION_UNION_COLUMNS = (
+    "element_id", "patient_id",
+    "medication_text", "medication_codings",
+    "startDate", "endDate",
+    "doseAmount", "doseAmountUnit_text",
+    "doseRoute_text", "doseRoute_codings",
+    "doseQuantity", "doseQuantityUnit",
+    "instructions",
+    "indication_text", "indication_codings",
+    "fillStatus_text",
+)
+
+
+def _from_sql(view_label: str, data_class: str) -> str:
+    """FROM fragment for SAM bodies. The Medication data class reads the
+    UNION ALL of its four source views; every other class reads its own
+    view. Columns are selected BY NAME so view column order cannot
+    silently desync the union."""
+    if data_class == "Medication":
+        return f"FROM {_union_bare(data_class)} v"
+    return f"FROM {_q(view_label)} v"
+
+
+def _union_bare(data_class: str) -> str:
+    """The (possibly unioned) FROM target WITHOUT alias — for inner
+    CTEs that reference the source directly."""
+    if data_class == "Medication":
+        cols = ", ".join(_MEDICATION_UNION_COLUMNS)
+        branches = " UNION ALL ".join(
+            f"SELECT {cols} FROM {_q('view_' + name)}"
+            for name in MEDICATION_SOURCE_VIEWS)
+        return f"({branches})"
+    raise ValueError("no union for this data class")
+
+
+def _from_bare_sql(view_label: str, data_class: str) -> str:
+    """`FROM <bare source> v` for inner CTEs (alias included)."""
+    if data_class == "Medication":
+        return f"FROM {_union_bare(data_class)} v"
+    return f"FROM {_q(view_label)} v"
+
+
+def _from_bare_or_label(view_label: str, data_class: str) -> str:
+    """`FROM <bare source>` (no alias) for scalar subqueries."""
+    if data_class == "Medication":
+        return _union_bare(data_class)
+    return _q(view_label)
+
+
 def _recognized_systems_lazy() -> "tuple[str, ...]":
     """[HB p.15] closure of recognized code-system identifier spellings."""
     from .codesystems import recognized_system_strings  # noqa: PLC0415
 
     return recognized_system_strings()
+
+
+_IDENTIFIER_RE = None
+
+
+def assert_sql_identifier(value: object, what: str) -> str:
+    """Reject non-identifier strings destined for SQL identifier or
+    literal positions on public authoring/execution surfaces
+    (build_rubric lesson / AMUX-152 #17 family: a caller-supplied
+    fragment in an entity/column slot is an injection, not a name)."""
+    global _IDENTIFIER_RE
+    if _IDENTIFIER_RE is None:
+        import re
+
+        _IDENTIFIER_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
+    if (not isinstance(value, str) or not _IDENTIFIER_RE.match(value)):
+        raise ValueError(
+            f"{what} must be a simple identifier matching "
+            "^[A-Za-z][A-Za-z0-9_]*$ (it reaches a SQL identifier/"
+            f"literal position); got {value!r}")
+    return value
 
 
 def _populated(col: str) -> str:
@@ -424,7 +658,7 @@ def sam_attr_is_populated(view_label: str, data_class: str, entity: str,
         f"  CASE WHEN {ok} THEN 'pass' ELSE 'fail' END AS result,\n"
         f"  CASE WHEN {ok} THEN '{entity} is populated' "
         f"ELSE '{entity} is not populated' END AS detail\n"
-        f"FROM {_q(view_label)} v\n"
+        f"{_from_sql(view_label, data_class)}\n"
         f"ORDER BY v.patient_id, v.element_id"
     )
 
@@ -450,7 +684,7 @@ def sam_attr_regex(view_label, data_class, entity, column, mnemonic,
         f"  CASE WHEN {ok} THEN 'pass' ELSE 'fail' END AS result,\n"
         f"  CASE WHEN {ok} THEN '{entity} satisfies {mnemonic}' "
         f"ELSE '{entity} does not satisfy {mnemonic}' END AS detail\n"
-        f"FROM {_q(view_label)} v\n"
+        f"{_from_sql(view_label, data_class)}\n"
         f"{join}"
         f"ORDER BY v.patient_id, v.element_id"
     )
@@ -470,7 +704,7 @@ def sam_attr_is_valid_date(view_label, data_class, entity, column,
         f"  CASE WHEN {ok} THEN 'pass' ELSE 'fail' END AS result,\n"
         f"  CASE WHEN {ok} THEN '{entity} is a valid date' "
         f"ELSE '{entity} is not a valid date' END AS detail\n"
-        f"FROM {_q(view_label)} v\n"
+        f"{_from_sql(view_label, data_class)}\n"
         f"{_prereq_join(prereq_label)}\n"
         f"ORDER BY v.patient_id, v.element_id"
     )
@@ -492,7 +726,7 @@ def sam_attr_is_timestamp(view_label, data_class, entity, column,
         f"  CASE WHEN {ok} THEN 'pass' ELSE 'fail' END AS result,\n"
         f"  CASE WHEN {ok} THEN '{entity} is a valid timestamp' "
         f"ELSE '{entity} is not a valid timestamp' END AS detail\n"
-        f"FROM {_q(view_label)} v\n"
+        f"{_from_sql(view_label, data_class)}\n"
         f"{_prereq_join(prereq_label)}\n"
         f"ORDER BY v.patient_id, v.element_id"
     )
@@ -515,7 +749,7 @@ def sam_attr_is_timestamp_tz(view_label, data_class, entity, column,
         f"  CASE WHEN {ok} THEN 'pass' ELSE 'fail' END AS result,\n"
         f"  CASE WHEN {ok} THEN '{entity} is a timestamp with time zone' "
         f"ELSE '{entity} is not a timestamp with time zone' END AS detail\n"
-        f"FROM {_q(view_label)} v\n"
+        f"{_from_sql(view_label, data_class)}\n"
         f"{_prereq_join(prereq_label)}\n"
         f"ORDER BY v.patient_id, v.element_id"
     )
@@ -537,9 +771,80 @@ def sam_attr_temporal_direction(view_label, data_class, entity, column,
         f"  CASE WHEN {ok} THEN 'pass' ELSE 'fail' END AS result,\n"
         f"  CASE WHEN {ok} THEN '{entity} is a {direction} date' "
         f"ELSE '{entity} is not a {direction} date' END AS detail\n"
-        f"FROM {_q(view_label)} v\n"
+        f"{_from_sql(view_label, data_class)}\n"
         f"{_prereq_join(prereq_label)}\n"
         f"ORDER BY v.patient_id, v.element_id"
+    )
+
+
+def sam_obsvalue_has_type(view_label, data_class, entity,
+                          has_col: str) -> str:
+    """Batch 6 (Joel 2026-11-20, recorded interpretation):
+    ObservationValue_HasType — passes when the ObservationValue has a
+    populated value[x] arm in the recognized FHIR R4 inventory
+    (Quantity, CodeableConcept, string, boolean, integer, Range, Ratio,
+    SampledData, time, dateTime, Period); no arm / unsupported arm ->
+    fail. Implemented per inferred semantics; flagged upstream to the
+    PIQI Alliance as a guide gap (the SG references HasType as a
+    prerequisite but never defines it). ROOT SAM (it IS the typed-SAM
+    prerequisite for MatchesType / IsQualitative)."""
+    ok = f"COALESCE(v.{has_col}, FALSE)"
+    return (
+        f"SELECT v.patient_id AS patient_id, v.element_id AS element_id,\n"
+        f"  '{data_class}' AS data_class, '{entity}' AS entity, "
+        f"'ObservationValue_HasType' AS sam_mnemonic,\n"
+        f"  CASE WHEN {ok} THEN 'pass' ELSE 'fail' END AS result,\n"
+        f"  CASE WHEN {ok} THEN '{entity} has a populated value arm' "
+        f"ELSE '{entity} has no populated value arm' END AS detail\n"
+        f"{_from_sql(view_label, data_class)}\n"
+        f"ORDER BY v.patient_id, v.element_id"
+    )
+
+
+#: Batch 6 [IG p.15]: basedOn -> ServiceRequest anchored-tail match
+#: (loader resolve() doctrine: relative, absolute-URL-tail and
+#: _history-stripped forms all end in ServiceRequest/<id>).
+_SR_REF_TAIL_RE = r"'(?:^|/)ServiceRequest/([A-Za-z0-9\-.]{1,64})$'"
+
+
+def _order_join(sr_label: str) -> str:
+    return (
+        f"LEFT JOIN {_q(sr_label)} o\n"
+        f"  ON regexp_extract(COALESCE(v.orderRef, ''), "
+        f"{_SR_REF_TAIL_RE}, 1) = o.element_id"
+    )
+
+
+def sam_order_sql(view_label, sr_label, data_class, entity, mnemonic,
+                  ok, pass_detail, fail_detail, prereq_label=None) -> str:
+    """Batch 6: order/orderDate SAMs — the lab view LEFT JOINs the
+    packaged ServiceRequest view on the basedOn anchored tail. A missing
+    basedOn or an unresolvable ServiceRequest yields NULL order columns
+    (honest absence: the populated root FAILS, downstream SAMs are
+    row-absent through the prerequisite chain)."""
+    prereq = (f"\n{_prereq_join(prereq_label)}\n" if prereq_label else "\n")
+    return (
+        f"SELECT v.patient_id AS patient_id, v.element_id AS element_id,\n"
+        f"  '{data_class}' AS data_class, '{entity}' AS entity, "
+        f"'{mnemonic}' AS sam_mnemonic,\n"
+        f"  CASE WHEN {ok} THEN 'pass' ELSE 'fail' END AS result,\n"
+        f"  CASE WHEN {ok} THEN '{pass_detail}' "
+        f"ELSE '{fail_detail}' END AS detail\n"
+        f"FROM {_q(view_label)} v\n"
+        f"{_order_join(sr_label)}"
+        f"{prereq}"
+        f"ORDER BY v.patient_id, v.element_id"
+    )
+
+
+def _order_populated_ok(col: str) -> str:
+    return f"COALESCE(TRIM(CAST(o.{col} AS VARCHAR)), '') <> ''"
+
+
+def _order_coding_ok(part: str) -> str:
+    return (
+        f"len(list_filter(COALESCE(o.order_codings, []), c -> "
+        f"COALESCE(json_extract_string(c, '$.{part}'), '') <> '')) > 0"
     )
 
 
@@ -561,7 +866,7 @@ def sam_obsvalue_is_qualitative(view_label, data_class, entity,
         f"  CASE WHEN {ok} THEN 'pass' ELSE 'fail' END AS result,\n"
         f"  CASE WHEN {ok} THEN '{entity} is qualitative' "
         f"ELSE '{entity} is not qualitative' END AS detail\n"
-        f"FROM {_q(view_label)} v\n"
+        f"{_from_sql(view_label, data_class)}\n"
         f"{_prereq_join(prereq_label)}\n"
         f"ORDER BY v.patient_id, v.element_id"
     )
@@ -592,7 +897,7 @@ def sam_obsvalue_matches_type(view_label, data_class, entity, text_col: str,
         f"  CASE WHEN {ok} THEN 'pass' ELSE 'fail' END AS result,\n"
         f"  CASE WHEN {ok} THEN '{entity} matches its value type' "
         f"ELSE '{entity} does not match its value type' END AS detail\n"
-        f"FROM {_q(view_label)} v\n"
+        f"{_from_sql(view_label, data_class)}\n"
         f"{_prereq_join(prereq_label)}\n"
         f"ORDER BY v.patient_id, v.element_id"
     )
@@ -620,7 +925,7 @@ def sam_concept_has_recognized_system(view_label, data_class, entity,
         f"  CASE WHEN {ok} THEN 'pass' ELSE 'fail' END AS result,\n"
         f"  CASE WHEN {ok} THEN '{entity} has a recognized code system' "
         f"ELSE '{entity} has no recognized code system' END AS detail\n"
-        f"FROM {_q(view_label)} v\n"
+        f"{_from_sql(view_label, data_class)}\n"
         f"{_prereq_join(prereq_label)}\n"
         f"ORDER BY v.patient_id, v.element_id"
     )
@@ -643,7 +948,7 @@ def sam_concept_part(view_label, data_class, entity, codings_col, mnemonic,
         f"  CASE WHEN {ok} THEN 'pass' ELSE 'fail' END AS result,\n"
         f"  CASE WHEN {ok} THEN '{entity} has at least one coding with {part}' "
         f"ELSE '{entity} has no coding with {part}' END AS detail\n"
-        f"FROM {_q(view_label)} v\n"
+        f"{_from_sql(view_label, data_class)}\n"
         f"{_prereq_join(prereq_label)}\n"
         f"ORDER BY v.patient_id, v.element_id"
     )
@@ -665,7 +970,7 @@ def sam_concept_is_complete(view_label, data_class, entity, codings_col,
         f"  CASE WHEN {ok} THEN '{entity} has at least one complete coding' "
         f"ELSE '{entity} has no complete coding "
         f"(code, system and display)' END AS detail\n"
-        f"FROM {_q(view_label)} v\n"
+        f"{_from_sql(view_label, data_class)}\n"
         f"{_prereq_join(prereq_label)}\n"
         f"ORDER BY v.patient_id, v.element_id"
     )
@@ -681,7 +986,7 @@ def sam_range_complete(view_label, data_class, entity, low_col, high_col,
         f"  CASE WHEN {ok} THEN 'pass' ELSE 'fail' END AS result,\n"
         f"  CASE WHEN {ok} THEN '{entity} has both numeric components' "
         f"ELSE '{entity} is missing a numeric component' END AS detail\n"
-        f"FROM {_q(view_label)} v\n"
+        f"{_from_sql(view_label, data_class)}\n"
         f"{_prereq_join(prereq_label)}\n"
         f"ORDER BY v.patient_id, v.element_id"
     )
@@ -697,7 +1002,7 @@ def sam_range_valid(view_label, data_class, entity, low_col, high_col,
         f"  CASE WHEN {ok} THEN 'pass' ELSE 'fail' END AS result,\n"
         f"  CASE WHEN {ok} THEN '{entity} low <= high' "
         f"ELSE '{entity} low > high' END AS detail\n"
-        f"FROM {_q(view_label)} v\n"
+        f"{_from_sql(view_label, data_class)}\n"
         f"{_prereq_join(prereq_label)}\n"
         f"ORDER BY v.patient_id, v.element_id"
     )
@@ -843,7 +1148,7 @@ def sam_class_has_duplicates(view_label: str, data_class: str,
     return (
         f"WITH elems AS (\n"
         f"  SELECT v.patient_id AS patient_id, {keys}, v.element_id\n"
-        f"  FROM {_q(view_label)} v WHERE {non_null}\n"
+        f"  {_from_bare_sql(view_label, data_class)} WHERE {non_null}\n"
         f"),\n"
         f"grp AS (\n"
         f"  SELECT e.patient_id AS patient_id, {keys}, "
@@ -866,7 +1171,8 @@ def sam_class_has_duplicates(view_label: str, data_class: str,
         f"  CASE WHEN COALESCE(pp.dup_groups, 0) > 0 "
         f"THEN 'duplicate elements: ' || pp.dup_ids "
         f"ELSE 'no duplicate elements detected' END AS detail\n"
-        f"FROM (SELECT DISTINCT patient_id FROM {_q(view_label)}) p\n"
+        f"FROM (SELECT DISTINCT patient_id FROM "
+        f"{_from_bare_or_label(view_label, data_class)}) p\n"
         f"LEFT JOIN per_pat pp ON pp.patient_id = p.patient_id\n"
         f"ORDER BY p.patient_id"
     )
@@ -1029,15 +1335,86 @@ def build_sam_catalog() -> list[SAMSpec]:
         "ObservationValue_IsQualitative",
         sam_obsvalue_is_qualitative(_view_label("LabResult"), "LabResult",
                                     "resultValue", "resultValue_type",
-                                    _prereq_label(p)),
-        prereq=p))
+                                    _prereq_label("labresult-resultvalue-hastype")),
+        prereq="labresult-resultvalue-hastype"))
     sams.append(SAMSpec(
         "labresult-resultvalue-matchestype", "LabResult", "resultValue",
         "ObservationValue_MatchesType",
         sam_obsvalue_matches_type(_view_label("LabResult"), "LabResult",
                                   "resultValue", "resultValue_text",
-                                  "resultValue_type", _prereq_label(p)),
-        prereq=p))
+                                  "resultValue_type",
+                                  _prereq_label("labresult-resultvalue-hastype")),
+        prereq="labresult-resultvalue-hastype"))
+    # Batch 6: ObservationValue_HasType (recorded interpretation, Joel
+    # 2026-11-20) — the typed-SAM prerequisite. Must be appended AFTER
+    # its children for _prereq_label use only; catalog order is
+    # irrelevant (prereq edges are by instance id).
+    sams.append(SAMSpec(
+        "labresult-resultvalue-hastype", "LabResult", "resultValue",
+        "ObservationValue_HasType",
+        sam_obsvalue_has_type(_view_label("LabResult"), "LabResult",
+                              "resultValue", "resultValue_hasType")))
+    # Batch 6 [IG p.15]: order/orderDate via basedOn -> ServiceRequest
+    _sr = "view_piqi_servicerequest"
+    _sr_dep = {_sr: "piqi_servicerequest"}
+    sams.append(SAMSpec(
+        "labresult-order-ispopulated", "LabResult", "order",
+        "Attr_IsPopulated",
+        sam_order_sql(_view_label("LabResult"), _sr, "LabResult", "order",
+                      "Attr_IsPopulated", _order_populated_ok("order_text"),
+                      "order is populated", "order is not populated"),
+        extra_deps=_sr_dep))
+    for part_name, short, mnem, pd_, fd_ in (
+        ("code", "hascode", "Concept_HasCode",
+         "order has at least one coding with code",
+         "order has no coding with code"),
+        ("system", "hascodesystem", "Concept_HasCodeSystem",
+         "order has at least one coding with system",
+         "order has no coding with system"),
+        ("display", "hasdisplay", "Concept_HasDisplay",
+         "order has at least one coding with display",
+         "order has no coding with display"),
+    ):
+        sams.append(SAMSpec(
+            f"labresult-order-{short}", "LabResult", "order", mnem,
+            sam_order_sql(_view_label("LabResult"), _sr, "LabResult", "order",
+                          mnem, _order_coding_ok(part_name), pd_, fd_,
+                          prereq_label=_prereq_label(
+                              "labresult-order-ispopulated")),
+            prereq="labresult-order-ispopulated", extra_deps=_sr_dep))
+    sams.append(SAMSpec(
+        "labresult-orderdate-ispopulated", "LabResult", "orderDate",
+        "Attr_IsPopulated",
+        sam_order_sql(_view_label("LabResult"), _sr, "LabResult", "orderDate",
+                      "Attr_IsPopulated", _order_populated_ok("orderDate"),
+                      "orderDate is populated", "orderDate is not populated"),
+        extra_deps=_sr_dep))
+    _od_ok = ("TRY_CAST(COALESCE(CAST(o.orderDate AS VARCHAR), '') AS DATE) "
+              "IS NOT NULL AND regexp_matches("
+              "COALESCE(CAST(o.orderDate AS VARCHAR), ''), "
+              "'^[0-9]{4}-[0-9]{2}-[0-9]{2}$')")
+    sams.append(SAMSpec(
+        "labresult-orderdate-isvaliddate", "LabResult", "orderDate",
+        "Attr_IsValidDate",
+        sam_order_sql(_view_label("LabResult"), _sr, "LabResult", "orderDate",
+                      "Attr_IsValidDate", _od_ok,
+                      "orderDate is a valid date",
+                      "orderDate is not a valid date",
+                      prereq_label=_prereq_label(
+                          "labresult-orderdate-ispopulated")),
+        prereq="labresult-orderdate-ispopulated", extra_deps=_sr_dep))
+    sams.append(SAMSpec(
+        "labresult-orderdate-ispastdate", "LabResult", "orderDate",
+        "Attr_IsPastDate",
+        sam_order_sql(_view_label("LabResult"), _sr, "LabResult", "orderDate",
+                      "Attr_IsPastDate",
+                      "TRY_CAST(COALESCE(CAST(o.orderDate AS VARCHAR), '') "
+                      "AS DATE) < CURRENT_DATE",
+                      "orderDate is a past date",
+                      "orderDate is not a past date",
+                      prereq_label=_prereq_label(
+                          "labresult-orderdate-ispopulated")),
+        prereq="labresult-orderdate-ispopulated", extra_deps=_sr_dep))
     tp = pop("LabResult", "test", "test_text")
     part("LabResult", "test", "test_codings", "Concept_HasCode", "code", tp)
     part("LabResult", "test", "test_codings", "Concept_HasCodeSystem",
@@ -1107,8 +1484,14 @@ def build_sam_catalog() -> list[SAMSpec]:
         "ObservationValue_IsQualitative",
         sam_obsvalue_is_qualitative(_view_label("VitalSign"), "VitalSign",
                                     "resultValue", "resultValue_type",
-                                    _prereq_label(vvp)),
-        prereq=vvp))
+                                    _prereq_label(
+                                        "vitalsign-resultvalue-hastype")),
+        prereq="vitalsign-resultvalue-hastype"))
+    sams.append(SAMSpec(
+        "vitalsign-resultvalue-hastype", "VitalSign", "resultValue",
+        "ObservationValue_HasType",
+        sam_obsvalue_has_type(_view_label("VitalSign"), "VitalSign",
+                              "resultValue", "resultValue_hasType")))
     pop("VitalSign", "resultUnit", "resultUnit_text")
     vip = pop("VitalSign", "interpretation", "interpretation_text")
     part("VitalSign", "interpretation", "interpretation_codings",
@@ -1205,8 +1588,15 @@ def build_sam_catalog() -> list[SAMSpec]:
         "resultValue", "ObservationValue_IsQualitative",
         sam_obsvalue_is_qualitative(_view_label("HealthAssessment"),
                                     "HealthAssessment", "resultValue",
-                                    "resultValue_type", _prereq_label(hap)),
-        prereq=hap))
+                                    "resultValue_type", _prereq_label(
+                                        "healthassessment-resultvalue-hastype")),
+        prereq="healthassessment-resultvalue-hastype"))
+    sams.append(SAMSpec(
+        "healthassessment-resultvalue-hastype", "HealthAssessment",
+        "resultValue", "ObservationValue_HasType",
+        sam_obsvalue_has_type(_view_label("HealthAssessment"),
+                              "HealthAssessment", "resultValue",
+                              "resultValue_hasType")))
     hpdt = pop("HealthAssessment", "performedDatetime", "performedDatetime")
     timestamp("HealthAssessment", "performedDatetime", "performedDatetime",
               hpdt)
@@ -1234,6 +1624,15 @@ def build_sam_library(spec: SAMSpec, catalog_ids: set[str]) -> dict:
         "label": _view_label(spec.data_class),
         "resource": view_canonical(DATA_CLASS_TO_VIEW[spec.data_class]),
     }]
+    if spec.data_class == "Medication":
+        # Batch 6 union: every Medication SAM reads the UNION ALL of the
+        # four source views — declare the extra three as dependencies so
+        # the runner materializes them under their labels.
+        for _name in MEDICATION_SOURCE_VIEWS[1:]:
+            related.append({
+                "type": "depends-on", "label": "view_" + _name,
+                "resource": view_canonical(_name),
+            })
     if spec.prereq is not None:
         assert spec.prereq in catalog_ids, spec.prereq
         related.append({
@@ -1697,6 +2096,9 @@ def build_parameterized_sam(mnemonic: str, data_class: str, entity: str,
         raise ValueError(
             f"unknown data class {data_class!r}; known: "
             f"{sorted(DATA_CLASS_TO_VIEW)}")
+    assert_sql_identifier(entity, "entity")
+    if column is not None:
+        assert_sql_identifier(column, "column")
     col = column or _param_default_column(mnemonic, entity)
     ok = spec["ok"].format(column=col)
     view_label = _view_label(data_class)
@@ -1707,7 +2109,7 @@ def build_parameterized_sam(mnemonic: str, data_class: str, entity: str,
         f"  CASE WHEN {ok} THEN 'pass' ELSE 'fail' END AS result,\n"
         f"  CASE WHEN {ok} THEN {spec['pass_detail'].format(entity=entity)} "
         f"ELSE {spec['fail_detail'].format(entity=entity)} END AS detail\n"
-        f"FROM {_q(view_label)} v\n"
+        f"{_from_sql(view_label, data_class)}\n"
         f"ORDER BY v.patient_id, v.element_id"
     )
     iid = f"param-{mnemonic}-{data_class}-{entity}".lower()

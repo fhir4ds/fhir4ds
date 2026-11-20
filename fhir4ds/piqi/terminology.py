@@ -103,12 +103,21 @@ def _view_rows(connection, data_class: str, entity: str, patient_id,
 
 def _local_cache_members(connection, valueset: str):
     """(system, code, display) rows from the connection's valueset_codes
-    table, or None when the table does not exist."""
+    table, or None when the table does not exist. Column shape matches
+    the canonical CQL/DQM cache (``valueset_url``, NOT ``url`` — the
+    loader schema at cql/duckdb/udf/valueset.py and macros/valueset.py)."""
     try:
         rows = connection.execute(
             "SELECT system, code, display FROM valueset_codes "
-            "WHERE url = ?", [valueset]).fetchall()
-    except Exception:
+            "WHERE valueset_url = ?", [valueset]).fetchall()
+    except Exception as exc:
+        # missing table / wrong shape => no cache (expected path); a
+        # present-but-unreadable cache is logged, never silently zero.
+        name = getattr(exc, "__class__", object).__name__
+        if "Catalog" in name or "Binder" in name or "not exist" in str(exc):
+            return None
+        _logger.warning("valueset_codes cache unreadable for %r: %s",
+                        valueset, exc)
         return None
     return [(r[0], r[1], r[2]) for r in rows]
 
@@ -162,6 +171,15 @@ def run_terminology_sam(connection, mnemonic: str, *, data_class: str,
             f"unsupported terminology SAM {mnemonic!r}; supported: "
             f"{sorted(_SUPPORTED)} (deferred family: "
             f"{sorted(TERMINOLOGY_DEPENDENT_SAMS)})")
+    if data_class not in DATA_CLASS_TO_VIEW:
+        raise ValueError(
+            f"unknown data class {data_class!r}; known: "
+            f"{sorted(DATA_CLASS_TO_VIEW)}")
+    # <entity>_codings reaches a SQL identifier position — reject
+    # fragments (build_rubric lesson / AMUX-152 #17 family).
+    from .authoring import assert_sql_identifier
+
+    assert_sql_identifier(entity, "entity")
     ep = _endpoint_or_none(endpoint, use_env)
     rows = _view_rows(connection, data_class, entity, patient_id,
                       source_table)

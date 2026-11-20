@@ -1,0 +1,94 @@
+{
+  "name": "piqi_medication_dispense",
+  "status": "draft",
+  "resource": "MedicationDispense",
+  "select": [
+    {
+      "column": [
+        {
+          "name": "element_id",
+          "path": "id",
+          "type": "id"
+        },
+        {
+          "name": "patient_id",
+          "path": "subject.reference.replace('urn:uuid:', '').split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "medication_text",
+          "path": "medication.ofType(CodeableConcept).text",
+          "type": "string"
+        },
+        {
+          "name": "medication_codings",
+          "path": "medication.ofType(CodeableConcept).coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "startDate",
+          "path": "whenHandedOver.toString()",
+          "type": "string"
+        },
+        {
+          "name": "endDate",
+          "path": "iif(false, '', {})",
+          "type": "string"
+        },
+        {
+          "name": "doseAmount",
+          "path": "dosageInstruction.first().doseAndRate.first().doseQuantity.value",
+          "type": "decimal"
+        },
+        {
+          "name": "doseAmountUnit_text",
+          "path": "dosageInstruction.first().doseAndRate.first().doseQuantity.unit",
+          "type": "string"
+        },
+        {
+          "name": "doseRoute_text",
+          "path": "dosageInstruction.first().route.text",
+          "type": "string"
+        },
+        {
+          "name": "doseRoute_codings",
+          "path": "dosageInstruction.first().route.coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "doseQuantity",
+          "path": "quantity.value",
+          "type": "decimal"
+        },
+        {
+          "name": "doseQuantityUnit",
+          "path": "quantity.unit",
+          "type": "string"
+        },
+        {
+          "name": "instructions",
+          "path": "dosageInstruction.first().text",
+          "type": "string"
+        },
+        {
+          "name": "indication_text",
+          "path": "iif(false, '', {})",
+          "type": "string"
+        },
+        {
+          "name": "indication_codings",
+          "path": "iif(false, {}.first().coding, {})",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "fillStatus_text",
+          "path": "status",
+          "type": "code"
+        }
+      ]
+    }
+  ]
+}
