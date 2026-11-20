@@ -859,5 +859,9 @@ class AutoCoder:
         # Unknown shape — best-effort passthrough.
         try:
             return dict(result)  # type: ignore[arg-type]
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001 — best-effort dict passthrough
+            # (AMUX-152 #35: named best-effort; unknown non-dataclass
+            # results have no JSON shape contract to preserve)
+            _logger.debug("auto_coder result passthrough: non-dict-shaped %s",
+                          type(result).__name__)
             return {}

@@ -20,12 +20,15 @@ Conductor-approved model (FEATURE_DEV_SERVER_V2.md, 2026-10-03):
 
 from __future__ import annotations
 
+import logging
 import re
 import threading
 from dataclasses import dataclass, field
 from typing import Any
 
 from fhir4ds.cql.parser import parse_cql
+
+_log = logging.getLogger(__name__)
 
 # S10: marker labels may carry quoted define names WITH SPACES
 # ('[name: Initial Population]' — quoted CQL identifiers). The label
@@ -348,7 +351,9 @@ class CellSession:
         try:
             composed = self.header_text + "\n" + "\n".join(self.cells.values())
             return refs_of(composed, identifiers_only=identifiers_only)
-        except Exception:
+        except Exception as exc:  # best-effort refs (AMUX-152 #35)
+            _log.warning("refs_of failed on composed cells: %s: %s",
+                         type(exc).__name__, exc)
             return {}
 
     def _header_define_names_unlocked(self) -> set[str]:
@@ -361,7 +366,9 @@ class CellSession:
             return set()
         try:
             return set(refs_of(self.header_text).keys())
-        except Exception:
+        except Exception as exc:  # best-effort header refs (AMUX-152 #35)
+            _log.warning("refs_of failed on header block: %s: %s",
+                         type(exc).__name__, exc)
             return set()
 
     # -- run planning -------------------------------------------------------

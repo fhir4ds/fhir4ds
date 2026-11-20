@@ -61,18 +61,12 @@ class FluentFunctionLoader:
         """
         paths = {}
 
-        from ..paths import get_package_root
-        package_root = get_package_root()
-        # cql-py root is parent of src/cql_py
-        cql_py_root = package_root.parent
-        # workspace root is parent of cql-py
-        root_dir = cql_py_root.parent
-
+        # AMUX-152 #32: the pre-monorepo workspace search dirs
+        # (benchmarking/ecqm-content-* content roots, cql/libraries) no
+        # longer exist in this layout — the packaged resource tree is the
+        # single library source.
         search_dirs = [
             get_resource_path("cql"),
-            root_dir / "benchmarking" / "ecqm-content-qicore-2025" / "input" / "cql",
-            root_dir / "benchmarking" / "dqm-content-qicore-2026" / "input" / "cql",
-            root_dir / "cql" / "libraries",
         ]
 
         # Load standard library names from configuration
