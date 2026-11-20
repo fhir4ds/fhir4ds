@@ -97,7 +97,16 @@ def load_piqi_views(connection, *, source_table: str = "resources") -> list[str]
 
 
 def run_sam(connection, sam, *, patient_id: _t.Optional[str] = None) -> list[dict]:
-    """Execute one SAM instance, optionally scoped by patient (BOUND)."""
+    """Execute one SAM instance, optionally scoped by patient (BOUND).
+
+    ``sam`` is either a packaged SAM name/instance id
+    (``"piqi-sam-labresult-resultvalue-ispopulated"``) or a custom SAM
+    Library DICT (AMUX-152 #22): a dict is materialized through a
+    dict-identity/url resolver fallback, so user-authored SAMs execute
+    against the same runner while their packaged canonical dependencies
+    (data-class views, prerequisite SAMs) still resolve from the
+    packaged registry.
+    """
     from .registry import get_sam as _get
 
     sam_dict = _get(sam) if isinstance(sam, str) else sam
@@ -125,7 +134,19 @@ def run_sam(connection, sam, *, patient_id: _t.Optional[str] = None) -> list[dic
             ).encode("utf-8")).decode("ascii"),
         }],
     }
-    rows = SQLQueryRunner(connection, piqi_resolver()).execute(
+    # AMUX-152 #22: a CUSTOM SAM dict (non-packaged url) must still
+    # materialize — resolve the dict itself by identity/url, and fall
+    # back to the packaged registry for every other canonical (views,
+    # prerequisite SAMs). Packaged behavior is unchanged.
+    _packaged = piqi_resolver()
+    _own = {canonical: sam_dict}
+
+    def _resolver(resolved_canonical: str) -> dict:
+        if resolved_canonical in _own:
+            return _own[resolved_canonical]
+        return _packaged(resolved_canonical)
+
+    rows = SQLQueryRunner(connection, _resolver).execute(
         wrapper, {"patient_id": patient_id})
     return [dict(zip(RESULT_COLUMNS, r)) for r in rows]
 

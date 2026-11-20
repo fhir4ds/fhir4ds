@@ -28,7 +28,7 @@
         },
         {
           "name": "resultValue_text",
-          "path": "(component.where(code.coding.code = '8480-5').first().value.ofType(Quantity).value.toString()) & '/' & (component.where(code.coding.code = '8462-4').first().value.ofType(Quantity).value.toString())",
+          "path": "iif(component.exists(), iif((component.where(code.coding.code = '8480-5').first().value.ofType(Quantity).value).exists() and (component.where(code.coding.code = '8462-4').first().value.ofType(Quantity).value).exists(), (component.where(code.coding.code = '8480-5').first().value.ofType(Quantity).value).toString() & '/' & (component.where(code.coding.code = '8462-4').first().value.ofType(Quantity).value).toString(), ''), iif(value.ofType(Quantity).exists(), value.ofType(Quantity).value.toString(), iif(value.ofType(string).exists(), value.ofType(string), iif(value.ofType(boolean).exists(), value.ofType(boolean).toString(), ''))))",
           "type": "string"
         },
         {
@@ -38,7 +38,7 @@
         },
         {
           "name": "resultValue_number",
-          "path": "component.where(code.coding.code = '8480-5').first().value.ofType(Quantity).value",
+          "path": "iif(component.exists(), component.where(code.coding.code = '8480-5').first().value.ofType(Quantity).value, value.ofType(Quantity).value)",
           "type": "decimal"
         },
         {
@@ -48,7 +48,7 @@
         },
         {
           "name": "resultUnit_text",
-          "path": "component.first().value.ofType(Quantity).unit",
+          "path": "iif(component.exists(), component.first().value.ofType(Quantity).unit, value.ofType(Quantity).unit)",
           "type": "string"
         },
         {

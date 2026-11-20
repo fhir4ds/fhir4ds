@@ -77,6 +77,29 @@ _SYSTOLIC = ("component.where(code.coding.code = '8480-5').first()"
 _DIASTOLIC = ("component.where(code.coding.code = '8462-4').first()"
               ".value.ofType(Quantity).value")
 
+# AMUX-152 #19: FHIRPath ``&`` renders an empty operand as '' (never as
+# 'null'), so the bare BP-pair projection rendered '/' for every vital
+# WITHOUT a systolic/diastolic component pair — an empty or scalar
+# valueQuantity vital then falsely PASSED Attr_IsPopulated (TRIM('/') is
+# non-empty). The text projection is therefore guarded: a BP panel
+# renders 'sys/dias' only when BOTH components carry a value; a scalar
+# vital renders its valueQuantity value; everything else renders ''.
+_VS_TEXT = (
+    "iif(component.exists(), "
+    f"iif(({_SYSTOLIC}).exists() and ({_DIASTOLIC}).exists(), "
+    f"({_SYSTOLIC}).toString() & '/' & ({_DIASTOLIC}).toString(), ''), "
+    "iif(value.ofType(Quantity).exists(), "
+    "value.ofType(Quantity).value.toString(), "
+    "iif(value.ofType(string).exists(), value.ofType(string), "
+    "iif(value.ofType(boolean).exists(), "
+    "value.ofType(boolean).toString(), ''))))"
+)
+_VS_NUMBER = (f"iif(component.exists(), {_SYSTOLIC}, "
+              "value.ofType(Quantity).value)")
+_VS_UNIT = ("iif(component.exists(), "
+            "component.first().value.ofType(Quantity).unit, "
+            "value.ofType(Quantity).unit)")
+
 VIEWS: dict[str, dict] = {}
 
 VIEWS["piqi_demographics"] = {
@@ -141,15 +164,12 @@ VIEWS["piqi_vital_sign"] = {
     "columns": [
         *_ID_COLS_OBS,
         *_concept_columns("vitalSign", "code.text", "code.coding"),
-        {"name": "resultValue_text",
-         "path": f"({_SYSTOLIC}.toString()) & '/' & ({_DIASTOLIC}.toString())",
-         "type": "string"},
+        {"name": "resultValue_text", "path": _VS_TEXT, "type": "string"},
         {"name": "resultValue_type",
          "path": "iif(component.exists(), 'SN', '')", "type": "string"},
-        {"name": "resultValue_number", "path": _SYSTOLIC, "type": "decimal"},
+        {"name": "resultValue_number", "path": _VS_NUMBER, "type": "decimal"},
         {"name": "resultValue_number2", "path": _DIASTOLIC, "type": "decimal"},
-        {"name": "resultUnit_text",
-         "path": "component.first().value.ofType(Quantity).unit", "type": "string"},
+        {"name": "resultUnit_text", "path": _VS_UNIT, "type": "string"},
         *_concept_columns("interpretation", "interpretation.first().text",
                           "interpretation.first().coding"),
         {"name": "referenceRange_text", "path": "referenceRange.first().text",
@@ -347,7 +367,12 @@ def build_view(name: str) -> dict:
 # constants (column names, data classes, entities, mnemonics, patterns
 # from the packaged PIQI spec tables). NO caller/runtime data may ever
 # reach these builders — runtime values (patient ids etc.) go through
-# the SQLQueryRunner's prepared-statement binding exclusively.
+# the SQLQueryRunner's prepared-statement binding exclusively. The one
+# PUBLIC entry point that accepts caller-supplied fields is
+# build_rubric(); it validates before interpolation (AMUX-152 #17):
+# scoring_effect is allowlisted (_SCORING_EFFECTS) and quoted via
+# quote_sql_literal, sequence/weight are int()-coerced with typed
+# ValueErrors, and duplicate sequences are rejected (#21).
 # ---------------------------------------------------------------------------
 def _q(label: str) -> str:
     """Quote a view/SAM label for SQL.
@@ -358,6 +383,18 @@ def _q(label: str) -> str:
     from ..viewdef.utils import quote_identifier
 
     return quote_identifier(label)
+
+
+def _sql_literal(value: str) -> str:
+    """Quote a SQL string literal (AMUX-152 #17 defense in depth).
+
+    ``scoring_effect`` is allowlisted, but every caller-supplied string
+    that reaches the rubric SQL is quoted anyway so a future vocabulary
+    widening cannot reopen the injection surface.
+    """
+    from ..sources.base import quote_sql_literal
+
+    return quote_sql_literal(value)
 
 
 def _populated(col: str) -> str:
@@ -921,14 +958,55 @@ def _sam_by_id(catalog: list[SAMSpec]) -> dict[str, SAMSpec]:
     return {s.instance_id: s for s in catalog}
 
 
+#: The authored scoring_effect vocabulary [RG p.7] — the ONLY values the
+#: rubric SQL may interpolate (AMUX-152 #17: ``scoring_effect`` is a
+#: PUBLIC build_rubric argument; anything outside this allowlist raises
+#: a typed ValueError instead of reaching the generated SQL).
+_SCORING_EFFECTS = ("scoring", "informational")
+
+
+def _int_criterion_field(criterion: dict, field: str) -> int:
+    """AMUX-152 #17: int()-coerce public numeric criterion fields.
+
+    ``sequence`` reaches ``{seq} AS sequence`` and the dependency labels;
+    ``weight`` reaches the projection — a SQL fragment in either slot is
+    an injection, not a number.
+    """
+    raw = criterion[field]
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        raise ValueError(
+            f"rubric criterion {field!r} must be an integer; got {raw!r}"
+        ) from None
+
+
+def _prereq_chain(spec: SAMSpec, by_id: dict[str, SAMSpec]) -> list[SAMSpec]:
+    """AMUX-152 #20: the FULL prerequisite chain of ``spec``, root-first
+    (execution order — [HB p.21] 'prerequisites can stack').
+
+    ``chain[0]`` is the ROOT prerequisite (the one with no prerequisite
+    of its own); its result view contains every element pass/fail, so it
+    can drive rubric row identity. ``chain[-1]`` is the DIRECT
+    prerequisite of the assigned SAM.
+    """
+    chain: list[SAMSpec] = []
+    cur = spec
+    while cur.prereq is not None:
+        cur = by_id[cur.prereq]
+        chain.append(cur)
+    chain.reverse()
+    return chain
+
+
 def build_rubric(name: str, description: str,
                  criteria: list[dict]) -> tuple[dict, list[dict]]:
     """Build a rubric SQLQuery Library from criterion dicts.
 
     Criterion fields: sequence, data_class, entity, sam (instance id),
     scoring_effect ('scoring'|'informational'), weight, criticality,
-    condition_sam (optional instance id). The prerequisite SAM is derived
-    from the assigned SAM instance's own ``prereq`` edge.
+    condition_sam (optional instance id). The prerequisite chain is
+    derived from the assigned SAM instance's own ``prereq`` edges.
 
     Returns ``(library_dict, criteria_metadata)``.
     """
@@ -938,8 +1016,16 @@ def build_rubric(name: str, description: str,
     selects: list[str] = []
     meta: list[dict] = []
 
-    for c in sorted(criteria, key=lambda x: x["sequence"]):
-        seq = c["sequence"]
+    # AMUX-152 #21: duplicate sequence values would collide in the UNION
+    # (same ``{seq} AS sequence`` for two criteria) — reject at build time.
+    seqs = [_int_criterion_field(c, "sequence") for c in criteria]
+    dupes = sorted({s for s in seqs if seqs.count(s) > 1})
+    if dupes:
+        raise ValueError(
+            f"rubric criteria have duplicate sequence values: {dupes}")
+
+    for c in sorted(criteria, key=lambda x: _int_criterion_field(x, "sequence")):
+        seq = _int_criterion_field(c, "sequence")
         sam_id = c["sam"]
         sam_id = sam_id[len("piqi-sam-"):] if sam_id.startswith("piqi-sam-") else sam_id
         if c.get("condition_sam"):
@@ -954,42 +1040,72 @@ def build_rubric(name: str, description: str,
         related.append({"type": "depends-on", "label": sam_label,
                         "resource": sam_canonical(spec.instance_id)})
         cond_label = ""
-        cond_spec = None
         if c.get("condition_sam"):
             cond_spec = by_id[c["condition_sam"]]
             assert cond_spec.data_class == spec.data_class
             cond_label = f"cond_{seq}"
             related.append({"type": "depends-on", "label": cond_label,
                             "resource": sam_canonical(cond_spec.instance_id)})
-        prereq_label = ""
-        prereq_mnemonic = ""
-        if spec.prereq is not None:
-            prereq_spec = by_id[spec.prereq]
-            prereq_label = f"prereq_{seq}"
-            prereq_mnemonic = prereq_spec.mnemonic
-            related.append({"type": "depends-on", "label": prereq_label,
-                            "resource": sam_canonical(prereq_spec.instance_id)})
+
+        # AMUX-152 #20: materialize the FULL prerequisite chain as rubric
+        # dependencies. A level-k SAM view contains a row for an element
+        # only when every DEEPER level passed (the SAM bodies inner-join
+        # their direct prerequisite on result = 'pass'), so a LEFT-JOIN
+        # chain from the ROOT view keeps every element addressable: a
+        # root failure surfaces as the ROOT SAM's FAIL [HB p.23 — prereq
+        # failure = denominator +1, numerator +0, attributed to the
+        # PREREQUISITE's dimension] instead of dropping the element.
+        chain = _prereq_chain(spec, by_id)
+        prereq_labels = []
+        for k, lvl in enumerate(chain):
+            lbl = f"prereq_{seq}_{k}"
+            prereq_labels.append(lbl)
+            related.append({"type": "depends-on", "label": lbl,
+                            "resource": sam_canonical(lvl.instance_id)})
 
         mnem, dc, ent = spec.mnemonic, spec.data_class, spec.entity
-        weight = int(c["weight"])
+        weight = _int_criterion_field(c, "weight")
         effect = c["scoring_effect"]
+        if effect not in _SCORING_EFFECTS:
+            raise ValueError(
+                "rubric criterion 'scoring_effect' must be one of "
+                f"{_SCORING_EFFECTS}; got {effect!r}")
         crit = "TRUE" if c["criticality"] else "FALSE"
 
-        # FROM shape: the prerequisite view (when present) sees every
-        # element, so it drives row identity; otherwise the assigned SAM.
-        if prereq_label:
-            frm = (f'FROM {_q(prereq_label)} p\n'
-                   f'LEFT JOIN {_q(sam_label)} a ON a.patient_id = p.patient_id '
-                   f'AND a.element_id = p.element_id AND a.data_class = p.data_class '
-                   f'AND a.entity = p.entity')
-            pid, eid = "p.patient_id", "p.element_id"
-            result_case = ("CASE WHEN a.result IS NOT NULL THEN a.result "
-                           "WHEN p.result = 'fail' THEN 'fail' ELSE NULL END")
-            detail_case = ("CASE WHEN a.result IS NOT NULL THEN a.detail "
-                           "WHEN p.result = 'fail' THEN p.detail ELSE NULL END")
-            attrib_case = (f"CASE WHEN a.result IS NOT NULL THEN '{mnem}' "
-                           f"WHEN p.result = 'fail' THEN '{prereq_mnemonic}' "
-                           f"ELSE NULL END")
+        # FROM shape: the ROOT prerequisite view sees every element, so
+        # it drives row identity; deeper levels LEFT JOIN in (row present
+        # iff every shallower level passed). Without a chain the assigned
+        # SAM view drives.
+        if chain:
+            frm = f"FROM {_q(prereq_labels[0])} p0\n"
+            for k in range(1, len(chain)):
+                frm += (f"LEFT JOIN {_q(prereq_labels[k])} p{k} ON "
+                        f"p{k}.patient_id = p0.patient_id "
+                        f"AND p{k}.element_id = p0.element_id "
+                        f"AND p{k}.data_class = p0.data_class "
+                        f"AND p{k}.entity = p0.entity\n")
+            frm += (f"LEFT JOIN {_q(sam_label)} a ON "
+                    f"a.patient_id = p0.patient_id "
+                    f"AND a.element_id = p0.element_id "
+                    f"AND a.data_class = p0.data_class "
+                    f"AND a.entity = p0.entity")
+            pid, eid = "p0.patient_id", "p0.element_id"
+            # First failure in EXECUTION order (root → … → direct) wins
+            # the attribution; the assigned SAM only speaks when the
+            # whole chain passed.
+            result_case = "CASE " + " ".join(
+                f"WHEN p{k}.result = 'fail' THEN 'fail'"
+                for k in range(len(chain)))
+            detail_case = "CASE " + " ".join(
+                f"WHEN p{k}.result = 'fail' THEN p{k}.detail"
+                for k in range(len(chain)))
+            attrib_case = "CASE " + " ".join(
+                f"WHEN p{k}.result = 'fail' THEN '{lvl.mnemonic}'"
+                for k, lvl in enumerate(chain))
+            result_case += " WHEN a.result IS NOT NULL THEN a.result ELSE NULL END"
+            detail_case += (" WHEN a.result IS NOT NULL THEN a.detail "
+                            "ELSE NULL END")
+            attrib_case += f" ELSE '{mnem}' END"
         else:
             frm = f"FROM {_q(sam_label)} a"
             pid, eid = "a.patient_id", "a.element_id"
@@ -1007,7 +1123,8 @@ def build_rubric(name: str, description: str,
         selects.append(
             f"SELECT patient_id, element_id, "
             f"{seq} AS sequence, '{dc}' AS data_class, '{ent}' AS entity, "
-            f"result, detail, attributed_mnemonic, '{effect}' AS scoring_effect, "
+            f"result, detail, attributed_mnemonic, "
+            f"{_sql_literal(effect)} AS scoring_effect, "
             f"{weight} AS weight, {crit} AS criticality\n"
             f"FROM (\n"
             f"  SELECT {pid} AS patient_id, {eid} AS element_id, "
