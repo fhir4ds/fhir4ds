@@ -16,3 +16,7 @@ patient-matching:
   label: Patient Matching
 deduplication:
   label: Deduplication
+mimic:
+  label: MIMIC
+benchmarking:
+  label: Benchmarking

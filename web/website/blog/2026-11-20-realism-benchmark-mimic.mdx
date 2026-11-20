@@ -1,0 +1,57 @@
+---
+title: "Testing Data-Quality Tooling Against Real Hospital Data: MIMIC-IV Meets fhir4ds"
+description: "Synthetic test corpora are clean by construction — which is exactly why they hide real defects. We built a corruption harness, pointed it and the full fhir4ds data-quality stack at MIMIC-IV-FHIR, and let real ICU data grade our homework."
+authors: joel
+tags: [fhir, data-quality, patient-matching, deduplication, mimic, benchmarking]
+date: 2026-11-20T12:00:00Z
+slug: /realism-benchmark-mimic
+unlisted: true
+---
+
+Every healthcare data tool ships with a test corpus. Ours did too — thousands of fixtures, every one hand-constructed to be *correct*. Then we pointed the stack at real hospital data for the first time, and within minutes it found a crash our clean corpus had been quietly hiding for months.
+
+This post is about what happened next: how we turned real clinical data into a rigorous benchmark, and what the exercise taught us about testing data-quality tooling.
+
+{/* truncate */}
+
+## The problem with clean test data
+
+fhir4ds ships four data-quality engines: patient matching (demographic rules producing FHIR Linkage resources), resource deduplication (temporal clustering over coded clinical events), PIQI scorecards (pass/fail data-quality assessments), and a code-fallback resolver that reconciles vocabulary disagreements. All of them were validated against synthetic corpora — the ONC patient-matching test set, CMS eCQM fixtures, and our own constructed cases.
+
+That validation is real, but it has a structural blind spot: **synthetic data is clean by construction.** It never contains the weird UCUM unit spellings, the 800K-observation corpora, or the identity quirks that a Boston ICU produces over a decade. A tool that scores perfectly on synthetic data has proven it handles the cases its authors imagined.
+
+## Two ideas, one harness
+
+We built `fhir4ds/realism/` around two pieces:
+
+**1. A realism corpus.** MIMIC-IV-FHIR is the Beth Israel ICU dataset converted to FHIR R4 — genuinely messy clinical content (real LOINC/RxNorm distributions, real timing, real missingness), publicly available, 100 patients and ~900K resources in the demo. It has one problem as a *matching* benchmark: no two records refer to the same entity, so there's nothing to match. The patient identities are de-identification artifacts — names are literally `Patient_10007795`, birth dates shifted into the 2080s.
+
+**2. A corruption harness.** So we make duplicates on purpose. The harness takes any FHIR corpus and injects known duplicates through eight seeded, deterministic corruption profiles: name typos (Damerau-Levenshtein-1), nickname substitutions (Robert→Bob), transliterations (the hard ones — Mohammed→Muhummad, DL≥2), birth-date shifts, address moves, phone-digit flips, MRN variants, and stacks of several at once. Each injected pair is gold-labeled with the profiles applied; every untouched real patient stays in the pool as an honest negative. Same seed, byte-identical benchmark.
+
+For MIMIC we first *realisticize* the identities — generate plausible names from our nickname corpus, rebase the shifted birth dates — because you can't corrupt a name that was never real.
+
+## What the real data found immediately
+
+We ran the deduplication leg over the full MIMIC corpus before injecting anything, and it crashed. Not on logic — on units. MIMIC microbiology uses UCUM annotations like `#/hpf` (per high-power field), and the unit-conversion library raises a bare `AssertionError` for some of these spellings. Our clean corpora had never once produced that spelling. Real data produced it in the first thousand resources.
+
+That's the whole argument in one anecdote: **the crash was invisible from synthetic data and surfaced in minutes from real data.** (Fixed same day, with a regression test — `REALISM-F1` if you're reading our commit log.)
+
+## The results
+
+With the crash fixed, the full benchmark on a 20-patient MIMIC slice (15 injected duplicates, seed 2026):
+
+**Patient matching: precision 1.0, recall 1.0.** Every injected duplicate found, zero false merges of real patients. Per-profile recall: clean copies 1.0, birth-date shifts 1.0, nickname substitutions 1.0, name typos 1.0.
+
+And one documented miss: **transliteration variants at DL≥2** (`Mohammed`→`Muhummad` as the only signal on an identifier-less patient) are not caught by the current rule set. Single-edit variants (`Mohammed`→`Mohammad`) are caught by fuzzy name rules; two-edit transliterations are not. We pinned this as a known gap rather than hiding it — it's precisely the case where hand-maintained name lists are structurally reactive, and it's the motivation for our name-embedding experiment (equivalent-name embeddings trained on variant pairs, scored through the same probabilistic rules — the approach ComplyAdvantage published 88%-recall numbers for earlier this year).
+
+**Deduplication on real data:** 46,469 clusters across the corpus, **zero cross-patient clusters** (the hard safety invariant), and a curation queue that finally had something real in it — 216,739 near-miss pairs, 7,650 vocabulary-unmatched resources, 1,065 unresolved medication references routed for review rather than silently bucketed. On our synthetic corpora that same queue had been empty. The code-fallback tier we built for exactly this population had never seen a real member of it until now.
+
+## Why this matters more than another synthetic suite
+
+Three things made this exercise worth more than another constructed test suite:
+
+1. **Real data finds real defects.** The unit-crash class — a library raising an unexpected exception type on legitimate input — simply doesn't exist in data you wrote yourself.
+2. **Gold labels without hand-labeling.** The corruption harness converts *any* real corpus into a matching benchmark. You get real clinical context underneath and known-truth duplicates on top — strictly better than either alone.
+3. **The gaps you find are the honest ones.** "Perfect on synthetic, transliteration-blind on real" is an accurate self-portrait. "Perfect on synthetic" alone is marketing.
+
+The harness ships in fhir4ds (`fhir4ds.realism`), works on any FHIR NDJSON or bundle corpus, and every profile is deterministic and seeded. Point it at your own exports — the interesting bugs are the ones your test data doesn't contain.
