@@ -199,6 +199,12 @@ VIEWS["piqi_health_assessment"] = {
         {"name": "resultUnit_text", "path": "value.ofType(Quantity).unit",
          "type": "string"},
         {"name": "performedDatetime",
+         # AMUX-152 #26: spelled 'performedDatetime' (lowercase t) ON
+         # PURPOSE — the PIQI Handbook v1.1 and the IG PCDM both use
+         # this exact spelling for HealthAssessment (p.13), while
+         # LabResult (p.15) and VitalSign (p.20) use
+         # 'performedDateTime'. No SAM binds this column today; keep the
+         # guide spellings verbatim (documented, not churned).
          "path": "effective.ofType(dateTime).toString()", "type": "string"},
     ],
 }
@@ -465,8 +471,13 @@ def sam_attr_is_valid_date(view_label, data_class, entity, column,
 
 def sam_attr_is_timestamp(view_label, data_class, entity, column,
                           prereq_label: str) -> str:
+    """[SG p.14] 'a timestamp including a date and time' — AMUX-152 #25:
+    date-only values FAIL (that is Attr_IsValidDate's domain; DuckDB's
+    TRY_CAST alone happily accepts a bare date)."""
     ok = ("TRY_CAST(COALESCE(CAST(v." + column + " AS VARCHAR), '') "
-          "AS TIMESTAMP) IS NOT NULL")
+          "AS TIMESTAMP) IS NOT NULL "
+          "AND regexp_matches(COALESCE(CAST(v." + column + " AS VARCHAR), ''), "
+          "'^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}')")
     return (
         f"SELECT v.patient_id AS patient_id, v.element_id AS element_id,\n"
         f"  '{data_class}' AS data_class, '{entity}' AS entity, "
@@ -595,15 +606,22 @@ _VALUE_CONTENT = "(code 2345-7, mg/dL -> [0, 10000])"
 
 
 def sam_unit_is_plausible(view_label, prereq_label: str) -> str:
+    """[SG p.23] LabResult_UnitIsPlausible (placeholder content, FDD §8 Q5).
+
+    AMUX-152 #18: plausibility is judged on the CODED arm — the concept
+    FAILS when any governed coding (2345-7 -> mg/dL; 742-7 -> 10*3/uL)
+    carries an implausible unit. Multi-coding concepts carrying local
+    codes alongside a governed code are judged by the governed arm, not
+    by the mere existence of a non-governed coding (exists-nonmatching
+    let wrong units pass); un-governed test codes stay plausible.
+    """
     ok = (
         "len(list_filter(COALESCE(v.test_codings, []), c ->\n"
         "     (json_extract_string(c, '$.code') = '2345-7' "
-        "AND COALESCE(v.resultUnit_text, '') IN ('mg/dL', 'mg/dl'))\n"
+        "AND COALESCE(v.resultUnit_text, '') NOT IN ('mg/dL', 'mg/dl'))\n"
         "  OR (json_extract_string(c, '$.code') = '742-7' "
-        "AND COALESCE(v.resultUnit_text, '') IN ('10*3/uL'))\n"
-        "  OR json_extract_string(c, '$.code') IS NULL\n"
-        "  OR json_extract_string(c, '$.code') NOT IN ('2345-7', '742-2')"
-        ")) > 0"
+        "AND COALESCE(v.resultUnit_text, '') NOT IN ('10*3/uL'))\n"
+        ")) = 0"
     )
     return (
         f"SELECT v.patient_id AS patient_id, v.element_id AS element_id,\n"
@@ -676,26 +694,46 @@ def sam_class_has_duplicates(view_label: str, data_class: str,
     Guide aliases: SUCCESS = "Has duplicates" — ``pass`` means duplicate
     elements were found. Identity attributes are authored per instance
     (runner parameters cannot bind inside materialized dependency
-    views). One row PER PATIENT (element_id NULL — class-level SAM).
+    views). One row PER PATIENT (element_id NULL — class-level SAM, the
+    deterministic class-level emission; duplicate element ids surface
+    deterministically in the detail, ordered).
+
+    AMUX-152 #25: NULL identity keys are NOT duplicates (house 3VL
+    doctrine — unknown identity is not equal identity): rows with any
+    NULL key are excluded from the duplicate grouping, while every
+    patient keeps exactly one class row.
     """
     keys = ", ".join(key_cols)
+    non_null = " AND ".join(f"v.{c} IS NOT NULL" for c in key_cols)
     return (
-        f"WITH grp AS (\n"
-        f"  SELECT v.patient_id AS patient_id, {keys}, "
-        f"count(*) AS c, string_agg(v.element_id, ', ' "
-        f"ORDER BY v.element_id) AS ids\n"
-        f"  FROM {_q(view_label)} v GROUP BY v.patient_id, {keys}\n"
+        f"WITH elems AS (\n"
+        f"  SELECT v.patient_id AS patient_id, {keys}, v.element_id\n"
+        f"  FROM {_q(view_label)} v WHERE {non_null}\n"
+        f"),\n"
+        f"grp AS (\n"
+        f"  SELECT e.patient_id AS patient_id, {keys}, "
+        f"count(*) AS c, string_agg(e.element_id, ', ' "
+        f"ORDER BY e.element_id) AS ids\n"
+        f"  FROM elems e GROUP BY e.patient_id, {keys}\n"
+        f"),\n"
+        f"per_pat AS (\n"
+        f"  SELECT g.patient_id AS patient_id, "
+        f"SUM(CASE WHEN g.c > 1 THEN 1 ELSE 0 END) AS dup_groups, "
+        f"string_agg(CASE WHEN g.c > 1 THEN g.ids END, '; ' "
+        f"ORDER BY g.ids) AS dup_ids\n"
+        f"  FROM grp g GROUP BY g.patient_id\n"
         f")\n"
-        f"SELECT g.patient_id AS patient_id, NULL AS element_id,\n"
+        f"SELECT p.patient_id AS patient_id, NULL AS element_id,\n"
         f"  '{data_class}' AS data_class, '{data_class}' AS entity, "
         f"'Class_HasDuplicates' AS sam_mnemonic,\n"
-        f"  CASE WHEN SUM(CASE WHEN g.c > 1 THEN 1 ELSE 0 END) > 0 "
-        f"THEN 'pass' ELSE 'fail' END AS result,\n"
-        f"  CASE WHEN SUM(CASE WHEN g.c > 1 THEN 1 ELSE 0 END) > 0 "
-        f"THEN 'duplicate elements: ' || string_agg(CASE WHEN g.c > 1 "
-        f"THEN g.ids END, '; ' ORDER BY g.ids) "
+        f"  CASE WHEN COALESCE(pp.dup_groups, 0) > 0 THEN 'pass' "
+        f"ELSE 'fail' END AS result,\n"
+        f"  CASE WHEN COALESCE(pp.dup_groups, 0) > 0 "
+        f"THEN 'duplicate elements: ' || pp.dup_ids "
         f"ELSE 'no duplicate elements detected' END AS detail\n"
-        f"FROM grp g GROUP BY g.patient_id ORDER BY g.patient_id"
+        f"FROM (SELECT DISTINCT patient_id FROM {_q(view_label)}) p\n"
+        f"LEFT JOIN per_pat pp ON pp.patient_id = p.patient_id\n"
+        f"ORDER BY p.patient_id"
     )
 
 
@@ -1015,6 +1053,13 @@ def build_rubric(name: str, description: str,
 
     Returns ``(library_dict, criteria_metadata)``.
     """
+    # AMUX-152 #25: public-input validation is typed ValueError (an
+    # ``assert`` vanishes under ``python -O``) — and an empty criteria
+    # list would generate invalid SQL (empty UNION), not a rubric.
+    if not criteria:
+        raise ValueError(
+            "rubric criteria must contain at least one criterion "
+            "(empty criteria list)")
     catalog = build_sam_catalog()
     by_id = _sam_by_id(catalog)
     related: list[dict] = []
@@ -1039,15 +1084,29 @@ def build_rubric(name: str, description: str,
                 if c["condition_sam"].startswith("piqi-sam-")
                 else c["condition_sam"])}
         spec = by_id[sam_id]
-        assert spec.data_class == c["data_class"], (spec.instance_id, c)
-        assert spec.entity.lower() == c["entity"].lower(), (spec.instance_id, c)
+        # AMUX-152 #25: caller-supplied criterion fields are validated
+        # with typed errors (asserts vanish under ``python -O``).
+        if spec.data_class != c["data_class"]:
+            raise ValueError(
+                f"criterion {seq}: data_class {c['data_class']!r} does "
+                f"not match assigned SAM {spec.instance_id!r} "
+                f"({spec.data_class!r})")
+        if spec.entity.lower() != c["entity"].lower():
+            raise ValueError(
+                f"criterion {seq}: entity {c['entity']!r} does not match "
+                f"assigned SAM {spec.instance_id!r} ({spec.entity!r})")
         sam_label = f"sam_{seq}"
         related.append({"type": "depends-on", "label": sam_label,
                         "resource": sam_canonical(spec.instance_id)})
         cond_label = ""
         if c.get("condition_sam"):
             cond_spec = by_id[c["condition_sam"]]
-            assert cond_spec.data_class == spec.data_class
+            if cond_spec.data_class != spec.data_class:
+                raise ValueError(
+                    f"criterion {seq}: condition_sam "
+                    f"{c['condition_sam']!r} is a "
+                    f"{cond_spec.data_class!r} SAM; the assigned SAM's "
+                    f"data class is {spec.data_class!r}")
             cond_label = f"cond_{seq}"
             related.append({"type": "depends-on", "label": cond_label,
                             "resource": sam_canonical(cond_spec.instance_id)})

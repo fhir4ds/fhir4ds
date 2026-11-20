@@ -20,8 +20,7 @@ import base64
 import typing as _t
 from dataclasses import dataclass, field
 
-from .authoring import DATA_CLASS_TO_VIEW
-from .registry import get_rubric, get_view, piqi_resolver
+from .registry import DATA_CLASS_TO_VIEW, get_rubric, get_view, piqi_resolver
 from .taxonomy import PIQIDimension, dimension_for_sam
 from ..sqlquery import SQLQueryRunner
 from ..sqlquery.types import SQLQUERY_PROFILE_CANONICAL
@@ -96,7 +95,8 @@ def load_piqi_views(connection, *, source_table: str = "resources") -> list[str]
     return created
 
 
-def run_sam(connection, sam, *, patient_id: _t.Optional[str] = None) -> list[dict]:
+def run_sam(connection, sam, *, patient_id: _t.Optional[str] = None,
+            source_table: str = "resources") -> list[dict]:
     """Execute one SAM instance, optionally scoped by patient (BOUND).
 
     ``sam`` is either a packaged SAM name/instance id
@@ -106,6 +106,9 @@ def run_sam(connection, sam, *, patient_id: _t.Optional[str] = None) -> list[dic
     against the same runner while their packaged canonical dependencies
     (data-class views, prerequisite SAMs) still resolve from the
     packaged registry.
+
+    ``source_table`` (AMUX-152 #24) is the physical DuckDB table the
+    generated ViewDefinition SQL reads from (default ``"resources"``).
     """
     from .registry import get_sam as _get
 
@@ -142,7 +145,8 @@ def run_sam(connection, sam, *, patient_id: _t.Optional[str] = None) -> list[dic
     # silently replacing the packaged SAM's semantics.
     _packaged = piqi_resolver()
     _own = {canonical: sam_dict}
-    if not isinstance(sam, str):
+    _is_dict = not isinstance(sam, str)
+    if _is_dict:
         try:
             _packaged(canonical)
         except KeyError:
@@ -160,19 +164,21 @@ def run_sam(connection, sam, *, patient_id: _t.Optional[str] = None) -> list[dic
                 return _own[resolved_canonical]
             raise
 
-    rows = SQLQueryRunner(connection, _resolver).execute(
+    rows = SQLQueryRunner(connection, _resolver,
+                          source_table=source_table).execute(
         wrapper, {"patient_id": patient_id})
     return [dict(zip(RESULT_COLUMNS, r)) for r in rows]
 
 
 def _data_class_frequency(connection, criteria: list[dict],
-                          patient_id: _t.Optional[str]) -> dict:
+                          patient_id: _t.Optional[str], *,
+                          source_table: str = "resources") -> dict:
     """Count elements per rubric-referenced data class [HB p.24]."""
     freq: dict[str, int] = {}
     for dc in sorted({c["data_class"] for c in criteria}):
         view_name = DATA_CLASS_TO_VIEW[dc]
         vd = parse_view_definition(get_view(view_name))
-        sql = SQLGenerator(source_table="resources").generate(vd)
+        sql = SQLGenerator(source_table=source_table).generate(vd)
         count = connection.execute(
             f"SELECT count(*) FROM ({sql}) s WHERE (? IS NULL OR "
             f"s.patient_id = ?)", [patient_id, patient_id]).fetchone()[0]
@@ -184,21 +190,31 @@ def evaluate_rubric(connection, rubric, *, patient_id: _t.Optional[str] = None,
                     message_id: _t.Optional[str] = None,
                     data_provider_id: _t.Optional[str] = None,
                     data_source_id: _t.Optional[str] = None,
+                    source_table: str = "resources",
                     verbose: bool = False) -> PIQIScorecard:
     """Evaluate a rubric and produce the [HB p.24] scorecard.
 
     ``rubric``: a packaged rubric NAME (``"sample"``), a rubric Library
     dict from :func:`fhir4ds.piqi.build_rubric`, or the Library dict's
     tuple form. Weights/criticality are rubric-authored static content
-    [RG p.6].
+    [RG p.6]. ``source_table`` (AMUX-152 #24) is the physical table the
+    generated ViewDefinition SQL reads from.
     """
     rubric_dict = get_rubric(rubric) if isinstance(rubric, str) else rubric
     if isinstance(rubric_dict, tuple):
         rubric_dict, criteria_meta = rubric_dict
     else:
-        criteria_meta = rubric_dict["piqiCriteria"]
+        # AMUX-152 #24: a FHIR-pure rubric Library (no criteria
+        # metadata) cannot be scored — fail typed, not KeyError.
+        criteria_meta = rubric_dict.get("piqiCriteria")
+        if not criteria_meta:
+            raise ValueError(
+                "rubric Library carries no 'piqiCriteria' metadata "
+                "(FHIR-pure rubric); pass the (library, criteria) tuple "
+                "returned by build_rubric or a packaged rubric name")
 
-    runner = SQLQueryRunner(connection, piqi_resolver())
+    runner = SQLQueryRunner(connection, piqi_resolver(),
+                            source_table=source_table)
     raw = runner.execute(rubric_dict, {"patient_id": patient_id})
     cols = ("patient_id", "element_id", "sequence", "data_class", "entity",
             "attributed_mnemonic", "scoring_effect", "weight", "criticality",
@@ -248,8 +264,9 @@ def evaluate_rubric(connection, rubric, *, patient_id: _t.Optional[str] = None,
         total_item_score=total,
         piqi_index=index,
         critical_failure_count=critical,
-        data_class_frequency=_data_class_frequency(connection, criteria_meta,
-                                                   patient_id),
+        data_class_frequency=_data_class_frequency(
+            connection, criteria_meta, patient_id,
+            source_table=source_table),
         potential_weighted_item_score=w_potential,
         total_weighted_item_score=w_total,
         piqi_weighted_index=w_index,

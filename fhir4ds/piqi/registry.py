@@ -14,6 +14,11 @@ from pathlib import Path
 
 from .authoring import CANONICAL_BASE, DATA_CLASS_TO_VIEW, view_canonical
 
+# AMUX-152 #23: registry is the RUNTIME surface for the data-class →
+# view mapping (runtime code imports it from here, not from the
+# authoring module); the table itself is authored in authoring.py,
+# which consumes it at generation time.
+
 _RESOURCES_DIR = Path(__file__).parent / "resources"
 
 
