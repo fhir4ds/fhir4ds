@@ -226,11 +226,19 @@ class TestOrganization:
         result = _match_org(conn, _org("o4", name="General Hospital",
                                        tax="123456789"))
         assert (result.outcome, result.rule_id) == ("match", "O3")
-        # name + addr_key
+        # name + addr_key — CR-002 (2026-11-20): O4 (P ~ 2e-6) exceeds the
+        # org 1e-8 approval budget -> must NOT link alone; WITH an exactly
+        # agreeing phone corroborator (combined 2e-12) it links.
         _index_org(conn, _org("o5", name="Imaging Center",
                               line="100 Main St"))
         result = _match_org(conn, _org("o6", name="Imaging Center",
                                        line="100 Main St"))
+        assert result.outcome == "no_match"
+        _index_org(conn, _org("o5b", name="Imaging Center",
+                              line="100 Main St", phones=["2175550100"]))
+        result = _match_org(conn, _org("o6b", name="Imaging Center",
+                                       line="100 Main St",
+                                       phones=["2175550100"]))
         assert result.outcome == "match"
         assert result.rule_id == "O4"
         # name-only, different cities -> no_match

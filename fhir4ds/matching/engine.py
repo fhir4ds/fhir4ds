@@ -30,6 +30,7 @@ regression gate.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field as dc_field
 from typing import Optional
 
@@ -40,6 +41,8 @@ from .normalizers import extract_patient_fields, suffix_conflict
 from .rules import (
     CATEGORY1_RULES,
     EXACT,
+    FIELD_DEPENDENCY_GROUPS,
+    FIELD_U_PROBS,
     GUARD_FIELD_BY_NAME,
     MatchRule,
 )
@@ -61,6 +64,13 @@ class MatchResult:
     skipped_rules: tuple[str, ...] = ()  # empty since slice 2 (fuzzy implemented)
     evaluated_rules: tuple[str, ...] = ()
     match_type: str = "exact"  # 'exact' | 'fuzzy' — per the FIRING rule's evaluation
+    # CR-002: the approval-threshold enforcement decision (non-Patient
+    # entities only; None on every Patient result). Shape:
+    # {required, satisfied, rule_id, firing_p, combined_p, threshold,
+    #  corroborating_fields}. On a `match` it describes the winning
+    # candidate; on a `no_match` it describes the LAST rule that fired
+    # but was refused for want of corroboration.
+    threshold_enforcement: Optional[dict] = None
 
 
 def _candidate_suffixes(
@@ -238,6 +248,58 @@ def _verify_candidate(
     return True, any_fuzzy, evidence
 
 
+def _exceeds_threshold(p: float, threshold: float) -> bool:
+    """CR-002 'exceeds' with a relative-epsilon guard: authored rules that
+    sit EXACTLY at their budget (location L1/L2, P = 1e-4 x 0.01) must not
+    flip to over-budget by float-product noise (1.0000000000000002e-06)."""
+    return p > threshold and not math.isclose(p, threshold, rel_tol=1e-12)
+
+
+def _combined_p_with_corroboration(
+    conn: duckdb.DuckDBPyConnection,
+    rule: MatchRule,
+    fields: dict[str, list[str]],
+    candidate_id: str,
+    entity_type: str,
+    firing_p: float,
+) -> tuple[float, list[str]]:
+    """CR-002 combined evidence: firing-rule P x the u-probabilities of
+    ADDITIONAL exactly-agreeing fields (the engine's existing product
+    combination semantics over ``FIELD_U_PROBS``).
+
+    A field corroborates when it is not part of the firing rule, is not
+    informationally dependent on any rule field (``FIELD_DEPENDENCY_GROUPS``
+    — e.g. ``street_line`` cannot corroborate an ``addr_key`` rule, its
+    information is already embedded in the key), has a u-probability
+    entry, and the query entity's and the candidate's indexed value sets
+    are both non-empty and intersect EXACTLY (fuzzy agreement deliberately
+    does not corroborate — conservative direction). ``suffix`` never
+    corroborates (it is negation machinery, not evidence).
+    """
+    rule_field_names = {name for name, _mode in rule.fields}
+    independent = {
+        name for name in fields
+        if not any(group.intersection({name, *rule_field_names})
+                   and name in group
+                   for group in FIELD_DEPENDENCY_GROUPS)
+    }
+    combined = firing_p
+    corroborating: list[str] = []
+    for field_name in sorted(independent - rule_field_names - {"suffix"}):
+        if field_name not in FIELD_U_PROBS:
+            continue
+        query_values = fields.get(field_name) or []
+        if not query_values:
+            continue
+        candidate_values = _indexed_values(
+            conn, entity_type, field_name, candidate_id)
+        if candidate_values and \
+                set(query_values) & set(candidate_values):
+            combined *= FIELD_U_PROBS[field_name][0]
+            corroborating.append(field_name)
+    return combined, corroborating
+
+
 def match_patient(
     conn: duckdb.DuckDBPyConnection,
     patient_resource: dict,
@@ -264,6 +326,7 @@ def match_fields(
     *,
     rules: list[MatchRule] = CATEGORY1_RULES,
     entity_type: str = "Patient",
+    approval_threshold: Optional[float] = None,
 ) -> MatchResult:
     """Match a normalized field map against the indexed corpus (slice 4).
 
@@ -276,12 +339,28 @@ def match_fields(
     AMUX-150: ``rules`` + ``entity_type`` parameterize the rule table and
     the index scope; defaults reproduce the Patient Category-1 behavior
     byte-for-byte. Disabled rules (``enabled=False``) are skipped.
+
+    CR-002 (non-Patient entities only): when an approval threshold is in
+    effect — an explicit ``approval_threshold`` argument, or the
+    ``approval_threshold`` attribute of a :class:`~fhir4ds.matching.
+    entity_rules.RuleSet` — a rule whose effective P(collision) EXCEEDS
+    the threshold does not link a candidate alone: the candidate survives
+    only when additional exactly-agreeing fields (not in the firing rule)
+    bring the COMBINED probability (rule P x field u-probabilities) back
+    under budget. Enforcement decisions are recorded on the result
+    (``MatchResult.threshold_enforcement``) and in the audit evidence.
+    Patient matching never enforces (plain rule list, no threshold).
     """
     create_matching_tables(conn)
+    if approval_threshold is None:
+        approval_threshold = getattr(rules, "approval_threshold", None)
+    enforce_threshold = approval_threshold \
+        if entity_type != "Patient" else None
     candidate_suffixes = fields.get("suffix", [])
 
     skipped: list[str] = []
     evaluated: list[str] = []
+    last_refusal: Optional[dict] = None
     for rule in rules:
         if not rule.enabled:
             continue
@@ -333,17 +412,45 @@ def match_fields(
         any_fuzzy = any(verified[pid][0] for pid in surviving)
         p = rule.p_collision_fuzzy if any_fuzzy else rule.p_collision
         match_type = "fuzzy" if any_fuzzy else "exact"
+        enforcement_by_pid: dict[str, dict] = {}
+        if enforce_threshold is not None \
+                and _exceeds_threshold(p, enforce_threshold):
+            # CR-002: the rule alone exceeds the approval budget — each
+            # candidate must corroborate the link with additional
+            # exactly-agreeing fields until the COMBINED P is under budget.
+            corroborated: list[str] = []
+            for pid in surviving:
+                combined, corroborating = _combined_p_with_corroboration(
+                    conn, rule, fields, pid, entity_type, p)
+                enforcement_by_pid[pid] = {
+                    "required": True,
+                    "satisfied": not _exceeds_threshold(
+                        combined, enforce_threshold),
+                    "rule_id": rule.rule_id,
+                    "firing_p": p,
+                    "combined_p": combined,
+                    "threshold": enforce_threshold,
+                    "corroborating_fields": corroborating,
+                }
+                if enforcement_by_pid[pid]["satisfied"]:
+                    corroborated.append(pid)
+            if not corroborated:
+                last_refusal = enforcement_by_pid[surviving[0]]
+                continue  # rule refused for every candidate
+            surviving = corroborated
         if len(surviving) == 1:
             matched_id = surviving[0]
             return MatchResult(
                 outcome="match",
                 rule_id=rule.rule_id,
-                confidence=1.0 - p,
+                confidence=1.0 - enforcement_by_pid[matched_id]["combined_p"]
+                if matched_id in enforcement_by_pid else 1.0 - p,
                 matched_ids=(matched_id,),
                 evidence=verified[matched_id][1],
                 skipped_rules=tuple(skipped),
                 evaluated_rules=tuple(evaluated),
                 match_type=match_type,
+                threshold_enforcement=enforcement_by_pid.get(matched_id),
             )
         return MatchResult(
             outcome="ambiguous",
@@ -359,6 +466,7 @@ def match_fields(
         outcome="no_match",
         skipped_rules=tuple(skipped),
         evaluated_rules=tuple(evaluated),
+        threshold_enforcement=last_refusal,
     )
 
 

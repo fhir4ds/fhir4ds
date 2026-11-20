@@ -13,18 +13,24 @@ budget than patient EMPI merges —
 - organizations 1e-8
 - locations 1e-6
 
+CR-002 (Joel decision 2026-11-20): the thresholds are now ENFORCED for
+non-Patient entities — the rule sets ship as :class:`RuleSet` lists
+carrying their ``approval_threshold``, and the engine refuses to link a
+candidate on a rule whose effective P(collision) exceeds the budget
+unless corroborating exactly-agreeing fields bring the COMBINED
+evidence (rule P x field u-probabilities, the engine's product
+semantics) back under budget. See ``engine.match_fields``. Patient
+matching (plain rule list, no threshold attribute) is byte-identical
+and never enforced.
+
 Hard scope cuts: name-only NEVER links practitioners (common surnames in
 one facility), organizations, or locations (a health system's "Imaging
 Center" exists in every city).
-
-NOTE (documented tension, FDD §7): O4 (org_name + addr_key ≈ 2e-6) and
-L1/L2 (≈1e-6) nominally exceed the org approval budget — they are kept
-per the FDD's own rule tables; the engine applies no threshold cutoff
-(the tables list only authored rules), so this is a documentation
-caveat, not a behavior difference.
 """
 
 from __future__ import annotations
+
+from typing import Optional
 
 from .rules import (
     EXACT,
@@ -35,6 +41,7 @@ from .rules import (
 )
 
 __all__ = [
+    "RuleSet",
     "PRACTITIONER_APPROVAL_THRESHOLD",
     "ORGANIZATION_APPROVAL_THRESHOLD",
     "LOCATION_APPROVAL_THRESHOLD",
@@ -46,6 +53,26 @@ __all__ = [
 PRACTITIONER_APPROVAL_THRESHOLD = 1e-8
 ORGANIZATION_APPROVAL_THRESHOLD = 1e-8
 LOCATION_APPROVAL_THRESHOLD = 1e-6
+
+
+class RuleSet(list):
+    """A rule table carrying its rule-set approval threshold (CR-002).
+
+    A plain ``list`` subclass so it flows through every existing
+    ``rules=`` parameter unchanged; ``approval_threshold`` is read by
+    :func:`fhir4ds.matching.engine.match_fields` (an explicit
+    ``approval_threshold`` argument overrides it; ``None``/absent — e.g.
+    the Patient Category-1 table — disables enforcement entirely).
+    """
+
+    approval_threshold: Optional[float] = None
+
+
+def _ruleset(rules: list[MatchRule],
+             approval_threshold: float) -> RuleSet:
+    rule_set = RuleSet(rules)
+    rule_set.approval_threshold = approval_threshold
+    return rule_set
 
 _E, _F = EXACT, FUZZY
 
@@ -69,7 +96,7 @@ def _rule(rule_id, fields, desc, p_fuzzy_fields=frozenset(),
 # Fuzzy names reuse the patient machinery (nickname ∪ DL<=1 @ >=5 chars) —
 # suffix-conflict negation transfers unchanged (practitioners carry
 # suffixes). P5 (name-only) is a HARD SCOPE CUT, not a rule.
-PRACTITIONER_RULES: list[MatchRule] = sorted(
+PRACTITIONER_RULES: RuleSet = _ruleset(sorted(
     [
         _rule(
             "P1",
@@ -99,12 +126,12 @@ PRACTITIONER_RULES: list[MatchRule] = sorted(
         ),
     ],
     key=lambda r: (r.p_collision, r.rule_id),
-)
+), PRACTITIONER_APPROVAL_THRESHOLD)
 
 # --- Organization -----------------------------------------------------------
 # O5 ships DISABLED (FDD §10 Q2 default): chain pharmacies share phone
 # pools; enable only if measurement on real corpora shows recall loss.
-ORGANIZATION_RULES: list[MatchRule] = sorted(
+ORGANIZATION_RULES: RuleSet = _ruleset(sorted(
     [
         _rule("O1", [("npi", _E)], "NPI (rare but decisive)"),
         _rule("O2", [("clia", _E)], "CLIA"),
@@ -130,10 +157,10 @@ ORGANIZATION_RULES: list[MatchRule] = sorted(
         ),
     ],
     key=lambda r: (r.p_collision, r.rule_id),
-)
+), ORGANIZATION_APPROVAL_THRESHOLD)
 
 # --- Location ---------------------------------------------------------------
-LOCATION_RULES: list[MatchRule] = sorted(
+LOCATION_RULES: RuleSet = _ruleset(sorted(
     [
         _rule(
             "L1",
@@ -149,4 +176,4 @@ LOCATION_RULES: list[MatchRule] = sorted(
         ),
     ],
     key=lambda r: (r.p_collision, r.rule_id),
-)
+), LOCATION_APPROVAL_THRESHOLD)

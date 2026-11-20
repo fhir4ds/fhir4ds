@@ -100,6 +100,15 @@ FIELD_U_PROBS: dict[str, tuple[float, Optional[float]]] = {
 # CMS approval threshold (upstream collision.APPROVAL_THRESHOLD).
 APPROVAL_THRESHOLD = 2e-12
 
+#: Fields that share information and therefore never corroborate each
+#: other under CR-002 threshold enforcement. ``addr_key`` embeds
+#: ``street_line`` (line[0]|city|state|postal5), so an agreeing
+#: street_line adds no independent evidence to a rule that already
+#: matched on addr_key (and vice versa).
+FIELD_DEPENDENCY_GROUPS: tuple[frozenset[str], ...] = (
+    frozenset({"addr_key", "street_line"}),
+)
+
 
 def p_collision(
     fields: tuple[tuple[str, str], ...],
