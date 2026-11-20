@@ -406,9 +406,9 @@ def _partition_internal(records: list[DedupRecord], *, code_fallback: str,
     """
     mode = _validate_code_fallback(code_fallback)
     if attach_keys:
-        from .concept_index import default_concept_index
-        records = _attach_match_keys(records, default_concept_index(),
-                                     mode)
+        # Lazy resolver: "off" mode never resolves, so it must not pay
+        # the default-index build either (mirrors dedup_pass's contract).
+        records = _attach_match_keys(records, _NULL_INDEX, mode)
     buckets: dict[tuple, list[DedupRecord]] = {}
     for record in records:
         buckets.setdefault(_sort_key(record), []).append(record)
