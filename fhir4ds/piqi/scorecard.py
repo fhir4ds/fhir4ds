@@ -62,6 +62,10 @@ class PIQIScorecard:
     piqi_weighted_index: _t.Optional[float]
     dimension_rollup: dict
     issues: list = field(default_factory=list)
+    #: per-data-class scoring rollup {class: {"potential", "total"}},
+    #: aggregated from the scoring criterion rows exactly like the flat
+    #: totals (informational rows excluded) [HB p.24 sub-indices].
+    per_data_class: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         d = {
@@ -239,6 +243,14 @@ def evaluate_rubric(connection, rubric, *, patient_id: _t.Optional[str] = None,
         w_index = None
 
     failed = [i for i in items if i["result"] == "fail"]
+    per_data_class: dict[str, dict[str, int]] = {}
+    for i in scoring:
+        dc = per_data_class.setdefault(
+            i["data_class"], {"potential": 0, "total": 0})
+        dc["potential"] += 1
+        if i["result"] == "pass":
+            dc["total"] += 1
+    per_data_class = {k: per_data_class[k] for k in sorted(per_data_class)}
     rollup: dict[str, dict[str, int]] = {}
     for i in failed:
         dim = dimension_for_sam(i["attributed_mnemonic"])
@@ -271,6 +283,7 @@ def evaluate_rubric(connection, rubric, *, patient_id: _t.Optional[str] = None,
         total_weighted_item_score=w_total,
         piqi_weighted_index=w_index,
         dimension_rollup=rollup,
+        per_data_class=per_data_class,
         issues=issues,
     )
 

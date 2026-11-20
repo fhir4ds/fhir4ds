@@ -61,10 +61,19 @@ DEFAULT_NUM_PATIENTS = 12
 #: cap applied in (id) order. VitalSign observations are deliberately
 #: NOT stripped — they are the unmodified control class. Condition and
 #: Procedure are stripped in full (the mission's named candidates).
+#:
+#: ``text_from_code`` (MedicationRequest) is for local name-code
+#: systems where the code IS the human-readable drug name (MIMIC's
+#: ``mimic-medication-name`` codings carry e.g. ``code:
+#: "Ondansetron"`` with no display and no ``cc.text``): when no text
+#: or display survives the strip, the FIRST coding's ``code`` string
+#: is preserved as the query text. Types without the flag keep the
+#: skip-if-no-text behavior.
 DEFAULT_STRIPPING: dict[str, dict[str, Any]] = {
     "Condition": {"path": "code", "cap": None},
     "Procedure": {"path": "code", "cap": None},
-    "MedicationRequest": {"path": "medicationCodeableConcept", "cap": 20},
+    "MedicationRequest": {"path": "medicationCodeableConcept", "cap": 300,
+                          "text_from_code": True},
     # laboratory Observations only; vital-signs Observations stay coded
     "Observation": {"path": "code", "cap": 40,
                     "category": "laboratory"},
@@ -155,6 +164,10 @@ def strip_codings(resources: list[dict],
                   spec: dict[str, dict[str, Any]]) -> tuple[list[dict], list[dict]]:
     """Build the BEFORE corpus: deep-copy and strip codings from the
     controlled subset, preserving the first coding display as ``text``.
+    With the spec's ``text_from_code`` flag, name-code systems whose
+    coding ``code`` IS the human-readable name (MIMIC medication-name)
+    fall back to the first coding's code string when no text/display
+    survives — see :data:`DEFAULT_STRIPPING`.
 
     Returns ``(stripped_resources, gold_records)`` where each gold
     record is ``{"resourceType", "id", "path", "text", "codings"}`` —
@@ -191,6 +204,12 @@ def strip_codings(resources: list[dict],
             text = next((c.get("display") for c in codings
                          if isinstance(c.get("display"), str)
                          and c["display"].strip()), None)
+        if not text and conf.get("text_from_code"):
+            # local name-code system (e.g. MIMIC mimic-medication-name):
+            # the coding's code string IS the human-readable name
+            text = next((c.get("code") for c in codings
+                         if isinstance(c.get("code"), str)
+                         and c["code"].strip()), None)
         if not text:
             continue  # no query text would survive the strip — skip
         clone = copy.deepcopy(r)
@@ -290,6 +309,10 @@ def evaluate_slice(resources: list[dict], rubric) -> dict:
     scorecard summary plus per-SAM fail counts."""
     from fhir4ds.piqi.scorecard import evaluate_rubric
 
+    if isinstance(rubric, tuple):
+        _, criteria_meta = rubric
+    else:
+        criteria_meta = rubric.get("piqiCriteria") or []
     conn, native = _fresh_connection()
     try:
         _load_resources_table(conn, resources)
@@ -305,6 +328,7 @@ def evaluate_slice(resources: list[dict], rubric) -> dict:
         "critical_failure_count": card.critical_failure_count,
         "data_class_frequency": card.data_class_frequency,
         "dimension_rollup": card.dimension_rollup,
+        "per_class": per_class_index(card, criteria_meta),
         "failing_sam_counts": dict(sorted(
             fail_counts.items(), key=lambda kv: -kv[1])),
         "fhirpath_native": native,
@@ -464,6 +488,27 @@ def gold_accuracy(gold: list[dict], augmented: list[dict]) -> dict:
     }
 
 
+def per_class_index(card, criteria: list[dict]) -> dict:
+    """Per-data-class PIQI sub-index for one scorecard leg.
+
+    Wraps the scorecard's ``per_data_class`` rollup (aggregated from
+    the scoring criterion rows exactly like the flat totals —
+    informational rows excluded) into ``potential`` / ``total`` /
+    ``pct_index`` rows. Rubric classes with no scoring rows (absent
+    from the corpus, or informational-only criteria) report zeroed
+    rows; ordering is sorted by class name (deterministic). ``card``
+    is a :class:`PIQIScorecard` or anything with ``per_data_class``.
+    """
+    out: dict[str, dict] = {}
+    for dc in sorted({c["data_class"] for c in criteria}):
+        row = card.per_data_class.get(dc, {"potential": 0, "total": 0})
+        potential, total = row["potential"], row["total"]
+        out[dc] = {"potential": potential, "total": total,
+                   "pct_index": round(total / potential * 100.0, 2)
+                   if potential else 0.0}
+    return out
+
+
 def recovery_table(before: dict, after: dict) -> dict:
     """Per-SAM fail-count movement between two scorecard summaries."""
     sams = sorted(set(before["failing_sam_counts"])
@@ -554,7 +599,9 @@ def run_benchmark(corpus_path: Union[str, Path], output_dir: Union[str, Path],
         "num_patients": num_patients,
         "stripping_spec": {
             k: {"path": v["path"], "cap": v.get("cap"),
-                **({"category": v["category"]} if "category" in v else {})}
+                **({"category": v["category"]} if "category" in v else {}),
+                **({"text_from_code": True} if v.get("text_from_code")
+                   else {})}
             for k, v in stripping.items()},
         "slice": {
             "resources": len(slice_resources),

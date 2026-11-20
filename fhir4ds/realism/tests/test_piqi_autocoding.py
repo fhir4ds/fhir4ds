@@ -161,6 +161,44 @@ class TestStripCodings(unittest.TestCase):
         self.assertEqual(gold[0]["text"], "Custom text")
 
 
+    def test_text_from_code_uses_first_coding_code_as_text(self):
+        # MIMIC MedicationRequest shape: the drug NAME is the code in a
+        # local name-code system — no display, no cc.text.
+        med = {"resourceType": "MedicationRequest", "id": "m1",
+               "subject": {"reference": "Patient/p1"},
+               "medicationCodeableConcept": {"coding": [{
+                   "code": "Ondansetron",
+                   "system": "https://fhir.mimic.mit.edu/CodeSystem/mimic-medication-name"}]}}
+        stripped, gold = strip_codings([med], DEFAULT_STRIPPING)
+        self.assertEqual(len(gold), 1)
+        self.assertEqual(gold[0]["text"], "Ondansetron")
+        self.assertEqual(gold[0]["codings"][0]["code"], "Ondansetron")
+        self.assertEqual(stripped[0]["medicationCodeableConcept"]["coding"], [])
+        self.assertEqual(stripped[0]["medicationCodeableConcept"]["text"],
+                         "Ondansetron")
+
+    def test_without_text_from_code_flag_name_code_is_skipped(self):
+        med = {"resourceType": "MedicationRequest", "id": "m1",
+               "subject": {"reference": "Patient/p1"},
+               "medicationCodeableConcept": {"coding": [{
+                   "code": "Ondansetron", "system": "s"}]}}
+        spec = {"MedicationRequest": {"path": "medicationCodeableConcept",
+                                      "cap": 20}}  # no text_from_code
+        stripped, gold = strip_codings([med], spec)
+        self.assertEqual(gold, [])
+        self.assertEqual(stripped, [])
+
+    def test_text_from_code_never_overrides_surviving_text(self):
+        med = {"resourceType": "MedicationRequest", "id": "m1",
+               "subject": {"reference": "Patient/p1"},
+               "medicationCodeableConcept": {
+                   "text": "Zofran 4mg",
+                   "coding": [{"code": "Ondansetron", "system": "s",
+                               "display": "Ondansetron inj"}]}}
+        _, gold = strip_codings([med], DEFAULT_STRIPPING)
+        self.assertEqual(gold[0]["text"], "Zofran 4mg")
+
+
 class TestGoldAccuracyAndRecovery(unittest.TestCase):
     def _run_stub(self, corpus):
         stripped, gold = strip_codings(corpus, DEFAULT_STRIPPING)
@@ -207,6 +245,44 @@ class TestGoldAccuracyAndRecovery(unittest.TestCase):
         self.assertEqual(rec["total_new_failures"], 2)
         self.assertEqual(rec["per_sam"]["Concept_IsComplete"],
                          {"fail_before": 10, "fail_after": 3, "delta": -7})
+
+
+class TestPerClassIndex(unittest.TestCase):
+    def _criteria(self):
+        return [
+            {"sequence": 1, "data_class": "Condition", "sam":
+             "condition-condition-iscomplete", "scoring_effect": "scoring"},
+            {"sequence": 2, "data_class": "Medication", "sam":
+             "medication-medication-iscomplete", "scoring_effect": "scoring"},
+            {"sequence": 3, "data_class": "LabResult", "sam":
+             "labresult-resultunit-ispopulated",
+             "scoring_effect": "informational"},
+        ]
+
+    def _card(self, per_data_class):
+        from types import SimpleNamespace
+        return SimpleNamespace(per_data_class=per_data_class)
+
+    def test_per_class_index_aggregates_potential_total_pct(self):
+        from fhir4ds.realism.piqi_autocoding import per_class_index
+        card = self._card(per_data_class={
+            "Condition": {"potential": 5, "total": 3},
+            "Medication": {"potential": 4, "total": 4}})
+        out = per_class_index(card, self._criteria())
+        self.assertEqual(out["Condition"],
+                         {"potential": 5, "total": 3, "pct_index": 60.0})
+        self.assertEqual(out["Medication"],
+                         {"potential": 4, "total": 4, "pct_index": 100.0})
+        # informational-only class zeroed, still present
+        self.assertEqual(out["LabResult"],
+                         {"potential": 0, "total": 0, "pct_index": 0.0})
+        # deterministic ordering: sorted by data class
+        self.assertEqual(list(out), ["Condition", "LabResult", "Medication"])
+
+    def test_per_class_index_empty_rubric_and_zero_potential(self):
+        from fhir4ds.realism.piqi_autocoding import per_class_index
+        card = self._card(per_data_class={})
+        self.assertEqual(per_class_index(card, []), {})
 
 
 class TestRubricAndUnmapped(unittest.TestCase):
