@@ -31,9 +31,29 @@ Two results mattered most:
 - **Zero cross-patient clusters.** The hard safety invariant: not one of the 46,469 clusters spans two patients. Deduplication that merges two people's data is worse than no deduplication.
 - **A curation queue with something real in it.** 216,739 near-miss pairs (looks-alike-but-not-merged, routed for review), 7,650 vocabulary-unmatched resources, and 1,065 unresolved medication references — queued for human review rather than silently bucketed. On our synthetic corpora that same queue had always been empty. The code-fallback tier we built for exactly this population had never seen a real member of it until now.
 
-## The auto-coding experiment: PIQI before and after
+## The auto-coding experiment: two arms on the same slice
 
-The second experiment is the one with real ground truth. MIMIC's export is fully coded — we found **zero text-only CodeableConcepts** in a 12-patient slice — so we manufactured the legacy situation every EHR migration actually faces: we stripped the codings from 1,643 coded resources (669 conditions, 494 procedures, 480 lab results, keeping the display text as `code.text`), ran the PIQI scorecard, let the auto-coder reconstruct codes from that text, and re-ran the identical scorecard. Because *we* removed the codes, we know exactly what the right answer was — ground-truth auto-coding accuracy on real ICU text, not a vibe.
+We ran the auto-coder two ways against the same 12-patient slice (86,224 resources). The **production path** augments the export exactly as shipped — no codings removed, originals untouched, appends only. The **scored path** strips codings from 1,643 resources first, because that arm needs ground truth and PIQI-as-scored needs text to work from.
+
+### The production path: what auto-coding adds to a real export
+
+The clearest result is **MedicationRequest**. MIMIC ships medications as *name-codes* — the coding's `code` literally is the drug name ("Ondansetron"), under MIMIC's private `mimic-medication-name` system, with no display and no standard vocabulary. Measured on the coding columns, zero of 2,429 medication requests were recognized, displayed, or complete before. The system-aware auto-coder (it skips concepts already coded in standard terminologies, per its INV-4 contract) appended RxNorm codings to 360 of them — the only class where recognition, display, and completeness all move together, and the strongest production story: local drug names become addressable standard terminology.
+
+What auto-coding can and cannot recover falls into a clean three-tier taxonomy:
+
+| tier | population (n) | recognized before → after |
+| --- | --- | --- |
+| already standard | procedures with SNOMED originals (224 of 494) | recognized as-shipped; auto-coding adds nothing |
+| alias-recovered | conditions and procedures under MIMIC's wrapped ICD systems (669 + 121) | 0 → 669 conditions (100%); procedures 224 → 345 via environment aliases |
+| translation-required | medications as local name-codes (2,429) | 0 → 0 without help; auto-coding moves 360 to RxNorm |
+
+The **conditions tier is the honest one**: MIMIC's ICD-9/ICD-10 codes sit under `mimic-diagnosis-icd9/icd10` wrapper URIs, so they initially scored as unrecognized. The fix is an *environment alias* — a declarative data table mapping those wrapper URIs to their standard ICD counterparts (ICD-10-CM for diagnoses, ICD-10-PCS for procedures), consulted after the standard-registry spellings. With the aliases registered, every ICD condition is recognized before auto-coding touches anything — so auto-coding's added value there is **not** a recognition score change; it is universal portability (SNOMED equivalents any consumer trusts, no alias table required) and clinical semantics.¹ The proprietary medication systems (`mimic-medication-name`, formulary codes, `poe-iv`) deliberately get no alias: their codes have no standard counterpart, which is exactly the translation-required signal. ²
+
+PIQI **as scored** shows no movement in this arm, and that is itself a finding: the packaged Concept assessments are gated on `code.text` being populated, and MIMIC ships none — so the production-path value lives in the coding columns above, while the strip arm below demonstrates the scored path end to end.
+
+### The scored path: strip and reconstruct
+
+MIMIC's export is fully coded — zero text-only CodeableConcepts in the slice — so we manufactured the legacy situation every EHR migration actually faces: we stripped the codings from 1,643 coded resources (669 conditions, 494 procedures, 480 lab results, keeping the display text as `code.text`), ran the PIQI scorecard, let the auto-coder reconstruct codes from that text, and re-ran the identical scorecard. Because *we* removed the codes, we know exactly what the right answer was — ground-truth auto-coding accuracy on real ICU text, not a vibe.
 
 We ran two configurations: the shipped strict default (only `certain`-grade matches are written) and a recall-oriented arm (`probable` and better).
 
@@ -52,6 +72,10 @@ We ran two configurations: the shipped strict default (only `certain`-grade matc
 | hybrid | 40.76 | 75% | 13.6% |
 
 The trade is clean. Pure semantic search maximizes *coverage* — it finds a plausible standard concept for almost everything — but its exact-code recovery collapses: embeddings rank paraphrases highly, and "a reasonable concept" is not "the right code." Pure lexical search is the opposite: strong on exact matches (the surface-form tiebreak anchors verbatim text to its code) but finds codes for only half the corpus. Hybrid delivers semantic-grade coverage *with* lexical-grade exactness — the best top-1 exact recovery of the three at near-best coverage, which is why it is the engine's default and ours.
+
+¹ The alias table ships as data in the PIQI code-system registry, so a different export environment registers its own wrappers without code changes; recognition through an alias is distinguishable from a standard spelling in the verdict's provenance.
+
+² Procedures are the sparsest tier: auto-coding reached 187 of 494, and after the run 418 of 494 (85%) are recognized — SNOMED originals, alias-recovered ICD, and appended codings together. An earlier no-strip run under-counted this class because ICD-10-PCS was missing from the standard code-system registry, so appended PCS codings scored as unrecognized until we closed that gap.
 
 ## Why this matters more than another synthetic suite
 
