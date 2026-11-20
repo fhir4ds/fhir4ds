@@ -43,6 +43,16 @@ We ran two configurations: the shipped strict default (only `certain`-grade matc
 
 **Ground truth.** This is the number you can only get by removing codes you already have. The stripped corpus's original codings split into two populations: 224 procedures whose originals are **SNOMED** codes, and everything else whose originals are MIMIC-local dictionaries (ICD-9/10 diagnosis codes, local lab item ids). On the standard-terminology subset, the auto-coder recovered the **exact original (system, code) pair for 224 of 224 — 100% top-1 exact recovery**. On the local-dictionary subset, exact match is impossible by construction — the engine doesn't know MIMIC's private dictionaries — and instead it returns standard SNOMED/LOINC equivalents. Spot-checking those: "Anemia in chronic kidney disease" (ICD-9 local) → SNOMED 707323002 *Anemia in chronic kidney disease*; "Portal vein thrombosis" → SNOMED 17920008 *Portal vein thrombosis*. That is precisely the EHR-migration promise: legacy local codes become addressable standard terminology, with the original text preserved and every generated coding carrying machine-readable provenance (engine, version, search mode, score, match grade, `userSelected=false`).
 
+**Does the retrieval mode matter?** We ablated the terminology engine's three search modes on the identical slice (same strip, same gold):
+
+| mode | PIQI index after auto-coding | elements re-coded | top-1 exact recovery (standard-terminology subset) |
+| --- | --- | --- | --- |
+| lexical only | 40.24 | 48% | 11.2% |
+| semantic only | 40.80 | 78% | 2.4% |
+| hybrid | 40.76 | 75% | 13.6% |
+
+The trade is clean. Pure semantic search maximizes *coverage* — it finds a plausible standard concept for almost everything — but its exact-code recovery collapses: embeddings rank paraphrases highly, and "a reasonable concept" is not "the right code." Pure lexical search is the opposite: strong on exact matches (the surface-form tiebreak anchors verbatim text to its code) but finds codes for only half the corpus. Hybrid delivers semantic-grade coverage *with* lexical-grade exactness — the best top-1 exact recovery of the three at near-best coverage, which is why it is the engine's default and ours.
+
 ## Why this matters more than another synthetic suite
 
 Three things made this exercise worth more than another constructed test suite:

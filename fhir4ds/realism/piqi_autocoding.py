@@ -341,7 +341,8 @@ def _autocoded_any(resource: dict) -> bool:
 
 def run_autocoder(stripped: list[dict], endpoint,
                   min_match_grade: str = "certain",
-                  max_passes: int = 3) -> dict:
+                  max_passes: int = 3,
+                  search_mode: str = "hybrid") -> dict:
     """Augment ``stripped`` in place via the AutoCoder and return engine
     stats. ``endpoint`` is any TerminologyEndpoint. ``min_match_grade``
     selects the strictness arm: 'certain' (shipped default) or e.g.
@@ -361,7 +362,8 @@ def run_autocoder(stripped: list[dict], endpoint,
     try:
         coder = AutoCoder(endpoint, cache_conn,
                           config=AutoCoderConfig(
-                              min_match_grade=min_match_grade))
+                              min_match_grade=min_match_grade,
+                              search_mode=search_mode))
 
         def _uncoded_count() -> int:
             return sum(1 for r in stripped if not _autocoded_any(r))
@@ -501,6 +503,7 @@ def unmapped_classes(resources: list[dict]) -> dict:
 # ── orchestration ─────────────────────────────────────────────────────
 
 def run_benchmark(corpus_path: Union[str, Path], output_dir: Union[str, Path],
+                   search_mode: str = "hybrid",
                   *, num_patients: int = DEFAULT_NUM_PATIENTS,
                   stripping: Optional[dict] = None,
                   skip_autocoding: bool = False,
@@ -611,7 +614,8 @@ def run_benchmark(corpus_path: Union[str, Path], output_dir: Union[str, Path],
         endpoint = _make_endpoint(http_base_url,
                                   breaker_threshold=10 ** 9)
         stats = run_autocoder(stripped, endpoint,
-                              min_match_grade=min_match_grade)
+                              min_match_grade=min_match_grade,
+                              search_mode=search_mode)
         stats["endpoint"] = (http_base_url or "in_process")
         if not http_base_url:
             from fhir4ds.cql.terminology.in_process_adapter import (
@@ -652,7 +656,8 @@ def run_benchmark(corpus_path: Union[str, Path], output_dir: Union[str, Path],
         )
         layout = prefer_terminology_layout()
         endpoint = InProcessTerminologyEndpoint()
-        stats = run_autocoder(stripped, endpoint)
+        stats = run_autocoder(stripped, endpoint,
+                              search_mode=search_mode)
         stats["medterm4ds_layout"] = layout
         report["autocoding"] = stats
         report["gold_accuracy"] = gold_accuracy(gold, stripped)
@@ -762,6 +767,12 @@ def main(argv: Optional[list[str]] = None) -> int:
         help=("AutoCoder threshold arm: 'certain' is the shipped strict "
               "default; 'probable' is the recall-oriented arm."))
     parser.add_argument(
+        "--search-mode", default="hybrid",
+        choices=["lexical", "hybrid", "semantic"],
+        help=("Terminology retrieval mode for the auto-coding arm "
+              "(ablation: lexical vs semantic vs hybrid). Default hybrid "
+              "matches the shipped AutoCoder default."))
+    parser.add_argument(
         "--phase", choices=["all", "piqi", "autocode", "after"],
         default="all",
         help=("Phase isolation: medterm4ds (torch) and the DuckDB native "
@@ -775,7 +786,8 @@ def main(argv: Optional[list[str]] = None) -> int:
                            skip_autocoding=skip,
                            phase=args.phase,
                            http_base_url=args.http_base_url,
-                           min_match_grade=args.min_match_grade)
+                           min_match_grade=args.min_match_grade,
+                           search_mode=args.search_mode)
     if args.phase != "autocode":
         print(summarize(report))
     return 0
