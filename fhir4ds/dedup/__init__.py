@@ -63,6 +63,13 @@ from .pipeline import (
     partition,
 )
 from .runner import DedupRunResult, run_dedup
+from .encounter import (
+    ENCOUNTER_MERGE_THRESHOLD,
+    EncounterFeatures,
+    EncounterRunResult,
+    encounter_pass,
+    run_encounter_dedup,
+)
 from .survivorship import (
     DEDUP_EXTENSION_URL,
     RICHNESS_KEYS,
@@ -75,9 +82,13 @@ from .survivorship import (
 )
 from .temporal import (
     DEFAULT_TZ,
+    MIN_INSTANT,
+    MAX_INSTANT,
     NormalizedDate,
     Signature,
     normalize_temporal,
+    overlap_fraction,
+    period_overlap,
     secondary_timestamp,
 )
 from .values import normalize_value
@@ -114,6 +125,12 @@ __all__ = [
     "escalate",
     "partition",
     "run_dedup",
+    # encounter strategy (AMUX-150 chunk C)
+    "ENCOUNTER_MERGE_THRESHOLD",
+    "EncounterFeatures",
+    "EncounterRunResult",
+    "encounter_pass",
+    "run_encounter_dedup",
     # survivorship (slice 3)
     "DEDUP_EXTENSION_URL",
     "RICHNESS_KEYS",
@@ -140,5 +157,9 @@ __all__ = [
     "NormalizedDate",
     "Signature",
     "DEFAULT_TZ",
+    "MIN_INSTANT",
+    "MAX_INSTANT",
+    "period_overlap",
+    "overlap_fraction",
     "__version__",
 ]

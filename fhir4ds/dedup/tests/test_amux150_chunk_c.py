@@ -78,7 +78,7 @@ class TestPeriodOverlapPrimitive:
         assert period_overlap(a, b) == "overlap"
         assert period_overlap(a, c) == "disjoint"
         assert period_overlap(a, c, max_gap="1h") == "adjacent"
-        assert period_overlap(a, d, max_gap="0s") == "adjacent"  # gap 0
+        assert period_overlap(a, d, max_gap="0s") == "overlap"  # touching
         assert period_overlap(self._nd(None, None), a) == "unknown"
 
 
