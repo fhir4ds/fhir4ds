@@ -22,6 +22,7 @@ from .normalizers import nickname_set
 __all__ = [
     "damerau_le1",
     "name_fuzzy_match",
+    "text_fuzzy_match",
     "dob_fuzzy_matches",
     "FUZZY_NAME_MIN_LEN",
     "ABBREV_PREFIX_MIN_LEN",
@@ -116,6 +117,20 @@ def name_fuzzy_match(a: Optional[str], b: Optional[str]) -> bool:
     if b in nickname_set(a):
         return True
     if _prefix_abbrev_match(a, b):
+        return True
+    if len(a) >= FUZZY_NAME_MIN_LEN and len(b) >= FUZZY_NAME_MIN_LEN:
+        return damerau_le1(a, b)
+    return False
+
+
+def text_fuzzy_match(a: Optional[str], b: Optional[str]) -> bool:
+    """AMUX-150 identity-resource fuzzy comparator for non-personal names
+    (organization / location display names): DL <= 1 at >= 5 chars —
+    NO nickname equivalence and NO prefix-abbreviation (an org name
+    truncation is not a diminutive)."""
+    if not a or not b:
+        return False
+    if a == b:
         return True
     if len(a) >= FUZZY_NAME_MIN_LEN and len(b) >= FUZZY_NAME_MIN_LEN:
         return damerau_le1(a, b)

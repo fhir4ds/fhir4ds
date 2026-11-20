@@ -54,9 +54,11 @@ CREATE TABLE IF NOT EXISTS linkage (
 """
 
 
-def canonical_pair_key(new_patient_id: str, existing_patient_id: str) -> str:
-    """``Patient/<a>|Patient/<b>`` with the two references sorted."""
-    a, b = sorted((f"Patient/{new_patient_id}", f"Patient/{existing_patient_id}"))
+def canonical_pair_key(new_patient_id: str, existing_patient_id: str,
+                       entity_type: str = "Patient") -> str:
+    """``<Type>/<a>|<Type>/<b>`` with the two references sorted."""
+    a, b = sorted((f"{entity_type}/{new_patient_id}",
+                   f"{entity_type}/{existing_patient_id}"))
     return f"{a}|{b}"
 
 
@@ -72,12 +74,14 @@ def _canonical_evidence(evidence: dict[str, str]) -> dict[str, str]:
 
 
 def build_linkage_resource(
-    match_result: MatchResult, new_patient_id: str, existing_patient_id: str
+    match_result: MatchResult, new_patient_id: str, existing_patient_id: str,
+    entity_type: str = "Patient",
 ) -> dict[str, Any]:
     """Build the deterministic Linkage resource for one matched pair."""
     if not match_result.rule_id:
         raise ValueError("MatchResult must carry a rule_id to build a Linkage")
-    refs = sorted((f"Patient/{new_patient_id}", f"Patient/{existing_patient_id}"))
+    refs = sorted((f"{entity_type}/{new_patient_id}",
+                   f"{entity_type}/{existing_patient_id}"))
     return {
         "resourceType": "Linkage",
         "active": True,
@@ -119,6 +123,7 @@ def upsert_linkage(
     match_result: MatchResult,
     new_patient_id: str,
     existing_patient_id: str,
+    entity_type: str = "Patient",
 ) -> dict[str, Any]:
     """Insert or update the Linkage row for one matched pair.
 
@@ -129,8 +134,10 @@ def upsert_linkage(
     change) overwrites, keeping decision history in the audit table.
     """
     create_linkage_tables(conn)
-    linkage_id = canonical_pair_key(new_patient_id, existing_patient_id)
-    resource = build_linkage_resource(match_result, new_patient_id, existing_patient_id)
+    linkage_id = canonical_pair_key(new_patient_id, existing_patient_id,
+                                    entity_type)
+    resource = build_linkage_resource(match_result, new_patient_id,
+                                      existing_patient_id, entity_type)
     existing_rule: Optional[str] = None
     row = conn.execute(
         "SELECT rule_id FROM linkage WHERE linkage_id = ?", [linkage_id]

@@ -92,22 +92,25 @@ def catching_rules(
         if any(not fields.get(f) for f, _mode in rule.fields):
             continue
         if rule.exact_fields():
-            candidates = _rule_candidate_ids(conn, rule, fields)
+            candidates = _rule_candidate_ids(conn, rule, fields,
+                                             "Patient")
         else:
-            candidates = _fuzzy_rule_pool(conn, rule, fields)
+            candidates = _fuzzy_rule_pool(conn, rule, fields, "Patient")
         if candidate_id not in (candidates - {patient_id}):
             continue
-        matched, _fuzzy, _ev = _verify_candidate(conn, rule, fields, candidate_id)
+        matched, _fuzzy, _ev = _verify_candidate(
+            conn, rule, fields, candidate_id, "Patient")
         if not matched:
             continue
         if rule.guards and not _guards_pass(
             rule,
             fields,
-            {f: _indexed_values(conn, f, candidate_id) for f in ("ssn4", "first")},
+            {f: _indexed_values(conn, "Patient", f, candidate_id)
+             for f in ("ssn4", "first")},
         ):
             continue
         if not suffix_conflict(
-            own_suffixes, _candidate_suffixes(conn, candidate_id)
+            own_suffixes, _candidate_suffixes(conn, "Patient", candidate_id)
         ):
             caught.append(rule.rule_id)
     return caught

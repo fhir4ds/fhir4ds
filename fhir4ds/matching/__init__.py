@@ -28,6 +28,18 @@ from .corpus import (
     match_corpus,
 )
 from .engine import MatchResult, match_patient
+from .entity_extractors import (
+    extract_location_fields,
+    extract_organization_fields,
+    extract_practitioner_fields,
+)
+from .entity_rules import (
+    LOCATION_RULES,
+    ORGANIZATION_APPROVAL_THRESHOLD,
+    ORGANIZATION_RULES,
+    PRACTITIONER_APPROVAL_THRESHOLD,
+    PRACTITIONER_RULES,
+)
 from .ingest import IngestReport, maybe_match_on_ingest, match_on_ingest
 from .linkage import (
     MATCHING_EXTENSION_URL,
@@ -60,7 +72,13 @@ from .rules import (
     MatchRule,
     p_collision,
 )
-from .store import create_matching_tables, exact_candidates, index_patient
+from .related_person import RelatedPersonReport, match_related_persons
+from .store import (
+    create_matching_tables,
+    exact_candidates,
+    index_entity,
+    index_patient,
+)
 
 __version__ = "0.0.25"
 
@@ -80,6 +98,7 @@ __all__ = [
     "FUZZY_NAME_MIN_LEN",
     "create_matching_tables",
     "index_patient",
+    "index_entity",
     "exact_candidates",
     "extract_patient_fields",
     "nickname_set",
@@ -106,6 +125,18 @@ __all__ = [
     "individual_context_patients",
     "find_contradictions",
     "individual_patients_view",
+    # AMUX-150 chunk B: identity strategies
+    "extract_practitioner_fields",
+    "extract_organization_fields",
+    "extract_location_fields",
+    "PRACTITIONER_RULES",
+    "ORGANIZATION_RULES",
+    "LOCATION_RULES",
+    "PRACTITIONER_APPROVAL_THRESHOLD",
+    "ORGANIZATION_APPROVAL_THRESHOLD",
+    "LOCATION_APPROVAL_THRESHOLD",
+    "RelatedPersonReport",
+    "match_related_persons",
     "__version__",
 ]
 

@@ -26,6 +26,7 @@ from fhir4ds.matching.entity_extractors import (
     extract_practitioner_fields,
 )
 from fhir4ds.matching.entity_rules import (
+    LOCATION_RULES,
     ORGANIZATION_RULES,
     PRACTITIONER_RULES,
 )
@@ -233,9 +234,9 @@ class TestOrganization:
         assert result.outcome == "match"
         assert result.rule_id == "O4"
         # name-only, different cities -> no_match
-        _index_org(conn, _org("o7", name="Imaging Center",
+        _index_org(conn, _org("o7", name="City Clinic",
                               line="9 Elm St", city="Shelbyville"))
-        result = _match_org(conn, _org("o8", name="Imaging Center",
+        result = _match_org(conn, _org("o8", name="City Clinic",
                                        line="100 Main St"))
         assert result.outcome == "no_match"
         conn.close()
@@ -261,7 +262,7 @@ class TestLocation:
         result = match_fields(
             conn, extract_location_fields(
                 _loc("l2", name="Main Pharmacy", line="100 Main St")),
-            entity_type="Location")
+            rules=LOCATION_RULES, entity_type="Location")
         assert result.outcome == "match"
         assert result.rule_id == "L1"
         _index_loc(conn, _loc("l3", name="Lab Draw Station",
@@ -272,14 +273,14 @@ class TestLocation:
                 _loc("l4", name="Lab Draw Station",
                      position={"latitude": 39.7817,
                                "longitude": -89.6501})),
-            entity_type="Location")
+            rules=LOCATION_RULES, entity_type="Location")
         assert result.outcome == "match"
         assert result.rule_id == "L2"
         # same name, different address, no position -> no_match
         result = match_fields(
             conn, extract_location_fields(
                 _loc("l5", name="Main Pharmacy", line="9 Elm St")),
-            entity_type="Location")
+            rules=LOCATION_RULES, entity_type="Location")
         assert result.outcome == "no_match"
         conn.close()
 

@@ -1,0 +1,27 @@
+{
+  "resourceType": "https://sql-on-fhir.org/ig/StructureDefinition/ViewDefinition",
+  "id": "location-match-fields",
+  "name": "location_match_fields",
+  "resource": "Location",
+  "description": "RAW location-match field substrate (AMUX-150 chunk B). Unnormalized columns; normalization (addr_key = line[0]|city|state|postal5; geo_key = lat,long rounded to 0.01 degrees ~1 km, absent unless both present) lives in fhir4ds.matching.entity_extractors.extract_location_fields. Auditable raw counterpart per FEATURE_NON_CODED_DEDUP.md §3.2.",
+  "select": [
+    {
+      "column": [
+        { "path": "id", "name": "location_id", "type": "string" },
+        { "path": "name", "name": "loc_name", "type": "string" },
+        { "path": "address.line.first()", "name": "street", "collection": true, "type": "string" },
+        { "path": "address.city", "name": "city", "collection": true, "type": "string" },
+        { "path": "address.state", "name": "state", "collection": true, "type": "string" },
+        { "path": "address.postalCode", "name": "postal", "collection": true, "type": "string" },
+        {
+          "path": "telecom.where(system = 'phone').value",
+          "name": "phone",
+          "collection": true,
+          "type": "string"
+        },
+        { "path": "position.latitude", "name": "latitude", "type": "decimal" },
+        { "path": "position.longitude", "name": "longitude", "type": "decimal" }
+      ]
+    }
+  ]
+}

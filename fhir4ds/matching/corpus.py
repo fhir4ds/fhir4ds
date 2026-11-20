@@ -30,9 +30,9 @@ from typing import Iterable, Optional
 import duckdb
 
 from .audit import record_match_audit
-from .engine import match_fields
 from .fuzzy import dob_fuzzy_matches
 from .linkage import create_linkage_tables, upsert_linkage
+from .rules import CATEGORY1_RULES
 from .store import create_matching_tables
 
 __all__ = [
@@ -84,20 +84,25 @@ class CorpusReport:
 # ---------------------------------------------------------------------------
 
 
-def _indexed_patient_ids(conn: duckdb.DuckDBPyConnection) -> list[str]:
+def _indexed_patient_ids(conn: duckdb.DuckDBPyConnection,
+                         entity_type: str = "Patient") -> list[str]:
     rows = conn.execute(
-        "SELECT DISTINCT patient_id FROM field_values ORDER BY patient_id"
+        "SELECT DISTINCT patient_id FROM field_values WHERE entity_type = ? "
+        "ORDER BY patient_id",
+        [entity_type],
     ).fetchall()
     return [r[0] for r in rows]
 
 
 def _indexed_fields(
-    conn: duckdb.DuckDBPyConnection, patient_id: str
+    conn: duckdb.DuckDBPyConnection, patient_id: str,
+    entity_type: str = "Patient",
 ) -> dict[str, list[str]]:
     rows = conn.execute(
-        "SELECT field_name, value FROM field_values WHERE patient_id = ? "
+        "SELECT field_name, value FROM field_values "
+        "WHERE entity_type = ? AND patient_id = ? "
         "ORDER BY field_name, value",
-        [patient_id],
+        [entity_type, patient_id],
     ).fetchall()
     fields: dict[str, list[str]] = {}
     for field_name, value in rows:
@@ -106,26 +111,36 @@ def _indexed_fields(
 
 
 def match_corpus(
-    conn: duckdb.DuckDBPyConnection, run_id: str
+    conn: duckdb.DuckDBPyConnection, run_id: str, *,
+    rules: list = CATEGORY1_RULES,
+    entity_type: str = "Patient",
 ) -> CorpusReport:
-    """Evaluate every indexed patient against the full corpus (self excluded).
+    """Evaluate every indexed entity against the full corpus (self excluded).
 
-    Patients are visited in sorted-id order; each decision is audited under
+    Entities are visited in sorted-id order; each decision is audited under
     ``run_id`` and every ``match`` outcome upserts one Linkage per matched
     pair. Because the engine sees the complete corpus on every pass, the
-    decision set depends only on the patient SET (determinism doctrine,
+    decision set depends only on the entity SET (determinism doctrine,
     design doc §4) — re-running over an unchanged corpus audits again but
     creates no new Linkage rows.
+
+    AMUX-150: ``rules`` + ``entity_type`` parameterize the pass (defaults
+    reproduce Patient corpus matching byte-for-byte).
     """
+    from .engine import match_fields
+    from .rules import MatchRule  # noqa: F401  (type documentation)
+
     if not isinstance(run_id, str) or not run_id:
         raise ValueError("run_id must be a non-empty string")
     create_matching_tables(conn)
     create_linkage_tables(conn)
     report = CorpusReport()
     pairs: set[tuple[str, str]] = set()
-    for patient_id in _indexed_patient_ids(conn):
-        fields = _indexed_fields(conn, patient_id)
-        result = match_fields(conn, fields, exclude=frozenset({patient_id}))
+    for patient_id in _indexed_patient_ids(conn, entity_type):
+        fields = _indexed_fields(conn, patient_id, entity_type)
+        result = match_fields(conn, fields,
+                              exclude=frozenset({patient_id}),
+                              rules=rules, entity_type=entity_type)
         record_match_audit(conn, run_id, patient_id, result)
         report.patients_evaluated += 1
         if result.outcome == "match":
@@ -139,7 +154,8 @@ def match_corpus(
         for candidate_id in result.matched_ids:
             pair = tuple(sorted((patient_id, candidate_id)))
             pairs.add(pair)
-            outcome = upsert_linkage(conn, result, patient_id, candidate_id)
+            outcome = upsert_linkage(conn, result, patient_id, candidate_id,
+                                     entity_type=entity_type)
             if outcome["action"] == "created":
                 report.links_created += 1
     report.unique_pairs = len(pairs)

@@ -58,6 +58,8 @@ __all__ = [
     "p_collision",
     "SSN4_AGREEMENT",
     "FIRST_NAME_AGREEMENT",
+    "PHONE_AGREEMENT",
+    "GUARD_FIELD_BY_NAME",
 ]
 
 EXACT = "exact"
@@ -83,6 +85,16 @@ FIELD_U_PROBS: dict[str, tuple[float, Optional[float]]] = {
     "namespace_id": (1e-15, None),
     "member_id": (0.000001, None),
     "subscriber_id": (0.0001, None),
+    # --- AMUX-150 chunk B: identity-resource u-values ---
+    # NON-UPSTREAM fhir4ds estimates (upstream Table 3 is patient-specific);
+    # conservative collision budgets for identity resources.
+    "npi": (1e-9, None),        # 10-digit issued-unique (NPI reality ~1e-10)
+    "clia": (1e-7, None),       # CLIA lab identifier
+    "tax_id": (1e-7, None),     # TIN/EIN
+    "org_name": (0.02, 0.04),   # org names collide at least as much as first names
+    "loc_name": (0.01, 0.02),   # "Main Pharmacy" / "Lab Draw Station" ubiquitous
+    "addr_key": (0.0001, None),  # street+city+state+zip5 composite
+    "geo_key": (0.0001, None),  # rounded lat/long pair
 }
 
 # CMS approval threshold (upstream collision.APPROVAL_THRESHOLD).
@@ -112,6 +124,18 @@ def p_collision(
 # Guard names (fhir4ds deviation, rule 30 only — see module docstring).
 SSN4_AGREEMENT = "ssn4_agreement"
 FIRST_NAME_AGREEMENT = "first_name_agreement"
+# AMUX-150 chunk B: identity-resource guard (practitioner P4) — the same
+# post-verification disagreement semantics over the phone field.
+PHONE_AGREEMENT = "phone_agreement"
+
+#: Guard name -> guarded field (AMUX-150: the guard whitelist is DATA —
+#: each rule set declares its guard-able fields through the guards its
+#: rules carry; this map is the closed vocabulary).
+GUARD_FIELD_BY_NAME: dict[str, str] = {
+    SSN4_AGREEMENT: "ssn4",
+    FIRST_NAME_AGREEMENT: "first",
+    PHONE_AGREEMENT: "phone",
+}
 
 
 @dataclass(frozen=True)
@@ -128,6 +152,9 @@ class MatchRule:
     # that fails any named guard is dropped from THIS rule's survivors;
     # evaluation continues with the next rule (no hard negation of the pair).
     guards: tuple[str, ...] = ()
+    # AMUX-150: disabled rules stay listed (documentation + one-flag
+    # enablement) but are skipped by the engine.
+    enabled: bool = True
 
     def exact_fields(self) -> tuple[str, ...]:
         return tuple(name for name, mode in self.fields if mode == EXACT)
