@@ -403,6 +403,13 @@ def _sql_literal(value: str) -> str:
     return quote_sql_literal(value)
 
 
+def _recognized_systems_lazy() -> "tuple[str, ...]":
+    """[HB p.15] closure of recognized code-system identifier spellings."""
+    from .codesystems import recognized_system_strings  # noqa: PLC0415
+
+    return recognized_system_strings()
+
+
 def _populated(col: str) -> str:
     return f"COALESCE(TRIM(CAST(v.{col} AS VARCHAR)), '') <> ''"
 
@@ -485,6 +492,134 @@ def sam_attr_is_timestamp(view_label, data_class, entity, column,
         f"  CASE WHEN {ok} THEN 'pass' ELSE 'fail' END AS result,\n"
         f"  CASE WHEN {ok} THEN '{entity} is a valid timestamp' "
         f"ELSE '{entity} is not a valid timestamp' END AS detail\n"
+        f"FROM {_q(view_label)} v\n"
+        f"{_prereq_join(prereq_label)}\n"
+        f"ORDER BY v.patient_id, v.element_id"
+    )
+
+
+def sam_attr_is_timestamp_tz(view_label, data_class, entity, column,
+                             prereq_label: str) -> str:
+    """[SG p.14] Attr_IsTimestampTz — 'a timestamp including a date,
+    time and time-zone'. Timestamp WITHOUT a trailing Z|±hh:mm offset
+    fails (that is Attr_IsTimestamp's domain)."""
+    ok = ("TRY_CAST(COALESCE(CAST(v." + column + " AS VARCHAR), '') "
+          "AS TIMESTAMPTZ) IS NOT NULL "
+          "AND regexp_matches(COALESCE(CAST(v." + column + " AS VARCHAR), ''), "
+          "'^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}"
+          "(Z|[+-][0-9]{2}:[0-9]{2})$')")
+    return (
+        f"SELECT v.patient_id AS patient_id, v.element_id AS element_id,\n"
+        f"  '{data_class}' AS data_class, '{entity}' AS entity, "
+        f"'Attr_IsTimestampTz' AS sam_mnemonic,\n"
+        f"  CASE WHEN {ok} THEN 'pass' ELSE 'fail' END AS result,\n"
+        f"  CASE WHEN {ok} THEN '{entity} is a timestamp with time zone' "
+        f"ELSE '{entity} is not a timestamp with time zone' END AS detail\n"
+        f"FROM {_q(view_label)} v\n"
+        f"{_prereq_join(prereq_label)}\n"
+        f"ORDER BY v.patient_id, v.element_id"
+    )
+
+
+def sam_attr_temporal_direction(view_label, data_class, entity, column,
+                                mnemonic: str, direction: str,
+                                prereq_label: str) -> str:
+    """[SG pp.13-14] Attr_IsFutureDate / Attr_IsPastDate — pure logic,
+    NO terminology dependency. A value that does not parse as a date
+    FAILS (invalid input is not a future/past date)."""
+    cmp_op = ">" if direction == "future" else "<"
+    ok = (f"TRY_CAST(COALESCE(CAST(v.{column} AS VARCHAR), '') AS DATE) "
+          f"{cmp_op} CURRENT_DATE")
+    return (
+        f"SELECT v.patient_id AS patient_id, v.element_id AS element_id,\n"
+        f"  '{data_class}' AS data_class, '{entity}' AS entity, "
+        f"'{mnemonic}' AS sam_mnemonic,\n"
+        f"  CASE WHEN {ok} THEN 'pass' ELSE 'fail' END AS result,\n"
+        f"  CASE WHEN {ok} THEN '{entity} is a {direction} date' "
+        f"ELSE '{entity} is not a {direction} date' END AS detail\n"
+        f"FROM {_q(view_label)} v\n"
+        f"{_prereq_join(prereq_label)}\n"
+        f"ORDER BY v.patient_id, v.element_id"
+    )
+
+
+def sam_obsvalue_is_qualitative(view_label, data_class, entity,
+                                type_col: str,
+                                prereq_label: str) -> str:
+    """[SG p.21] ObservationValue_IsQualitative — hardwired CE/CWE/CD/ST
+    value-type set ('coded entry' + 'structured text' types).
+
+    Our views render value types as NM (Quantity), CE (CodeableConcept),
+    ST (string/boolean) and SN (BP struct) — CE/ST are the qualitative
+    arms present in the model."""
+    ok = (f"COALESCE(CAST(v.{type_col} AS VARCHAR), '') "
+          f"IN ('CE', 'CWE', 'CD', 'ST')")
+    return (
+        f"SELECT v.patient_id AS patient_id, v.element_id AS element_id,\n"
+        f"  '{data_class}' AS data_class, '{entity}' AS entity, "
+        f"'ObservationValue_IsQualitative' AS sam_mnemonic,\n"
+        f"  CASE WHEN {ok} THEN 'pass' ELSE 'fail' END AS result,\n"
+        f"  CASE WHEN {ok} THEN '{entity} is qualitative' "
+        f"ELSE '{entity} is not qualitative' END AS detail\n"
+        f"FROM {_q(view_label)} v\n"
+        f"{_prereq_join(prereq_label)}\n"
+        f"ORDER BY v.patient_id, v.element_id"
+    )
+
+
+def sam_obsvalue_matches_type(view_label, data_class, entity, text_col: str,
+                              type_col: str, prereq_label: str) -> str:
+    """[SG p.21] ObservationValue_MatchesType — value shape consistent
+    with the expressed value type (NM ⇒ numeric text, ST ⇒ non-empty
+    text, CE ⇒ non-empty text; SN ⇒ numeric). A missing/unknown type
+    FAILS (the guide's HasType prerequisite ghost is NOT implemented —
+    Joel decision pending; Attr_IsPopulated stands in)."""
+    text = f"COALESCE(CAST(v.{text_col} AS VARCHAR), '')"
+    numeric = f"regexp_matches({text}, '^-?[0-9]+(\\.[0-9]+)?$')"
+    nonempty = f"{text} <> ''"
+    ok = (
+        f"CASE COALESCE(CAST(v.{type_col} AS VARCHAR), '')\n"
+        f"    WHEN 'NM' THEN {numeric}\n"
+        f"    WHEN 'SN' THEN {numeric}\n"
+        f"    WHEN 'ST' THEN {nonempty}\n"
+        f"    WHEN 'CE' THEN {nonempty}\n"
+        f"    ELSE FALSE END"
+    )
+    return (
+        f"SELECT v.patient_id AS patient_id, v.element_id AS element_id,\n"
+        f"  '{data_class}' AS data_class, '{entity}' AS entity, "
+        f"'ObservationValue_MatchesType' AS sam_mnemonic,\n"
+        f"  CASE WHEN {ok} THEN 'pass' ELSE 'fail' END AS result,\n"
+        f"  CASE WHEN {ok} THEN '{entity} matches its value type' "
+        f"ELSE '{entity} does not match its value type' END AS detail\n"
+        f"FROM {_q(view_label)} v\n"
+        f"{_prereq_join(prereq_label)}\n"
+        f"ORDER BY v.patient_id, v.element_id"
+    )
+
+
+def sam_concept_has_recognized_system(view_label, data_class, entity,
+                                      codings_col: str,
+                                      recognized: "list[str] | tuple[str, ...]",
+                                      prereq_label: str) -> str:
+    """[SG p.18] Concept_HasRecognizedCodeSystem — at least one coding's
+    system resolves through the HB p.15 code-system registry (any
+    identifier/alias/OID spelling of a registered system). The
+    recognized-string closure is embedded at AUTHOR time (constant list
+    from :func:`fhir4ds.piqi.codesystems.recognized_system_strings`)."""
+    in_list = ", ".join(_sql_literal(s) for s in recognized)
+    ok = (
+        f"len(list_filter(COALESCE(v.{codings_col}, []), c -> "
+        f"COALESCE(json_extract_string(c, '$.system'), '') "
+        f"IN ({in_list}))) > 0"
+    )
+    return (
+        f"SELECT v.patient_id AS patient_id, v.element_id AS element_id,\n"
+        f"  '{data_class}' AS data_class, '{entity}' AS entity, "
+        f"'Concept_HasRecognizedCodeSystem' AS sam_mnemonic,\n"
+        f"  CASE WHEN {ok} THEN 'pass' ELSE 'fail' END AS result,\n"
+        f"  CASE WHEN {ok} THEN '{entity} has a recognized code system' "
+        f"ELSE '{entity} has no recognized code system' END AS detail\n"
         f"FROM {_q(view_label)} v\n"
         f"{_prereq_join(prereq_label)}\n"
         f"ORDER BY v.patient_id, v.element_id"
@@ -765,6 +900,9 @@ def _prereq_label(instance_id: str) -> str:
 def build_sam_catalog() -> list[SAMSpec]:
     sams: list[SAMSpec] = []
 
+    # [HB p.15] recognized-code-system closure — embedded at author time
+    _rec = _recognized_systems_lazy()
+
     def pop(dc, ent, col):
         iid = f"{dc}-{ent}".lower() + "-ispopulated"
         sams.append(SAMSpec(
@@ -792,22 +930,83 @@ def build_sam_catalog() -> list[SAMSpec]:
             prereq=prereq))
         return iid
 
+    def recognized(dc, ent, col, prereq):
+        iid = f"{dc}-{ent}".lower() + "-hasrecognizedcodesystem"
+        sams.append(SAMSpec(
+            iid, dc, ent, "Concept_HasRecognizedCodeSystem",
+            sam_concept_has_recognized_system(
+                _view_label(dc), dc, ent, col, _rec,
+                _prereq_label(prereq)),
+            prereq=prereq))
+        return iid
+
+    def regex(dc, ent, col, short, mnemonic, pattern, prereq, extra=""):
+        iid = f"{dc}-{ent}".lower() + f"-{short}"
+        sams.append(SAMSpec(
+            iid, dc, ent, mnemonic,
+            sam_attr_regex(_view_label(dc), dc, ent, col, mnemonic,
+                           pattern, _prereq_label(prereq), extra),
+            prereq=prereq))
+        return iid
+
+    def valid_date(dc, ent, col, prereq):
+        iid = f"{dc}-{ent}".lower() + "-isvaliddate"
+        sams.append(SAMSpec(
+            iid, dc, ent, "Attr_IsValidDate",
+            sam_attr_is_valid_date(_view_label(dc), dc, ent, col,
+                                   _prereq_label(prereq)),
+            prereq=prereq))
+        return iid
+
+    def date_direction(dc, ent, col, direction, prereq):
+        mnemonic = ("Attr_IsFutureDate" if direction == "future"
+                    else "Attr_IsPastDate")
+        iid = f"{dc}-{ent}".lower() + f"-is{direction}date"
+        sams.append(SAMSpec(
+            iid, dc, ent, mnemonic,
+            sam_attr_temporal_direction(_view_label(dc), dc, ent, col,
+                                        mnemonic, direction,
+                                        _prereq_label(prereq)),
+            prereq=prereq))
+        return iid
+
+    def timestamp(dc, ent, col, prereq):
+        iid = f"{dc}-{ent}".lower() + "-istimestamp"
+        sams.append(SAMSpec(
+            iid, dc, ent, "Attr_IsTimestamp",
+            sam_attr_is_timestamp(_view_label(dc), dc, ent, col,
+                                  _prereq_label(prereq)),
+            prereq=prereq))
+        return iid
+
+    def hasduplicates(dc, key_cols):
+        iid = dc.lower() + "-hasduplicates"
+        sams.append(SAMSpec(
+            iid, dc, dc, "Class_HasDuplicates",
+            sam_class_has_duplicates(_view_label(dc), dc, key_cols)))
+        return iid
+
     # -- Demographics (full binding) --
     for ent, col in [("birthDate", "birthDate"), ("deathDate", "deathDate")]:
         p = pop("Demographics", ent, col)
-        sams.append(SAMSpec(
-            f"demographics-{ent.lower()}-isvaliddate", "Demographics", ent,
-            "Attr_IsValidDate",
-            sam_attr_is_valid_date(_view_label("Demographics"), "Demographics",
-                                   ent, col, _prereq_label(p)),
-            prereq=p))
+        valid_date("Demographics", ent, col, p)
+        date_direction("Demographics", ent, col, "past", p)
     for ent in ("birthSex", "deceased", "ethnicity", "genderIdentity",
                 "primaryLanguage", "maritalStatus", "race"):
-        pop("Demographics", ent, f"{ent}_text")
+        p = pop("Demographics", ent, f"{ent}_text")
+        part("Demographics", ent, f"{ent}_codings", "Concept_HasCode",
+             "code", p)
+        part("Demographics", ent, f"{ent}_codings", "Concept_HasCodeSystem",
+             "system", p)
+        part("Demographics", ent, f"{ent}_codings", "Concept_HasDisplay",
+             "display", p)
     complete("Demographics", "birthSex", "birthSex_codings",
              "demographics-birthsex-ispopulated")
     complete("Demographics", "race", "race_codings",
              "demographics-race-ispopulated")
+    for ent in ("birthSex", "race", "ethnicity"):
+        recognized("Demographics", ent, f"{ent}_codings",
+                   f"demographics-{ent.lower()}-ispopulated")
 
     # -- LabResult (full binding) --
     p = pop("LabResult", "resultValue", "resultValue_text")
@@ -825,6 +1024,20 @@ def build_sam_catalog() -> list[SAMSpec]:
                            "resultValue_text", mnemonic, pattern,
                            _prereq_label(p), extra),
             prereq=p))
+    sams.append(SAMSpec(
+        "labresult-resultvalue-isqualitative", "LabResult", "resultValue",
+        "ObservationValue_IsQualitative",
+        sam_obsvalue_is_qualitative(_view_label("LabResult"), "LabResult",
+                                    "resultValue", "resultValue_type",
+                                    _prereq_label(p)),
+        prereq=p))
+    sams.append(SAMSpec(
+        "labresult-resultvalue-matchestype", "LabResult", "resultValue",
+        "ObservationValue_MatchesType",
+        sam_obsvalue_matches_type(_view_label("LabResult"), "LabResult",
+                                  "resultValue", "resultValue_text",
+                                  "resultValue_type", _prereq_label(p)),
+        prereq=p))
     tp = pop("LabResult", "test", "test_text")
     part("LabResult", "test", "test_codings", "Concept_HasCode", "code", tp)
     part("LabResult", "test", "test_codings", "Concept_HasCodeSystem",
@@ -832,8 +1045,15 @@ def build_sam_catalog() -> list[SAMSpec]:
     part("LabResult", "test", "test_codings", "Concept_HasDisplay",
          "display", tp)
     complete("LabResult", "test", "test_codings", tp)
+    recognized("LabResult", "test", "test_codings", tp)
     pop("LabResult", "resultUnit", "resultUnit_text")
-    pop("LabResult", "interpretation", "interpretation_text")
+    ip = pop("LabResult", "interpretation", "interpretation_text")
+    part("LabResult", "interpretation", "interpretation_codings",
+         "Concept_HasCode", "code", ip)
+    part("LabResult", "interpretation", "interpretation_codings",
+         "Concept_HasCodeSystem", "system", ip)
+    part("LabResult", "interpretation", "interpretation_codings",
+         "Concept_HasDisplay", "display", ip)
     rp = pop("LabResult", "referenceRange", "referenceRange_text")
     sams.append(SAMSpec(
         "labresult-referencerange-rangeiscomplete", "LabResult",
@@ -853,21 +1073,11 @@ def build_sam_catalog() -> list[SAMSpec]:
     pop("LabResult", "specimenType", "specimenType_text")
     pop("LabResult", "resultStatus", "resultStatus_text")
     pdt = pop("LabResult", "performedDateTime", "performedDateTime")
-    sams.append(SAMSpec(
-        "labresult-performeddatetime-istimestamp", "LabResult",
-        "performedDateTime", "Attr_IsTimestamp",
-        sam_attr_is_timestamp(_view_label("LabResult"), "LabResult",
-                              "performedDateTime", "performedDateTime",
-                              _prereq_label(pdt)),
-        prereq=pdt))
+    timestamp("LabResult", "performedDateTime", "performedDateTime", pdt)
     sams.append(SAMSpec(
         "labresult-elementisclean", "LabResult", "LabResult",
         "Element_IsClean", sam_element_is_clean_lab(_view_label("LabResult"))))
-    sams.append(SAMSpec(
-        "labresult-hasduplicates", "LabResult", "LabResult",
-        "Class_HasDuplicates",
-        sam_class_has_duplicates(_view_label("LabResult"), "LabResult",
-                                 ["test_text", "performedDateTime"])))
+    hasduplicates("LabResult", ["test_text", "performedDateTime"])
     clean = "labresult-elementisclean"
     sams.append(SAMSpec(
         "labresult-unitplausible", "LabResult", "LabResult",
@@ -888,9 +1098,23 @@ def build_sam_catalog() -> list[SAMSpec]:
     part("VitalSign", "vitalSign", "vitalSign_codings", "Concept_HasDisplay",
          "display", vp)
     complete("VitalSign", "vitalSign", "vitalSign_codings", vp)
-    pop("VitalSign", "resultValue", "resultValue_text")
+    recognized("VitalSign", "vitalSign", "vitalSign_codings", vp)
+    vvp = pop("VitalSign", "resultValue", "resultValue_text")
+    regex("VitalSign", "resultValue", "resultValue_text", "isnumeric",
+          "Attr_IsNumeric", r"^-?[0-9]+(\.[0-9]+)?$", vvp)
+    sams.append(SAMSpec(
+        "vitalsign-resultvalue-isqualitative", "VitalSign", "resultValue",
+        "ObservationValue_IsQualitative",
+        sam_obsvalue_is_qualitative(_view_label("VitalSign"), "VitalSign",
+                                    "resultValue", "resultValue_type",
+                                    _prereq_label(vvp)),
+        prereq=vvp))
     pop("VitalSign", "resultUnit", "resultUnit_text")
-    pop("VitalSign", "interpretation", "interpretation_text")
+    vip = pop("VitalSign", "interpretation", "interpretation_text")
+    part("VitalSign", "interpretation", "interpretation_codings",
+         "Concept_HasCode", "code", vip)
+    part("VitalSign", "interpretation", "interpretation_codings",
+         "Concept_HasCodeSystem", "system", vip)
     vrp = pop("VitalSign", "referenceRange", "referenceRange_text")
     sams.append(SAMSpec(
         "vital-sign-referencerange-rangeiscomplete", "VitalSign",
@@ -908,12 +1132,9 @@ def build_sam_catalog() -> list[SAMSpec]:
                         _prereq_label("vital-sign-referencerange-rangeiscomplete")),
         prereq="vital-sign-referencerange-rangeiscomplete"))
     pop("VitalSign", "resultStatus", "resultStatus_text")
-    pop("VitalSign", "performedDateTime", "performedDateTime")
-    sams.append(SAMSpec(
-        "vital-sign-hasduplicates", "VitalSign", "VitalSign",
-        "Class_HasDuplicates",
-        sam_class_has_duplicates(_view_label("VitalSign"), "VitalSign",
-                                 ["vitalSign_text", "performedDateTime"])))
+    vpdt = pop("VitalSign", "performedDateTime", "performedDateTime")
+    timestamp("VitalSign", "performedDateTime", "performedDateTime", vpdt)
+    hasduplicates("VitalSign", ["vitalSign_text", "performedDateTime"])
 
     # -- Core bindings for the remaining 7 classes --
     core = [
@@ -934,7 +1155,63 @@ def build_sam_catalog() -> list[SAMSpec]:
     ]
     for dc, view, ent, text_col, codings_col in core:
         p = pop(dc, ent, text_col)
+        part(dc, ent, codings_col, "Concept_HasCode", "code", p)
+        part(dc, ent, codings_col, "Concept_HasCodeSystem", "system", p)
+        part(dc, ent, codings_col, "Concept_HasDisplay", "display", p)
         complete(dc, ent, codings_col, p)
+        recognized(dc, ent, codings_col, p)
+
+    # -- Widened date/temporal/numeric/duplicates bindings --
+    cop = pop("Condition", "onsetDate", "onsetDate")
+    valid_date("Condition", "onsetDate", "onsetDate", cop)
+    date_direction("Condition", "onsetDate", "onsetDate", "past", cop)
+    crp = pop("Condition", "resolutionDate", "resolutionDate")
+    valid_date("Condition", "resolutionDate", "resolutionDate", crp)
+    date_direction("Condition", "resolutionDate", "resolutionDate",
+                   "past", crp)
+    hasduplicates("Condition", ["condition_text", "onsetDate"])
+    aep = pop("Allergy", "effectiveDate", "effectiveDate")
+    valid_date("Allergy", "effectiveDate", "effectiveDate", aep)
+    date_direction("Allergy", "effectiveDate", "effectiveDate", "past", aep)
+    hasduplicates("Allergy", ["substance_text", "effectiveDate"])
+    iap = pop("Immunization", "administrationDate", "administrationDate")
+    valid_date("Immunization", "administrationDate", "administrationDate",
+               iap)
+    date_direction("Immunization", "administrationDate",
+                   "administrationDate", "past", iap)
+    iep = pop("Immunization", "expirationDate", "expirationDate")
+    valid_date("Immunization", "expirationDate", "expirationDate", iep)
+    date_direction("Immunization", "expirationDate", "expirationDate",
+                   "future", iep)
+    hasduplicates("Immunization",
+                  ["immunization_text", "administrationDate"])
+    pop("Medication", "startDate", "startDate")
+    dap = pop("Medication", "doseAmount", "doseAmount")
+    regex("Medication", "doseAmount", "doseAmount", "isnumeric",
+          "Attr_IsNumeric", r"^-?[0-9]+(\.[0-9]+)?$", dap)
+    hasduplicates("Medication", ["medication_text", "startDate"])
+    pop("Procedure", "procedureDateTime", "procedureDateTime")
+    hasduplicates("Procedure", ["procedure_text", "procedureDateTime"])
+    dip = pop("MedicalDevice", "implantationDate", "implantationDate")
+    valid_date("MedicalDevice", "implantationDate", "implantationDate", dip)
+    date_direction("MedicalDevice", "implantationDate", "implantationDate",
+                   "past", dip)
+    hasduplicates("MedicalDevice", ["deviceType_text", "deviceID_text"])
+    hap = pop("HealthAssessment", "resultValue", "resultValue_text")
+    regex("HealthAssessment", "resultValue", "resultValue_text", "isnumeric",
+          "Attr_IsNumeric", r"^-?[0-9]+(\.[0-9]+)?$", hap)
+    sams.append(SAMSpec(
+        "healthassessment-resultvalue-isqualitative", "HealthAssessment",
+        "resultValue", "ObservationValue_IsQualitative",
+        sam_obsvalue_is_qualitative(_view_label("HealthAssessment"),
+                                    "HealthAssessment", "resultValue",
+                                    "resultValue_type", _prereq_label(hap)),
+        prereq=hap))
+    hpdt = pop("HealthAssessment", "performedDatetime", "performedDatetime")
+    timestamp("HealthAssessment", "performedDatetime", "performedDatetime",
+              hpdt)
+    hasduplicates("HealthAssessment",
+                  ["assessment_text", "performedDatetime"])
 
     # Condition sex plausibility (placeholder content, FDD §8 Q5)
     sams.append(SAMSpec(
@@ -1042,14 +1319,89 @@ def _prereq_chain(spec: SAMSpec, by_id: dict[str, SAMSpec]) -> list[SAMSpec]:
     return chain
 
 
+#: [RG p.5] the sequence is "assigned automatically based on the data
+#: class and entity" — this is the deterministic class order (IG p.8
+#: listing order), then entity, then SAM instance id.
+_IG_CLASS_ORDER = ("Demographics", "Allergy", "Condition",
+                   "HealthAssessment", "Immunization", "LabResult",
+                   "MedicalDevice", "Medication", "Procedure", "VitalSign")
+
+
+def _auto_sequence_key(criterion: dict) -> tuple:
+    dc = criterion["data_class"]
+    cls_idx = (_IG_CLASS_ORDER.index(dc) if dc in _IG_CLASS_ORDER
+               else len(_IG_CLASS_ORDER))
+    return (cls_idx, str(criterion["entity"]).lower(),
+            str(criterion["sam"]).lower())
+
+
+def _assign_sequences(criteria: list[dict]) -> list[dict]:
+    """Auto-assign sequence numbers [RG p.5] when omitted.
+
+    All-or-none: a mix of authored and missing sequences is ambiguous
+    and rejected with a typed ValueError.
+    """
+    have = [c for c in criteria if "sequence" in c]
+    if have and len(have) != len(criteria):
+        raise ValueError(
+            "rubric criteria must either ALL carry an explicit "
+            "'sequence' or ALL omit it (automatic assignment mixes "
+            "badly with authored sequences)")
+    if not have:
+        ordered = sorted(criteria, key=_auto_sequence_key)
+        for i, c in enumerate(ordered, start=1):
+            c["sequence"] = i
+        # preserve the caller's criteria order for metadata emission;
+        # the build sorts by sequence anyway
+        return criteria
+    return criteria
+
+
+def _criterion_weight(criterion: dict, effect: str) -> int:
+    """[RG p.6] informational ⇒ 0; scoring defaults to 1."""
+    if "weight" not in criterion or criterion["weight"] is None:
+        return 0 if effect == "informational" else 1
+    weight = _int_criterion_field(criterion, "weight")
+    if effect == "informational" and weight != 0:
+        raise ValueError(
+            "rubric criterion weight must be 0 for informational "
+            f"criteria [RG p.6]; got {weight!r}")
+    return weight
+
+
+def _criterion_criticality(criterion: dict, effect: str) -> bool:
+    """[RG p.6] criticality is 'false' for informational criteria."""
+    crit = bool(criterion["criticality"])
+    if effect == "informational" and crit:
+        raise ValueError(
+            "rubric criterion criticality must be false for "
+            "informational criteria [RG p.6]")
+    return crit
+
+
 def build_rubric(name: str, description: str,
-                 criteria: list[dict]) -> tuple[dict, list[dict]]:
+                 criteria: list[dict], *, mnemonic: str | None = None,
+                 version: str | None = None, authority: str | None = None,
+                 model: dict | None = None, source: dict | None = None,
+                 creation_datetime: str | None = None,
+                 modified_datetime: str | None = None,
+                 ) -> tuple[dict, list[dict]]:
     """Build a rubric SQLQuery Library from criterion dicts.
 
-    Criterion fields: sequence, data_class, entity, sam (instance id),
-    scoring_effect ('scoring'|'informational'), weight, criticality,
-    condition_sam (optional instance id). The prerequisite chain is
-    derived from the assigned SAM instance's own ``prereq`` edges.
+    Criterion fields: sequence (optional — auto-assigned per RG p.5
+    when omitted by every criterion), data_class, entity, sam (instance
+    id), scoring_effect ('scoring'|'informational'), weight (optional —
+    defaults 1 scoring / enforced 0 informational), criticality (false
+    for informational), condition_sam (optional instance id), and the
+    [RG p.5] success_name_override / failure_name_override detail-name
+    overrides. The prerequisite chain is derived from the assigned SAM
+    instance's own ``prereq`` edges.
+
+    Rubric-level metadata kwargs ([RG pp.4-5]): ``mnemonic``, ``version``,
+    ``authority``, ``model`` (versionMnemonic/mnemonic/version/
+    extensionMnemonic), ``source`` (organizationUid/organizationName),
+    ``creation_datetime``, ``modified_datetime`` — emitted on the
+    Library's ``piqiRubric`` block (plus the FHIR-native ``version``).
 
     Returns ``(library_dict, criteria_metadata)``.
     """
@@ -1065,6 +1417,7 @@ def build_rubric(name: str, description: str,
     related: list[dict] = []
     selects: list[str] = []
     meta: list[dict] = []
+    criteria = _assign_sequences([dict(c) for c in criteria])
 
     # AMUX-152 #21: duplicate sequence values would collide in the UNION
     # (same ``{seq} AS sequence`` for two criteria) — reject at build time.
@@ -1128,13 +1481,24 @@ def build_rubric(name: str, description: str,
                             "resource": sam_canonical(lvl.instance_id)})
 
         mnem, dc, ent = spec.mnemonic, spec.data_class, spec.entity
-        weight = _int_criterion_field(c, "weight")
         effect = c["scoring_effect"]
         if effect not in _SCORING_EFFECTS:
             raise ValueError(
                 "rubric criterion 'scoring_effect' must be one of "
                 f"{_SCORING_EFFECTS}; got {effect!r}")
-        crit = "TRUE" if c["criticality"] else "FALSE"
+        weight = _criterion_weight(c, effect)
+        crit_bool = _criterion_criticality(c, effect)
+        crit = "TRUE" if crit_bool else "FALSE"
+        # [RG p.5] success/failure name overrides replace the
+        # SAM-authored detail strings (quoted; public input).
+        succ_override = c.get("success_name_override")
+        fail_override = c.get("failure_name_override")
+        if succ_override is not None and not isinstance(succ_override, str):
+            raise ValueError(
+                f"criterion {seq}: success_name_override must be a string")
+        if fail_override is not None and not isinstance(fail_override, str):
+            raise ValueError(
+                f"criterion {seq}: failure_name_override must be a string")
 
         # FROM shape: the ROOT prerequisite view sees every element, so
         # it drives row identity; deeper levels LEFT JOIN in (row present
@@ -1184,11 +1548,21 @@ def build_rubric(name: str, description: str,
                          f'AND c.element_id = {eid}')
             cond_where = "AND c.result = 'pass'"
 
+        # [RG p.5] name overrides: replace the SAM-authored detail text
+        # on the matching result arm (no override -> original detail).
+        detail_proj = "detail"
+        if succ_override is not None or fail_override is not None:
+            succ = (_sql_literal(succ_override) if succ_override is not None
+                    else "detail")
+            fail = (_sql_literal(fail_override) if fail_override is not None
+                    else "detail")
+            detail_proj = (f"CASE WHEN t.result = 'pass' THEN {succ} "
+                           f"ELSE {fail} END AS detail")
         selects.append(
             f"SELECT patient_id, element_id, "
             f"{seq} AS sequence, {_sql_literal(dc)} AS data_class, "
             f"{_sql_literal(ent)} AS entity, "
-            f"result, detail, attributed_mnemonic, "
+            f"result, {detail_proj}, attributed_mnemonic, "
             f"{_sql_literal(effect)} AS scoring_effect, "
             f"{weight} AS weight, {crit} AS criticality\n"
             f"FROM (\n"
@@ -1204,10 +1578,24 @@ def build_rubric(name: str, description: str,
             "sequence": seq, "description": c.get("description", ""),
             "data_class": dc, "entity": ent, "sam": spec.instance_id,
             "sam_mnemonic": mnem, "scoring_effect": effect, "weight": weight,
-            "criticality": bool(c["criticality"]),
+            "criticality": crit_bool,
             "condition_sam": c.get("condition_sam") or "",
             "prereq_sam": spec.prereq or "",
+            "success_name_override": succ_override or "",
+            "failure_name_override": fail_override or "",
         })
+
+    piqi_rubric = {
+        "mnemonic": mnemonic or name,
+        "name": name,
+        "description": description,
+        "version": version or "",
+        "authority": authority or "",
+        "model": dict(model or {}),
+        "source": dict(source or {}),
+        "creationDateTime": creation_datetime or "",
+        "modifiedDateTime": modified_datetime or "",
+    }
 
     body = (
         "WITH items AS (\n"
@@ -1223,6 +1611,7 @@ def build_rubric(name: str, description: str,
         "resourceType": "Library",
         "id": "piqi-rubric-" + name,
         "url": CANONICAL_BASE + "Library/piqi-rubric-" + name,
+        **({"version": version} if version else {}),
         "name": "PIQI_Rubric_" + "".join(
             w.capitalize() for w in name.replace("-", "_").split("_")),
         "title": description,
@@ -1237,8 +1626,115 @@ def build_rubric(name: str, description: str,
             "contentType": "application/sql;dialect=duckdb",
             "data": base64.b64encode(body.encode("utf-8")).decode("ascii"),
         }],
+        "piqiRubric": piqi_rubric,
     }
     return library, meta
+
+
+# ---------------------------------------------------------------------------
+# Parameterized SAMs (matrix batch 5)
+#
+# Runner parameters bind ONLY in the MAIN SQLQuery body (SOF-SQ-03
+# doctrine), so parameter-taking SAM instances are NOT packaged under
+# resources/sams/ (those are materialized dependency views). They are
+# built on demand via :func:`build_parameterized_sam` and executed as
+# the MAIN body through :func:`fhir4ds.piqi.run_parameterized_sam`,
+# which binds the parameter VALUES through DuckDB prepared statements
+# (never interpolation).
+# ---------------------------------------------------------------------------
+def _param_default_column(mnemonic: str, entity: str) -> str:
+    if mnemonic == "ObservationValueType_InList":
+        return f"{entity}_type"
+    return f"{entity}_text"
+
+
+_PARAMETER_SPECS: dict[str, dict] = {
+    # mnemonic -> {param name, SQL ok-expression (uses {column} and $param)}
+    "Attr_MatchesRegex": {
+        "param": "pattern",
+        "ok": "regexp_matches(COALESCE(CAST(v.{column} AS VARCHAR), ''), "
+              "$pattern)",
+        "pass_detail": "'{entity} matches the configured pattern'",
+        "fail_detail": "'{entity} does not match the configured pattern'",
+    },
+    "Attr_InList": {
+        "param": "values",
+        "ok": "list_contains(string_split($values, ','), "
+              "COALESCE(CAST(v.{column} AS VARCHAR), ''))",
+        "pass_detail": "'{entity} is in the configured list'",
+        "fail_detail": "'{entity} is not in the configured list'",
+    },
+    "ObservationValueType_InList": {
+        "param": "valueTypes",
+        "ok": "list_contains(string_split($valueTypes, ','), "
+              "COALESCE(CAST(v.{column} AS VARCHAR), ''))",
+        "pass_detail": "'{entity} value type is in the configured list'",
+        "fail_detail": "'{entity} value type is not in the configured list'",
+    },
+}
+
+
+def build_parameterized_sam(mnemonic: str, data_class: str, entity: str,
+                            column: str | None = None) -> dict:
+    """Build a PARAMETER-TAKING SAM Library [SG property tables].
+
+    The returned Library declares its SAM parameter (e.g. ``pattern``
+    for Attr_MatchesRegex) and its SQL body references it as a named
+    placeholder; execute it with
+    :func:`fhir4ds.piqi.run_parameterized_sam`, which binds values via
+    prepared statements. Supported mnemonics:
+    ``Attr_MatchesRegex`` (param ``pattern``), ``Attr_InList``
+    (param ``values``, comma-separated), ``ObservationValueType_InList``
+    (param ``valueTypes``, comma-separated).
+    """
+    try:
+        spec = _PARAMETER_SPECS[mnemonic]
+    except KeyError:
+        raise ValueError(
+            f"unsupported parameterized SAM {mnemonic!r}; supported: "
+            f"{sorted(_PARAMETER_SPECS)}") from None
+    if data_class not in DATA_CLASS_TO_VIEW:
+        raise ValueError(
+            f"unknown data class {data_class!r}; known: "
+            f"{sorted(DATA_CLASS_TO_VIEW)}")
+    col = column or _param_default_column(mnemonic, entity)
+    ok = spec["ok"].format(column=col)
+    view_label = _view_label(data_class)
+    body = (
+        f"SELECT v.patient_id AS patient_id, v.element_id AS element_id,\n"
+        f"  '{data_class}' AS data_class, '{entity}' AS entity, "
+        f"'{mnemonic}' AS sam_mnemonic,\n"
+        f"  CASE WHEN {ok} THEN 'pass' ELSE 'fail' END AS result,\n"
+        f"  CASE WHEN {ok} THEN {spec['pass_detail'].format(entity=entity)} "
+        f"ELSE {spec['fail_detail'].format(entity=entity)} END AS detail\n"
+        f"FROM {_q(view_label)} v\n"
+        f"ORDER BY v.patient_id, v.element_id"
+    )
+    iid = f"param-{mnemonic}-{data_class}-{entity}".lower()
+    pascal = "PIQI_SAM_" + "".join(
+        w.capitalize() for w in iid.replace("-", "_").split("_"))
+    return {
+        "resourceType": "Library",
+        "id": "piqi-sam-" + iid,
+        "url": sam_canonical(iid),
+        "name": pascal,
+        "status": "active",
+        "type": {"coding": [{"system": LIBRARY_TYPES_SYSTEM,
+                             "code": "sql-query"}]},
+        "meta": {"profile": [SQLQUERY_PROFILE]},
+        "relatedArtifact": [{
+            "type": "depends-on", "label": view_label,
+            "resource": view_canonical(DATA_CLASS_TO_VIEW[data_class]),
+        }],
+        "parameter": [{
+            "name": spec["param"], "use": "in", "min": 1, "max": "1",
+            "type": "string",
+        }],
+        "content": [{
+            "contentType": "application/sql;dialect=duckdb",
+            "data": base64.b64encode(body.encode("utf-8")).decode("ascii"),
+        }],
+    }
 
 
 #: The [RG p.7] sample rubric, reproduced exactly (criterion 2's entity
@@ -1265,7 +1761,12 @@ SAMPLE_RUBRIC_CRITERIA = [
 
 def generate_all() -> dict[str, str]:
     """Generate every packaged PIQI resource (name -> JSON text)."""
-    out: dict[str, str] = {}
+    from .codesystems import registry_document  # noqa: PLC0415 — lazy
+
+    out: dict[str, str] = {
+        # [HB p.15] code-system identifier registry (FHIR4-24-backed)
+        "codesystems.json": json.dumps(registry_document(), indent=2) + "\n",
+    }
     for name in VIEWS:
         out[f"views/{name}.json"] = json.dumps(build_view(name), indent=2) + "\n"
     catalog = build_sam_catalog()

@@ -1,8 +1,8 @@
 {
   "resourceType": "Library",
-  "id": "piqi-sam-vital-sign-hasduplicates",
-  "url": "https://fhir4ds.org/piqi/Library/piqi-sam-vital-sign-hasduplicates",
-  "name": "PIQI_SAM_VitalSignHasduplicates",
+  "id": "piqi-sam-vitalsign-hasduplicates",
+  "url": "https://fhir4ds.org/piqi/Library/piqi-sam-vitalsign-hasduplicates",
+  "name": "PIQI_SAM_VitalsignHasduplicates",
   "status": "active",
   "type": {
     "coding": [

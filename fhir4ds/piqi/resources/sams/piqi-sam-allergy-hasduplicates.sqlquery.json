@@ -1,0 +1,34 @@
+{
+  "resourceType": "Library",
+  "id": "piqi-sam-allergy-hasduplicates",
+  "url": "https://fhir4ds.org/piqi/Library/piqi-sam-allergy-hasduplicates",
+  "name": "PIQI_SAM_AllergyHasduplicates",
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "system": "http://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
+    ]
+  },
+  "relatedArtifact": [
+    {
+      "type": "depends-on",
+      "label": "view_piqi_allergy",
+      "resource": "https://fhir4ds.org/piqi/ViewDefinition/piqi_allergy"
+    }
+  ],
+  "parameter": [],
+  "content": [
+    {
+      "contentType": "application/sql;dialect=duckdb",
+      "data": "V0lUSCBlbGVtcyBBUyAoCiAgU0VMRUNUIHYucGF0aWVudF9pZCBBUyBwYXRpZW50X2lkLCBzdWJzdGFuY2VfdGV4dCwgZWZmZWN0aXZlRGF0ZSwgdi5lbGVtZW50X2lkCiAgRlJPTSAidmlld19waXFpX2FsbGVyZ3kiIHYgV0hFUkUgdi5zdWJzdGFuY2VfdGV4dCBJUyBOT1QgTlVMTCBBTkQgdi5lZmZlY3RpdmVEYXRlIElTIE5PVCBOVUxMCiksCmdycCBBUyAoCiAgU0VMRUNUIGUucGF0aWVudF9pZCBBUyBwYXRpZW50X2lkLCBzdWJzdGFuY2VfdGV4dCwgZWZmZWN0aXZlRGF0ZSwgY291bnQoKikgQVMgYywgc3RyaW5nX2FnZyhlLmVsZW1lbnRfaWQsICcsICcgT1JERVIgQlkgZS5lbGVtZW50X2lkKSBBUyBpZHMKICBGUk9NIGVsZW1zIGUgR1JPVVAgQlkgZS5wYXRpZW50X2lkLCBzdWJzdGFuY2VfdGV4dCwgZWZmZWN0aXZlRGF0ZQopLApwZXJfcGF0IEFTICgKICBTRUxFQ1QgZy5wYXRpZW50X2lkIEFTIHBhdGllbnRfaWQsIFNVTShDQVNFIFdIRU4gZy5jID4gMSBUSEVOIDEgRUxTRSAwIEVORCkgQVMgZHVwX2dyb3Vwcywgc3RyaW5nX2FnZyhDQVNFIFdIRU4gZy5jID4gMSBUSEVOIGcuaWRzIEVORCwgJzsgJyBPUkRFUiBCWSBnLmlkcykgQVMgZHVwX2lkcwogIEZST00gZ3JwIGcgR1JPVVAgQlkgZy5wYXRpZW50X2lkCikKU0VMRUNUIHAucGF0aWVudF9pZCBBUyBwYXRpZW50X2lkLCBOVUxMIEFTIGVsZW1lbnRfaWQsCiAgJ0FsbGVyZ3knIEFTIGRhdGFfY2xhc3MsICdBbGxlcmd5JyBBUyBlbnRpdHksICdDbGFzc19IYXNEdXBsaWNhdGVzJyBBUyBzYW1fbW5lbW9uaWMsCiAgQ0FTRSBXSEVOIENPQUxFU0NFKHBwLmR1cF9ncm91cHMsIDApID4gMCBUSEVOICdwYXNzJyBFTFNFICdmYWlsJyBFTkQgQVMgcmVzdWx0LAogIENBU0UgV0hFTiBDT0FMRVNDRShwcC5kdXBfZ3JvdXBzLCAwKSA+IDAgVEhFTiAnZHVwbGljYXRlIGVsZW1lbnRzOiAnIHx8IHBwLmR1cF9pZHMgRUxTRSAnbm8gZHVwbGljYXRlIGVsZW1lbnRzIGRldGVjdGVkJyBFTkQgQVMgZGV0YWlsCkZST00gKFNFTEVDVCBESVNUSU5DVCBwYXRpZW50X2lkIEZST00gInZpZXdfcGlxaV9hbGxlcmd5IikgcApMRUZUIEpPSU4gcGVyX3BhdCBwcCBPTiBwcC5wYXRpZW50X2lkID0gcC5wYXRpZW50X2lkCk9SREVSIEJZIHAucGF0aWVudF9pZA=="
+    }
+  ]
+}

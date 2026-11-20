@@ -1,0 +1,39 @@
+{
+  "resourceType": "Library",
+  "id": "piqi-sam-allergy-substance-hascode",
+  "url": "https://fhir4ds.org/piqi/Library/piqi-sam-allergy-substance-hascode",
+  "name": "PIQI_SAM_AllergySubstanceHascode",
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "system": "http://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
+    ]
+  },
+  "relatedArtifact": [
+    {
+      "type": "depends-on",
+      "label": "view_piqi_allergy",
+      "resource": "https://fhir4ds.org/piqi/ViewDefinition/piqi_allergy"
+    },
+    {
+      "type": "depends-on",
+      "label": "prereq_allergy_substance_ispopulated",
+      "resource": "https://fhir4ds.org/piqi/Library/piqi-sam-allergy-substance-ispopulated"
+    }
+  ],
+  "parameter": [],
+  "content": [
+    {
+      "contentType": "application/sql;dialect=duckdb",
+      "data": "U0VMRUNUIHYucGF0aWVudF9pZCBBUyBwYXRpZW50X2lkLCB2LmVsZW1lbnRfaWQgQVMgZWxlbWVudF9pZCwKICAnQWxsZXJneScgQVMgZGF0YV9jbGFzcywgJ3N1YnN0YW5jZScgQVMgZW50aXR5LCAnQ29uY2VwdF9IYXNDb2RlJyBBUyBzYW1fbW5lbW9uaWMsCiAgQ0FTRSBXSEVOIGxlbihsaXN0X2ZpbHRlcihDT0FMRVNDRSh2LnN1YnN0YW5jZV9jb2RpbmdzLCBbXSksIGMgLT4gQ09BTEVTQ0UoanNvbl9leHRyYWN0X3N0cmluZyhjLCAnJC5jb2RlJyksICcnKSA8PiAnJykpID4gMCBUSEVOICdwYXNzJyBFTFNFICdmYWlsJyBFTkQgQVMgcmVzdWx0LAogIENBU0UgV0hFTiBsZW4obGlzdF9maWx0ZXIoQ09BTEVTQ0Uodi5zdWJzdGFuY2VfY29kaW5ncywgW10pLCBjIC0+IENPQUxFU0NFKGpzb25fZXh0cmFjdF9zdHJpbmcoYywgJyQuY29kZScpLCAnJykgPD4gJycpKSA+IDAgVEhFTiAnc3Vic3RhbmNlIGhhcyBhdCBsZWFzdCBvbmUgY29kaW5nIHdpdGggY29kZScgRUxTRSAnc3Vic3RhbmNlIGhhcyBubyBjb2Rpbmcgd2l0aCBjb2RlJyBFTkQgQVMgZGV0YWlsCkZST00gInZpZXdfcGlxaV9hbGxlcmd5IiB2CkpPSU4gInByZXJlcV9hbGxlcmd5X3N1YnN0YW5jZV9pc3BvcHVsYXRlZCIgcCBPTiBwLnBhdGllbnRfaWQgPSB2LnBhdGllbnRfaWQgQU5EIHAuZWxlbWVudF9pZCA9IHYuZWxlbWVudF9pZCBBTkQgcC5yZXN1bHQgPSAncGFzcycKT1JERVIgQlkgdi5wYXRpZW50X2lkLCB2LmVsZW1lbnRfaWQ="
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "resourceType": "Library",
+  "id": "piqi-sam-healthassessment-performeddatetime-istimestamp",
+  "url": "https://fhir4ds.org/piqi/Library/piqi-sam-healthassessment-performeddatetime-istimestamp",
+  "name": "PIQI_SAM_HealthassessmentPerformeddatetimeIstimestamp",
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "system": "http://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
+    ]
+  },
+  "relatedArtifact": [
+    {
+      "type": "depends-on",
+      "label": "view_piqi_health_assessment",
+      "resource": "https://fhir4ds.org/piqi/ViewDefinition/piqi_health_assessment"
+    },
+    {
+      "type": "depends-on",
+      "label": "prereq_healthassessment_performeddatetime_ispopulated",
+      "resource": "https://fhir4ds.org/piqi/Library/piqi-sam-healthassessment-performeddatetime-ispopulated"
+    }
+  ],
+  "parameter": [],
+  "content": [
+    {
+      "contentType": "application/sql;dialect=duckdb",
+      "data": "U0VMRUNUIHYucGF0aWVudF9pZCBBUyBwYXRpZW50X2lkLCB2LmVsZW1lbnRfaWQgQVMgZWxlbWVudF9pZCwKICAnSGVhbHRoQXNzZXNzbWVudCcgQVMgZGF0YV9jbGFzcywgJ3BlcmZvcm1lZERhdGV0aW1lJyBBUyBlbnRpdHksICdBdHRyX0lzVGltZXN0YW1wJyBBUyBzYW1fbW5lbW9uaWMsCiAgQ0FTRSBXSEVOIFRSWV9DQVNUKENPQUxFU0NFKENBU1Qodi5wZXJmb3JtZWREYXRldGltZSBBUyBWQVJDSEFSKSwgJycpIEFTIFRJTUVTVEFNUCkgSVMgTk9UIE5VTEwgQU5EIHJlZ2V4cF9tYXRjaGVzKENPQUxFU0NFKENBU1Qodi5wZXJmb3JtZWREYXRldGltZSBBUyBWQVJDSEFSKSwgJycpLCAnXlswLTldezR9LVswLTldezJ9LVswLTldezJ9W1QgXVswLTldezJ9OlswLTldezJ9JykgVEhFTiAncGFzcycgRUxTRSAnZmFpbCcgRU5EIEFTIHJlc3VsdCwKICBDQVNFIFdIRU4gVFJZX0NBU1QoQ09BTEVTQ0UoQ0FTVCh2LnBlcmZvcm1lZERhdGV0aW1lIEFTIFZBUkNIQVIpLCAnJykgQVMgVElNRVNUQU1QKSBJUyBOT1QgTlVMTCBBTkQgcmVnZXhwX21hdGNoZXMoQ09BTEVTQ0UoQ0FTVCh2LnBlcmZvcm1lZERhdGV0aW1lIEFTIFZBUkNIQVIpLCAnJyksICdeWzAtOV17NH0tWzAtOV17Mn0tWzAtOV17Mn1bVCBdWzAtOV17Mn06WzAtOV17Mn0nKSBUSEVOICdwZXJmb3JtZWREYXRldGltZSBpcyBhIHZhbGlkIHRpbWVzdGFtcCcgRUxTRSAncGVyZm9ybWVkRGF0ZXRpbWUgaXMgbm90IGEgdmFsaWQgdGltZXN0YW1wJyBFTkQgQVMgZGV0YWlsCkZST00gInZpZXdfcGlxaV9oZWFsdGhfYXNzZXNzbWVudCIgdgpKT0lOICJwcmVyZXFfaGVhbHRoYXNzZXNzbWVudF9wZXJmb3JtZWRkYXRldGltZV9pc3BvcHVsYXRlZCIgcCBPTiBwLnBhdGllbnRfaWQgPSB2LnBhdGllbnRfaWQgQU5EIHAuZWxlbWVudF9pZCA9IHYuZWxlbWVudF9pZCBBTkQgcC5yZXN1bHQgPSAncGFzcycKT1JERVIgQlkgdi5wYXRpZW50X2lkLCB2LmVsZW1lbnRfaWQ="
+    }
+  ]
+}

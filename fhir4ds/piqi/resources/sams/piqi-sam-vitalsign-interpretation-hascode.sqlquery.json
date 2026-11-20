@@ -1,0 +1,39 @@
+{
+  "resourceType": "Library",
+  "id": "piqi-sam-vitalsign-interpretation-hascode",
+  "url": "https://fhir4ds.org/piqi/Library/piqi-sam-vitalsign-interpretation-hascode",
+  "name": "PIQI_SAM_VitalsignInterpretationHascode",
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "system": "http://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
+    ]
+  },
+  "relatedArtifact": [
+    {
+      "type": "depends-on",
+      "label": "view_piqi_vital_sign",
+      "resource": "https://fhir4ds.org/piqi/ViewDefinition/piqi_vital_sign"
+    },
+    {
+      "type": "depends-on",
+      "label": "prereq_vitalsign_interpretation_ispopulated",
+      "resource": "https://fhir4ds.org/piqi/Library/piqi-sam-vitalsign-interpretation-ispopulated"
+    }
+  ],
+  "parameter": [],
+  "content": [
+    {
+      "contentType": "application/sql;dialect=duckdb",
+      "data": "U0VMRUNUIHYucGF0aWVudF9pZCBBUyBwYXRpZW50X2lkLCB2LmVsZW1lbnRfaWQgQVMgZWxlbWVudF9pZCwKICAnVml0YWxTaWduJyBBUyBkYXRhX2NsYXNzLCAnaW50ZXJwcmV0YXRpb24nIEFTIGVudGl0eSwgJ0NvbmNlcHRfSGFzQ29kZScgQVMgc2FtX21uZW1vbmljLAogIENBU0UgV0hFTiBsZW4obGlzdF9maWx0ZXIoQ09BTEVTQ0Uodi5pbnRlcnByZXRhdGlvbl9jb2RpbmdzLCBbXSksIGMgLT4gQ09BTEVTQ0UoanNvbl9leHRyYWN0X3N0cmluZyhjLCAnJC5jb2RlJyksICcnKSA8PiAnJykpID4gMCBUSEVOICdwYXNzJyBFTFNFICdmYWlsJyBFTkQgQVMgcmVzdWx0LAogIENBU0UgV0hFTiBsZW4obGlzdF9maWx0ZXIoQ09BTEVTQ0Uodi5pbnRlcnByZXRhdGlvbl9jb2RpbmdzLCBbXSksIGMgLT4gQ09BTEVTQ0UoanNvbl9leHRyYWN0X3N0cmluZyhjLCAnJC5jb2RlJyksICcnKSA8PiAnJykpID4gMCBUSEVOICdpbnRlcnByZXRhdGlvbiBoYXMgYXQgbGVhc3Qgb25lIGNvZGluZyB3aXRoIGNvZGUnIEVMU0UgJ2ludGVycHJldGF0aW9uIGhhcyBubyBjb2Rpbmcgd2l0aCBjb2RlJyBFTkQgQVMgZGV0YWlsCkZST00gInZpZXdfcGlxaV92aXRhbF9zaWduIiB2CkpPSU4gInByZXJlcV92aXRhbHNpZ25faW50ZXJwcmV0YXRpb25faXNwb3B1bGF0ZWQiIHAgT04gcC5wYXRpZW50X2lkID0gdi5wYXRpZW50X2lkIEFORCBwLmVsZW1lbnRfaWQgPSB2LmVsZW1lbnRfaWQgQU5EIHAucmVzdWx0ID0gJ3Bhc3MnCk9SREVSIEJZIHYucGF0aWVudF9pZCwgdi5lbGVtZW50X2lk"
+    }
+  ]
+}

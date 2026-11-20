@@ -315,4 +315,7 @@ def test_packaged_resources_match_authoring_amux152():
     committed_files = {
         str(p.relative_to(res_dir)) for sub in ("views", "sams", "rubrics")
         for p in (res_dir / sub).glob("*.json")}
-    assert committed_files == set(generated)
+    # codesystems.json [HB p.15] is generated at the resources root
+    committed_files.add("codesystems.json")
+    assert committed_files == set(generated), (
+        sorted(committed_files ^ set(generated)))

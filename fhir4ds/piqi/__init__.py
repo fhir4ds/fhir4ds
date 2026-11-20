@@ -10,6 +10,7 @@ FEATURE_PIQI_FRAMEWORK.md`` for the approved design.
 
 from .authoring import (
     CANONICAL_BASE,
+    build_parameterized_sam,
     build_rubric,
     build_sam_catalog,
     build_view,
@@ -20,8 +21,10 @@ from .scorecard import (
     PIQIScorecard,
     evaluate_rubric,
     load_piqi_views,
+    run_parameterized_sam,
     run_sam,
 )
+from .terminology import COULD_NOT_ASSESS, run_terminology_sam
 from .taxonomy import PIQIDimension, dimension_for_sam, resolve_dimension
 
 __version__ = "0.0.25"
@@ -31,6 +34,7 @@ __all__ = [
     # authoring
     "CANONICAL_BASE",
     "build_rubric",
+    "build_parameterized_sam",
     "build_sam_catalog",
     "build_view",
     # registry
@@ -45,6 +49,10 @@ __all__ = [
     "evaluate_rubric",
     "load_piqi_views",
     "run_sam",
+    "run_parameterized_sam",
+    # terminology SAMs
+    "COULD_NOT_ASSESS",
+    "run_terminology_sam",
     # taxonomy
     "PIQIDimension",
     "dimension_for_sam",

@@ -1,0 +1,39 @@
+{
+  "resourceType": "Library",
+  "id": "piqi-sam-demographics-ethnicity-hasdisplay",
+  "url": "https://fhir4ds.org/piqi/Library/piqi-sam-demographics-ethnicity-hasdisplay",
+  "name": "PIQI_SAM_DemographicsEthnicityHasdisplay",
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "system": "http://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
+    ]
+  },
+  "relatedArtifact": [
+    {
+      "type": "depends-on",
+      "label": "view_piqi_demographics",
+      "resource": "https://fhir4ds.org/piqi/ViewDefinition/piqi_demographics"
+    },
+    {
+      "type": "depends-on",
+      "label": "prereq_demographics_ethnicity_ispopulated",
+      "resource": "https://fhir4ds.org/piqi/Library/piqi-sam-demographics-ethnicity-ispopulated"
+    }
+  ],
+  "parameter": [],
+  "content": [
+    {
+      "contentType": "application/sql;dialect=duckdb",
+      "data": "U0VMRUNUIHYucGF0aWVudF9pZCBBUyBwYXRpZW50X2lkLCB2LmVsZW1lbnRfaWQgQVMgZWxlbWVudF9pZCwKICAnRGVtb2dyYXBoaWNzJyBBUyBkYXRhX2NsYXNzLCAnZXRobmljaXR5JyBBUyBlbnRpdHksICdDb25jZXB0X0hhc0Rpc3BsYXknIEFTIHNhbV9tbmVtb25pYywKICBDQVNFIFdIRU4gbGVuKGxpc3RfZmlsdGVyKENPQUxFU0NFKHYuZXRobmljaXR5X2NvZGluZ3MsIFtdKSwgYyAtPiBDT0FMRVNDRShqc29uX2V4dHJhY3Rfc3RyaW5nKGMsICckLmRpc3BsYXknKSwgJycpIDw+ICcnKSkgPiAwIFRIRU4gJ3Bhc3MnIEVMU0UgJ2ZhaWwnIEVORCBBUyByZXN1bHQsCiAgQ0FTRSBXSEVOIGxlbihsaXN0X2ZpbHRlcihDT0FMRVNDRSh2LmV0aG5pY2l0eV9jb2RpbmdzLCBbXSksIGMgLT4gQ09BTEVTQ0UoanNvbl9leHRyYWN0X3N0cmluZyhjLCAnJC5kaXNwbGF5JyksICcnKSA8PiAnJykpID4gMCBUSEVOICdldGhuaWNpdHkgaGFzIGF0IGxlYXN0IG9uZSBjb2Rpbmcgd2l0aCBkaXNwbGF5JyBFTFNFICdldGhuaWNpdHkgaGFzIG5vIGNvZGluZyB3aXRoIGRpc3BsYXknIEVORCBBUyBkZXRhaWwKRlJPTSAidmlld19waXFpX2RlbW9ncmFwaGljcyIgdgpKT0lOICJwcmVyZXFfZGVtb2dyYXBoaWNzX2V0aG5pY2l0eV9pc3BvcHVsYXRlZCIgcCBPTiBwLnBhdGllbnRfaWQgPSB2LnBhdGllbnRfaWQgQU5EIHAuZWxlbWVudF9pZCA9IHYuZWxlbWVudF9pZCBBTkQgcC5yZXN1bHQgPSAncGFzcycKT1JERVIgQlkgdi5wYXRpZW50X2lkLCB2LmVsZW1lbnRfaWQ="
+    }
+  ]
+}

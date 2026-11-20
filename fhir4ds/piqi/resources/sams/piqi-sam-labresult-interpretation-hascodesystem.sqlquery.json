@@ -1,0 +1,39 @@
+{
+  "resourceType": "Library",
+  "id": "piqi-sam-labresult-interpretation-hascodesystem",
+  "url": "https://fhir4ds.org/piqi/Library/piqi-sam-labresult-interpretation-hascodesystem",
+  "name": "PIQI_SAM_LabresultInterpretationHascodesystem",
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "system": "http://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
+    ]
+  },
+  "relatedArtifact": [
+    {
+      "type": "depends-on",
+      "label": "view_piqi_labresult",
+      "resource": "https://fhir4ds.org/piqi/ViewDefinition/piqi_labresult"
+    },
+    {
+      "type": "depends-on",
+      "label": "prereq_labresult_interpretation_ispopulated",
+      "resource": "https://fhir4ds.org/piqi/Library/piqi-sam-labresult-interpretation-ispopulated"
+    }
+  ],
+  "parameter": [],
+  "content": [
+    {
+      "contentType": "application/sql;dialect=duckdb",
+      "data": "U0VMRUNUIHYucGF0aWVudF9pZCBBUyBwYXRpZW50X2lkLCB2LmVsZW1lbnRfaWQgQVMgZWxlbWVudF9pZCwKICAnTGFiUmVzdWx0JyBBUyBkYXRhX2NsYXNzLCAnaW50ZXJwcmV0YXRpb24nIEFTIGVudGl0eSwgJ0NvbmNlcHRfSGFzQ29kZVN5c3RlbScgQVMgc2FtX21uZW1vbmljLAogIENBU0UgV0hFTiBsZW4obGlzdF9maWx0ZXIoQ09BTEVTQ0Uodi5pbnRlcnByZXRhdGlvbl9jb2RpbmdzLCBbXSksIGMgLT4gQ09BTEVTQ0UoanNvbl9leHRyYWN0X3N0cmluZyhjLCAnJC5zeXN0ZW0nKSwgJycpIDw+ICcnKSkgPiAwIFRIRU4gJ3Bhc3MnIEVMU0UgJ2ZhaWwnIEVORCBBUyByZXN1bHQsCiAgQ0FTRSBXSEVOIGxlbihsaXN0X2ZpbHRlcihDT0FMRVNDRSh2LmludGVycHJldGF0aW9uX2NvZGluZ3MsIFtdKSwgYyAtPiBDT0FMRVNDRShqc29uX2V4dHJhY3Rfc3RyaW5nKGMsICckLnN5c3RlbScpLCAnJykgPD4gJycpKSA+IDAgVEhFTiAnaW50ZXJwcmV0YXRpb24gaGFzIGF0IGxlYXN0IG9uZSBjb2Rpbmcgd2l0aCBzeXN0ZW0nIEVMU0UgJ2ludGVycHJldGF0aW9uIGhhcyBubyBjb2Rpbmcgd2l0aCBzeXN0ZW0nIEVORCBBUyBkZXRhaWwKRlJPTSAidmlld19waXFpX2xhYnJlc3VsdCIgdgpKT0lOICJwcmVyZXFfbGFicmVzdWx0X2ludGVycHJldGF0aW9uX2lzcG9wdWxhdGVkIiBwIE9OIHAucGF0aWVudF9pZCA9IHYucGF0aWVudF9pZCBBTkQgcC5lbGVtZW50X2lkID0gdi5lbGVtZW50X2lkIEFORCBwLnJlc3VsdCA9ICdwYXNzJwpPUkRFUiBCWSB2LnBhdGllbnRfaWQsIHYuZWxlbWVudF9pZA=="
+    }
+  ]
+}

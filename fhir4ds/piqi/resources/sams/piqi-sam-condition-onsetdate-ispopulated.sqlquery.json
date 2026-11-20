@@ -1,0 +1,34 @@
+{
+  "resourceType": "Library",
+  "id": "piqi-sam-condition-onsetdate-ispopulated",
+  "url": "https://fhir4ds.org/piqi/Library/piqi-sam-condition-onsetdate-ispopulated",
+  "name": "PIQI_SAM_ConditionOnsetdateIspopulated",
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "system": "http://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
+    ]
+  },
+  "relatedArtifact": [
+    {
+      "type": "depends-on",
+      "label": "view_piqi_condition",
+      "resource": "https://fhir4ds.org/piqi/ViewDefinition/piqi_condition"
+    }
+  ],
+  "parameter": [],
+  "content": [
+    {
+      "contentType": "application/sql;dialect=duckdb",
+      "data": "U0VMRUNUIHYucGF0aWVudF9pZCBBUyBwYXRpZW50X2lkLCB2LmVsZW1lbnRfaWQgQVMgZWxlbWVudF9pZCwKICAnQ29uZGl0aW9uJyBBUyBkYXRhX2NsYXNzLCAnb25zZXREYXRlJyBBUyBlbnRpdHksICdBdHRyX0lzUG9wdWxhdGVkJyBBUyBzYW1fbW5lbW9uaWMsCiAgQ0FTRSBXSEVOIENPQUxFU0NFKFRSSU0oQ0FTVCh2Lm9uc2V0RGF0ZSBBUyBWQVJDSEFSKSksICcnKSA8PiAnJyBUSEVOICdwYXNzJyBFTFNFICdmYWlsJyBFTkQgQVMgcmVzdWx0LAogIENBU0UgV0hFTiBDT0FMRVNDRShUUklNKENBU1Qodi5vbnNldERhdGUgQVMgVkFSQ0hBUikpLCAnJykgPD4gJycgVEhFTiAnb25zZXREYXRlIGlzIHBvcHVsYXRlZCcgRUxTRSAnb25zZXREYXRlIGlzIG5vdCBwb3B1bGF0ZWQnIEVORCBBUyBkZXRhaWwKRlJPTSAidmlld19waXFpX2NvbmRpdGlvbiIgdgpPUkRFUiBCWSB2LnBhdGllbnRfaWQsIHYuZWxlbWVudF9pZA=="
+    }
+  ]
+}

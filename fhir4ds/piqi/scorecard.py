@@ -174,6 +174,71 @@ def run_sam(connection, sam, *, patient_id: _t.Optional[str] = None,
     return [dict(zip(RESULT_COLUMNS, r)) for r in rows]
 
 
+def run_parameterized_sam(connection, sam, parameters: dict, *,
+                          patient_id: _t.Optional[str] = None,
+                          source_table: str = "resources") -> list[dict]:
+    """Execute a PARAMETER-TAKING SAM instance as the MAIN query body.
+
+    ``sam`` is a Library dict from
+    :func:`fhir4ds.piqi.build_parameterized_sam`; ``parameters`` maps
+    the SAM's declared parameter names to values. Because runner
+    parameters can only bind in the MAIN SQLQuery body (SOF-SQ-03
+    doctrine — materialized dependency views cannot carry them), the
+    SAM's SQL is embedded inline in the wrapper body rather than
+    referenced as a dependency view; its data-class view dependency
+    still resolves through the packaged registry. All parameter VALUES
+    bind through DuckDB prepared statements — never interpolation.
+    """
+    import base64 as _b64
+
+    declared = [p["name"] for p in sam.get("parameter", [])]
+    missing = [n for n in declared if n not in (parameters or {})]
+    if missing:
+        raise ValueError(
+            f"missing SAM parameter(s) {missing}; declared: {declared}")
+    sam_sql = _b64.b64decode(sam["content"][0]["data"]).decode("utf-8")
+    wrapper_params = [{"name": "patient_id", "use": "in", "min": 0,
+                       "max": "1", "type": "string"},
+                      *[{"name": n, "use": "in", "min": 1, "max": "1",
+                         "type": "string"} for n in declared]]
+    wrapper = {
+        "resourceType": "Library",
+        "id": "piqi-run-" + sam["id"],
+        "url": sam["url"] + "-run",
+        "name": "PIQI_Run_" + sam["id"].replace("piqi-sam-", "")
+                .replace("-", "_"),
+        "status": "active",
+        "type": {"coding": [{"code": "sql-query"}]},
+        "meta": {"profile": [SQLQUERY_PROFILE_CANONICAL]},
+        "relatedArtifact": [dict(ra) for ra in sam.get("relatedArtifact", [])],
+        "parameter": wrapper_params,
+        "content": [{
+            "contentType": "application/sql;dialect=duckdb",
+            "data": _b64.b64encode((
+                "SELECT patient_id, element_id, data_class, entity, "
+                "sam_mnemonic, result, detail FROM (" + sam_sql + ") s "
+                "WHERE ($patient_id IS NULL OR s.patient_id = $patient_id) "
+                "ORDER BY s.patient_id, s.element_id"
+            ).encode("utf-8")).decode("ascii"),
+        }],
+    }
+    _packaged = piqi_resolver()
+    _own = {sam["url"]: sam}
+
+    def _resolver(resolved_canonical: str) -> dict:
+        try:
+            return _packaged(resolved_canonical)
+        except KeyError:
+            if resolved_canonical in _own:
+                return _own[resolved_canonical]
+            raise
+
+    rows = SQLQueryRunner(connection, _resolver,
+                          source_table=source_table).execute(
+        wrapper, {"patient_id": patient_id, **parameters})
+    return [dict(zip(RESULT_COLUMNS, r)) for r in rows]
+
+
 def _data_class_frequency(connection, criteria: list[dict],
                           patient_id: _t.Optional[str], *,
                           source_table: str = "resources") -> dict:

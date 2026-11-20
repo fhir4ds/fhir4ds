@@ -235,7 +235,8 @@ def build_mimic_rubric() -> tuple[dict, list[dict]]:
     def crit(seq, dc, ent, sam, effect="scoring", desc=""):
         return {"sequence": seq, "description": desc, "data_class": dc,
                 "entity": ent, "sam": sam, "scoring_effect": effect,
-                "weight": 1, "criticality": False}
+                "weight": 0 if effect == "informational" else 1,
+                "criticality": False}
 
     criteria = [
         crit(1, "Demographics", "birthDate",

@@ -1,0 +1,39 @@
+{
+  "resourceType": "Library",
+  "id": "piqi-sam-medication-doseamount-isnumeric",
+  "url": "https://fhir4ds.org/piqi/Library/piqi-sam-medication-doseamount-isnumeric",
+  "name": "PIQI_SAM_MedicationDoseamountIsnumeric",
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "system": "http://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
+    ]
+  },
+  "relatedArtifact": [
+    {
+      "type": "depends-on",
+      "label": "view_piqi_medication_request",
+      "resource": "https://fhir4ds.org/piqi/ViewDefinition/piqi_medication_request"
+    },
+    {
+      "type": "depends-on",
+      "label": "prereq_medication_doseamount_ispopulated",
+      "resource": "https://fhir4ds.org/piqi/Library/piqi-sam-medication-doseamount-ispopulated"
+    }
+  ],
+  "parameter": [],
+  "content": [
+    {
+      "contentType": "application/sql;dialect=duckdb",
+      "data": "U0VMRUNUIHYucGF0aWVudF9pZCBBUyBwYXRpZW50X2lkLCB2LmVsZW1lbnRfaWQgQVMgZWxlbWVudF9pZCwKICAnTWVkaWNhdGlvbicgQVMgZGF0YV9jbGFzcywgJ2Rvc2VBbW91bnQnIEFTIGVudGl0eSwgJ0F0dHJfSXNOdW1lcmljJyBBUyBzYW1fbW5lbW9uaWMsCiAgQ0FTRSBXSEVOIHJlZ2V4cF9tYXRjaGVzKENPQUxFU0NFKENBU1Qodi5kb3NlQW1vdW50IEFTIFZBUkNIQVIpLCAnJyksICdeLT9bMC05XSsoXC5bMC05XSspPyQnKSBUSEVOICdwYXNzJyBFTFNFICdmYWlsJyBFTkQgQVMgcmVzdWx0LAogIENBU0UgV0hFTiByZWdleHBfbWF0Y2hlcyhDT0FMRVNDRShDQVNUKHYuZG9zZUFtb3VudCBBUyBWQVJDSEFSKSwgJycpLCAnXi0/WzAtOV0rKFwuWzAtOV0rKT8kJykgVEhFTiAnZG9zZUFtb3VudCBzYXRpc2ZpZXMgQXR0cl9Jc051bWVyaWMnIEVMU0UgJ2Rvc2VBbW91bnQgZG9lcyBub3Qgc2F0aXNmeSBBdHRyX0lzTnVtZXJpYycgRU5EIEFTIGRldGFpbApGUk9NICJ2aWV3X3BpcWlfbWVkaWNhdGlvbl9yZXF1ZXN0IiB2CkpPSU4gInByZXJlcV9tZWRpY2F0aW9uX2Rvc2VhbW91bnRfaXNwb3B1bGF0ZWQiIHAgT04gcC5wYXRpZW50X2lkID0gdi5wYXRpZW50X2lkIEFORCBwLmVsZW1lbnRfaWQgPSB2LmVsZW1lbnRfaWQgQU5EIHAucmVzdWx0ID0gJ3Bhc3MnCk9SREVSIEJZIHYucGF0aWVudF9pZCwgdi5lbGVtZW50X2lk"
+    }
+  ]
+}

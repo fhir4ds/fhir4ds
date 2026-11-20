@@ -1,0 +1,34 @@
+{
+  "resourceType": "Library",
+  "id": "piqi-sam-medication-doseamount-ispopulated",
+  "url": "https://fhir4ds.org/piqi/Library/piqi-sam-medication-doseamount-ispopulated",
+  "name": "PIQI_SAM_MedicationDoseamountIspopulated",
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "system": "http://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
+    ]
+  },
+  "relatedArtifact": [
+    {
+      "type": "depends-on",
+      "label": "view_piqi_medication_request",
+      "resource": "https://fhir4ds.org/piqi/ViewDefinition/piqi_medication_request"
+    }
+  ],
+  "parameter": [],
+  "content": [
+    {
+      "contentType": "application/sql;dialect=duckdb",
+      "data": "U0VMRUNUIHYucGF0aWVudF9pZCBBUyBwYXRpZW50X2lkLCB2LmVsZW1lbnRfaWQgQVMgZWxlbWVudF9pZCwKICAnTWVkaWNhdGlvbicgQVMgZGF0YV9jbGFzcywgJ2Rvc2VBbW91bnQnIEFTIGVudGl0eSwgJ0F0dHJfSXNQb3B1bGF0ZWQnIEFTIHNhbV9tbmVtb25pYywKICBDQVNFIFdIRU4gQ09BTEVTQ0UoVFJJTShDQVNUKHYuZG9zZUFtb3VudCBBUyBWQVJDSEFSKSksICcnKSA8PiAnJyBUSEVOICdwYXNzJyBFTFNFICdmYWlsJyBFTkQgQVMgcmVzdWx0LAogIENBU0UgV0hFTiBDT0FMRVNDRShUUklNKENBU1Qodi5kb3NlQW1vdW50IEFTIFZBUkNIQVIpKSwgJycpIDw+ICcnIFRIRU4gJ2Rvc2VBbW91bnQgaXMgcG9wdWxhdGVkJyBFTFNFICdkb3NlQW1vdW50IGlzIG5vdCBwb3B1bGF0ZWQnIEVORCBBUyBkZXRhaWwKRlJPTSAidmlld19waXFpX21lZGljYXRpb25fcmVxdWVzdCIgdgpPUkRFUiBCWSB2LnBhdGllbnRfaWQsIHYuZWxlbWVudF9pZA=="
+    }
+  ]
+}
