@@ -8,9 +8,9 @@ slug: /realism-benchmark-mimic
 unlisted: true
 ---
 
-Every healthcare data tool ships with a test corpus. Ours did too — thousands of fixtures, every one hand-constructed to be *correct*. Then we pointed the stack at real hospital data for the first time, and within minutes it found a crash our clean corpus had been quietly hiding for months.
+Every healthcare data tool ships with a test corpus. Ours did too — thousands of fixtures, every one hand-constructed to be *correct*. That validation is real, but it has a structural blind spot: clean synthetic data only exercises the cases its authors imagined.
 
-This post is about what happened next: what real ICU data does to resource deduplication, and a before/after experiment where an auto-coder had to reconstruct stripped clinical codes from free text — graded against the codes we removed.
+This post is about what happened when we pointed the stack at real hospital data: what genuine ICU content does to resource deduplication, and a before/after experiment where an auto-coder had to reconstruct stripped clinical codes from free text — graded against the codes we removed.
 
 {/* truncate */}
 
@@ -22,15 +22,9 @@ That validation is real, but it has a structural blind spot: **synthetic data is
 
 So we built a realism harness (`fhir4ds.realism`) — corpus-agnostic, deterministic, seeded — around the MIMIC-IV-FHIR demo: the Beth Israel ICU dataset converted to FHIR R4, 100 patients and roughly 900K resources of genuinely messy clinical content. (The harness can also inject seeded duplicate patients for matching experiments, but that is not what this post is about. MIMIC's identities are de-identification artifacts — `Patient_10007795`, birth dates in the 2080s — so it is not a patient-matching corpus and we don't use it as one.)
 
-## The crash that real data found in minutes
-
-We ran the deduplication leg over the full MIMIC corpus before injecting anything, and it crashed. Not on logic — on units. MIMIC microbiology uses UCUM annotations like `#/hpf` (per high-power field), and the unit-conversion library raises a bare `AssertionError` for some of these spellings. Our clean corpora had never once produced that spelling. Real data produced it in the first thousand resources.
-
-That's the whole argument in one anecdote: **the crash was invisible from synthetic data and surfaced in minutes from real data.** (Fixed same day, with a regression test — `REALISM-F1` if you're reading our commit log.)
-
 ## Resource deduplication on real repeated clinical events
 
-With the crash fixed, deduplication over the full corpus found **46,469 duplicate clusters** — and here is the part synthetic corpora can never give you: **we didn't inject a single one.** These are real repeated clinical events — the same lab drawn and re-reported, the same vitals streamed from the monitor, the same medication administered and documented twice. Every cluster is a genuine redundancy a downstream analyst would otherwise double-count.
+Deduplication over the full corpus found **46,469 duplicate clusters** — and here is the part synthetic corpora can never give you: **we didn't inject a single one.** These are real repeated clinical events — the same lab drawn and re-reported, the same vitals streamed from the monitor, the same medication administered and documented twice. Every cluster is a genuine redundancy a downstream analyst would otherwise double-count.
 
 Two results mattered most:
 
@@ -53,7 +47,7 @@ We ran two configurations: the shipped strict default (only `certain`-grade matc
 
 Three things made this exercise worth more than another constructed test suite:
 
-1. **Real data finds real defects.** The unit-crash class — a library raising an unexpected exception type on legitimate input — simply doesn't exist in data you wrote yourself.
+1. **Real data exercises vocabulary and shape you didn't author.** MIMIC's UCUM annotations, local code dictionaries, and export quirks (concepts that carry coding displays but never `code.text`) are the populations our synthetic corpora never modeled — and they change what the tools actually do.
 2. **Real redundancy needs no injection.** 46,469 genuine duplicate clusters with zero cross-patient merges is a validation synthetic duplicates can approximate but never earn.
 3. **The gaps you find are the honest ones.** Measured recovery rates against known-truth codes — including where the auto-coder can't reach — are an accurate self-portrait. "Perfect on synthetic" alone is marketing.
 
