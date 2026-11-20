@@ -585,7 +585,10 @@ def _quantity_to_pint(q_dict: dict | None):
             # phase 0.5 root-cause fix at the source).
             raise UndefinedUnitError(ucum_code)
         return value * parsed_unit
-    except (TypeError, ValueError, UndefinedUnitError) as e:
+    except (TypeError, ValueError, UndefinedUnitError, AssertionError) as e:
+        # AssertionError: pint raises bare asserts for some exotic UCUM
+        # spellings (REALISM-F1: MIMIC micro units '#/hpf', '#/lpf', '#/uL')
+        # — unconvertible, never a crash.
         _logger.warning("_quantity_to_pint conversion failed: %s", e)
         return None
 
