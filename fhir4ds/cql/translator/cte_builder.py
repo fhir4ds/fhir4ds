@@ -313,7 +313,9 @@ def _multi_filter_label(filters: list) -> str:
     same type+valueset whose additional filters share a property but differ
     in comparator or target (`clinicalStatus in "A"` vs
     `clinicalStatus in "B"`) must not collide onto one CTE (AMUX-152 #8).
-    Each filter therefore carries a stable hash of its comparator+target.
+    Each filter therefore carries a stable, seed-free ``sha1`` (first 8 hex
+    chars) of the canonical ``f"{kind}|{target}"`` string — same filters
+    always produce the same label within and across runs/processes.
     """
     parts = []
     for prop, kind, target in filters:
