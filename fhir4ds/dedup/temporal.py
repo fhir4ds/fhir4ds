@@ -74,6 +74,20 @@ _TEMPORAL_FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("onsetPeriod", "period"),
     ),
     "Immunization": (("occurrenceDateTime", "datetime"),),
+    # AMUX-150 chunk A coded-type extension (FEATURE_NON_CODED_DEDUP §2.1).
+    # MedicationRequest.authoredOn is the EVENT anchor;
+    # dispenseRequest.validityPeriod is deliberately NOT the primary field
+    # (validity windows span refills).
+    "MedicationRequest": (("authoredOn", "datetime"),),
+    "MedicationDispense": (("whenHandedOver", "datetime"),),
+    "MedicationAdministration": (
+        ("effectiveDateTime", "datetime"),
+        ("effectivePeriod", "period"),
+    ),
+    "DiagnosticReport": (
+        ("effectiveDateTime", "datetime"),
+        ("effectivePeriod", "period"),
+    ),
 }
 
 # Secondary scalar timestamps (cross-field checks arrive in a later slice).

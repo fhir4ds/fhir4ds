@@ -48,6 +48,11 @@ from .linkage import (
     load_dedup_linkage_resources,
     upsert_dedup_linkage,
 )
+from .medication import (
+    LazyMedicationIndex,
+    MedicationIndex,
+    resolve_medication_reference,
+)
 from .pipeline import (
     POC_TROPONIN,
     VITAL_EXTENDED_WINDOW_LOINC,
@@ -93,6 +98,9 @@ __all__ = [
     "write_curation_queue",
     "normalize_lexical_text",
     "tier2_text_set",
+    "LazyMedicationIndex",
+    "MedicationIndex",
+    "resolve_medication_reference",
     "DedupRecord",
     "DedupResult",
     "DedupRunResult",

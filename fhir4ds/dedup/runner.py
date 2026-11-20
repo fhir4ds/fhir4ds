@@ -73,7 +73,7 @@ def _cluster_evidence(cluster: list[DedupRecord],
                             if e.get("tier") == "hybrid"]
             if hybrid_edges:
                 evidence["conceptIndex"] = {
-                    "version": hybrid_edges[0]["index_version"],
+                    "version": hybrid_edges[0].get("index_version"),
                     "resolutions": [
                         {"edge": e["edge"],
                          "concept": e.get("resolved_concept"),
@@ -96,6 +96,7 @@ def run_dedup(
     default_tz: str = DEFAULT_TZ,
     code_fallback: str = "on",
     concept_index=None,
+    medication_resolver=None,
     output_dir: Optional[str] = None,
     dedup_proposer=None,
 ) -> DedupRunResult:
@@ -111,6 +112,8 @@ def run_dedup(
       | ``"off"`` — see :func:`fhir4ds.dedup.dedup_pass`.
     - ``concept_index``: optional concept display index for the tier-2
       hybrid resolution (default: the versioned in-repo index).
+    - ``medication_resolver`` (AMUX-150): optional bounded medication
+      reference resolver; ``None`` lazily builds the same-corpus index.
     - ``output_dir``: when given, the deterministic tier-3 curation
       queue is written to ``<output_dir>/dedup_curation_queue.jsonl``.
     - ``dedup_proposer``: optional
@@ -130,7 +133,8 @@ def run_dedup(
 
     result = dedup_pass(resources, default_tz=default_tz,
                         code_fallback=code_fallback,
-                        concept_index=concept_index)
+                        concept_index=concept_index,
+                        medication_resolver=medication_resolver)
     survivors: list[dict] = []
     linkage_resources: list[dict] = []
     try:

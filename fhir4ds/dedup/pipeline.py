@@ -28,7 +28,7 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 from .category import Category
-from .codes import normalize_codes
+from .codes import medication_code_keys, normalize_codes
 from .lexical import raw_code_texts, tier2_provenance, tier2_text_set
 from .temporal import (
     DEFAULT_TZ,
@@ -88,6 +88,11 @@ _LOINC = "http://loinc.org"
 
 _DATETIME_SIGNATURES = (Signature.DT_NAIVE, Signature.DT_Z, Signature.DT_OFFSET)
 
+#: Resource types whose medication[x] choice may be a medicationReference
+#: resolved by the AMUX-150 bounded same-corpus resolver.
+_MEDICATION_REFERENCE_TYPES = frozenset({
+    "MedicationRequest", "MedicationDispense", "MedicationAdministration"})
+
 # Patient-typed reference extraction: relative, absolute, and versioned
 # spellings normalize to "Patient/<id>" (patient_ref doctrine — Patient-typed
 # refs only; bare ids and non-Patient subjects do not attribute).
@@ -144,6 +149,12 @@ class DedupRecord:
     code_provenance: str = "none"
     resolved_concepts: dict = field(default_factory=dict)
     match_key: frozenset = frozenset()
+    # AMUX-150 chunk A: code elements contributed by the bounded
+    # same-corpus medication[x]-reference resolver. They live in
+    # ``code_keys`` (they union like any coding) but are NOT authored
+    # codings — pair-edge tier classification treats a shared
+    # reference-resolved concept as ``hybrid:reference_resolved``.
+    reference_resolved_keys: frozenset = frozenset()
 
     @property
     def concept_keys(self) -> frozenset[tuple[str, str]]:
@@ -151,11 +162,19 @@ class DedupRecord:
         return self.code_keys | frozenset(self.resolved_concepts)
 
     @classmethod
-    def from_resource(cls, resource: dict) -> "DedupRecord":
+    def from_resource(cls, resource: dict, *,
+                      code_resolver=None) -> "DedupRecord":
         """Build a DedupRecord from a raw resource dict.
 
         Raises ValueError when the resource lacks a usable string ``id``
         (deterministic cluster keys require ids).
+
+        ``code_resolver`` (AMUX-150): optional bounded medication
+        reference resolver (``.resolve(resource) -> Medication dict |
+        None``); when given and the resource carries a
+        ``medicationReference``, the resolved Medication's codings join
+        ``code_keys`` with provenance ``reference_resolved``. Default
+        ``None`` keeps direct construction working unchanged.
         """
         if not isinstance(resource, dict):
             raise ValueError("resource must be a dict")
@@ -168,6 +187,19 @@ class DedupRecord:
         nd = normalize_temporal(resource)
         secondary = secondary_timestamp(resource)
         code_keys = normalize_codes(resource)
+        reference_resolved_keys: frozenset = frozenset()
+        if code_resolver is not None and not code_keys \
+                and rtype in _MEDICATION_REFERENCE_TYPES \
+                and isinstance(resource.get("medicationReference"), dict):
+            resolved = code_resolver.resolve(resource)
+            resolved_keys = medication_code_keys(resolved) \
+                if resolved is not None else frozenset()
+            if resolved_keys:
+                code_keys = resolved_keys
+                reference_resolved_keys = resolved_keys
+        provenance = tier2_provenance(resource, code_keys)
+        if reference_resolved_keys:
+            provenance = "reference_resolved"
         return cls(
             resource=resource,
             rid=rid,
@@ -179,7 +211,8 @@ class DedupRecord:
             category=categorize_record(resource),
             secondary_ts=secondary.dt_utc if secondary is not None else None,
             tier2_texts=tier2_text_set(resource),
-            code_provenance=tier2_provenance(resource, code_keys),
+            code_provenance=provenance,
+            reference_resolved_keys=reference_resolved_keys,
         )
 
 
@@ -254,6 +287,12 @@ def _pair_edge(left: DedupRecord, right: DedupRecord,
     concept is an authored coding on BOTH sides; ``hybrid`` when a
     shared concept was introduced by index resolution on at least one
     side; ``text`` when only normalized-text tokens are shared.
+
+    AMUX-150 §2.3: a shared concept introduced by the bounded
+    medication-reference resolver on at least one side (and not authored
+    on both) is ``hybrid`` with subtype ``reference_resolved`` — a
+    data-completeness bridge, kept distinguishable from the vocabulary
+    ``hybrid:text_only``/``hybrid:hybrid`` class.
     """
     concept_shared = sorted(
         (element for element in shared if element[0] == "code"),
@@ -264,10 +303,24 @@ def _pair_edge(left: DedupRecord, right: DedupRecord,
     if concept_shared:
         for element in concept_shared:
             concept = (element[1], element[2])
-            if concept in left.code_keys and concept in right.code_keys:
+            if concept in (left.code_keys - left.reference_resolved_keys) \
+                    and concept in (right.code_keys
+                                    - right.reference_resolved_keys):
                 edge["tier"] = "canonical"
                 return edge
         # Shared concept exists only via resolution on at least one side.
+        # Reference-resolved first (AMUX-150), then concept-index.
+        for element in concept_shared:
+            concept = (element[1], element[2])
+            resolvers = sorted(
+                (record.rid for record in (left, right)
+                 if concept in record.reference_resolved_keys))
+            if resolvers:
+                edge["tier"] = "hybrid"
+                edge["subtype"] = "reference_resolved"
+                edge["resolved_by"] = resolvers[0]
+                edge["resolved_concept"] = list(concept)
+                return edge
         edge["tier"] = "hybrid"
         edge["subtype"] = _tier2_subtype(left, right)
         for element in concept_shared:
@@ -896,7 +949,8 @@ def _attach_match_keys(records: list[DedupRecord], index,
 
 
 def dedup_pass(resources: list[dict], *, default_tz: str = DEFAULT_TZ,
-               code_fallback: str = "on", concept_index=None
+               code_fallback: str = "on", concept_index=None,
+               medication_resolver=None
                ) -> DedupResult:
     """Full pipeline: normalize → partition → escalate.
 
@@ -914,9 +968,21 @@ def dedup_pass(resources: list[dict], *, default_tz: str = DEFAULT_TZ,
     ``concept_index``: optional :class:`~fhir4ds.dedup.concept_index.
     ConceptIndex`; ``None`` uses the default versioned index built from
     the in-repo ValueSet display fixtures.
+
+    ``medication_resolver`` (AMUX-150): optional bounded medication
+    reference resolver (``.resolve(resource) -> Medication | None``);
+    ``None`` (default) lazily builds the same-corpus
+    :class:`~fhir4ds.dedup.medication.MedicationIndex` from
+    ``resources`` on first use — a corpus without medication references
+    never pays the build.
     """
     mode = _validate_code_fallback(code_fallback)
-    records = [DedupRecord.from_resource(r) for r in resources]
+    if medication_resolver is None:
+        from .medication import LazyMedicationIndex
+        medication_resolver = LazyMedicationIndex(resources)
+    records = [DedupRecord.from_resource(r,
+                                         code_resolver=medication_resolver)
+               for r in resources]
     # Off mode attaches canonical-only keys (the index is never consulted).
     records = _attach_match_keys(
         records,
@@ -965,10 +1031,30 @@ def dedup_pass(resources: list[dict], *, default_tz: str = DEFAULT_TZ,
         near_misses.extend(_cross_bucket_near_misses(records))
 
     # Tier-3 queue: unmatched = the never-canonical population (empty
-    # canonical code key), regardless of tier-2 eligibility.
+    # canonical code key), regardless of tier-2 eligibility. A medication
+    # record whose emptiness is caused by an unresolvable medication[x]
+    # reference gets the DEDICATED kind (AMUX-150 §2.2) so the queue
+    # distinguishes "missing coding" from "dangling reference".
     unmatched = []
+    unresolved_refs = []
     for record in sorted((r for r in records if not r.code_keys),
                          key=lambda r: r.rid):
+        reference_field = record.resource.get("medicationReference") \
+            if record.rtype in _MEDICATION_REFERENCE_TYPES else None
+        if isinstance(reference_field, dict):
+            raw_ref = reference_field.get("reference")
+            display = reference_field.get("display")
+            unresolved_refs.append({
+                "kind": "unresolved_medication_reference",
+                "resource_type": record.rtype,
+                "rid": record.rid,
+                "patient_ref": record.patient_ref,
+                "reference": raw_ref if isinstance(raw_ref, str)
+                and raw_ref else None,
+                **({"display": display}
+                   if isinstance(display, str) and display else {}),
+            })
+            continue
         unmatched.append({
             "kind": "unmatched",
             "resource_type": record.rtype,
@@ -986,7 +1072,7 @@ def dedup_pass(resources: list[dict], *, default_tz: str = DEFAULT_TZ,
                 lead)
 
     curation_records = sorted(
-        unmatched + near_misses,
+        unmatched + unresolved_refs + near_misses,
         key=lambda e: (queue_sort_key(e), e["kind"]))
 
     emitted.sort(key=lambda r: r.rid)
@@ -1017,6 +1103,10 @@ def dedup_pass(resources: list[dict], *, default_tz: str = DEFAULT_TZ,
                 len(r.resolved_concepts) for r in records),
             "curation_unmatched": len(unmatched),
             "curation_near_miss": len(near_misses),
+            # AMUX-150 chunk A stats
+            "reference_resolved_records": sum(
+                1 for r in records if r.reference_resolved_keys),
+            "unresolved_medication_references": len(unresolved_refs),
         },
         cluster_edges=cluster_edges,
         curation_records=curation_records,
