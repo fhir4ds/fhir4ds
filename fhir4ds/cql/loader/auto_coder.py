@@ -33,7 +33,12 @@ Safety guarantees (FDD §7 Invariants):
     * INV-9: :meth:`augment_resource` NEVER raises. All exceptions are
       caught, logged at WARNING, and the resource is returned unchanged.
     * INV-2: Original ``CodeableConcept.text`` is preserved unchanged.
-    * INV-4: Resources with existing ``coding[]`` are NOT re-coded.
+    * INV-4: CodeableConcepts already carrying a terminologically
+      asserted coding (ANY STANDARD-system coding, any coding under
+      ``strict_coded_skip=True``, or a coding from a previous
+      AutoCoder run) are NOT re-coded. NON-standard-system codings
+      (local/imported systems) do not block auto-coding — they become
+      the query text (display, else the code string; FHIR4-24).
     * INV-6: Every auto-coded Coding has ``userSelected == False``.
     * INV-7: Cache hit determinism — same key returns byte-identical
       ``result_json``.
@@ -53,8 +58,10 @@ from typing import TYPE_CHECKING, Any, Optional
 from .autocoding_extension import (
     AUTOCODING_EXTENSION_URL,
     build_autocoding_extension,
+    is_autocoded,
 )
 from .category import normalize_text, resolve_category
+from ..terminology.system_mappings import is_standard_code_system
 
 if TYPE_CHECKING:  # pragma: no cover - import-time only
     from fhir4ds.cql.terminology.endpoint import TerminologyEndpoint
@@ -110,39 +117,95 @@ _VALID_SEARCH_MODES = frozenset({"lexical", "hybrid", "semantic"})
 _VALID_MATCH_GRADES = frozenset(_MATCH_GRADE_ORDER)
 
 
-def _has_coded_entry(coding: Any) -> bool:
-    """True when ``coding`` carries at least one entry with a ``code``.
+def _resolve_query_text(
+    cc: dict, *, strict_coded_skip: bool
+) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """System-aware query-text precedence (FHIR4-24, the DEFAULT).
 
-    A ``coding[]`` whose entries all lack a ``code`` (display-only) is a
-    text carrier from a legacy export, not a manual coding — INV-4 must
-    not treat it as "already coded" (AMUX-60 Gap 1).
-    """
-    if not isinstance(coding, list) or not coding:
-        return False
-    return any(
-        isinstance(entry, dict) and isinstance(entry.get("code"), str) and entry["code"].strip()
-        for entry in coding
-    )
+    Per CodeableConcept:
+      1. ``code.text`` when present → ``("text", None)`` provenance.
+      2. ``display`` of a coding entry that is code-less OR coded in a
+         NON-standard system.
+      3. ``code`` string of a coding entry coded in a NON-standard
+         system (the MIMIC name-code case).
 
+    Returns ``(query_text, query_source, query_system)``;
+    ``(None, None, None)`` means "do not auto-code this concept".
 
-def _uncoded_display(cc: dict) -> str | None:
-    """The display of a code-less coding entry, when one carries text.
+    Skip rules:
+      * Any entry carrying the autocoding extension (our own output from
+        a previous run) → already auto-coded → skip (idempotency).
+      * Any entry coded in a STANDARD system (per
+        :func:`is_standard_code_system`) means the concept IS
+        terminologically asserted → skip entirely (INV-4 preserved
+        where it matters), EVEN when ``code.text`` is present. This
+        includes mixed local+standard concepts.
+      * ``strict_coded_skip=True`` restores the legacy INV-4-everywhere
+        behavior: ANY coded entry (standard or not) skips.
 
-    Query-text fallback for CodeableConcepts without ``text`` whose only
-    content is ``coding[0].display`` — the shape EHR exports produce when
-    the source knew the name but not the code.
+    Determinism: the choice depends only on the concept's content —
+    same input, same output.
     """
     coding = cc.get("coding")
+    if isinstance(coding, list):
+        for entry in coding:
+            if not isinstance(entry, dict):
+                continue
+            if is_autocoded(entry):
+                # Our own output from a previous run — never re-code,
+                # even if the endpoint returned a non-standard system.
+                return None, None, None
+            code = entry.get("code")
+            if not (isinstance(code, str) and code.strip()):
+                continue
+            system = entry.get("system") if isinstance(entry.get("system"), str) else None
+            if strict_coded_skip or is_standard_code_system(system):
+                # Legacy skip-all-coded, or the concept is
+                # terminologically asserted in a standard system → skip
+                # the WHOLE concept.
+                return None, None, None
+
+    text = cc.get("text")
+    if isinstance(text, str) and text.strip():
+        return text, "text", None
+
     if not isinstance(coding, list):
-        return None
+        return None, None, None
+
+    chosen: Optional[tuple[str, str, Optional[str]]] = None
     for entry in coding:
-        if _has_coded_entry([entry]):
+        if not isinstance(entry, dict):
             continue
-        if isinstance(entry, dict):
+        code = entry.get("code")
+        has_code = isinstance(code, str) and bool(code.strip())
+
+        if not has_code:
+            # Leg 2 (code-less display): a text carrier from a legacy
+            # export — not a coding; does not block auto-coding.
+            if chosen is None:
+                display = entry.get("display")
+                if isinstance(display, str) and display.strip():
+                    system = entry.get("system")
+                    chosen = (
+                        display,
+                        "display",
+                        system if isinstance(system, str) and system else None,
+                    )
+            continue
+
+        # Non-standard coded entry (standard ones returned above):
+        # legs 2 (display) / 3 (code).
+        if chosen is None:
+            system = entry.get("system") if isinstance(entry.get("system"), str) else None
             display = entry.get("display")
             if isinstance(display, str) and display.strip():
-                return display
-    return None
+                chosen = (display, "display", system)
+            else:
+                chosen = (code, "code", system)
+
+    if chosen is None:
+        return None, None, None
+    return chosen
 
 
 def _detect_engine_version() -> str:
@@ -218,6 +281,14 @@ class AutoCoderConfig:
             runtime by ``os.cpu_count()``. Each worker loads its own
             medterm4ds engine (~5 GB for medspaCy + SapBERT); on a
             16 GB machine, ``workers=2`` is the practical max.
+        strict_coded_skip: FHIR4-24 — when ``True``, restores the
+            legacy INV-4-everywhere behavior: a ``coding[]`` with ANY
+            coded entry is skipped, regardless of the coding's system.
+            Default ``False`` enables the system-aware query
+            precedence: concepts coded only in NON-standard systems
+            are auto-coded from the non-standard entry's display (or
+            its code string — the MIMIC name-code case), while any
+            STANDARD-system coding still skips the concept.
     """
 
     enabled: bool = True
@@ -232,6 +303,7 @@ class AutoCoderConfig:
     category_overrides: dict[str, str] = field(default_factory=dict)
     batch_size: int = 1
     workers: int = 1
+    strict_coded_skip: bool = False
 
     def __post_init__(self) -> None:
         """Validate non-negative performance knobs at construction.
@@ -281,6 +353,11 @@ class AutoCoderConfig:
             raise ValueError(
                 f"AutoCoderConfig.min_match_grade must be one of "
                 f"{sorted(_VALID_MATCH_GRADES)}, got {self.min_match_grade!r}"
+            )
+        if not isinstance(self.strict_coded_skip, bool):
+            raise ValueError(
+                f"AutoCoderConfig.strict_coded_skip must be a bool, "
+                f"got {self.strict_coded_skip!r}"
             )
 
 
@@ -503,28 +580,24 @@ class AutoCoder:
         Pre-conditions (verified by caller): ``cc`` is a dict, ``category``
         is a non-empty string.
 
-        Guards (FDD INV-2/INV-3/INV-4):
-            * Query text = ``coalesce(code.text, code.coding[].display)`` —
-              a ``coding[]`` whose entries ALL lack a ``code`` is a text
-              carrier, not a coding (common legacy-export shape); its
-              display becomes the query text and the entry is preserved
-              alongside the auto-coded additions (AMUX-60 Gap 1).
+        Guards (FDD INV-2/INV-3/INV-4 + FHIR4-24 system-aware default):
+            * Query text is resolved by :func:`_resolve_query_text`:
+              ``code.text``, else the display of a code-less OR
+              non-standard-system coding entry, else the code string of
+              a non-standard-system coding entry.
+            * Concepts with any STANDARD-system coding (and, under
+              ``strict_coded_skip``, any coded entry at all) are
+              skipped — no double-coding.
             * Empty/missing query text → skip.
-            * ``coding[]`` with at least one coded entry (has ``code``)
-              → skip (no double-coding).
             * Search returns 0 results → no Codings appended, no cache
               write (the cache stores the FULL pre-filter result, so
               re-runs with a stricter threshold will still hit cache).
         """
-        text = cc.get("text")
-        if not isinstance(text, str) or not text.strip():
-            text = _uncoded_display(cc)
+        text, query_source, query_system = _resolve_query_text(
+            cc, strict_coded_skip=self._config.strict_coded_skip
+        )
         if not isinstance(text, str) or not text.strip():
             return  # INV-3: resources without usable text are untouched.
-
-        if _has_coded_entry(cc.get("coding")):
-            # INV-4: existing manual coding → do NOT re-code.
-            return
 
         if len(text) > 200:
             _logger.debug(
@@ -562,6 +635,8 @@ class AutoCoder:
 
         # Build Codings. Each Coding carries the autocoding extension
         # (INV-5) and userSelected=False (INV-6). Append to coding[].
+        # FHIR4-24: the extension provenance also records the query
+        # source leg and the non-standard system that justified it.
         codings: list[dict] = []
         for result in kept:
             ext = build_autocoding_extension(
@@ -571,6 +646,8 @@ class AutoCoder:
                 score=result.get("score", 0.0),
                 match_grade=result.get("match_grade", "ambiguous"),
                 index_version=result.get("index_version") or index_version,
+                query_source=query_source,
+                query_system=query_system,
             )
             coding: dict[str, Any] = {
                 "system": result.get("system"),
