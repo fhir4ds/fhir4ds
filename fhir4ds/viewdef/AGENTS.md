@@ -2,6 +2,33 @@
 
 ## SQLQuery composition steps (2026-10-27)
 
+- RENDER PIPELINE SQLQUERY ORDERING (2026-11-22, v0.0.26 D5 HISTORIAN
+  QA-D5H-002): `render_view_sqls` must NOT emit sqlquery steps, and
+  `render_composition_ddl` must append their CREATE statements at the END
+  (after unions/projection wrappers). A SQLQuery may read a union-family or
+  projected table that only exists after the pass-2 DDL executes — emitting
+  the CREATE in pass 1 Catalog-errors on the browser/render path while
+  `run_composition` (plan order) succeeds. `build_composition_plan` embeds
+  the decoded Library SQL in each sqlquery step (`step["sql"]`) so the pure
+  renderer needs no vd_dir; a plan without it raises a typed ValueError.
+  Pinned by `TestEvolV0026D5Historian::test_render_pipeline_sqlquery_over_union_parity`.
+- MANIFEST VD-NAME IDENTITY (2026-11-22, v0.0.26 D5 HISTORIAN QA-D5H-001):
+  `resolve_materialization_order` keys VD identity by `vd.name or stem`.
+  VD `name` is 0..1 per the published SD — two nameless VDs previously
+  crashed `build_composition_plan` with a raw KeyError (None-key collapse),
+  and duplicate DECLARED names crashed identically. Nameless VDs now
+  identify by stem (not join-resolvable by design); duplicate declared names
+  raise a typed ValueError (ambiguous join.view resolution). Pinned by
+  `TestEvolV0026D5Historian::test_nameless_vds_compose_and_duplicate_names_are_typed`.
+- `_referenced_views` matches only UNQUOTED schema spellings
+  (`omop.person`, `OMOP . "person"`); a quoted schema ref
+  (`"My Schema".person`) is NOT seen, so the dependency is missed at
+  planning. The failure mode is LOUD (DuckDB Catalog error at CREATE when
+  the dep view does not exist yet) or benign on re-run (CREATE OR REPLACE
+  converges) — never silently wrong rows. Manifests with quoting-needing
+  schemas should keep SQL refs unquoted-schema where possible; tightening
+  the regex needs a proper SQL tokenizer (deferred, LOW).
+
 `manifest.sql_queries` maps a table to a SQLQuery `Library` under
 `sqlqueries/`. The runner materializes its decoded `application/sql` body as
 `CREATE OR REPLACE VIEW <schema>.<table> AS ...`, after the views it reads

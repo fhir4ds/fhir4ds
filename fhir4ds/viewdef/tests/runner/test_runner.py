@@ -369,3 +369,106 @@ class TestQuotingRoundTripAmux152:
             b = sorted(map(str, con_ren.execute(
                 f'SELECT * FROM "OMOP Schema"."{table}"').fetchall()))
             assert a == b and a, f"{table}: exec={a} render={b}"
+
+
+class TestEvolV0026D5Historian:
+    """D5-HISTORIAN v0.0.26 walkthrough findings.
+
+    QA-D5H-001: manifests of nameless ViewDefinitions (name is 0..1 per the
+    published StructureDefinition) crashed build_composition_plan with a raw
+    KeyError, and duplicate VD names crashed the same way — the planner keyed
+    identity by vd.name with no presence/uniqueness handling.
+
+    QA-D5H-002: the text-render pipeline (render_view_sqls pass 1 +
+    render_composition_ddl pass 2 — the browser worker's path) emitted
+    SQLQuery CREATEs in pass 1, BEFORE union tables exist (pass 2), so a
+    SQLQuery reading a union-family table Catalog-errored on the render path
+    while the exec path (run_composition) ordered it correctly.
+    """
+
+    def test_nameless_vds_compose_and_duplicate_names_are_typed(self, con, tmp_path):
+        from fhir4ds.viewdef.runner import build_composition_plan, run_composition
+
+        d = tmp_path / "nameless"
+        d.mkdir()
+        vd = {"resource": "Patient",
+              "select": [{"column": [{"name": "pid", "path": "id"}]}]}
+        for stem in ("a-view", "b-view"):
+            (d / f"{stem}.json").write_text(json.dumps(vd))
+        (d / "manifest.json").write_text(json.dumps(
+            {"views": {"a-view": "a", "b-view": "b"}}))
+
+        # Two nameless VDs must compose (was: KeyError 'a-view').
+        created = run_composition(con, d / "manifest.json", "resources")
+        rows_a = con.execute('SELECT pid FROM "omop"."a" ORDER BY pid').fetchall()
+        rows_b = con.execute('SELECT pid FROM "omop"."b" ORDER BY pid').fetchall()
+        assert rows_a == rows_b == [("p1",), ("p2",)]
+        assert created["a"] == '"omop"."a"'
+
+        # Duplicate DECLARED names are a typed ambiguity error (was KeyError).
+        named = {"resource": "Patient", "name": "Dup",
+                 "select": [{"column": [{"name": "pid", "path": "id"}]}]}
+        (d / "a-view.json").write_text(json.dumps(named))
+        (d / "b-view.json").write_text(json.dumps(named))
+        with pytest.raises(ValueError, match="Duplicate ViewDefinition name 'Dup'"):
+            build_composition_plan(d / "manifest.json")
+
+    def test_render_pipeline_sqlquery_over_union_parity(self, tmp_path):
+        """A SQLQuery that reads a union-family table must compose on the
+        text-render pipeline exactly like run_composition (was: render pass 1
+        created the SQLQuery before the union table existed -> Catalog Error)."""
+        import base64
+        from fhir4ds.viewdef.runner import (
+            build_composition_plan, run_composition,
+            render_view_sqls, render_composition_ddl,
+        )
+
+        d = tmp_path / "unionquery"
+        d.mkdir()
+        (d / "arm-view.json").write_text(json.dumps({
+            "name": "Arm", "resource": "Patient",
+            "select": [{"column": [{"name": "pid", "path": "id"}]}],
+        }))
+        (d / "sqlqueries").mkdir()
+        (d / "sqlqueries" / "final.json").write_text(json.dumps({
+            "resourceType": "Library",
+            "content": [{"contentType": "application/sql",
+                         "data": base64.b64encode(b"SELECT pid FROM omop.fam").decode()}],
+        }))
+        (d / "manifest.json").write_text(json.dumps({
+            "views": {"arm-view": "arm"},
+            "unions": {"fam": ["arm-view"]},
+            "sql_queries": {"final": "final"},
+        }))
+
+        def fresh():
+            c = fhir4ds.create_connection()
+            c.execute("CREATE TABLE resources (resource JSON)")
+            for r in SRC:
+                c.execute("INSERT INTO resources VALUES (?)", [json.dumps(r)])
+            return c
+
+        con_exec = fresh()
+        run_composition(con_exec, d / "manifest.json", "resources")
+        expected = con_exec.execute('SELECT pid FROM omop."final" ORDER BY pid').fetchall()
+        assert expected == [("p1",), ("p2",)]
+
+        plan = build_composition_plan(d / "manifest.json")
+        con_ren = fresh()
+        con_ren.execute('CREATE SCHEMA IF NOT EXISTS "omop"')
+        columns, sqls = {}, {}
+        for v in render_view_sqls(plan, d, "resources"):
+            con_ren.execute(f'CREATE OR REPLACE VIEW {v["table_sql"]} AS\n{v["sql"]}')
+            columns[v["name"]] = [
+                c[0] for c in con_ren.execute(
+                    f'SELECT * FROM {v["table_sql"]} LIMIT 0').description]
+            sqls[v["name"]] = v["sql"]
+        # union children must be introspectable for the union step
+        for step in plan["steps"]:
+            if step["type"] == "union":
+                for child in step["children"]:
+                    columns.setdefault(child, columns.get("arm"))
+        for stmt in render_composition_ddl(plan, columns, sql_by_view=sqls):
+            con_ren.execute(stmt)
+        got = con_ren.execute('SELECT pid FROM omop."final" ORDER BY pid').fetchall()
+        assert got == expected, f"render={got} exec={expected}"
