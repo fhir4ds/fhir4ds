@@ -1097,7 +1097,7 @@ def test_cql_quantity_negate_round_extreme_magnitude_exact_serialization_rev26()
                 '"value":-1.0',
             ),
             (
-                "SELECT roundQuantity('{\"value\":1.005,\"code\":\"mg\"}', 2)",
+                "SELECT RoundQuantityTo('{\"value\":1.005,\"code\":\"mg\"}', 2)",
                 '"value":1.01',
             ),
         ]

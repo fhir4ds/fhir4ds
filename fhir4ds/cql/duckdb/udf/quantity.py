@@ -1202,7 +1202,7 @@ def quantityNegate(q_json: str | None) -> str | None:
     code = data.get("code") or unit or "1"
     return (
         '{"value":'
-        + _exact_decimal_text(-current)
+        + _exact_decimal_text(current.copy_negate())
         + ',"unit":'
         + orjson.dumps(unit if unit is not None else code).decode("utf-8")
         + ',"code":'
