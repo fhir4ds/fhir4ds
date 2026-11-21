@@ -426,6 +426,27 @@ def build_composition_plan(manifest_path: Path) -> dict:
                 "projection": projections.get(table) or None,
             })
 
+    # 6. Output-table uniqueness (QA-D5E-001, v0.0.26 D5 EXPLORER): the
+    # stem/table-name normalizations above can map DISTINCT manifest keys
+    # onto one output table (e.g. stems 'a-b-view' vs 'a.b-view' both ->
+    # 'a_b'; a single stem 'fam-view' vs union table 'fam'; a SQLQuery
+    # table vs a view). Without this check run_composition silently
+    # last-wins (CREATE OR REPLACE shadows an earlier step) or builds a
+    # self-referential view for the SQLQuery case.
+    seen_tables: Dict[str, str] = {}
+    for step in steps:
+        owner = step.get("stem") or step.get("table")
+        kind = step["type"]
+        prior = seen_tables.get(step["table_sql"])
+        if prior is not None:
+            raise ValueError(
+                f"Composition steps {prior!r} and {owner!r} both write output "
+                f"table {step['table_sql']}; manifest stems/unions/"
+                "sql_queries must normalize to unique output table names"
+                f" ({kind} step)"
+            )
+        seen_tables[step["table_sql"]] = owner
+
     return {"schema": schema, "steps": steps}
 
 

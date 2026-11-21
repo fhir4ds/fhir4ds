@@ -2,6 +2,31 @@
 
 ## SQLQuery composition steps (2026-10-27)
 
+- OUTPUT-TABLE UNIQUENESS (2026-11-22, v0.0.26 D5 EXPLORER QA-D5E-001):
+  `build_composition_plan` ends with a uniqueness check over every step's
+  `table_sql` (view/union/sqlquery alike) raising a typed ValueError naming
+  both owners. The stem/table normalizations map DISTINCT manifest keys onto
+  one output table — stems `a-b-view` vs `a.b-view` both -> `a_b` (and
+  `x-view-view` vs `x-view` both -> `x`, because `.replace("-view","")` is
+  global); a single stem `fam-view` collides with union table `fam`; a
+  SQLQuery table collides with a VD view. Pre-fix consequences: VD-vs-VD
+  collisions silently last-wins (CREATE OR REPLACE shadows an earlier step —
+  wrong rows, no error); union-vs-single had the single step (order 4)
+  silently OVERWRITE the union table (order 3); sqlquery-vs-view created a
+  SELF-REFERENTIAL view failing at select time with a raw DuckDB
+  BinderException ("infinite recursion detected"). Pinned by
+  `TestEvolV0026D5Explorer` (3 collision tests + non-colliding control incl.
+  unicode stems + quoting-needing schema + sqlquery-over-union).
+- LOW registry (D5 EXPLORER 2026-11-22, documented, no fix):
+  - An orphan `projections` key (its stem consumed by a `materialize`
+    override, or naming a table that never materializes) is SILENTLY
+    ignored — no table, no error. Loud only if a SQLQuery happens to
+    reference the never-created table (Catalog error).
+  - The "nameless VDs are not join-resolvable by design" wording above is
+    imprecise: `resolve_materialization_order` DOES resolve a `join.view`
+    equal to a nameless VD's stem. A hyphenated stem then fails LOUD+typed
+    at generation (strict identifier quoter); an identifier-safe stem
+    (e.g. `tgt_view`) works end-to-end as a feature.
 - RENDER PIPELINE SQLQUERY ORDERING (2026-11-22, v0.0.26 D5 HISTORIAN
   QA-D5H-002): `render_view_sqls` must NOT emit sqlquery steps, and
   `render_composition_ddl` must append their CREATE statements at the END

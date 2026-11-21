@@ -472,3 +472,109 @@ class TestEvolV0026D5Historian:
             con_ren.execute(stmt)
         got = con_ren.execute('SELECT pid FROM omop."final" ORDER BY pid').fetchall()
         assert got == expected, f"render={got} exec={expected}"
+
+
+class TestEvolV0026D5Explorer:
+    """D5-EXPLORER v0.0.26 fuzz findings.
+
+    QA-D5E-001 (MEDIUM): the composition planner normalized distinct manifest
+    stems / union / SQLQuery tables onto ONE output table with no uniqueness
+    check, so run_composition silently last-wins (CREATE OR REPLACE shadows
+    an earlier step) and a SQLQuery colliding with a VD view created a
+    self-referential view (raw DuckDB BinderException "infinite recursion
+    detected" at select time). build_composition_plan now rejects any two
+    steps that would write the same output table with a typed ValueError.
+    """
+
+    def _vd(self, src_literal):
+        return {
+            "resource": "Patient",
+            "select": [{"column": [
+                {"name": "id", "path": "id"},
+                {"name": "src", "path": f"'{src_literal}'"},
+            ]}],
+        }
+
+    def test_stem_normalization_collision_is_typed_error(self, tmp_path):
+        import pytest
+        from fhir4ds.viewdef.runner import build_composition_plan
+        d = tmp_path / "collide"
+        d.mkdir()
+        (d / "a-b-view.json").write_text(json.dumps(self._vd("hyphen")))
+        (d / "a.b-view.json").write_text(json.dumps(self._vd("dot")))
+        (d / "manifest.json").write_text(json.dumps(
+            {"views": {"a-b-view": "", "a.b-view": ""}}))
+        with pytest.raises(ValueError, match="a_b"):
+            build_composition_plan(d / "manifest.json")
+
+    def test_union_table_vs_single_stem_collision_is_typed_error(self, tmp_path):
+        import pytest
+        from fhir4ds.viewdef.runner import build_composition_plan
+        d = tmp_path / "ucoll"
+        d.mkdir()
+        (d / "fam-a-view.json").write_text(json.dumps(self._vd("arm")))
+        (d / "fam-b-view.json").write_text(json.dumps(self._vd("arm")))
+        (d / "fam-view.json").write_text(json.dumps(self._vd("single")))
+        (d / "manifest.json").write_text(json.dumps({
+            "views": {"fam-a-view": "", "fam-b-view": "", "fam-view": ""},
+            "unions": {"fam": ["fam-a-view", "fam-b-view"]},
+        }))
+        # previously the 'single' step silently OVERWROTE the union table
+        with pytest.raises(ValueError, match="fam"):
+            build_composition_plan(d / "manifest.json")
+
+    def test_sqlquery_table_vs_view_collision_is_typed_error(self, tmp_path):
+        import base64
+        import pytest
+        from fhir4ds.viewdef.runner import build_composition_plan
+        d = tmp_path / "sqcoll"
+        d.mkdir()
+        (d / "person-view.json").write_text(json.dumps({
+            "resource": "Patient",
+            "select": [{"column": [{"name": "id", "path": "id"}]}],
+        }))
+        (d / "sqlqueries").mkdir()
+        (d / "sqlqueries" / "dup.json").write_text(json.dumps({
+            "resourceType": "Library",
+            "content": [{"contentType": "application/sql",
+                         "data": base64.b64encode(
+                             b"SELECT id FROM omop.person").decode()}],
+        }))
+        (d / "manifest.json").write_text(json.dumps({
+            "views": {"person-view": ""},
+            "sql_queries": {"person": "dup"},
+        }))
+        # previously created a self-referential view (BinderException at select)
+        with pytest.raises(ValueError, match="person"):
+            build_composition_plan(d / "manifest.json")
+
+    def test_distinct_output_tables_still_compose(self, tmp_path):
+        """Control: non-colliding stems (incl. unicode + quoting-needing
+        schema + unions + sqlquery) still plan and execute end-to-end."""
+        import base64
+        import fhir4ds
+        from fhir4ds.viewdef.runner import run_composition
+        d = tmp_path / "ok"
+        d.mkdir()
+        (d / "persön-view.json").write_text(json.dumps(self._vd("u")))
+        (d / "we-ird-view.json").write_text(json.dumps(self._vd("q")))
+        (d / "sqlqueries").mkdir()
+        (d / "sqlqueries" / "reader.json").write_text(json.dumps({
+            "resourceType": "Library",
+            "content": [{"contentType": "application/sql",
+                         "data": base64.b64encode(
+                             b'SELECT id FROM "My Schema"."uni table"').decode()}],
+        }))
+        (d / "manifest.json").write_text(json.dumps({
+            "views": {"persön-view": "", "we-ird-view": ""},
+            "view_schema": "My Schema",
+            "unions": {"uni table": ["persön-view", "we-ird-view"]},
+            "sql_queries": {"reader": "reader"},
+        }))
+        con = fhir4ds.create_connection()
+        con.execute("CREATE TABLE resources (resource JSON)")
+        for r in SRC:
+            con.execute("INSERT INTO resources VALUES (?)", [json.dumps(r)])
+        run_composition(con, d / "manifest.json", "resources")
+        n = con.execute('SELECT count(*) FROM "My Schema"."reader"').fetchone()[0]
+        assert n == 4  # 2 arms x 2 patients
