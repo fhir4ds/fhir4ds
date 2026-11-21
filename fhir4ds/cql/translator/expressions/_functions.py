@@ -3139,6 +3139,16 @@ class FunctionsMixin:
                 _leaf_row_scoped = isinstance(
                     _leaf_from_expr, (SQLIdentifier, SQLQualifiedIdentifier)
                 ) or isinstance(_leaf_from_expr, RetrievePlaceholder) or (
+                    # QA-D3H-003: a parenthesized UNION as the FROM source
+                    # (`((SELECT patient_id, resource FROM ...) UNION ...)
+                    # AS VE`) is row-scoped too — its branches project
+                    # patient_id. Excluding it skipped the per-leaf patient
+                    # correlation and made every patient count every row
+                    # (QI-Core CMS149 IPP over-inclusion; the same leak
+                    # class this correlation exists to prevent on
+                    # CMS74/CMS149/CMS506).
+                    isinstance(_leaf_from_expr, SQLUnion)
+                ) or (
                     isinstance(_leaf_from_expr, (SQLSubquery, SQLSelect))
                     and (
                         _leaf_from_expr.from_clause is not None
