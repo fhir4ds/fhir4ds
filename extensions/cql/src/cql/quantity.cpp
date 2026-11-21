@@ -966,8 +966,37 @@ static bool is_plain_decimal_token(const std::string &token, bool &neg, std::str
 	return true;
 }
 
+// Minimal JSON string escaping (matches yyjson compact output for the
+// ASCII unit/code/system strings Quantities carry).
+static void json_escape_into(std::string &out, const std::string &s) {
+	out += '"';
+	for (size_t i = 0; i < s.size(); ++i) {
+		char ch = s[i];
+		switch (ch) {
+		case '"': out += "\\\""; break;
+		case '\\': out += "\\\\"; break;
+		case '\b': out += "\\b"; break;
+		case '\f': out += "\\f"; break;
+		case '\n': out += "\\n"; break;
+		case '\r': out += "\\r"; break;
+		case '\t': out += "\\t"; break;
+		default:
+			if (static_cast<unsigned char>(ch) < 0x20) {
+				char buf[8];
+				std::snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned char>(ch));
+				out += buf;
+			} else {
+				out += ch;
+			}
+		}
+	}
+	out += '"';
+}
+
 // Serialize a Quantity with an exact authored decimal value text (no double
-// round-trip). The value text must already be plain decimal digits.
+// round-trip). The value text must already be plain decimal digits; it is
+// JSON-safe by construction, so the object is assembled directly instead of
+// going through a yyjson real (which would re-enter binary64).
 static Optional<std::string> format_quantity_json_value_text(const ParsedQuantity &q, const std::string &value_text) {
 	if (value_text.empty()) {
 		return NullOpt<std::string>();
@@ -976,32 +1005,16 @@ static Optional<std::string> format_quantity_json_value_text(const ParsedQuantit
 	if (safe.find('.') == std::string::npos) {
 		safe += ".0";
 	}
-	yyjson_mut_doc *doc = yyjson_mut_doc_new(nullptr);
-	if (!doc) {
-		return NullOpt<std::string>();
-	}
-	yyjson_mut_val *root = yyjson_mut_obj(doc);
-	if (!root) {
-		yyjson_mut_doc_free(doc);
-		return NullOpt<std::string>();
-	}
-	yyjson_mut_doc_set_root(doc, root);
-	if (!yyjson_mut_obj_add_raw(doc, root, "value", safe.c_str())) {
-		yyjson_mut_doc_free(doc);
-		return NullOpt<std::string>();
-	}
-	yyjson_mut_obj_add_strcpy(doc, root, "unit", q.code.c_str());
-	yyjson_mut_obj_add_strcpy(doc, root, "code", q.code.c_str());
-	yyjson_mut_obj_add_strcpy(doc, root, "system", q.system.c_str());
-	char *json_str = yyjson_mut_write(doc, 0, nullptr);
-	if (!json_str) {
-		yyjson_mut_doc_free(doc);
-		return NullOpt<std::string>();
-	}
-	std::string result(json_str);
-	free(json_str);
-	yyjson_mut_doc_free(doc);
-	return result;
+	std::string out = "{\"value\":";
+	out += safe;
+	out += ",\"unit\":";
+	json_escape_into(out, q.code);
+	out += ",\"code\":";
+	json_escape_into(out, q.code);
+	out += ",\"system\":";
+	json_escape_into(out, q.system);
+	out += "}";
+	return out;
 }
 
 Optional<std::string> quantity_negate(const std::string &q_json) {
