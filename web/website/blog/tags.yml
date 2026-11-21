@@ -22,3 +22,5 @@ mimic:
   label: MIMIC
 benchmarking:
   label: Benchmarking
+autocoding:
+  label: Auto-Coding
