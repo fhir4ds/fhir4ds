@@ -1340,7 +1340,42 @@ class CTEManagerMixin:
                     # The patient_id should come from the source CTE (FROM clause)
                     # We need to determine the alias of the source table
                     source_alias = self._get_source_alias(sql_ast)
-                    patient_id_col = SQLQualifiedIdentifier(parts=[source_alias, "patient_id"]) if source_alias else SQLIdentifier(name="patient_id")
+
+                    # d3-EXPLORER QA-D3E-003: a patient-INDEPENDENT
+                    # derived source (`(SELECT unnest([...]) AS x)
+                    # AS _lt_unnest` — a projection with NO FROM, hence no
+                    # patient_id column) cannot carry `<alias>.patient_id`;
+                    # projecting it binder-fails ("Values list ... does not
+                    # have a column named patient_id"). Cross-join
+                    # _patients and project `_pt.patient_id` instead
+                    # (mirrors the list-literal define doctrine).
+                    _from_alias_obj = (
+                        sql_ast.from_clause
+                        if isinstance(sql_ast.from_clause, SQLAlias) else None
+                    )
+                    _inner_derived = (
+                        _from_alias_obj.expr.query
+                        if _from_alias_obj is not None
+                        and isinstance(_from_alias_obj.expr, SQLSubquery)
+                        else None
+                    )
+                    _patient_independent_source = (
+                        isinstance(_inner_derived, SQLSelect)
+                        and _inner_derived.from_clause is None
+                    )
+                    _pt_join = None
+                    if _patient_independent_source:
+                        from ..translator.types import SQLJoin as _SQLJoinD3E
+                        patient_id_col = SQLQualifiedIdentifier(parts=["_pt", "patient_id"])
+                        _pt_join = _SQLJoinD3E(
+                            join_type="CROSS JOIN",
+                            table=SQLAlias(
+                                expr=SQLIdentifier(name="_patients"),
+                                alias="_pt",
+                            ),
+                        )
+                    else:
+                        patient_id_col = SQLQualifiedIdentifier(parts=[source_alias, "patient_id"]) if source_alias else SQLIdentifier(name="patient_id")
 
                     # Alias the value column(s) as "value" for downstream references
                     value_columns = []
@@ -1388,6 +1423,8 @@ class CTEManagerMixin:
                                 ))
                             joins = fixed_joins
                         existing = list(sql_ast.joins) if sql_ast.joins else []
+                        if _pt_join is not None:
+                            existing = [_pt_join] + existing
                         return SQLSelect(
                             columns=new_columns,
                             from_clause=sql_ast.from_clause,
@@ -1399,10 +1436,13 @@ class CTEManagerMixin:
                             distinct=sql_ast.distinct,
                             limit=sql_ast.limit,
                         )
+                    _final_joins = _existing_joins or None
+                    if _pt_join is not None:
+                        _final_joins = ([_pt_join] + _existing_joins) or None
                     return SQLSelect(
                         columns=new_columns,
                         from_clause=sql_ast.from_clause,
-                        joins=_existing_joins or None,
+                        joins=_final_joins,
                         where=sql_ast.where,
                         group_by=_group_by,
                         having=sql_ast.having,

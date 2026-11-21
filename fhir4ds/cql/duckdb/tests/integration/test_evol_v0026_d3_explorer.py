@@ -147,6 +147,31 @@ _SQL_HEAD = CQLToSQLTranslator().translate_library_to_population_sql(
 )
 
 
+def test_tuple_list_unnest_define_with_where_projects_pt_patient_id_d3_explorer():
+    """QA-D3E-003: a define whose query source is a patient-INDEPENDENT
+    tuple-list UNNEST derived table projected `<alias>.patient_id` from a
+    source that has no patient_id column ("Values list _lt_unnest does not
+    have a column named patient_id"). Must cross-join _patients."""
+    cql = """library TupleUnnest version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define T: (Tuple { items: {Tuple { v: 1 }, Tuple { v: null } } }) X
+  return X.items I where I.v is not null return I.v
+define TC: Count(T)
+"""
+    sql = CQLToSQLTranslator().translate_library_to_population_sql(
+        parse_cql(cql), output_columns={"tc": "TC"})
+    native, py = _con_connections()
+    try:
+        rn = native.execute(sql).fetchall()
+        rp = py.execute(sql).fetchall()
+    finally:
+        native.close()
+        py.close()
+    assert sorted(rn) == [("p1", 1), ("p2", 1)]
+    assert rn == rp
+
+
 def test_cql20_list_function_define_alias_consumers_d3_explorer():
     """QA-D3E-002: a define of Head/TailN/Slice (CQL 2.0 list subsetting)
     must be marked stores_list_value + PATIENT_SCALAR + List<T> — alias
