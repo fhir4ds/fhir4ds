@@ -637,3 +637,77 @@ class TestMatchesFlagArgSpecFp10F01:
             ).fetchone()[0]
             assert native == expected, (expression, native, expected)
             assert fallback == expected, (expression, fallback, expected)
+
+
+def test_string_transform_regex_dialect_documented_divergences_d2_explorer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    r"""v0.0.26 Domain 2 EXPLORER: further spec-sanctioned regex dialect divergences.
+
+    Extends the FP-10 SKEPTIC pinned set with adversarial-fuzz instances
+    found in the v0.0.26 evolution campaign (Domain 2, iteration 8). All
+    are std::regex-ECMAScript vs Python-``re`` dialect features that no
+    official FHIRPath fixture exercises; §5.6.9 does not prescribe a
+    dialect. Each assertion pins the OBSERVED behavior of each engine so
+    any future change is deliberate.
+
+    Notable root causes:
+      * ``a{100000}`` — native fails via libstdc++'s NFA-state limit
+        (``_GLIBCXX_REGEX_STATE_LIMIT`` ~65536 states), not a designed
+        guard; the boundary is between {10000} (both engines fine) and
+        {100000}. Python ``re`` evaluates it, so results AND is_valid
+        diverge at the engine limit.
+      * ``a++`` possessive — libstdc++ accepts and matches (partial-match
+        'a+'), Python ``re`` errors (possessive unsupported until 3.11).
+      * ``(?<n>a)(?<n>b)`` duplicate named group — the reverse direction:
+        native accepts (FP-10 HISTORIAN translation drops names), Python
+        ``re`` rejects duplicate group names.
+      * bare ``[:alpha:]``, unbalanced ``a{2``, and comment-inside-braces
+        ``a{1/*c*/,2}`` — literal-brace/POSIX-corner treatment differs.
+    """
+    resource = json.dumps({"resourceType": "Patient"})
+    native_expectations = [
+        # expression, (fp, fp_text, fp_json, fp_bool, fp_num, is_valid)
+        ("'ab'.matches('(?P<n>a)b')", ([], None, None, None, None, False)),
+        ("'ab'.matches('(?<n>a)(?<n>b)')", (["true"], "true", "[true]", True, None, True)),
+        (r"'abc'.matches('\\Aabc')", (["false"], "false", "[false]", False, None, True)),
+        (r"'abc'.matches('abc\\z')", (["false"], "false", "[false]", False, None, True)),
+        (r"'abc'.matches('abc\\Z')", (["false"], "false", "[false]", False, None, True)),
+        (r"'A'.matches('\\101')", ([], None, None, None, None, False)),
+        ("'aaa'.matches('a++')", (["true"], "true", "[true]", True, None, True)),
+        ("'ab'.matches('a(?#c)b')", ([], None, None, None, None, False)),
+        ("'a'.matches('a{10000}')", (["false"], "false", "[false]", False, None, True)),
+        ("'a'.matches('a{100000}')", ([], None, None, None, None, False)),
+        ("'a{2'.matches('a{2')", ([], None, None, None, None, False)),
+        ("'Ab'.matches('(?i)(?m)ab')", ([], None, None, None, None, False)),
+        ("'ab'.matches('^(?i)a')", ([], None, None, None, None, False)),
+        ("'[:alpha:]'.matches('[:alpha:]')", (["true"], "true", "[true]", True, None, True)),
+        ("'a'.matches('a{1/*c*/,2}')", ([], None, None, None, None, False)),
+    ]
+    fallback_expectations = [
+        ("'ab'.matches('(?P<n>a)b')", (["true"], "true", "[true]", True, None, True)),
+        ("'ab'.matches('(?<n>a)(?<n>b)')", ([], None, None, None, None, False)),
+        (r"'abc'.matches('\\Aabc')", (["true"], "true", "[true]", True, None, True)),
+        (r"'abc'.matches('abc\\z')", ([], None, None, None, None, False)),
+        (r"'abc'.matches('abc\\Z')", (["true"], "true", "[true]", True, None, True)),
+        (r"'A'.matches('\\101')", (["true"], "true", "[true]", True, None, True)),
+        ("'aaa'.matches('a++')", ([], None, None, None, None, False)),
+        ("'ab'.matches('a(?#c)b')", (["true"], "true", "[true]", True, None, True)),
+        ("'a'.matches('a{10000}')", (["false"], "false", "[false]", False, None, True)),
+        ("'a'.matches('a{100000}')", (["false"], "false", "[false]", False, None, True)),
+        ("'a{2'.matches('a{2')", (["true"], "true", "[true]", True, None, True)),
+        ("'Ab'.matches('(?i)(?m)ab')", (["true"], "true", "[true]", True, None, True)),
+        ("'ab'.matches('^(?i)a')", (["true"], "true", "[true]", True, None, True)),
+        ("'[:alpha:]'.matches('[:alpha:]')", (["false"], "false", "[false]", False, None, True)),
+        ("'a'.matches('a{1/*c*/,2}')", (["false"], "false", "[false]", False, None, True)),
+    ]
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression, expected in native_expectations:
+            assert _all_outputs_with_valid(native, resource, expression) == expected, ("native", expression)
+        for expression, expected in fallback_expectations:
+            assert _all_outputs_with_valid(fallback, resource, expression) == expected, ("fallback", expression)
+    finally:
+        native.close()
+        fallback.close()
