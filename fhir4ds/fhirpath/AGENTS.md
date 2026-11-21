@@ -19,6 +19,37 @@
   that) before the 1000-batch/10000-result guard trips. Bounded and
   parity-consistent; a semantic-hash fast path would be needed to fix.
 
+- **v0.0.26 Domain 2 HISTORIAN adjudications (2026-11-21, systematic
+  spec-walkdown, 0 defects):** (1) `~` on incomparable quantities
+  (`1 'x' ~ 1 year`, `1 'cm' ~ 1 's'`) AND on cross-unit offset
+  temperatures (`1 'Cel' ~ 33.8 '[degF]'`) is FALSE on both engines — the
+  v0.0.24 it2 corpus-refresh adjudication (official testEquivalent28/29
+  "quantities that can't be compared are not equivalent"), pinned in
+  test_equality_parity.py:735. This SUPERSEDES the older FP-13
+  root-AGENTS.md "empty for `~`" pins; `=`/`!=`/ordering keep empty for
+  offset temps. Do not re-flag. (2) `'\u005'` is STRICTLY rejected
+  (is_valid False, both engines) although N1 §4.1.2 prose example
+  TestEscape4 shows tolerant 'u005' — deliberate FP-10-era choice pinned
+  by test_malformed_literal_edges_match_python_fallback; no official
+  fixture pins the tolerant form (LOW INTENDED). (3) `trace('')` with an
+  empty name returns the input on both engines — v2.0.0 §5.9.1 imposes
+  NO name constraint (the exported helper's non-empty-name rule is its
+  own stricter contract). (4) Unary plus IS grammar (`polarityExpression
+  : ('+'|'-') expression`): `+5` valid on both engines. Probes:
+  `.temp/qa/d2_historian_v0026/` (p1-p5).
+
+- **repeatAll self-projection converges by design (v0.0.26 Domain 2
+  SKEPTIC, 2026-11-21):** `1.repeatAll($this)` does NOT trip the guard —
+  the work queue is gated on `=`-equality newness while the RESULT keeps
+  duplicates, so a self-projection yields exactly one duplicate round
+  (`['1','1']`, is_valid True) on BOTH engines; only value-growing
+  projections (`$this + 1`) fire "repeatAll() infinite loop detected".
+  Work gating uses FHIRPath semantic `=` (quantity cross-unit: a `10 'mm'`
+  projection off a `1 'cm'` input is NOT new work, but IS emitted again
+  in the result). Union `|` dedups at construction BEFORE `~` sees a
+  collection — never write multi-item `~` expectations with duplicate
+  spellings across operands. Probe: `.temp/qa/d2_skeptic_v0026/`.
+
 - **repeat()/repeatAll() termination guard parity (v0.0.26 Domain 1
   SKEPTIC, 2026-11-21):** Python-engine `repeat_macro`/`repeat_all_macro`
   (`engine/invocations/filtering.py`) MUST keep the frontier-round
