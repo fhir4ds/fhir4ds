@@ -485,21 +485,59 @@ def _compare_cql_duration_quantities(q1_dict: dict, q2_dict: dict, op: str):
     precision1 = _decimal_equivalence_precision(q1_dict)
     precision2 = _decimal_equivalence_precision(q2_dict)
 
+    # Exact rational comparison: the day-conversion tables store values as
+    # context-rounded Decimals (1/24 rounds at 28 digits), so Decimal
+    # arithmetic makes 1 'h' and 60 'min' differ by 1 ulp and equality
+    # wrongly returns False. Fractions keep the comparison exact.
+    from fractions import Fraction
+    from decimal import localcontext
+
+    def _exact_days(value, table, unit):
+        # table[unit] is a context-rounded Decimal (1/24 at 28 digits);
+        # limit_denominator recovers the exact rational it was rounded
+        # from, so 1 'h' and 60 'min' compare exactly equal.
+        return Fraction(value) * Fraction(table[unit]).limit_denominator(10**9)
+
+    def _to_decimal(frac):
+        with localcontext() as ctx:
+            ctx.prec = 60
+            return Decimal(frac.numerator) / Decimal(frac.denominator)
+
     if op in ("~", "!~"):
-        left = value1 * _CQL_EQUIVALENT_DURATION_DAYS[unit1]
-        right = value2 * _CQL_EQUIVALENT_DURATION_DAYS[unit2]
+        left = _to_decimal(_exact_days(value1, _CQL_EQUIVALENT_DURATION_DAYS, unit1))
+        right = _to_decimal(_exact_days(value2, _CQL_EQUIVALENT_DURATION_DAYS, unit2))
         return _apply_quantity_compare(left, right, op, precision1, precision2)
 
     if unit1 in _CQL_VARIABLE_CALENDAR_UNITS or unit2 in _CQL_VARIABLE_CALENDAR_UNITS:
         if unit1 in _CQL_VARIABLE_CALENDAR_UNITS and unit2 in _CQL_VARIABLE_CALENDAR_UNITS:
-            left = value1 * _CQL_VARIABLE_CALENDAR_UNITS[unit1]
-            right = value2 * _CQL_VARIABLE_CALENDAR_UNITS[unit2]
-            return _apply_quantity_compare(left, right, op, precision1, precision2)
+            left = _exact_days(value1, _CQL_VARIABLE_CALENDAR_UNITS, unit1)
+            right = _exact_days(value2, _CQL_VARIABLE_CALENDAR_UNITS, unit2)
+            if op == ">":
+                return left > right
+            if op == "<":
+                return left < right
+            if op == ">=":
+                return left >= right
+            if op == "<=":
+                return left <= right
+            if op == "==":
+                return left == right
+            return left != right
         return None
 
-    left = value1 * _CQL_DEFINITE_DURATION_DAYS[unit1]
-    right = value2 * _CQL_DEFINITE_DURATION_DAYS[unit2]
-    return _apply_quantity_compare(left, right, op, precision1, precision2)
+    left = _exact_days(value1, _CQL_DEFINITE_DURATION_DAYS, unit1)
+    right = _exact_days(value2, _CQL_DEFINITE_DURATION_DAYS, unit2)
+    if op == ">":
+        return left > right
+    if op == "<":
+        return left < right
+    if op == ">=":
+        return left >= right
+    if op == "<=":
+        return left <= right
+    if op == "==":
+        return left == right
+    return left != right
 
 
 def _parse_quantity(value: str | None) -> dict | None:
