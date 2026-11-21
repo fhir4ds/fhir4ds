@@ -604,6 +604,88 @@ def _build_resource_id_expr(resource_ref: "SQLExpression") -> "SQLExpression":
     )
 
 
+def _synthesize_target_from_count_unnest(select: "SQLSelect"):
+    """Target twin for the ``COUNT(...) FROM (SELECT unnest(...) AS _elem)``
+    aggregate shape whose list source coerces rows from a resource-bearing
+    CTE. Returns the QA-021 single-row comma-joined resource-id subquery, or
+    None when the shape does not match.
+    """
+    from ...translator.types import SQLAlias as _SA, SQLSelect as _SS, SQLSubquery as _SQ
+
+    def _single_col_expr(sel):
+        if not sel or not getattr(sel, "columns", None) or len(sel.columns) != 1:
+            return None
+        c = sel.columns[0]
+        return c.expr if isinstance(c, SQLAlias) else c
+
+    # Column must be a bare COUNT aggregate
+    col = _single_col_expr(select)
+    if not (isinstance(col, SQLFunctionCall) and col.name.upper() == "COUNT"):
+        return None
+    # FROM must be (SELECT unnest(X) AS _elem) AS <agg alias>
+    fc = select.from_clause
+    if not isinstance(fc, _SA):
+        return None
+    unnest_sel = fc.expr if isinstance(fc.expr, (_SQ, _SS)) else None
+    if isinstance(unnest_sel, _SQ):
+        unnest_sel = unnest_sel.query
+    if not isinstance(unnest_sel, _SS):
+        return None
+    unnest_col = _single_col_expr(unnest_sel)
+    if not (isinstance(unnest_col, SQLFunctionCall) and unnest_col.name.lower() == "unnest"):
+        return None
+    list_subq = unnest_col.args[0] if unnest_col.args else None
+    if isinstance(list_subq, _SQ):
+        list_subq = list_subq.query
+    if not isinstance(list_subq, _SS):
+        return None
+    # list subquery FROM (SELECT * AS __cql_list_value FROM <CTE> AS <row> [WHERE w]) AS _cql_list_source
+    lfc = list_subq.from_clause
+    if not isinstance(lfc, _SA):
+        return None
+    row_sel = lfc.expr if isinstance(lfc.expr, (_SQ, _SS)) else None
+    if isinstance(row_sel, _SQ):
+        row_sel = row_sel.query
+    if not isinstance(row_sel, _SS):
+        return None
+    rfc = row_sel.from_clause
+    if not isinstance(rfc, _SA):
+        return None
+    row_alias = rfc.alias
+    from ..placeholder import RetrievePlaceholder as _RP
+    if not isinstance(rfc.expr, (SQLIdentifier, _RP)):
+        return None
+    resource_ref = SQLQualifiedIdentifier(parts=[row_alias, "resource"])
+    id_expr = _build_resource_id_expr(resource_ref)
+    target_select = SQLSelect(
+        columns=[
+            SQLFunctionCall(
+                name="COALESCE",
+                args=[
+                    SQLFunctionCall(
+                        name="array_to_string",
+                        args=[
+                            SQLFunctionCall(
+                                name="list_sort",
+                                args=[SQLFunctionCall(name="list_distinct", args=[
+                                    SQLFunctionCall(name="list", args=[id_expr]),
+                                ])],
+                            ),
+                            SQLLiteral(value=","),
+                        ],
+                    ),
+                    SQLCast(expression=SQLNull(), target_type="VARCHAR"),
+                ],
+            ),
+        ],
+        from_clause=rfc,
+        where=row_sel.where,
+        order_by=row_sel.order_by,
+        limit=row_sel.limit,
+    )
+    return SQLSubquery(query=target_select)
+
+
 def _synthesize_target_from_resource_select(
     select: "SQLSelect",
     context: "Optional[SQLTranslationContext]" = None,
@@ -635,6 +717,17 @@ def _synthesize_target_from_resource_select(
     col = select.columns[0]
     if isinstance(col, SQLAlias):
         col = col.expr
+
+    # Case 3: COUNT-over-unnest (CMS74 union-unnest count machinery,
+    # d3-SKEPTIC v0.0.26 audit-evidence repair). The count lowers to
+    # `SELECT COUNT(_elem) FROM (SELECT unnest(<list subq>) AS _elem) AS
+    # _agg_src`, where the list subquery coerces rows from an innermost
+    # `SELECT * AS __cql_list_value FROM <CTE> AS <row> WHERE <w>`.
+    # Synthesize the target from that innermost CTE with the same row
+    # filters so multi-winner evidence names the resources (QA-021).
+    _c3 = _synthesize_target_from_count_unnest(select)
+    if _c3 is not None:
+        return _c3
 
     # Case 1: directly selecting 'resource' column
     if isinstance(col, SQLQualifiedIdentifier) and col.parts[-1] == "resource":

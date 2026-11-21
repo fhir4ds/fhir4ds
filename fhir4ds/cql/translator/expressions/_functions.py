@@ -3118,14 +3118,40 @@ class FunctionsMixin:
                 # Patient-correlate the leaf BEFORE coercion: the rows
                 # select spans ALL patients; without the correlation every
                 # patient counts every row (QI-Core gate over-count on
-                # CMS74/CMS149/CMS506).
+                # CMS74/CMS149/CMS506). SKIP patient-independent leaves —
+                # a list-literal source lowers to a derived unnest table
+                # `(SELECT unnest([...]) AS I) AS _list` with NO FROM and
+                # no patient_id column; correlating it appends
+                # `_list.patient_id = _pt.patient_id` and binder-fails
+                # (d3-SKEPTIC v0.0.26: Count((from {null as Integer} I
+                # return I))).
                 _ls_inner = (
                     _leaf_sql.query if isinstance(_leaf_sql, SQLSubquery)
                     and isinstance(_leaf_sql.query, SQLSelect) else _leaf_sql
                 )
-                if isinstance(_ls_inner, SQLSelect) and isinstance(
-                    _ls_inner.from_clause, SQLAlias
-                ) and _ls_inner.from_clause.alias:
+                _leaf_from = (
+                    _ls_inner.from_clause
+                    if isinstance(_ls_inner, SQLSelect) else None
+                )
+                _leaf_from_expr = (
+                    _leaf_from.expr if isinstance(_leaf_from, SQLAlias) else None
+                )
+                _leaf_row_scoped = isinstance(
+                    _leaf_from_expr, (SQLIdentifier, SQLQualifiedIdentifier)
+                ) or isinstance(_leaf_from_expr, RetrievePlaceholder) or (
+                    isinstance(_leaf_from_expr, (SQLSubquery, SQLSelect))
+                    and (
+                        _leaf_from_expr.from_clause is not None
+                        if isinstance(_leaf_from_expr, SQLSelect)
+                        else _leaf_from_expr.query.from_clause is not None
+                    )
+                )
+                if (
+                    _leaf_row_scoped
+                    and isinstance(_ls_inner, SQLSelect)
+                    and isinstance(_ls_inner.from_clause, SQLAlias)
+                    and _ls_inner.from_clause.alias
+                ):
                     from ._query import _patient_correlated_where
                     _ls_inner.where = _patient_correlated_where(
                         _ls_inner.where,
