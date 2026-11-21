@@ -230,6 +230,14 @@ class ListsMixin:
                     _carries_pid = False
                     if isinstance(_src, (SQLIdentifier,)) and _src.quoted:
                         _carries_pid = True
+                    elif isinstance(_src, RetrievePlaceholder):
+                        # Phase-1 translation: the retrieve is still a
+                        # placeholder; it resolves to a patient-keyed
+                        # retrieve CTE which carries patient_id. Skipping
+                        # the correlation here leaked rows across patients
+                        # for Count/First/... over `{ [Resource: VS] ... }`
+                        # braced-query selectors (d3-SKEPTIC v0.0.26).
+                        _carries_pid = True
                     elif isinstance(_src, SQLSubquery) and isinstance(_src.query, SQLSelect):
                         for _c in _src.query.columns or []:
                             _cname = (

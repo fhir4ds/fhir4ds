@@ -3947,13 +3947,22 @@ class FunctionsMixin:
             else:
                 substr = SQLFunctionCall(name="system.substring", args=[args[0], start_index])
             invalid_start = SQLBinaryOp(left=args[1], operator="<", right=SQLLiteral(value=0))
-            # CQL 1.5 §17.16: only start > Length is null; start ==
-            # Length yields the empty string (Substring('', 0) -> '',
-            # fixture-pinned; supersedes the older >= boundary).
+            # Official fixtures CqlStringOperatorsTest.xml: SubstringAB2
+            # pins Substring('ab', 2) -> null (start == length of a
+            # NON-EMPTY string is past the end); SubstringEmptyAnd0 pins
+            # Substring('', 0) -> ''. d3-SKEPTIC v0.0.26: the delta's
+            # "start == Length yields empty string" reading generalized the
+            # empty-string fixture to all strings.
+            _len_call = SQLFunctionCall(name="system.length", args=[args[0]])
+            # NOT(start=0 AND length=0) == (start != 0 OR length != 0)
             past_end = SQLBinaryOp(
-                left=args[1],
-                operator=">",
-                right=SQLFunctionCall(name="system.length", args=[args[0]]),
+                operator="AND",
+                left=SQLBinaryOp(left=args[1], operator=">=", right=_len_call),
+                right=SQLBinaryOp(
+                    operator="OR",
+                    left=SQLBinaryOp(left=args[1], operator="!=", right=SQLLiteral(value=0)),
+                    right=SQLBinaryOp(left=_len_call, operator="!=", right=SQLLiteral(value=0)),
+                ),
             )
             condition = SQLBinaryOp(operator="OR", left=invalid_start, right=past_end)
             if len(args) >= 3:
