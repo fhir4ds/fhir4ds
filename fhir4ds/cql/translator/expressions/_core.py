@@ -198,6 +198,44 @@ class CoreMixin:
             text = text + ("T23:59:59.999" if is_high else "T00:00:00.000")
         return SQLLiteral(value=text)
 
+    # QA-D4E-001: a trailing ISO-8601 UTC designator or numeric offset marks
+    # a bound whose instant differs from its local wall-clock text. Casting
+    # such a literal through DuckDB's naive TIMESTAMP silently strips the
+    # offset (keeps local wall time), shifting the interval by the offset
+    # amount; offset-bearing texts must flow verbatim because the VARCHAR
+    # temporal UDFs (intervalFromBounds/intervalContainsPrecise/...) parse
+    # ISO-8601 offsets natively.
+    _TZ_BOUND_SUFFIX_RE = _re.compile(r"(?:Z|[+-]\d{2}:\d{2})$", _re.IGNORECASE)
+
+    @classmethod
+    def _interval_parameter_bound_expr(
+        cls,
+        value: Any,
+        *,
+        is_datetime: bool,
+        is_high: bool,
+    ) -> SQLExpression:
+        """Interval parameter bound as a typed SQL expression.
+
+        Returns the TIMESTAMP/DATE-normalized cast for naive texts (historical
+        behavior) and the verbatim literal for offset-bearing datetime texts
+        (QA-D4E-001: naive TIMESTAMP casts strip timezone offsets).
+        """
+        literal = cls._interval_parameter_bound_sql(
+            value, is_datetime=is_datetime, is_high=is_high
+        )
+        if (
+            is_datetime
+            and isinstance(literal, SQLLiteral)
+            and isinstance(literal.value, str)
+            and cls._TZ_BOUND_SUFFIX_RE.search(literal.value.strip())
+        ):
+            return literal
+        return SQLCast(
+            expression=literal,
+            target_type="TIMESTAMP" if is_datetime else "DATE",
+        )
+
     def _parameter_reference_expression(self, name: str, cql_type: Optional[str]) -> SQLExpression:
         """Return a runtime parameter reference preserving declared primitive type."""
         ref = SQLParameterRef(name=name)
@@ -776,13 +814,12 @@ class CoreMixin:
                     # Date-only end bounds get end-of-day (T23:59:59.999)
                     # to match CQL date→datetime promotion semantics.
                     is_dt = symbol.cql_type and "DateTime" in str(symbol.cql_type)
-                    cast_type = "TIMESTAMP" if is_dt else "DATE"
-                    start_literal = self._interval_parameter_bound_sql(
+                    start_literal = self._interval_parameter_bound_expr(
                         b_start,
                         is_datetime=bool(is_dt),
                         is_high=False,
                     )
-                    end_literal = self._interval_parameter_bound_sql(
+                    end_literal = self._interval_parameter_bound_expr(
                         b_end,
                         is_datetime=bool(is_dt),
                         is_high=True,
@@ -790,8 +827,8 @@ class CoreMixin:
                     return SQLFunctionCall(
                         name="intervalFromBounds",
                         args=[
-                            SQLCast(expression=start_literal, target_type=cast_type),
-                            SQLCast(expression=end_literal, target_type=cast_type),
+                            start_literal,
+                            end_literal,
                             SQLLiteral(value=low_closed),
                             SQLLiteral(value=high_closed),
                         ],
