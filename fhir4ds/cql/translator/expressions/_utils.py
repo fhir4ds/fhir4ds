@@ -272,6 +272,68 @@ def _coerce_query_rows_to_list(node):
         return node
 
     value_alias = "__cql_list_value"
+
+    # QA-D3H-001: a query used as a query source lowers to a one-row-per-
+    # element projection whose WHERE/HAVING/ORDER BY may reference the
+    # PROJECTED ALIAS (DuckDB allows alias references in WHERE):
+    #   SELECT <cast> AS Q FROM "Observation" O WHERE Q IS NOT NULL AND ...
+    # Re-projecting the column as __cql_list_value while copying the WHERE
+    # verbatim drops the alias column and yields
+    # "Referenced column Q not found". When any trailing clause references
+    # the alias, nest the ORIGINAL select as a derived table instead and
+    # project the qualified alias column — semantically equivalent and the
+    # alias binding survives.
+    _first_alias = first_col.alias if isinstance(first_col, SQLAlias) else None
+    if _first_alias:
+        def _sql_references_name(node, name: str) -> bool:
+            if node is None:
+                return False
+            if isinstance(node, (list, tuple)):
+                return any(_sql_references_name(e, name) for e in node)
+            if isinstance(node, SQLIdentifier):
+                return node.name == name
+            if isinstance(node, SQLQualifiedIdentifier):
+                return name in node.parts
+            stack = [node]
+            seen = set()
+            while stack:
+                cur = stack.pop()
+                if id(cur) in seen:
+                    continue
+                seen.add(id(cur))
+                if isinstance(cur, SQLIdentifier) and cur.name == name:
+                    return True
+                if isinstance(cur, SQLQualifiedIdentifier) and name in cur.parts:
+                    return True
+                for value in vars(cur).values():
+                    if hasattr(value, "__dict__"):
+                        stack.append(value)
+                    elif isinstance(value, (list, tuple)):
+                        stack.extend(
+                            e for e in value if hasattr(e, "__dict__")
+                        )
+            return False
+
+        _trailing = (inner_select.where, inner_select.having,
+                     inner_select.order_by, inner_select.group_by)
+        if any(_sql_references_name(clause, _first_alias) for clause in _trailing):
+            _qualified = SQLQualifiedIdentifier(
+                parts=["_cql_row_source", _first_alias]
+            )
+            return SQLSubquery(query=SQLSelect(
+                columns=[SQLFunctionCall(
+                    name="COALESCE",
+                    args=[
+                        SQLFunctionCall(name="list", args=[_qualified]),
+                        SQLArray([]),
+                    ],
+                )],
+                from_clause=SQLAlias(
+                    expr=SQLSubquery(query=inner_select),
+                    alias="_cql_row_source",
+                ),
+            ))
+
     # Engine-backlog: DISTINCT (the CQL default `return` de-dup at the
     # definition root) reorders rows hash-wise, scrambling list() order
     # against order-sensitive comparison. With no explicit ORDER BY, order
