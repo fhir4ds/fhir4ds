@@ -2,6 +2,32 @@
 
 ## Known Fragile Areas
 
+- **repeat()/repeatAll() termination guard parity (v0.0.26 Domain 1
+  SKEPTIC, 2026-11-21):** Python-engine `repeat_macro`/`repeat_all_macro`
+  (`engine/invocations/filtering.py`) MUST keep the frontier-round
+  termination guard (1000 work batches / 10000 results), mirroring native
+  `fn_repeat`/`fn_repeat_all` (`evaluator.cpp`). A value-growing projection
+  (`1.repeat($this + 1)`) never converges; without the guard the fallback
+  engine loops forever, hanging the fallback `fhirpath` AND
+  `fhirpath_is_valid` UDFs — DuckDB runs UDFs on worker threads where
+  SIGALRM cannot fire, so nothing short of query cancellation stops it
+  (whole-query DoS; one probe run also ended in SIGSEGV from the memory
+  growth endgame). The guard raises `FHIRPathError("repeat() infinite loop
+  detected")` / `("repeatAll() infinite loop detected")` with messages
+  EXACTLY matching native; the UDF wrapper converts to empty and BOTH
+  is_valid classifiers return False — do NOT add these messages to
+  `_is_valid_empty_result_error` (native rejects them). The loops process
+  by frontier round, which preserves the old FIFO-queue result order
+  exactly (a FIFO queue IS frontier order); a per-DEQUEUED-item cap would
+  diverge from native on legitimately wide converging trees (2000-linkId
+  case). Guard tests:
+  `test_filter_projection_parity.py::test_repeat_unbounded_projection_guard_terminates_in_fallback`
+  and `::test_repeat_guard_does_not_fire_on_converging_wide_projections`.
+  Related boundary: the direct helper `functions/filter.py::repeat` /
+  `repeat_all` carry their OWN `max_iterations` guard (default 1000) with a
+  different message — fine (different surface), but keep the engine-side
+  guard if the helper is ever refactored to delegate.
+
 - **§G-5 time boundary precision fix (2026-08-11):** `lowBoundary()` /
   `highBoundary()` on a Time input now preserves components at the
   input's precision and only fills components below it. Previously

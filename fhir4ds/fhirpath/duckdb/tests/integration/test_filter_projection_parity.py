@@ -366,3 +366,97 @@ def test_oftype_qualified_fhir_namespace_matches_native_and_fallback(
     finally:
         native.close()
         fallback.close()
+
+
+def test_repeat_unbounded_projection_guard_terminates_in_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """v0.0.26 Domain 1 SKEPTIC: value-growing projections must hit a
+    termination guard in the Python engine, mirroring the native
+    ``repeat()/repeatAll() infinite loop detected`` FHIRPathSpecError.
+
+    Pre-fix, ``1.repeat($this + 1)`` (every projection yields a brand-new
+    value, so the '='-gated work queue never converges) looped FOREVER in
+    the Python engine — hanging the fallback ``fhirpath`` UDF and the
+    fallback ``fhirpath_is_valid`` (which validates by evaluating), while
+    native throws at 1000 iterations / 10000 results and returns empty at
+    the UDF boundary. The guard raises the same-message FHIRPathError,
+    which the UDF wrapper converts to empty (eval) and is_valid classifies
+    as False (matching native — the message is deliberately NOT in the
+    ``_is_valid_empty_result_error`` acceptance list).
+    """
+    import signal
+
+    from fhir4ds.fhirpath import evaluate
+    from fhir4ds.fhirpath.engine.errors import FHIRPathError
+
+    class _Timeout(Exception):
+        pass
+
+    def _alarm(signum: int, frame: object) -> None:
+        raise _Timeout()
+
+    resource = {"resourceType": "Patient", "id": "p1"}
+    old_handler = signal.signal(signal.SIGALRM, _alarm)
+    try:
+        for expression in ("1.repeat($this + 1)", "1.repeatAll($this + 1)"):
+            signal.alarm(20)  # engine-level eval runs in-thread; alarm fires
+            try:
+                with pytest.raises(FHIRPathError, match="infinite loop detected"):
+                    evaluate(resource, expression)
+            except _Timeout:
+                pytest.fail(f"{expression}: engine evaluation did not terminate")
+            finally:
+                signal.alarm(0)
+    finally:
+        signal.signal(signal.SIGALRM, old_handler)
+
+    # UDF boundary: fallback converts the guard error to empty, matching
+    # native's empty; is_valid classifies False on BOTH engines.
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for expression in ("1.repeat($this + 1)", "1.repeatAll($this + 1)"):
+            for con in (native, fallback):
+                row = con.execute(
+                    "SELECT fhirpath(?::JSON, ?)", ["{}", expression]).fetchone()
+                assert row[0] in ([], None), (expression, row)
+                assert con.execute(
+                    "SELECT fhirpath_is_valid(?)", [expression]).fetchone()[0] is False
+    finally:
+        native.close()
+        fallback.close()
+
+
+def test_repeat_guard_does_not_fire_on_converging_wide_projections(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """v0.0.26 Domain 1 SKEPTIC: the guard mirrors native thresholds (work
+    batches, not dequeued items) so a legitimately WIDE converging tree
+    (many distinct results across few frontier rounds) still completes on
+    both engines with identical output."""
+    # 2000 distinct leaves reachable in a handful of frontier rounds:
+    # repeat over a two-level tree whose children project distinct values.
+    leaf_count = 2000
+    resource = {
+        "resourceType": "Questionnaire",
+        "id": "q",
+        "item": [
+            {"linkId": f"L{i}"} for i in range(leaf_count)
+        ],
+    }
+    expression = "item.repeatAll($this.linkId)"
+    expected = [f"L{i}" for i in range(leaf_count)]
+
+    native = _connection()
+    fallback = _python_fallback_connection(monkeypatch)
+    try:
+        for con in (native, fallback):
+            row = con.execute(
+                "SELECT fhirpath(?::JSON, ?)", [json.dumps(resource), expression]
+            ).fetchone()
+            got = json.loads(row[0]) if isinstance(row[0], str) else row[0]
+            assert got == expected
+    finally:
+        native.close()
+        fallback.close()
