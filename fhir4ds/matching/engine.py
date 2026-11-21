@@ -40,11 +40,13 @@ from .fuzzy import dob_fuzzy_matches, name_fuzzy_match, text_fuzzy_match
 from .normalizers import extract_patient_fields, suffix_conflict
 from .rules import (
     CATEGORY1_RULES,
+    EMBED,
     EXACT,
     FIELD_DEPENDENCY_GROUPS,
     FIELD_U_PROBS,
     GUARD_FIELD_BY_NAME,
     MatchRule,
+    patient_rules_with_embedding,
 )
 from .store import create_matching_tables, exact_candidates, index_patient  # noqa: F401
 
@@ -145,35 +147,54 @@ def _field_match(
     field_name: str,
     patient_values: list[str],
     candidate_values: list[str],
-    allow_fuzzy: bool,
-) -> tuple[bool, bool, str]:
-    """Match one rule field: (matched, was_fuzzy, evidence).
+    mode: str,
+) -> tuple[bool, bool, str, Optional[str]]:
+    """Match one rule field: (matched, was_fuzzy, evidence, embed_band).
 
     Exact-any first (patient value present among the candidate's indexed
     values); then, when the field is fuzzy-marked, pairwise fuzzy
     verification (person names / org-location names / dob comparators).
+    EMBED-mode name fields verify through the pinned name-embedding
+    distance bands (FHIR4-20); the matched band is returned so the
+    decider can select the band's u-value, and the evidence carries
+    ``a~b|band=<band>|model=name-embed-v1@<sha8>``.
     """
     cand_set = set(candidate_values)
     for pv in patient_values:
         if pv in cand_set:
-            return True, False, pv
-    if allow_fuzzy:
+            return True, False, pv, None
+    if mode != EXACT:
         if field_name in _NAME_FIELDS:
+            if mode == EMBED:
+                from . import name_embedding
+
+                model_id = name_embedding.embedding_model_id() or "unavailable"
+                for pv in patient_values:
+                    for cv in candidate_values:
+                        band = name_embedding.name_distance_band(pv, cv)
+                        if band is not None:
+                            return (
+                                True,
+                                True,
+                                f"{pv}~{cv}|band={band}|model={model_id}",
+                                band,
+                            )
+                return False, False, "", None
             for pv in patient_values:
                 for cv in candidate_values:
                     if name_fuzzy_match(pv, cv):
-                        return True, True, f"{pv}~{cv}"
+                        return True, True, f"{pv}~{cv}", None
         elif field_name in _TEXT_NAME_FIELDS:
             for pv in patient_values:
                 for cv in candidate_values:
                     if text_fuzzy_match(pv, cv):
-                        return True, True, f"{pv}~{cv}"
+                        return True, True, f"{pv}~{cv}", None
         elif field_name == "dob":
             for pv in patient_values:
                 for cv in candidate_values:
                     if dob_fuzzy_matches(pv, cv):
-                        return True, True, f"{pv}~{cv}"
-    return False, False, ""
+                        return True, True, f"{pv}~{cv}", None
+    return False, False, "", None
 
 
 def _guard_passes(
@@ -225,27 +246,31 @@ def _verify_candidate(
     fields: dict[str, list[str]],
     candidate_id: str,
     entity_type: str,
-) -> tuple[bool, bool, dict[str, str]]:
+) -> tuple[bool, bool, dict[str, str], dict[str, str]]:
     """Verify every rule field against one candidate.
 
-    Returns (matched, any_field_fuzzy, evidence). Exact-mode fields never
-    fuzzy-match; fuzzy-mode fields try exact first (so unchanged values do
-    not taint match_type).
+    Returns (matched, any_field_fuzzy, evidence, embed_bands). Exact-mode
+    fields never fuzzy-match; fuzzy-mode fields try exact first (so
+    unchanged values do not taint match_type). EMBED fields resolve to
+    their matched band (an exactly-equal pair is the tight band).
     """
     evidence: dict[str, str] = {}
+    embed_bands: dict[str, str] = {}
     any_fuzzy = False
     for field_name, mode in rule.fields:
-        matched, was_fuzzy, ev = _field_match(
+        matched, was_fuzzy, ev, band = _field_match(
             field_name,
             fields.get(field_name, []),
             _indexed_values(conn, entity_type, field_name, candidate_id),
-            allow_fuzzy=(mode != EXACT),
+            mode=mode,
         )
         if not matched:
-            return False, False, {}
+            return False, False, {}, {}
+        if mode == EMBED:
+            embed_bands[field_name] = band or "tight"
         any_fuzzy = any_fuzzy or was_fuzzy
         evidence[field_name] = ev
-    return True, any_fuzzy, evidence
+    return True, any_fuzzy, evidence, embed_bands
 
 
 def _exceeds_threshold(p: float, threshold: float) -> bool:
@@ -304,6 +329,8 @@ def match_patient(
     conn: duckdb.DuckDBPyConnection,
     patient_resource: dict,
     exclude: frozenset[str] = frozenset(),
+    *,
+    use_embedding: bool = True,
 ) -> MatchResult:
     """Match one Patient resource against the indexed corpus.
 
@@ -312,10 +339,16 @@ def match_patient(
     already-indexed patient never matches itself, and by corpus-mode
     matching so decisions depend only on the patient SET (determinism
     doctrine, design doc §4).
+
+    ``use_embedding`` (FHIR4-20) evaluates the additive E1-E3 embedding
+    rules alongside the Category-1 table; inert when the pinned artifact
+    is absent (the combined table then equals CATEGORY1_RULES). Pass
+    False to pin exact legacy behavior.
     """
     create_matching_tables(conn)
     return match_fields(
-        conn, extract_patient_fields(patient_resource), exclude=exclude
+        conn, extract_patient_fields(patient_resource), exclude=exclude,
+        rules=patient_rules_with_embedding() if use_embedding else CATEGORY1_RULES,
     )
 
 
@@ -378,9 +411,9 @@ def match_fields(
             continue
         # Pairwise verification (exact fields are guaranteed by blocking;
         # fuzzy fields verified exact-first then fuzzy per candidate).
-        verified: dict[str, tuple[bool, dict[str, str]]] = {}
+        verified: dict[str, tuple[bool, dict[str, str], dict[str, str]]] = {}
         for pid in sorted(candidates):
-            matched, any_fuzzy, evidence = _verify_candidate(
+            matched, any_fuzzy, evidence, embed_bands = _verify_candidate(
                 conn, rule, fields, pid, entity_type)
             if not matched:
                 continue
@@ -395,7 +428,7 @@ def match_fields(
                 }
                 if not _guards_pass(rule, fields, guard_values):
                     continue
-            verified[pid] = (any_fuzzy, evidence)
+            verified[pid] = (any_fuzzy, evidence, embed_bands)
         if not verified:
             continue
         # Suffix-conflict negation: a candidate whose suffix set is non-empty
@@ -410,7 +443,22 @@ def match_fields(
         if not surviving:
             continue
         any_fuzzy = any(verified[pid][0] for pid in surviving)
-        p = rule.p_collision_fuzzy if any_fuzzy else rule.p_collision
+        if rule.band_u_values:
+            # FHIR4-20: per-band P selection — the matched embed band(s)
+            # choose their u-value in the product. A single surviving
+            # band set is needed for an unambiguous P; mixed bands across
+            # survivors take the LOOSEST (most conservative) band per
+            # embed field.
+            merged_bands: dict[str, str] = {}
+            order = [b for b, _u in rule.band_u_values]
+            for pid in surviving:
+                for fname, band in verified[pid][2].items():
+                    if fname not in merged_bands or \
+                            order.index(band) > order.index(merged_bands[fname]):
+                        merged_bands[fname] = band
+            p = rule.effective_p(merged_bands)
+        else:
+            p = rule.p_collision_fuzzy if any_fuzzy else rule.p_collision
         match_type = "fuzzy" if any_fuzzy else "exact"
         enforcement_by_pid: dict[str, dict] = {}
         if enforce_threshold is not None \
@@ -494,11 +542,14 @@ def evaluate_rule(
     )
     surviving: list[str] = []
     any_fuzzy = False
+    merged_bands: dict[str, str] = {}
     for pid in sorted(candidates):
-        matched, fuzzy, _ev = _verify_candidate(
+        matched, fuzzy, _ev, bands = _verify_candidate(
             conn, rule, fields, pid, entity_type)
         if not matched:
             continue
+        if bands:
+            merged_bands.update(bands)
         if rule.guards and not _guards_pass(
             rule,
             fields,
@@ -517,7 +568,9 @@ def evaluate_rule(
         return MatchResult(
             outcome="match",
             rule_id=rule.rule_id,
-            confidence=1.0 - (rule.p_collision_fuzzy if any_fuzzy else rule.p_collision),
+            confidence=1.0 - (
+                rule.effective_p(merged_bands) if rule.band_u_values
+                else (rule.p_collision_fuzzy if any_fuzzy else rule.p_collision)),
             matched_ids=(surviving[0],),
             match_type="fuzzy" if any_fuzzy else "exact",
             evaluated_rules=(rule.rule_id,),
@@ -526,7 +579,9 @@ def evaluate_rule(
         return MatchResult(
             outcome="ambiguous",
             rule_id=rule.rule_id,
-            confidence=1.0 - (rule.p_collision_fuzzy if any_fuzzy else rule.p_collision),
+            confidence=1.0 - (
+                rule.effective_p(merged_bands) if rule.band_u_values
+                else (rule.p_collision_fuzzy if any_fuzzy else rule.p_collision)),
             matched_ids=tuple(surviving),
             match_type="fuzzy" if any_fuzzy else "exact",
             evaluated_rules=(rule.rule_id,),

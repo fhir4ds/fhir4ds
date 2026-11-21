@@ -98,7 +98,7 @@ def catching_rules(
             candidates = _fuzzy_rule_pool(conn, rule, fields, "Patient")
         if candidate_id not in (candidates - {patient_id}):
             continue
-        matched, _fuzzy, _ev = _verify_candidate(
+        matched, _fuzzy, _ev, _bands = _verify_candidate(
             conn, rule, fields, candidate_id, "Patient")
         if not matched:
             continue

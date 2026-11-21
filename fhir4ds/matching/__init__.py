@@ -67,11 +67,18 @@ from .normalizers import (
 )
 from .rules import (
     APPROVAL_THRESHOLD,
+    BAND_EDGES,
+    BAND_U_VALUES,
     CATEGORY1_RULES,
+    EMBED,
     FIELD_U_PROBS,
     MatchRule,
+    embedding_rules,
     p_collision,
+    patient_rules_with_embedding,
 )
+from . import name_embedding
+from .name_embedding import name_distance_band  # noqa: F401 (re-export)
 from .related_person import RelatedPersonReport, match_related_persons
 from .store import (
     create_matching_tables,
@@ -92,6 +99,14 @@ __all__ = [
     "FIELD_U_PROBS",
     "APPROVAL_THRESHOLD",
     "p_collision",
+    # FHIR4-20: embedding match rules
+    "EMBED",
+    "BAND_U_VALUES",
+    "BAND_EDGES",
+    "embedding_rules",
+    "patient_rules_with_embedding",
+    "name_embedding",
+    "name_distance_band",
     "damerau_le1",
     "name_fuzzy_match",
     "dob_fuzzy_matches",
