@@ -2,6 +2,23 @@
 
 ## Known Fragile Areas
 
+- **v0.0.26 Domain 1 EXPLORER fixes (2026-11-21):** (1)
+  `_has_invalid_math_literal_operands` (duckdb/udf.py) MUST stay
+  memoized — the pre-memoization per-operator left/right recursion was
+  exponential (T(n)=3·T(n−1)); ~20-op arithmetic chains hung the fallback
+  `fhirpath_is_valid` UDF and ≥60 ops intermittently SIGSEGV'd the
+  process. Guard:
+  `test_operator_parity.py::test_math_literal_operand_scan_is_not_exponential_d1_explorer`.
+  (2) Parenthesized INT32_MIN/LLONG_MIN spellings (`-(2147483648)`,
+  `-(9223372036854775808L)`) are valid on BOTH engines — the fallback
+  prechecks' minus-scan skips wrapping `()`/whitespace and the engine
+  `polarity_expression` unwrap includes `ParenthesizedTerm`. Guard:
+  extended `test_integer_literal_range_matches_spec_and_backends`.
+  DEFERRED LOW: repeat/repeatAll guard FIRING is O(n²) in the equality
+  dedup — a 13-wide frontier repeat takes ~116s native (fallback ~10×
+  that) before the 1000-batch/10000-result guard trips. Bounded and
+  parity-consistent; a semantic-hash fast path would be needed to fix.
+
 - **repeat()/repeatAll() termination guard parity (v0.0.26 Domain 1
   SKEPTIC, 2026-11-21):** Python-engine `repeat_macro`/`repeat_all_macro`
   (`engine/invocations/filtering.py`) MUST keep the frontier-round
