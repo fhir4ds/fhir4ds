@@ -151,11 +151,19 @@ class TestRuleRegistration:
         assert ("street_line", "exact") in e3.fields
         for rule in rules.values():
             assert rule.band_u_values, "E-rules carry per-band u-values"
-            assert [b for b, _u in rule.band_u_values] == ["tight", "mid", "loose"]
             assert all(0.0 < u < 1.0 for _b, u in rule.band_u_values)
             # ordering bounds: p_collision is the TIGHTEST-band product,
             # p_collision_fuzzy the LOOSEST-band product
             assert rule.p_collision <= rule.p_collision_fuzzy
+        # P4 calibration: bands are truncated PER RULE to the approval
+        # budget (2e-12). With the measured u-values (tight 0.0025 /
+        # mid 0.034 / loose 0.12): E1 keeps tight+mid (loose product
+        # 6e-12 > budget), E2 keeps all three (phone companion), E3
+        # keeps tight only (double-embed mid 3.5e-12 > budget).
+        assert [b for b, _u in rules["E1"].band_u_values] == ["tight", "mid"]
+        assert [b for b, _u in rules["E2"].band_u_values] == [
+            "tight", "mid", "loose"]
+        assert [b for b, _u in rules["E3"].band_u_values] == ["tight"]
 
     def test_table_is_additive_sorted_and_category1_identical(self):
         combined = patient_rules_with_embedding()
@@ -178,14 +186,21 @@ class TestRuleRegistration:
             assert r in combined
 
     def test_manifest_u_values_match_constants(self):
-        from fhir4ds.matching.rules import BAND_U_VALUES
+        from fhir4ds.matching.rules import BAND_EDGES, BAND_U_VALUES
 
         assert {k: round(v, 10) for k, v in band_u_values()} == {
             k: round(v, 10) for k, v in dict(BAND_U_VALUES).items()
         }
+        # P4: edges pin in lockstep too, and the manifest records the
+        # calibration (a regenerated artifact must not silently revert
+        # to placeholders).
+        assert band_edges() == BAND_EDGES
+        assert name_embedding.manifest()["calibrated"] is True
+        assert "calibration" in name_embedding.manifest()
 
     def test_effective_p_per_band(self):
         e1 = {r.rule_id: r for r in embedding_rules()}["E1"]
+        e3 = {r.rule_id: r for r in embedding_rules()}["E3"]
         from fhir4ds.matching.rules import FIELD_U_PROBS
 
         base = (
@@ -198,7 +213,14 @@ class TestRuleRegistration:
             e1.effective_p({"first": "tight"}), base * u["tight"], rel_tol=1e-15
         )
         assert math.isclose(
-            e1.effective_p({"first": "loose"}), base * u["loose"], rel_tol=1e-15
+            e1.effective_p({"first": "mid"}), base * u["mid"], rel_tol=1e-15
+        )
+        # E3 squares the band u (two EMBED fields)
+        base3 = FIELD_U_PROBS["dob"][0] * FIELD_U_PROBS["street_line"][0]
+        assert math.isclose(
+            e3.effective_p({"first": "tight", "last": "tight"}),
+            base3 * u["tight"] ** 2,
+            rel_tol=1e-15,
         )
         # a rule without embed fields ignores the bands argument
         r04 = next(r for r in CATEGORY1_RULES if r.rule_id == "04")
@@ -358,6 +380,45 @@ class TestEngineEmbed:
         result = match_patient(conn, exact, exclude=frozenset({"p2"}))
         # exact values should be caught by cheaper Category-1 rules first
         assert result.rule_id not in {"E1", "E2", "E3"}
+
+    def test_band_gate_rejects_unapprovable_band_per_rule(self):
+        """P4 calibration: a pair landing in a band the rule does NOT
+        carry (dropped by the 2e-12 approval budget) must not match that
+        rule. abbey/becky sits at cosine distance ~0.484 = loose-only.
+        """
+        from fhir4ds.matching.engine import _field_match
+
+        # direct verification gate
+        matched, _fuzzy, _ev, band = _field_match(
+            "first", ["becky"], ["abbey"], EMBED,
+            embed_bands_allowed=frozenset({"tight", "mid"}))
+        assert not matched and band is None
+        matched, _fuzzy, ev, band = _field_match(
+            "first", ["becky"], ["abbey"], EMBED,
+            embed_bands_allowed=frozenset({"tight", "mid", "loose"}))
+        assert matched and band == "loose"
+        assert "band=loose" in ev
+
+        # end-to-end: E1 (tight+mid only) must not carry the pair; with a
+        # shared phone the E2 rule (all bands) may still match it.
+        conn = _conn()
+        base = json.loads(json.dumps(_BASE))
+        base["name"] = [
+            {"use": "official", "family": "Ibrahim", "given": ["Becky"]}]
+        base["telecom"] = [
+            {"system": "phone", "value": "555-301-4444", "use": "home"}]
+        index_patient(conn, base)
+        variant = json.loads(json.dumps(base))
+        variant["id"] = "p2"
+        variant["name"] = [
+            {"use": "official", "family": "Ibrahim", "given": ["Abbey"]}]
+        index_patient(conn, variant)
+        result = match_patient(conn, variant, exclude=frozenset({"p2"}))
+        assert result.rule_id != "E1", (
+            "E1 must reject a loose-band pair (band dropped by the "
+            "approval budget)")
+        if result.rule_id == "E2":
+            assert "band=loose" in result.evidence["first"]
 
 
 # ---------------------------------------------------------------------------

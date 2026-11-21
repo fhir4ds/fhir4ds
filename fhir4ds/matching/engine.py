@@ -148,6 +148,7 @@ def _field_match(
     patient_values: list[str],
     candidate_values: list[str],
     mode: str,
+    embed_bands_allowed: Optional[frozenset[str]] = None,
 ) -> tuple[bool, bool, str, Optional[str]]:
     """Match one rule field: (matched, was_fuzzy, evidence, embed_band).
 
@@ -158,6 +159,9 @@ def _field_match(
     distance bands (FHIR4-20); the matched band is returned so the
     decider can select the band's u-value, and the evidence carries
     ``a~b|band=<band>|model=name-embed-v1@<sha8>``.
+    ``embed_bands_allowed`` (FHIR4-20 P4 calibration) gates the band to
+    the rule's approvable band list — a pair landing in a band the rule
+    does not carry (dropped by the approval budget) does NOT match.
     """
     cand_set = set(candidate_values)
     for pv in patient_values:
@@ -172,7 +176,10 @@ def _field_match(
                 for pv in patient_values:
                     for cv in candidate_values:
                         band = name_embedding.name_distance_band(pv, cv)
-                        if band is not None:
+                        if band is not None and (
+                            embed_bands_allowed is None
+                            or band in embed_bands_allowed
+                        ):
                             return (
                                 True,
                                 True,
@@ -257,12 +264,17 @@ def _verify_candidate(
     evidence: dict[str, str] = {}
     embed_bands: dict[str, str] = {}
     any_fuzzy = False
+    allowed = (
+        frozenset(b for b, _u in rule.band_u_values)
+        if rule.band_u_values else None
+    )
     for field_name, mode in rule.fields:
         matched, was_fuzzy, ev, band = _field_match(
             field_name,
             fields.get(field_name, []),
             _indexed_values(conn, entity_type, field_name, candidate_id),
             mode=mode,
+            embed_bands_allowed=allowed,
         )
         if not matched:
             return False, False, {}, {}

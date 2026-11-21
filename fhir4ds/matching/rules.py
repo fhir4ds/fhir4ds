@@ -45,6 +45,7 @@ Fields, modes, and P-values are unchanged from upstream.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Optional
 
@@ -356,37 +357,73 @@ CATEGORY1_RULES: list[MatchRule] = sorted(_RULE_DEFS, key=lambda r: (r.p_collisi
 
 #: Band u-value CONSTANTS (P(collision) of "embedding distance falls in
 #: this band or any tighter band" over distinct-name pairs — cumulative
-#: from tight outward). v1 values are UNCALIBRATED placeholders (manifest
-#: flag ``calibrated=false``): a quick engine-corpus histogram (2026-11-20,
-#: 865 intra-group positive pairs vs ~3k unrelated pairs) measured
-#: cumulative distinct-pair rates of ~0.001 / ~0.002 / ~0.009 at the
-#: placeholder edges below; rounded UP conservatively. P4 of the
-#: FHIR4-20 campaign measures the real histograms (ONC given-name pool +
-#: hard negatives) and overwrites BOTH this constant and the artifact
-#: manifest together (unit test asserts manifest == constants).
+#: from tight outward). CALIBRATED 2026-11-20 by FHIR4-20 P4
+#: (``scripts/calibrate_name_embedding.py``, manifest flag
+#: ``calibrated=true``): cumulative distinct-pair rates over a seeded
+#: 1,000,000-pair sample of the ONC given-name pool (1,489 unique names)
+#: plus 2,118 manufactured cross-group DL<=2 hard negatives, at band
+#: edges chosen on the held-out (by-group) positive split to capture
+#: 0.35 / 0.70 / 0.85 of 3,463 calibration positives; rounded UP to 2
+#: significant digits (conservative). The unit test asserts
+#: manifest == constants.
 BAND_U_VALUES: tuple[tuple[str, float], ...] = (
-    ("tight", 0.002),
-    ("mid", 0.005),
-    ("loose", 0.01),
+    ("tight", 0.0025),
+    ("mid", 0.034),
+    ("loose", 0.12),
 )
 
-#: Band upper edges on cosine distance — UNCALIBRATED placeholders until
-#: P4 (same contract as BAND_U_VALUES; conservative so the ONC precision
-#: gate holds while values are placeholders). The runtime comparison
-#: carries ±``name_embedding.BAND_HYSTERESIS`` slack toward the tighter
-#: band.
-BAND_EDGES: dict[str, float] = {"tight": 0.10, "mid": 0.15, "loose": 0.20}
+#: Band upper edges on cosine distance — CALIBRATED with BAND_U_VALUES
+#: (same measured histograms; smallest grid edge meeting each cumulative
+#: positive-capture target). The runtime comparison carries
+#: ±``name_embedding.BAND_HYSTERESIS`` slack toward the tighter band.
+BAND_EDGES: dict[str, float] = {"tight": 0.19, "mid": 0.36, "loose": 0.5}
+
+#: Category-1 approval threshold (rules.py slice-2 note): an E-rule's
+#: effective P at a band must stay <= this budget for the band to appear
+#: in that rule's band list (FDD §3.2 — a band that cannot appear in an
+#: approvable rule product ships in NO rule). Measured u-values truncate
+#: per rule: E1 keeps tight+mid (loose 6e-12 > budget), E2 keeps all
+#: three (phone companion), E3 keeps tight only (double-embed mid
+#: 3.5e-12 > budget).
+EMBED_APPROVAL_P = 2e-12
+
+
+def _approvable_rule_bands(
+    fields: tuple[tuple[str, str], ...],
+) -> tuple[tuple[str, float], ...]:
+    """This rule's approvable band list: the tight-anchored prefix of
+    ``BAND_U_VALUES`` whose effective P stays within the Category-1
+    approval budget (FDD §3.2 — a band that cannot appear in an approvable
+    rule product for THIS rule ships in NO rule; approvability is a
+    per-rule product, so the truncation is per rule, not global)."""
+    embed_count = sum(1 for _f, mode in fields if mode == EMBED)
+    companion = 1.0
+    for name, mode in fields:
+        if mode != EMBED:
+            companion *= FIELD_U_PROBS[name][0]
+    kept: list[tuple[str, float]] = []
+    for band, u in BAND_U_VALUES:
+        product = u ** embed_count * companion
+        if product > EMBED_APPROVAL_P and not math.isclose(
+            product, EMBED_APPROVAL_P, rel_tol=1e-12
+        ):
+            break
+        kept.append((band, u))
+    return tuple(kept)
 
 
 def _embedding_p(fields: tuple[tuple[str, str], ...], band: str) -> float:
     """P(collision) bound for an E-rule at one band: product of the
-    non-embed fields' u-probabilities x the band's u-value."""
+    non-embed fields' u-probabilities x the band's u-value PER embed
+    field (E3 carries two EMBED fields and squares the band u)."""
     result = 1.0
+    embed_count = 0
     for name, mode in fields:
         if mode == EMBED:
-            continue
-        result *= FIELD_U_PROBS[name][0]
-    return result * dict(BAND_U_VALUES)[band]
+            embed_count += 1
+        else:
+            result *= FIELD_U_PROBS[name][0]
+    return result * dict(BAND_U_VALUES)[band] ** embed_count
 
 
 def embedding_rules() -> list[MatchRule]:
@@ -422,15 +459,19 @@ def embedding_rules() -> list[MatchRule]:
         rule_id, fields, desc = entry[0], entry[1], entry[2]
         guards = entry[3] if len(entry) > 3 else ()
         fields = tuple(fields)
+        bands = _approvable_rule_bands(fields)
+        assert bands and bands[0][0] == "tight", (
+            f"{rule_id}: tight band must be approvable (calibrated "
+            f"u-values out of budget)")
         rules.append(MatchRule(
             rule_id=rule_id,
             fields=fields,
-            p_collision=_embedding_p(fields, "tight"),
-            p_collision_fuzzy=_embedding_p(fields, "loose"),
+            p_collision=_embedding_p(fields, bands[0][0]),
+            p_collision_fuzzy=_embedding_p(fields, bands[-1][0]),
             p_fuzzy_fields=frozenset(),
             description=desc,
             guards=guards,
-            band_u_values=tuple((b, u[b]) for b, _u in BAND_U_VALUES),
+            band_u_values=bands,
         ))
     return rules
 
