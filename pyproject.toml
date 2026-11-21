@@ -98,12 +98,17 @@ mongo = [
 # adapter. medterm4ds is published on PyPI so it is declared normally —
 # pip install 'fhir4ds-v2[terminology]' pulls both.
 #
-# Bounded to <0.0.14: medterm4ds 0.0.13, published 2026-11-15, so
-# `pip install 'fhir4ds-v2[terminology]'` / 'fhir4ds-v2[ner]' resolve.
+# Bounded to <0.0.15: medterm4ds 0.0.14 (draft dist at ~/src/medterm4ds/dist
+# as of 2026-11-20; PENDING PyPI publication). The 0.0.14 release carries the
+# PR-#24 inference lock that fixes concurrent-native-inference (the root cause
+# behind the fhir4ds FHIR4-22 min-TypeErrors and same-process segfaults) and
+# ships docs/threading-and-embedding.md — one thread per DuckDB connection is
+# the supported in-process contract. Install-from-draft until it publishes:
+# pip install ~/src/medterm4ds/dist/medterm4ds-0.0.14-py3-none-any.whl
 # Both extras are pinned to the same bound so they stay mutually satisfiable;
 # they had drifted apart (terminology <0.0.11, ner <0.0.10) and could not be
-# installed together. Both extras were resolved together against PyPI on
-# 2026-11-15 (pip --dry-run: fhir4ds-v2 0.0.24 + medterm4ds 0.0.13).
+# installed together. (Previous bound <0.0.14 resolved against PyPI on
+# 2026-11-15: fhir4ds-v2 0.0.24 + medterm4ds 0.0.13.)
 # 0.0.12 (2026-11-13) and 0.0.13 (2026-11-15) were validated together with
 # this bump via the fhir4ds terminology/OMOP suites and the clean-venv
 # install smoke. 0.0.10 was the last independently reviewed release (search
@@ -125,7 +130,7 @@ mongo = [
 # USER_DIRECTIVES in fhir4ds-private/docs/prompts/.ai_loop/.
 terminology = [
     "httpx>=0.24",
-    "medterm4ds>=0.0.13,<0.0.14",
+    "medterm4ds>=0.0.14,<0.0.15",
 ]
 # Phase 4 — Clinical Notes NER. Pulls the medspaCy + HuggingFace NER +
 # SapBERT cascade transitively via medterm4ds[extraction]. fhir4ds
@@ -133,7 +138,7 @@ terminology = [
 # those heavy deps are owned by medterm4ds so the core ``import fhir4ds``
 # path remains zero-dep.
 ner = [
-    "medterm4ds[extraction]>=0.0.13,<0.0.14",
+    "medterm4ds[extraction]>=0.0.14,<0.0.15",
 ]
 # Agentic interfaces: MCP stdio server (fhir4ds-mcp). Optional per the
 # operations-layer FDD — core install stays dependency-lean.
