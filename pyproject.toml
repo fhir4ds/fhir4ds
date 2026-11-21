@@ -99,11 +99,15 @@ mongo = [
 # pip install 'fhir4ds-v2[terminology]' pulls both.
 #
 # Bounded to <0.0.15: medterm4ds 0.0.14 (draft dist at ~/src/medterm4ds/dist
-# as of 2026-11-20; PENDING PyPI publication). The 0.0.14 release carries the
-# PR-#24 inference lock that fixes concurrent-native-inference (the root cause
-# behind the fhir4ds FHIR4-22 min-TypeErrors and same-process segfaults) and
-# ships docs/threading-and-embedding.md — one thread per DuckDB connection is
-# the supported in-process contract. Install-from-draft until it publishes:
+# as of 2026-11-20; PENDING PyPI publication, Joel-gated). The 0.0.14 release
+# carries the PR-#24 inference lock that fixes concurrent-native-inference
+# (the root cause behind the fhir4ds FHIR4-22 min-TypeErrors and same-process
+# segfaults) and ships docs/threading-and-embedding.md — one thread per
+# DuckDB connection is the supported in-process contract. 0.0.14 final also
+# widens its duckdb bound to >=0.9.0,<3 (medterm4ds PR #25 11d7341; their CI
+# matrix runs the full suite on duckdb 1.5.5/1.5.6/2.0.0 — evidence-backed),
+# so these extras resolve with fhir4ds's duckdb 2.0 default on py3.11+.
+# Install-from-draft until it publishes:
 # pip install ~/src/medterm4ds/dist/medterm4ds-0.0.14-py3-none-any.whl
 # Both extras are pinned to the same bound so they stay mutually satisfiable;
 # they had drifted apart (terminology <0.0.11, ner <0.0.10) and could not be
