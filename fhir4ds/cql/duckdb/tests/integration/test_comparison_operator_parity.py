@@ -156,8 +156,14 @@ define TupleStringEquivalentCase: Tuple { x: 'ABC' } ~ Tuple { x: 'abc' }
         "DateTimeBetweenImprecise": None,
         "DecimalEquivalentLeastPrecision": True,
         "DecimalNotEquivalentLeastPrecision": False,
-        "DecimalEquivalentHalfUnitBoundary": True,
-        "DecimalEquivalentTrailingZeroPrecision": True,
+        # Official fixtures CqlComparisonOperatorsTest.xml
+        # EquivFloat1Float1WithPrecision / ...AndZ pin BOTH `1.5 ~ 1.55`
+        # and `1.50 ~ 1.55` as **false**: rounding the more precise
+        # operand to the least precision (half-up) gives 1.6 != 1.5.
+        # Fixtures outrank the least-precision-tolerance prose reading
+        # (d3-SKEPTIC v0.0.26 carry-in adjudication).
+        "DecimalEquivalentHalfUnitBoundary": False,
+        "DecimalEquivalentTrailingZeroPrecision": False,
         "QuantityDecimalEquivalentLeastPrecision": True,
         "QuantityDecimalNotEquivalentLeastPrecision": True,
         "CalendarDefiniteDurationEqual": None,

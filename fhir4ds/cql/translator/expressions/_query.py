@@ -426,6 +426,33 @@ def _src_list_projection_is_list_valued(source_expr) -> bool:
     return _is_list_valued_projection(expr)
 
 
+def _is_tuple_list_field_source(node) -> bool:
+    """True for the tuple-list-field property projection shape.
+
+    ``Tuple { days: { Tuple { ... }, ... } }.days`` lowers (via
+    ``_translate_property``'s list-valued tuple-field branch) to::
+
+        COALESCE(from_json(json_extract_string(<tuple json>, '$.days'),
+                           '["VARCHAR"]'), [])
+
+    — a DuckDB ``VARCHAR[]`` of element JSON texts. When used as a query
+    source with an alias, it must UNNEST like array sources so the alias
+    iterates elements; without this, WHERE/RETURN clauses inline the whole
+    list into ``fhirpath(VARCHAR[], ...)`` calls, which binder-fail
+    (d3-SKEPTIC v0.0.26 carry-in 2).
+    """
+    if not (isinstance(node, SQLFunctionCall) and node.name == "COALESCE" and len(node.args) == 2):
+        return False
+    inner = node.args[0]
+    if not (isinstance(inner, SQLFunctionCall) and inner.name == "from_json" and len(inner.args) == 2):
+        return False
+    type_arg = inner.args[1]
+    return (
+        isinstance(type_arg, SQLLiteral)
+        and type_arg.value == '["VARCHAR"]'
+    )
+
+
 def _demote_audit_struct_to_bool(expr: SQLExpression) -> SQLExpression:
     """Extract .result from audit-struct expressions so they can be used as SQL WHERE predicates.
 
@@ -5849,8 +5876,19 @@ class QueryMixin:
             not _multi_source_done
             and isinstance(result, SQLFunctionCall)
             and alias
-            and result.name.lower() in ("cqlchildren", "cqldescendants")
+            and (
+                result.name.lower() in ("cqlchildren", "cqldescendants")
+                or _is_tuple_list_field_source(result)
+            )
         ):
+            # Children()/Descendants() query sources iterate one structural
+            # item per row (CQL §22.9/§22.10) so WHERE/RETURN alias
+            # references bind to each element, not the whole list. Tuple-
+            # list-field property sources (e.g. `(Tuple { days: {...} }.days)
+            # D`) lower to the same list shape (VARCHAR[] of element JSON
+            # texts) and iterate identically — without this, the whole list
+            # was inlined into fhirpath(VARCHAR[], ...) calls
+            # (BinderException; d3-SKEPTIC v0.0.26 carry-in 2).
             from ...parser.ast_nodes import FunctionRef as _FnRef, QuerySource as _QSrc
             _lt_param = f"_lt_{alias}"
             if isinstance(node.source, list) and node.source:

@@ -9,6 +9,61 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 _logger = logging.getLogger(__name__)
 
 
+def _synthetic_membership_resource(value_sql) -> "SQLExpression":
+    """Wrap a scalar operand into a synthetic resource for membership UDFs.
+
+    ``in_valueset`` / ``cql_equivalent_in_valueset`` navigate a FHIR
+    resource + element path (``extractCodes``). A non-resource scalar
+    operand (e.g. a ``First(...)`` subquery yielding a CodeableConcept
+    JSON, or a string-valued expression) must be wrapped first:
+
+    * JSON-object text (CodeableConcept/Coding) embeds as the ``code``
+      element: ``{"code": <parsed value>}``.
+    * Scalar strings synthesize a system-less coding so the UDF's
+      String-overload scan applies:
+      ``{"code":{"coding":[{"code": <json-quoted string>}]}}``.
+    * Anything else (NULL / malformed) stays NULL → UDF returns SQL NULL
+      per CQL 3VL.
+    """
+    is_json_object = SQLBinaryOp(
+        operator="AND",
+        left=SQLFunctionCall(
+            name="starts_with", args=[value_sql, SQLLiteral("{")],
+        ),
+        right=SQLFunctionCall(name="json_valid", args=[value_sql]),
+    )
+    concept_wrap = SQLFunctionCall(
+        name="json_object",
+        args=[SQLLiteral("code"), SQLCast(expression=value_sql, target_type="JSON")],
+    )
+    # to_json() renders the scalar as a JSON literal (string quoted).
+    string_wrap = SQLBinaryOp(
+        operator="||",
+        left=SQLBinaryOp(
+            operator="||",
+            left=SQLLiteral('{"code":{"coding":[{"code":'),
+            right=SQLFunctionCall(name="to_json", args=[value_sql]),
+        ),
+        right=SQLLiteral('}]}}'),
+    )
+    return SQLCase(
+        when_clauses=[(is_json_object, concept_wrap)],
+        else_clause=SQLCase(
+            when_clauses=[
+                (
+                    SQLUnaryOp(
+                        operator="IS NOT NULL",
+                        operand=SQLFunctionCall(name="trim", args=[value_sql]),
+                        prefix=False,
+                    ),
+                    string_wrap,
+                )
+            ],
+            else_clause=SQLLiteral(value=None),
+        ),
+    )
+
+
 def _terminological_equivalence_key(value: Any) -> Any:
     """String equivalence key for CQL Code ``~`` element comparison.
 
@@ -4785,8 +4840,27 @@ class OperatorsMixin:
                     and len(left.args) == 2):
                 resource_arg = left.args[0]
                 path_arg = left.args[1]
-            else:
+            elif isinstance(left, (SQLIdentifier, SQLQualifiedIdentifier)):
+                # A bare column/qualified reference may name a resource
+                # column (e.g. `X.code in "VS"` reached via alias binding) —
+                # keep the legacy resource+path shape.
                 resource_arg = left
+                path_arg = SQLLiteral("code")
+            else:
+                # Non-resource SCALAR operand (d3-SKEPTIC v0.0.26 QA-D3S-004):
+                # e.g. `First([Observation] O return O.code) ~in "VS"` lowers
+                # to a scalar subquery whose value is the CodeableConcept
+                # JSON itself. The membership UDF navigates resource+path
+                # (extractCodes), so feeding the bare concept with path
+                # 'code' finds no coding under a CodeableConcept document
+                # and silently returns False. Wrap the value as the 'code'
+                # element of a synthetic resource, shape-discriminated:
+                # JSON-object values (CodeableConcept/Coding) embed parsed;
+                # scalar strings synthesize a system-less coding so the
+                # UDF's String-overload scan applies; anything else (null/
+                # malformed) stays NULL per CQL 3VL.
+                _v = SQLCast(expression=left, target_type="VARCHAR")
+                resource_arg = _synthetic_membership_resource(_v)
                 path_arg = SQLLiteral("code")
             # When the resource argument is a list-returning
             # expression (e.g. encounterDiagnosis() results),
