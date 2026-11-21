@@ -4615,7 +4615,7 @@ class FunctionsMixin:
                         result.result_type = "Quantity"
                         return result
                     return SQLLiteral(value=val)
-                raise ValueError(f"The Maximum operator is not defined for type {raw_type_name}")
+                raise TranslationError(f"The Maximum operator is not defined for type {raw_type_name}")
         return SQLNull()
 
     def _translate_minimum_pre(self, func: FunctionRef, translator) -> Optional[SQLExpression]:
@@ -4675,7 +4675,7 @@ class FunctionsMixin:
                         result.result_type = "Quantity"
                         return result
                     return SQLLiteral(value=val)
-                raise ValueError(f"The Minimum operator is not defined for type {raw_type_name}")
+                raise TranslationError(f"The Minimum operator is not defined for type {raw_type_name}")
         return SQLNull()
 
     def _translate_flatten_pre(self, func, translator) -> "Optional[SQLExpression]":

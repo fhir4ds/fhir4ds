@@ -434,12 +434,14 @@ using FHIR version '4.0.1'
 context Patient
 define Invalid: {expression}
 """
-        # Superseded behavior (2.0-era translator): static temporal boundary
-        # underflow/overflow now FOLDS to SQL NULL at translation instead of
-        # raising; the official conformance suite (2029/2037 gate) accepts
-        # this. Pinned here so the fold cannot silently change again.
-        translated = translate_cql(cql)
-        assert translated["InvalidBoundary"].to_sql().strip().upper() == "NULL"
+        # CQL-11 EXPLORER doctrine: unsupported maximum/minimum types raise
+        # a typed TranslationError instead of lowering to SQL NULL.
+        import pytest as _pytest
+
+        from fhir4ds.cql.errors import TranslationError as _TE
+
+        with _pytest.raises(_TE, match="not defined for type"):
+            translate_cql(cql)
 
     with no_python_connection() as con:
         assert con.execute("SELECT predecessorOf('5')").fetchone()[0] == "4.99999999"
