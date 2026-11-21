@@ -6644,6 +6644,13 @@ class OperatorsMixin:
             else:
                 left_start = left
                 left_end = None
+            # QA-D4H-001: sub-day precision compares timezone-normalized
+            # instants via the precision-aware UDFs (only when no
+            # AND-stripped extras need recombining).
+            if extra_condition_ast is None:
+                precise = self._subday_during_precise_udf(left_start, interval_expr, precision)
+                if precise is not None:
+                    return precise
             left_start_truncated = self._truncate_to_precision(left_start, precision)
 
             # Gap 11: Extract interval bounds and use boundary-aware comparisons
@@ -7029,6 +7036,10 @@ class OperatorsMixin:
                     if isinstance(precision, str):
                         precision = precision.lower()
                     interval_expr = self.translate(expr.right.operand.right, usage=ExprUsage.SCALAR)
+                    # QA-D4H-001: sub-day precision compares tz-normalized instants
+                    precise = self._subday_during_precise_udf(interval_start, interval_expr, precision)
+                    if precise is not None:
+                        return precise
                     left_truncated = self._ensure_date_cast(
                         self._truncate_to_precision(interval_start, precision))
                     # Try boundary-aware comparison via _extract_interval_bounds
@@ -7290,6 +7301,12 @@ class OperatorsMixin:
                                 operator="and", left=extra_condition_ast, right=cond
                             )
                     interval_expr = self.translate(actual_interval_ast, usage=ExprUsage.SCALAR)
+                    # QA-D4H-001: sub-day precision compares tz-normalized instants
+                    # (only when no AND-stripped extras need recombining)
+                    if extra_condition_ast is None:
+                        precise = self._subday_during_precise_udf(interval_end, interval_expr, precision)
+                        if precise is not None:
+                            return precise
                     left_truncated = self._ensure_date_cast(
                         self._truncate_to_precision(interval_end, precision))
                     # Try boundary-aware comparison via _extract_interval_bounds
@@ -7360,6 +7377,11 @@ class OperatorsMixin:
                                 operator="and", left=extra_condition_ast, right=cond
                             )
                     interval_expr = self.translate(actual_interval_ast, boolean_context=False)
+                    # QA-D4H-001: sub-day precision compares tz-normalized instants
+                    if extra_condition_ast is None:
+                        precise = self._subday_during_precise_udf(interval_end, interval_expr, precision)
+                        if precise is not None:
+                            return precise
                     left_truncated = self._ensure_date_cast(
                         self._truncate_to_precision(interval_end, precision))
                     right_start = SQLFunctionCall(name="intervalStart", args=[interval_expr])
