@@ -905,9 +905,121 @@ Optional<std::string> quantity_divide(const std::string &q1_json, const std::str
 	return format_quantity_json(result);
 }
 
+static bool all_digits(const std::string &s) {
+	for (char ch : s) {
+		if (ch < '0' || ch > '9') {
+			return false;
+		}
+	}
+	return true;
+}
+
+// Extract the raw authored decimal token following "value" in a Quantity
+// JSON string (plain digits only; returns "" for exponent or unparsable
+// text). Shared by quantity_round and quantity_negate so both operate on
+// the authored decimal digits, not the binary64 double (REV-26-001:
+// str/strtod round-trips lose precision beyond 15 significant digits and
+// switch to scientific notation).
+static std::string extract_raw_value_token(const std::string &q_json) {
+	std::string token;
+	size_t pos = q_json.find("\"value\"");
+	if (pos == std::string::npos) {
+		return token;
+	}
+	size_t p = pos + 7;
+	while (p < q_json.size() && (q_json[p] == ' ' || q_json[p] == ':')) p++;
+	size_t start = p;
+	while (p < q_json.size() && (q_json[p] == '-' || q_json[p] == '+' || q_json[p] == '.' ||
+	                             (q_json[p] >= '0' && q_json[p] <= '9') ||
+	                             q_json[p] == 'e' || q_json[p] == 'E')) {
+		p++;
+	}
+	token = q_json.substr(start, p - start);
+	return token;
+}
+
+// True when the token is plain fixed-point decimal text (no exponent) with
+// at least one integer digit — the shapes safe to re-serialize verbatim.
+static bool is_plain_decimal_token(const std::string &token, bool &neg, std::string &int_part, std::string &frac_part) {
+	if (token.empty() || token.find('e') != std::string::npos || token.find('E') != std::string::npos) {
+		return false;
+	}
+	std::string t = token;
+	neg = false;
+	if (!t.empty() && (t[0] == '-' || t[0] == '+')) {
+		neg = (t[0] == '-');
+		t = t.substr(1);
+	}
+	size_t dot = t.find('.');
+	if (dot == std::string::npos) {
+		int_part = t;
+		frac_part = "";
+	} else {
+		int_part = t.substr(0, dot);
+		frac_part = t.substr(dot + 1);
+	}
+	if (!all_digits(int_part) || !all_digits(frac_part) || int_part.empty()) {
+		return false;
+	}
+	size_t nz = int_part.find_first_not_of('0');
+	int_part = (nz == std::string::npos) ? "0" : int_part.substr(nz);
+	return true;
+}
+
+// Serialize a Quantity with an exact authored decimal value text (no double
+// round-trip). The value text must already be plain decimal digits.
+static Optional<std::string> format_quantity_json_value_text(const ParsedQuantity &q, const std::string &value_text) {
+	if (value_text.empty()) {
+		return NullOpt<std::string>();
+	}
+	std::string safe = value_text;
+	if (safe.find('.') == std::string::npos) {
+		safe += ".0";
+	}
+	yyjson_mut_doc *doc = yyjson_mut_doc_new(nullptr);
+	if (!doc) {
+		return NullOpt<std::string>();
+	}
+	yyjson_mut_val *root = yyjson_mut_obj(doc);
+	if (!root) {
+		yyjson_mut_doc_free(doc);
+		return NullOpt<std::string>();
+	}
+	yyjson_mut_doc_set_root(doc, root);
+	if (!yyjson_mut_obj_add_raw(doc, root, "value", safe.c_str())) {
+		yyjson_mut_doc_free(doc);
+		return NullOpt<std::string>();
+	}
+	yyjson_mut_obj_add_strcpy(doc, root, "unit", q.code.c_str());
+	yyjson_mut_obj_add_strcpy(doc, root, "code", q.code.c_str());
+	yyjson_mut_obj_add_strcpy(doc, root, "system", q.system.c_str());
+	char *json_str = yyjson_mut_write(doc, 0, nullptr);
+	if (!json_str) {
+		yyjson_mut_doc_free(doc);
+		return NullOpt<std::string>();
+	}
+	std::string result(json_str);
+	free(json_str);
+	yyjson_mut_doc_free(doc);
+	return result;
+}
+
 Optional<std::string> quantity_negate(const std::string &q_json) {
 	auto q = parse_quantity_json(q_json);
 	if (!q) return NullOpt<std::string>();
+	// Exact-text path: negate operates on the authored decimal digits, so
+	// extreme magnitudes (>15 significant digits) keep their exact value
+	// instead of collapsing to the nearest binary64 double.
+	std::string token = extract_raw_value_token(q_json);
+	bool neg = false, text_ok = false;
+	std::string int_part, frac_part;
+	if (!token.empty()) {
+		text_ok = is_plain_decimal_token(token, neg, int_part, frac_part);
+	}
+	if (text_ok) {
+		std::string value_text = neg ? token.substr(1) : ("-" + token);
+		return format_quantity_json_value_text(*q, value_text);
+	}
 	q->value = -q->value;
 	return format_quantity_json(*q);
 }
@@ -932,15 +1044,6 @@ static bool round_digits_increment(std::string &digits) {
 	return false;
 }
 
-static bool all_digits(const std::string &s) {
-	for (char ch : s) {
-		if (ch < '0' || ch > '9') {
-			return false;
-		}
-	}
-	return true;
-}
-
 Optional<std::string> quantity_round(const std::string &q_json, int64_t precision) {
 	auto q = parse_quantity_json(q_json);
 	if (!q) return NullOpt<std::string>();
@@ -956,48 +1059,13 @@ Optional<std::string> quantity_round(const std::string &q_json, int64_t precisio
 
 	// Extract the raw value token from the JSON so rounding operates on the
 	// authored decimal digits, not on the binary64 double.
-	std::string token;
-	{
-		size_t pos = q_json.find("\"value\"");
-		if (pos != std::string::npos) {
-			size_t p = pos + 7;
-			while (p < q_json.size() && (q_json[p] == ' ' || q_json[p] == ':')) p++;
-			size_t start = p;
-			while (p < q_json.size() && (q_json[p] == '-' || q_json[p] == '+' || q_json[p] == '.' ||
-			                             (q_json[p] >= '0' && q_json[p] <= '9') ||
-			                             q_json[p] == 'e' || q_json[p] == 'E')) {
-				p++;
-			}
-			token = q_json.substr(start, p - start);
-		}
-	}
+	std::string token = extract_raw_value_token(q_json);
 
 	double result_value;
 	bool neg = false;
 	std::string int_part;
 	std::string frac_part;
-	bool text_ok = false;
-	if (!token.empty() && token.find('e') == std::string::npos && token.find('E') == std::string::npos) {
-		std::string t = token;
-		if (!t.empty() && (t[0] == '-' || t[0] == '+')) {
-			neg = (t[0] == '-');
-			t = t.substr(1);
-		}
-		size_t dot = t.find('.');
-		if (dot == std::string::npos) {
-			int_part = t;
-			frac_part = "";
-		} else {
-			int_part = t.substr(0, dot);
-			frac_part = t.substr(dot + 1);
-		}
-		if (all_digits(int_part) && all_digits(frac_part) && !int_part.empty()) {
-			// strip leading zeros, keep at least one digit
-			size_t nz = int_part.find_first_not_of('0');
-			int_part = (nz == std::string::npos) ? "0" : int_part.substr(nz);
-			text_ok = true;
-		}
-	}
+	bool text_ok = is_plain_decimal_token(token, neg, int_part, frac_part);
 
 	if (text_ok) {
 		std::string kept_digits; // integer + kept-fraction digits

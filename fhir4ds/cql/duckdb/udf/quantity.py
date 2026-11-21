@@ -1156,6 +1156,21 @@ def quantityConvert(q_json: str | None, target_unit: str) -> str | None:
         return None
 
 
+def _exact_decimal_text(value) -> str:
+    """Serialize a Decimal exactly — never through float (REV-26-001).
+
+    CQL-10 doctrine: exact-Decimal end-to-end. ``str(float(d))`` loses
+    precision beyond 15 significant digits and switches to scientific
+    notation (the known DuckDB VARCHAR->DECIMAL cast hazard). Mirrors the
+    native quantity JSON value rendering: plain fixed-point text with at
+    least one fractional digit.
+    """
+    text = format(value, "f")
+    if "." not in text:
+        text += ".0"
+    return text
+
+
 def quantityNegate(q_json: str | None) -> str | None:
     """Negate a quantity (CQL unary minus on Quantity).
 
@@ -1187,7 +1202,7 @@ def quantityNegate(q_json: str | None) -> str | None:
     code = data.get("code") or unit or "1"
     return (
         '{"value":'
-        + str(float(-current))
+        + _exact_decimal_text(-current)
         + ',"unit":'
         + orjson.dumps(unit if unit is not None else code).decode("utf-8")
         + ',"code":'
@@ -1243,7 +1258,7 @@ def roundQuantity(q_json: str | None, precision: str | int | None = None) -> str
     code = data.get("code") or unit or "1"
     return (
         '{"value":'
-        + str(float(rounded))
+        + _exact_decimal_text(rounded)
         + ',"unit":'
         + orjson.dumps(unit if unit is not None else code).decode("utf-8")
         + ',"code":'
