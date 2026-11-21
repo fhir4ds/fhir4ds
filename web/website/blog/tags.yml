@@ -12,6 +12,8 @@ performance:
   label: Performance
 data-quality:
   label: Data Quality
+piqi:
+  label: PIQI
 patient-matching:
   label: Patient Matching
 deduplication:
