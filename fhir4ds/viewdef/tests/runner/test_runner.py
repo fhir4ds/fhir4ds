@@ -326,3 +326,46 @@ class TestQuotingRoundTripAmux152:
         assert ref == '"OMOP Schema"."events"'
         n = con.execute(f"SELECT count(*) FROM {ref}").fetchone()[0]
         assert n == 2
+
+    def test_render_pipeline_parity_quoting_needing_schema(self, con, family_dir):
+        """D5-SKEPTIC v0.0.26: the text-render pipeline (render_view_sqls +
+        render_composition_ddl — the browser worker's path) must produce the
+        same rowsets as run_composition under a quoting-needing schema."""
+        from fhir4ds.viewdef.runner import (
+            build_composition_plan, render_view_sqls, render_composition_ddl,
+        )
+        m = json.loads((family_dir / "manifest.json").read_text())
+        m["view_schema"] = "OMOP Schema"
+        (family_dir / "manifest.json").write_text(json.dumps(m))
+
+        con_exec = fhir4ds.create_connection()
+        con_exec.execute("CREATE TABLE resources (resource JSON)")
+        from .test_runner import SRC as _SRC
+        for r in _SRC:
+            con_exec.execute("INSERT INTO resources VALUES (?)", [json.dumps(r)])
+        run_composition(con_exec, family_dir / "manifest.json", "resources")
+
+        plan = build_composition_plan(family_dir / "manifest.json")
+        con_ren = fhir4ds.create_connection()
+        con_ren.execute("CREATE TABLE resources (resource JSON)")
+        for r in _SRC:
+            con_ren.execute("INSERT INTO resources VALUES (?)", [json.dumps(r)])
+        con_ren.execute(f'CREATE SCHEMA IF NOT EXISTS "{plan["schema"]}"')
+        views = render_view_sqls(plan, family_dir, "resources")
+        columns, sqls = {}, {}
+        for v in views:
+            con_ren.execute(f'CREATE OR REPLACE VIEW {v["table_sql"]} AS\n{v["sql"]}')
+            columns[v["name"]] = [
+                c[0] for c in con_ren.execute(
+                    f'SELECT * FROM {v["table_sql"]} LIMIT 0').description
+            ]
+            sqls[v["name"]] = v["sql"]
+        for stmt in render_composition_ddl(plan, columns, sql_by_view=sqls):
+            con_ren.execute(stmt)
+
+        for table in ("person", "events"):
+            a = sorted(map(str, con_exec.execute(
+                f'SELECT * FROM "OMOP Schema"."{table}"').fetchall()))
+            b = sorted(map(str, con_ren.execute(
+                f'SELECT * FROM "OMOP Schema"."{table}"').fetchall()))
+            assert a == b and a, f"{table}: exec={a} render={b}"
