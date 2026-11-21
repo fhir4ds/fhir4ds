@@ -78,10 +78,23 @@ def iter_ndjson_resources(text: str) -> Iterator[dict]:
 
 
 def _read_text(path: Path) -> str:
-    """Read a text payload, transparently gunzipping ``.gz`` files."""
-    if path.suffix.lower() == ".gz":
-        return gzip.decompress(path.read_bytes()).decode("utf-8-sig")
-    return path.read_text(encoding="utf-8-sig")
+    """Read a text payload, transparently gunzipping ``.gz`` files.
+
+    Raises ``ValueError`` naming the file for corrupt gzip payloads and
+    undecodable bytes — a raw ``BadGzipFile``/``UnicodeDecodeError``
+    without attribution gives the caller no way to tell which file in a
+    corpus directory is broken.
+    """
+    try:
+        if path.suffix.lower() == ".gz":
+            data = gzip.decompress(path.read_bytes())
+        else:
+            data = path.read_bytes()
+        return data.decode("utf-8-sig")
+    except (ValueError, OSError) as exc:
+        # BadGzipFile subclasses OSError; UnicodeDecodeError subclasses
+        # ValueError. Both are re-raised with file attribution.
+        raise ValueError(f"{path.name}: cannot read corpus file ({exc})") from exc
 
 
 def _is_data_file(name: str) -> bool:
@@ -122,6 +135,22 @@ def bundle_entries(bundle: dict) -> Iterator[dict]:
             yield resource
 
 
+def _extend_flattening(resources: list[dict], objs: Iterator[dict]) -> None:
+    """Append resources, flattening Bundle objects into their entries.
+
+    Single-document Bundles are flattened by ``load_bundle_file`` /
+    ``load_ndjson_dir``; a Bundle arriving on a JSONL/NDJSON *stream*
+    must be flattened the same way, otherwise its entries are invisible
+    to every downstream consumer (matching / dedup / PIQI views key on
+    the clinical resourceType, never ``Bundle``).
+    """
+    for obj in objs:
+        if obj.get("resourceType") == "Bundle":
+            resources.extend(bundle_entries(obj))
+        else:
+            resources.append(obj)
+
+
 def load_bundle_file(path: Union[str, Path]) -> list[dict]:
     """Load one Bundle JSON file (``.json``) or JSONL bundle stream."""
     path = Path(path)
@@ -136,9 +165,32 @@ def load_bundle_file(path: Union[str, Path]) -> list[dict]:
             if not is_fhir_resource(obj):
                 raise ValueError(
                     f"{path}: JSONL line is not a FHIR resource")
-            resources.append(obj)
+            _extend_flattening(resources, [obj])
         return _sorted(resources)
-    obj = json.loads(text)
+    try:
+        obj = json.loads(text)
+    except json.JSONDecodeError:
+        # A .json file may hold a JSONL stream of resources/Bundles
+        # (the same fallback the directory loader documents); the raw
+        # "Extra data" error leaks the JSON parser's internals.
+        resources = []
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                line_obj = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"{path}: neither a single JSON document nor a "
+                    f"JSONL resource stream ({exc})") from exc
+            if not is_fhir_resource(line_obj):
+                raise ValueError(
+                    f"{path}: JSONL line is not a FHIR resource")
+            _extend_flattening(resources, [line_obj])
+        if not resources:
+            raise ValueError(f"{path}: file is not a FHIR resource/Bundle")
+        return _sorted(resources)
     if not is_fhir_resource(obj):
         raise ValueError(f"{path}: file is not a FHIR resource/Bundle")
     if obj["resourceType"] == "Bundle":
@@ -174,13 +226,13 @@ def load_ndjson_dir(path: Union[str, Path]) -> list[dict]:
                 # A bare JSON array of resources (entry.resource export).
                 for item in obj:
                     if is_fhir_resource(item):
-                        resources.append(item)
+                        _extend_flattening(resources, [item])
                     elif isinstance(item, dict) and is_fhir_resource(
                             item.get("resource")):
-                        resources.append(item["resource"])
+                        _extend_flattening(resources, [item["resource"]])
                 continue
         try:
-            resources.extend(iter_ndjson_resources(text))
+            _extend_flattening(resources, iter_ndjson_resources(text))
         except ValueError as exc:
             failures.append(f"{file.name}: {exc}")
     if not resources:
@@ -191,8 +243,12 @@ def load_ndjson_dir(path: Union[str, Path]) -> list[dict]:
 
 
 def _sorted(resources: list[dict]) -> list[dict]:
-    return sorted(resources, key=lambda r: (r.get("resourceType", ""),
-                                            r.get("id", "")))
+    # Keys are str()-coerced: is_fhir_resource only pins ``resourceType``
+    # to a string; ``id`` may be any JSON value (invalid FHIR but valid
+    # JSON) and a mixed-type key would crash the sort with a raw
+    # TypeError. Tolerance-first: load it, order deterministically.
+    return sorted(resources, key=lambda r: (str(r.get("resourceType", "")),
+                                            str(r.get("id", ""))))
 
 
 def load_corpus(path: Union[str, Path]) -> list[dict]:
