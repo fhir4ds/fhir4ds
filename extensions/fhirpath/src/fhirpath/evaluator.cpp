@@ -12,6 +12,7 @@ using namespace duckdb_yyjson; // NOLINT
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cerrno>
 #include <cstring>
 #include <ctime>
 #include <functional>
@@ -10289,6 +10290,32 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 		if (op == "/" || op == "div" || op == "mod" || !(l_is_int_type && r_is_int_type)) {
 			std::string exact_text;
 			if (tryDecimalArithmeticText(lv, rv, op, exact_text)) {
+				if ((op == "div" || op == "mod") && l_is_int_type && r_is_int_type) {
+					// v0.0.26 Domain 1 HISTORIAN (QA-D1H-001): 6.6.5/6.6.6
+					// truncated division/remainder over Integer operands
+					// returns Integer (spec signatures div(Integer,Integer)
+					// : Integer / mod(Integer,Integer) : Integer; FP-18
+					// SKEPTIC doctrine: exact int64 div/mod must return
+					// FromInteger so 64-bit quotients never render
+					// scientific notation). Routing these through
+					// FromDecimal here lost the Integer result TYPE: bare
+					// `7 div 2` still displayed '3' via source_text, but
+					// composed arithmetic rendered '(7 div 2) * 3' as
+					// '9.0' and type().name said Decimal. int64 truncated-
+					// division overflow (LLONG_MIN div -1) stays empty,
+					// mirroring the Python fallback's explicit guard.
+					errno = 0;
+					char *end = nullptr;
+					long long q = std::strtoll(exact_text.c_str(), &end, 10);
+					if (errno == ERANGE) {
+						return {};
+					}
+					if (end && *end == '\0' && end != exact_text.c_str()) {
+						return {FPValue::FromInteger(q)};
+					}
+					// Unexpected non-integer text: fall through to the
+					// Decimal transport below.
+				}
 				FPValue v = FPValue::FromDecimal(strtod(exact_text.c_str(), nullptr));
 				v.source_text = exact_text;
 				return {v};

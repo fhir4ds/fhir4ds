@@ -1396,6 +1396,56 @@ _FP18_F01_BOOLEAN_QUANTITY_CASES = [
 ]
 
 
+# v0.0.26 Domain 1 HISTORIAN (QA-D1H-001): §6.6.5/§6.6.6 truncated
+# division/remainder over INTEGER operands returns Integer (spec
+# signatures `div(Integer, Integer) : Integer` / `mod(Integer, Integer) :
+# Integer`; FP-18 SKEPTIC doctrine: exact int64 div/mod must return
+# FromInteger). The FP-01 exact-decimal gate had been routing div/mod
+# through FromDecimal even for Integer x Integer, so the Integer result
+# TYPE was lost: `(7 div 2) * 3` rendered '9.0' natively vs '9' on the
+# fallback, `(7 div 2).type().name` said Decimal, and the int64 div
+# overflow convention (LLONG_MIN div -1 -> empty) regressed to a Decimal.
+_D1H_INTEGER_DIVMOD_CASES = [
+    # (expression, expected serialized output)
+    ("(7 div 2) * 3", ["9"]),
+    ("(7 div 2) + 1", ["4"]),
+    ("(7 mod 2) * 3", ["3"]),
+    ("(7 mod 2) + 1", ["2"]),
+    ("(5 div 2) * 2", ["4"]),
+    ("(7 div 2).type().name", ["Integer"]),
+    ("(7 mod 2).type().name", ["Integer"]),
+    ("9223372036854775807L div 3", ["3074457345618258602"]),
+    # int64 truncated-division overflow -> empty on BOTH engines
+    ("-9223372036854775808L div -1", []),
+]
+
+
+@pytest.mark.parametrize(
+    ("expression", "expected"),
+    _D1H_INTEGER_DIVMOD_CASES,
+)
+def test_integer_div_mod_result_type_parity_d1_historian(
+    expression: str,
+    expected,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Integer x Integer div/mod keeps the Integer result type on both engines."""
+    resource = json.dumps({"resourceType": "Observation"})
+    native = _connection()
+    fallback = _fallback_connection(monkeypatch)
+    try:
+        for con in (native, fallback):
+            row = con.execute(
+                "SELECT fhirpath(?::JSON, ?)", [resource, expression]
+            ).fetchone()[0]
+            assert row == expected, (
+                f"{expression!r}: result={row!r} expected={expected!r}"
+            )
+    finally:
+        native.close()
+        fallback.close()
+
+
 @pytest.mark.parametrize(
     ("expression", "expected"),
     _FP18_F01_BOOLEAN_QUANTITY_CASES,
