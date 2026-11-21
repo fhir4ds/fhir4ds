@@ -20,19 +20,14 @@ PIQI comes from the PIQI Alliance (Charles Harp's framework guides, v1.1/v1.2), 
 
 The unit of measurement is the **SAM** — a Simple Assessment Module: a pass/fail check bound to a data attribute. `Attr_IsPopulated` on a lab value, `Concept_HasCode` on a coded concept, `Attr_IsNumeric` on something that must parse as a number. Each SAM declares its scoring effect, an optional weight, and an optional *criticality* flag.
 
-Here is the full dimension taxonomy with a sample of the SAMs we ship against each sub-classification:
+Here is the dimension taxonomy with a sample of the SAMs we ship against each sub-classification:
 
-| Dimension | Sub-classification | What it asks | Sample SAMs |
-| --- | --- | --- | --- |
-| **Availability** | Unpopulated | Is the attribute present at all? | `Attr_IsPopulated` |
-| | Incomplete | Is a structured value fully specified? | `Concept_IsComplete`, `Concept_HasDisplay` |
-| | Missing | Is a required element absent from its container? | `ObservationValue_HasType` |
-| | Duplication | Does the same real-world entity appear twice? | `Class_HasDuplicates` |
-| **Accuracy** | InvalidValue | Is the value in a valid range/format for its type? | `Attr_IsNumeric`, `Attr_IsDecimal`, `Attr_IsTimestamp`, `Attr_MatchesRegex`, `Attr_InList` |
-| | InvalidFormat | Does a formatted value obey its syntax? | `Attr_IsValidDate` |
-| **Conformity** | InvalidMember | Is a coded concept drawn from a valid, recognized code system? | `Concept_HasCode`, `Concept_HasCodeSystem`, `Concept_HasRecognizedCodeSystem` |
-| **Plausibility** | TemporallyImplausible | Could this value exist at this time? | `Attr_IsFutureDate`, `Attr_IsPastDate` |
-| | ClinicallyImplausible | Is the value within physiological limits? | `LabResult_ValueIsPlausible`, `LabResult_UnitIsPlausible`, `Condition_SexPlausible` |
+| Dimension | What it asks | Sub-classifications (with sample SAMs) |
+| --- | --- | --- |
+| **Availability** | Is the data there at all? | • **Unpopulated** — `Attr_IsPopulated`<br/>• **Incomplete** — `Concept_IsComplete`, `Concept_HasDisplay`<br/>• **Missing** — `ObservationValue_HasType`<br/>• **Duplication** — `Class_HasDuplicates` |
+| **Accuracy** | Is the value right for its type? | • **InvalidValue** — `Attr_IsNumeric`, `Attr_IsDecimal`, `Attr_IsTimestamp`, `Attr_MatchesRegex`, `Attr_InList`<br/>• **InvalidFormat** — `Attr_IsValidDate` |
+| **Conformity** | Does a coded concept obey its type system? | • **InvalidMember** — `Concept_HasCode`, `Concept_HasCodeSystem`, `Concept_HasRecognizedCodeSystem` |
+| **Plausibility** | Is the value believable? | • **TemporallyImplausible** — `Attr_IsFutureDate`, `Attr_IsPastDate`<br/>• **ClinicallyImplausible** — `LabResult_ValueIsPlausible`, `LabResult_UnitIsPlausible`, `Condition_SexPlausible` |
 
 (A full inventory of the 33 implemented SAMs — including the terminology-dependent ones like code-system membership and display-consistency — ships with the library; the four not yet implemented are documented with reasons in the project's completeness matrix.)
 
@@ -66,6 +61,8 @@ Then we changed one thing and re-ran the identical scorecard. The intervention: 
 
 **The medication story is the cleanest.** MIMIC ships medications as name-codes — the coding's `code` literally is the drug name ("Ondansetron") under a private system, no display, no standard vocabulary. Measured on the coding columns: zero of 2,429 medication requests recognized, displayed, or complete before. After auto-coding, **360 carry RxNorm codings** — recognition, display, and completeness moving together, local drug names becoming addressable standard terminology. The auto-coder is conservative by contract: it refuses when it isn't confident, and every generated coding carries machine-readable provenance (engine, version, search mode, score, match grade, `userSelected=false`).
 
+**A procedure, worked through.** The clearest single illustration of the auto-coder behaving exactly as designed: a MIMIC procedure coded `4311 — "Percutaneous [endoscopic] gastrostomy [PEG]"` under a wrapper system — classic bracketed ICD-9 billing shorthand. The environment alias already recognizes it as ICD; the auto-coder then appends SNOMED `235159007 — Percutaneous endoscopic gastrostomy`, along with a second candidate (`312341002`, the *permanent* PEG variant) at a lower grade. The original ICD coding is untouched. Every appended coding carries `userSelected=false` and full provenance — engine version, search mode, score, match grade, and which text it searched on. A billing-coded legacy procedure becomes a clinically-coded one without losing anything, and a terminologist reviewing the two candidates has everything needed to confirm or dismiss in seconds. That is the contract working: augment, never overwrite; suggest, never assert.
+
 What auto-coding can and cannot recover falls into a clean three-tier taxonomy:
 
 | tier | population (n) | recognized before → after |
@@ -78,22 +75,9 @@ The conditions tier has its own lesson. MIMIC's ICD-9/10 codes sit under wrapper
 
 **The text-gate finding.** PIQI *as scored* shows no movement in that production arm — and that is itself a result. The packaged Concept assessments are gated on `code.text` being populated, and MIMIC ships none. The scorecard told us exactly *where* the problem lives: value in the coding columns, silence in the scored column. (The scorecard also caught us: an earlier run under-counted recognized procedures because ICD-10-PCS was missing from the standard code-system registry. The engine grading its own homework includes grading ours.)
 
-### Ground truth: the strip experiment
+(How accurate is the auto-coder when you *do* know the right answer? We ran a companion experiment — strip the codes, reconstruct them from text, score against the removed originals — with clean results worth their own post.)
 
-For real accuracy receipts we manufactured the legacy situation every EHR migration faces. We stripped codings from 1,643 coded resources (669 conditions, 494 procedures, 480 lab results — keeping display text as `code.text`), ran the scorecard, let the auto-coder reconstruct codes from text, and re-ran the identical scorecard. Because *we* removed the codes, we know exactly what the right answer was.
-
-A counterfactual "ceiling" run — stripped corpus with original codings quietly re-attached — scored 41.7, isolating the 3,083 fail items that purely represent lost codings. The recall-oriented configuration wrote 3,366 codings across 1,216 of 1,643 stripped elements and recovered **2,188 of the 3,083 fail items — 71% of the coding gap, zero regressions**: nothing that passed before regressed, plausibility checks included. The strict default wrote only 28 codings — all `certain`-grade — recovering exactly 28 items with zero new failures. Conservative by design.
-
-And the accuracy receipt: on the subset whose originals were standard SNOMED codes, the auto-coder recovered the **exact original (system, code) pair for 224 of 224 — 100% top-1 exact recovery**. On MIMIC-local dictionaries exact match is impossible by construction; instead it returns standard equivalents. Spot-checks: "Anemia in chronic kidney disease" (local ICD-9) → SNOMED 707323002 *Anemia in chronic kidney disease*; "Portal vein thrombosis" → SNOMED 17920008 *Portal vein thrombosis*. Original text preserved, provenance on every coding.
-
-We also ablated the terminology engine's three search modes on the identical strip-and-gold slice: semantic maximizes coverage but its exact-code recovery collapses (2.4%); lexical anchors verbatim text but covers only half the corpus; **hybrid delivers semantic-grade coverage with the best exact recovery (13.6%)**, which is why it's the default.
-
-## Honest limits
-
-- **Four SAMs unimplemented**, each exclusion documented (builder-trivial-unbound or RESTful-surface checks).
-- **Probable-grade suggestions need human confirmation.** The recall arm writes `probable`-and-better matches; that's routed to the curation queue deliberately. A terminology engine that never needs review is a terminology engine you shouldn't trust.
-- **Recognized-system is environment-registry-relative.** Recognition depends on the code-system registry and alias table of the environment doing the scoring — which is the right semantics (a wrapper URI means what your environment says it means), but cross-environment comparisons must account for it.
-- **We found gaps in the guides themselves and flagged them upstream** — a `HasType` reference with no defining guide, and ICD-10-PCS missing from the standard code-system closure. Framework adoption is a two-way street; finding and reporting the spec's own defects is part of the contribution.
+## Ship it
 
 The whole loop ships in fhir4ds: PIQI rubrics as resources, the realism harness (`fhir4ds.realism`) and the PIQI auto-coding benchmark (`fhir4ds.realism.piqi_autocoding`) — deterministic, repeatable, corpus-agnostic. Point them at your own exports. The interesting bugs are the ones your test data doesn't contain, and the scorecard will tell you exactly where they live.
 
