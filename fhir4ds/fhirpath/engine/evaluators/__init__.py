@@ -677,6 +677,7 @@ def polarity_expression(ctx, parentData, node):
             "TermExpression",
             "LiteralTerm",
             "InvocationTerm",
+            "ParenthesizedTerm",
         ):
             kids = literal.get("children") or []
             literal = kids[0] if len(kids) == 1 else None

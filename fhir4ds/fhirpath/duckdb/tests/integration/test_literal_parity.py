@@ -422,8 +422,19 @@ def test_integer_literal_range_matches_spec_and_backends() -> None:
     valid_cases = {
         "2147483647": ["2147483647"],
         "(-2147483648)": ["-2147483648"],
+        # v0.0.26 Domain 1 EXPLORER QA-D1E-001: unary minus over a
+        # PARENTHESIZED boundary literal is the same sanctioned INT32_MIN /
+        # LLONG_MIN spelling as the direct form (§4.1.3 minus is unary
+        # negation, not part of the literal); parens are transparent.
+        "-(2147483648)": ["-2147483648"],
+        "- (2147483648)": ["-2147483648"],
+        "-((2147483648))": ["-2147483648"],
+        "-(9223372036854775808L)": ["-9223372036854775808"],
+        "(-(2147483648)).type().name": ["Integer"],
+        "-(2147483648) = -2147483648": ["true"],
+        "-(2147483648) + 1": ["-2147483647"],
     }
-    invalid_cases = ["2147483648", "(-2147483649)", "9223372036854775808"]
+    invalid_cases = ["2147483648", "(-2147483649)", "9223372036854775808", "(2147483648)", "-(2147483649)", "-(9223372036854775809L)"]
 
     py = _python_fallback_connection()
     cpp = _connection()
