@@ -20,6 +20,22 @@ PIQI comes from the PIQI Alliance (Charles Harp's framework guides, v1.1/v1.2), 
 
 The unit of measurement is the **SAM** — a Simple Assessment Module: a pass/fail check bound to a data attribute. `Attr_IsPopulated` on a lab value, `Concept_HasCode` on a coded concept, `Attr_IsNumeric` on something that must parse as a number. Each SAM declares its scoring effect, an optional weight, and an optional *criticality* flag.
 
+Here is the full dimension taxonomy with a sample of the SAMs we ship against each sub-classification:
+
+| Dimension | Sub-classification | What it asks | Sample SAMs |
+| --- | --- | --- | --- |
+| **Availability** | Unpopulated | Is the attribute present at all? | `Attr_IsPopulated` |
+| | Incomplete | Is a structured value fully specified? | `Concept_IsComplete`, `Concept_HasDisplay` |
+| | Missing | Is a required element absent from its container? | `ObservationValue_HasType` |
+| | Duplication | Does the same real-world entity appear twice? | `Class_HasDuplicates` |
+| **Accuracy** | InvalidValue | Is the value in a valid range/format for its type? | `Attr_IsNumeric`, `Attr_IsDecimal`, `Attr_IsTimestamp`, `Attr_MatchesRegex`, `Attr_InList` |
+| | InvalidFormat | Does a formatted value obey its syntax? | `Attr_IsValidDate` |
+| **Conformity** | InvalidMember | Is a coded concept drawn from a valid, recognized code system? | `Concept_HasCode`, `Concept_HasCodeSystem`, `Concept_HasRecognizedCodeSystem` |
+| **Plausibility** | TemporallyImplausible | Could this value exist at this time? | `Attr_IsFutureDate`, `Attr_IsPastDate` |
+| | ClinicallyImplausible | Is the value within physiological limits? | `LabResult_ValueIsPlausible`, `LabResult_UnitIsPlausible`, `Condition_SexPlausible` |
+
+(A full inventory of the 33 implemented SAMs — including the terminology-dependent ones like code-system membership and display-consistency — ships with the library; the four not yet implemented are documented with reasons in the project's completeness matrix.)
+
 A **rubric** is an ordered, weighted set of SAMs scoped to data classes (conditions, medications, lab results, demographics…). Run a rubric over a payload and you get a **scorecard**: the **PIQI Index** (0–100, passed items over scorable items), a weighted variant when the rubric weights SAMs, a **critical failure count** for SAMs flagged critical, and a **Data Class Frequency** breakdown so you can see *which* classes dragged the score. One thing the framework deliberately does not give you is interpretive bands — there is no universal "75 is good." A score means what its rubric makes it mean; comparison is rubric-relative. That's a feature: it forces you to say what you care about.
 
 ## The implementation: PIQI as FHIR resources
