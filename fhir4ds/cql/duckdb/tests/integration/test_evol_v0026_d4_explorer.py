@@ -121,3 +121,120 @@ def test_naive_bounds_keep_timestamp_normalization_d4_explorer():
         native.close()
 
 
+# ── QA-D4E-002: exists() over intersect/except of query defines ────────
+
+_CQL_SETOPS = """library D4S version '1.0.0'
+using FHIR version '4.0.1'
+valueset "NumProc VS": 'http://example.org/ValueSet/numproc'
+valueset "NumProc2 VS": 'http://example.org/ValueSet/numproc2'
+parameter "Measurement Period" Interval<DateTime>
+context Patient
+define "ArmA": [Procedure: "NumProc VS"] P where P.performed during day of "Measurement Period"
+define "ArmB": [Procedure: "NumProc2 VS"] P where P.performed during day of "Measurement Period"
+define "IntersectAB": exists (ArmA intersect ArmB)
+define "ExceptAB": exists (ArmA except ArmB)
+define "UnionAB": exists (ArmA union ArmB)
+define "WinH1": [Procedure: "NumProc VS"] P where P.performed during day of Interval[@2026-01-01, @2026-06-30]
+define "WinH2": [Procedure: "NumProc VS"] P where P.performed during day of Interval[@2026-04-01, @2026-12-31]
+define "IntersectWin": exists (WinH1 intersect WinH2)
+"""
+
+_SETOP_RESOURCES = [{"resourceType": "Patient", "id": p} for p in ("s1", "s2", "s3", "s4")]
+_SETOP_RESOURCES += [
+    # s1: only arm A
+    {"resourceType": "Procedure", "id": "pr-s1", "status": "completed",
+     "subject": {"reference": "Patient/s1"}, "performedDateTime": "2026-03-01",
+     "code": {"coding": [{"system": "http://snomed.info/sct", "code": "44493007"}]}},
+    # s2: arms A and B (distinct procedures: intersect empty, except/union nonempty)
+    {"resourceType": "Procedure", "id": "pr-s2a", "status": "completed",
+     "subject": {"reference": "Patient/s2"}, "performedDateTime": "2026-03-01",
+     "code": {"coding": [{"system": "http://snomed.info/sct", "code": "44493007"}]}},
+    {"resourceType": "Procedure", "id": "pr-s2b", "status": "completed",
+     "subject": {"reference": "Patient/s2"}, "performedDateTime": "2026-04-01",
+     "code": {"coding": [{"system": "http://snomed.info/sct", "code": "80146002"}]}},
+    # s3: no procedures at all
+    # s4: two num-VS procedures, Mar (H1 only) + May (H1 and H2) -> windows OVERLAP
+    {"resourceType": "Procedure", "id": "pr-s4a", "status": "completed",
+     "subject": {"reference": "Patient/s4"}, "performedDateTime": "2026-03-01",
+     "code": {"coding": [{"system": "http://snomed.info/sct", "code": "44493007"}]}},
+    {"resourceType": "Procedure", "id": "pr-s4b", "status": "completed",
+     "subject": {"reference": "Patient/s4"}, "performedDateTime": "2026-05-01",
+     "code": {"coding": [{"system": "http://snomed.info/sct", "code": "44493007"}]}},
+]
+
+# (patient): IntersectAB, ExceptAB, UnionAB, IntersectWin
+_SETOP_EXPECT = {
+    "s1": (False, True, True, False),   # Mar proc in H1 only -> windows disjoint
+    "s2": (False, True, True, False),
+    "s3": (False, False, False, False),
+    "s4": (False, True, True, True),    # May proc in BOTH windows -> intersect nonempty
+}
+
+
+_VS_NUM = {
+    "resourceType": "ValueSet", "id": "numproc", "url": "http://example.org/ValueSet/numproc",
+    "compose": {"include": [{"system": "http://snomed.info/sct",
+                             "concept": [{"code": "44493007"}]}]},
+}
+_VS_NUM2 = {
+    "resourceType": "ValueSet", "id": "numproc2", "url": "http://example.org/ValueSet/numproc2",
+    "compose": {"include": [{"system": "http://snomed.info/sct",
+                             "concept": [{"code": "80146002"}]}]},
+}
+
+
+def _setop_connections():
+    native = duckdb.connect(config={"allow_unsigned_extensions": True})
+    register(native)
+    py = duckdb.connect()
+    ver = duckdb.__version__
+    duckdb.__version__ = "0.0.0-forced-python-fallback"
+    register(py)
+    duckdb.__version__ = ver
+    for con in (native, py):
+        loader = FHIRDataLoader(con)
+        loader.load_valuesets([_VS_NUM, _VS_NUM2])
+        loader.load_resources(_SETOP_RESOURCES)
+    return native, py
+
+
+def _setop_sql(con):
+    return CQLToSQLTranslator(con).translate_library_to_population_sql(
+        parse_cql(_CQL_SETOPS),
+        output_columns={"iab": "IntersectAB", "eab": "ExceptAB", "uab": "UnionAB",
+                        "iw": "IntersectWin"},
+        parameters={"Measurement Period": ("2026-01-01", "2026-12-31")},
+    )
+
+
+def test_exists_over_intersect_except_query_defines_d4_explorer():
+    """QA-D4E-002: exists(ArmA intersect/except ArmB) must test non-
+    emptiness. The set-op source fell through to the scalar ``IS NOT NULL``
+    default, and the later setop->correlated-EXISTS pass then produced the
+    tautology ``EXISTS(...) IS NOT NULL`` — TRUE for every patient,
+    including patients with zero procedures (silent wrong populations)."""
+    native, py = _setop_connections()
+    try:
+        for con in (native, py):
+            FHIRDataLoader(con).load_resources(_SETOP_RESOURCES)
+            rows = {
+                r[0]: (bool(r[1]), bool(r[2]), bool(r[3]), bool(r[4]))
+                for r in con.execute(_setop_sql(con)).fetchall()
+                if r[0] in _SETOP_EXPECT
+            }
+            assert rows == _SETOP_EXPECT, (rows, con)
+    finally:
+        native.close()
+        py.close()
+
+
+def test_exists_setop_sql_has_no_tautological_is_not_null_d4_explorer():
+    """SQL-shape guard: the exists-over-setop predicate must not render as
+    ``EXISTS (...) IS NOT NULL`` (a tautology)."""
+    native, _ = _connections()
+    try:
+        sql = _setop_sql(native)
+        assert "IS NOT NULL\n" not in sql
+        assert ") IS NOT NULL" not in sql.replace("patient_id IS NOT NULL", "")
+    finally:
+        native.close()

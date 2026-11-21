@@ -3200,8 +3200,15 @@ class ListsMixin:
             source = self._strip_aggregates_for_exists(source)
             return SQLExists(subquery=SQLSubquery(query=source))
 
-        # For SQLUnion, wrap in EXISTS
-        if isinstance(source, SQLUnion):
+        # For SQLUnion (and INTERSECT/EXCEPT — QA-D4E-002), wrap in EXISTS.
+        # A bare set-op source previously fell through to the scalar
+        # ``source IS NOT NULL`` default; after the later setop->correlated-
+        # EXISTS rewrite that produced the tautology
+        # ``EXISTS (...) IS NOT NULL`` (TRUE for every patient, including
+        # those with zero matching rows — silent wrong population results).
+        # Wrapping here lets the correlation pass emit the plain correlated
+        # EXISTS, identical to the union path.
+        if isinstance(source, (SQLUnion, SQLIntersect, SQLExcept)):
             # EXISTS (SELECT ... UNION ALL SELECT ...)
             return SQLExists(subquery=SQLSubquery(query=source))
 
