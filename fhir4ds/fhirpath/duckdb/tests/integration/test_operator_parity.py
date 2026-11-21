@@ -465,3 +465,45 @@ def test_subsetting_argument_type_error_validity_classification_fp05_skeptic(
     finally:
         cpp.close()
         py.close()
+
+
+def test_math_literal_operand_scan_is_not_exponential_d1_explorer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """v0.0.26 Domain 1 EXPLORER QA-D1E-002 regression guard.
+
+    ``_has_invalid_math_literal_operands`` recursed per top-level operator
+    into the full left prefix AND right suffix with no memoization, making
+    the work T(n) = 3*T(n-1): a ~20-operator arithmetic chain hung the
+    fallback ``fhirpath_is_valid`` UDF for minutes (and >= 60 operators
+    intermittently SIGSEGV'd the process), while native answered instantly.
+    The memoized rewrite must stay polynomial: these chains must return
+    quickly and True on BOTH engines (the test doubles as a hang tripwire —
+    an exponential regression turns this into a suite timeout, not a silent
+    pass).
+    """
+    import time
+
+    expressions = [
+        "1" + " + 1" * 60,
+        "1" + " + 1" * 120,
+        "1" + " * 2 div 2 mod 3 + 1" * 15,
+        "name.given.count() + 1" + " + id.length()" * 19,
+    ]
+    cpp = _connection()
+    py = _python_fallback_connection(monkeypatch)
+    try:
+        for expression in expressions:
+            for con in (cpp, py):
+                start = time.monotonic()
+                got = con.execute(
+                    "SELECT fhirpath_is_valid(?)", [expression]
+                ).fetchone()[0]
+                elapsed = time.monotonic() - start
+                assert got is True, f"{expression[:40]!r}...: is_valid={got}"
+                # Generous bound (memoized scan is sub-millisecond; the
+                # pre-fix code needed minutes at 60 operators).
+                assert elapsed < 10.0, f"is_valid took {elapsed:.1f}s"
+    finally:
+        cpp.close()
+        py.close()
