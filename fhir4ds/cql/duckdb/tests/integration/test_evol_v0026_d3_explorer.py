@@ -125,6 +125,52 @@ def test_generated_sql_aliases_element_column_not_star_d3_explorer():
     assert '"A" AS X WHERE X.value IS NOT NULL AND X.patient_id = _pt.patient_id' in _SQL
 
 
+_CQL_HEAD = """library HeadAliasFamily version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define X: Head({1,2,3,4}, 2)
+define HX: Head("X", 1)
+define TX: Tail("X", 1)
+define SK: Skip("X", 1)
+define TK: Take("X", 1)
+define LX: Length("X")
+define FX: First("X")
+define CX: Count("X")
+"""
+
+_SQL_HEAD = CQLToSQLTranslator().translate_library_to_population_sql(
+    parse_cql(_CQL_HEAD),
+    output_columns={
+        "hx": "HX", "tx": "TX", "sk": "SK", "tk": "TK",
+        "lx": "LX", "fx": "FX", "cx": "CX",
+    },
+)
+
+
+def test_cql20_list_function_define_alias_consumers_d3_explorer():
+    """QA-D3E-002: a define of Head/TailN/Slice (CQL 2.0 list subsetting)
+    must be marked stores_list_value + PATIENT_SCALAR + List<T> — alias
+    consumers previously nested the whole list (Head -> [[1,2]], Skip ->
+    [], Length -> 1)."""
+    native, py = _con_connections()
+    try:
+        rn = native.execute(_SQL_HEAD).fetchall()
+        rp = py.execute(_SQL_HEAD).fetchall()
+    finally:
+        native.close()
+        py.close()
+    assert rn == rp
+    row = {k: rn[0][i] for i, k in enumerate(
+        ["pid", "hx", "tx", "sk", "tk", "lx", "fx", "cx"])}
+    assert row["hx"] == [1], row
+    assert row["tx"] == [2], row
+    assert row["sk"] == [2], row
+    assert row["tk"] == [1], row
+    assert row["lx"] == 2, row
+    assert row["fx"] == 1, row
+    assert row["cx"] == 2, row
+
+
 def test_open_preexisting_query_source_composition_failures_are_loud_d3_explorer():
     """Documented-open (v0.0.26 d3-EXPLORER): union-derived alias sources
     and distinct-expression query sources raise BinderExceptions at

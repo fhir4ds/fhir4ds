@@ -513,6 +513,10 @@ class InferenceMixin:
                 return RowShape.PATIENT_SCALAR
             if func_name in ('flatten', 'distinct'):
                 return RowShape.PATIENT_SCALAR
+            # CQL 2.0 list-subsetting functions store ONE row per patient
+            # whose value is the sub-list (d3-EXPLORER QA-D3E-002).
+            if func_name in ('head', 'tail', 'skip', 'take', 'slice'):
+                return RowShape.PATIENT_SCALAR
             # Constructor functions that produce scalar values
             if func_name in ('datetime', 'date', 'time', 'now', 'today', 'timeofdayvalue',
                             'tointeger', 'todecimal', 'tostring', 'toboolean',

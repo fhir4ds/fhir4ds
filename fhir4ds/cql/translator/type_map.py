@@ -1351,6 +1351,16 @@ def infer_cql_type_compat(context: Any, ast_node: Any) -> str:
             if ast_node.arguments:
                 return infer_cql_type_compat(context, ast_node.arguments[0])
             return "List<Any>"
+        elif func_name in ('head', 'tail', 'skip', 'take', 'slice'):
+            # CQL 2.0 list subsetting functions preserve List<T> — the
+            # define-of-Head/Tail stored-list marker depends on the List<
+            # cql_type (d3-EXPLORER QA-D3E-002: alias consumers nested the
+            # whole list because the define typed as Any).
+            if ast_node.arguments:
+                source_type = infer_cql_type_compat(context, ast_node.arguments[0])
+                if source_type.startswith("List<"):
+                    return source_type
+            return "List<Any>"
         elif func_name == 'flatten':
             if ast_node.arguments:
                 source_type = infer_cql_type_compat(context, ast_node.arguments[0])

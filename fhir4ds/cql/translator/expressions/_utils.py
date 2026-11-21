@@ -191,6 +191,12 @@ def _is_list_returning_sql(node) -> bool:
                          "str_split", "STR_SPLIT", "string_split",
                          "Distinct", '"Distinct"', "list_reverse", "list_slice",
                          "Skip", "Take", "Tail",
+                         # CQL 2.0 list functions (FHIR-40612 etc.): Head/TailN/
+                         # Slice are registered list-returning macros — a
+                         # define of one of them must be marked stores_list_
+                         # value or alias consumers nest the whole list
+                         # (d3-EXPLORER QA-D3E-002: Length(HeadAlias) was 1).
+                         "Head", "TailN", "Slice",
                          "CQLListDistinctEq", "CQLListExceptEq",
                          "CQLListIntersectEq", "jsonConcat",
                          "cqlChildren", "cqlDescendants", "ExpandValueSet",
