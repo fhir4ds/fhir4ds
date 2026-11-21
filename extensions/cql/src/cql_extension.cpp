@@ -7788,6 +7788,45 @@ static void SuccessorOfBigIntFunc(DataChunk &args, ExpressionState &state, Vecto
 	}
 }
 
+// Recover the authored decimal scale of a DOUBLE operand the same way the
+// Python authority does (udf/math.py _step_value): Decimal(str(x)). Python's
+// str() renders the shortest round-trip form and ALWAYS keeps one fractional
+// digit for integral floats ("2.0"), so an integral double has scale 1
+// (step 0.1) and a non-integral one uses its natural digit count. The flat
+// 1e-8 step only applies when the authored scale is 0 (CQL 2.0
+// PredecessorOf1DPrecision pins predecessor of 1.0 -> 0.9).
+static int64_t python_double_decimal_scale(double v) {
+	if (std::isnan(v) || std::isinf(v)) return -1;
+	char buf[64];
+	for (int prec = 1; prec <= 17; prec++) {
+		std::snprintf(buf, sizeof(buf), "%.*g", prec, v);
+		if (std::strtod(buf, nullptr) == v) break;
+	}
+	std::string text(buf);
+	size_t e_pos = text.find_first_of("eE");
+	int64_t mantissa_scale = 0;
+	if (e_pos != std::string::npos) {
+		// Scientific form (Python Decimal('1e-05') has exponent -5):
+		// scale = mantissa fractional digits - exponent.
+		int64_t exponent = std::strtoll(text.c_str() + e_pos + 1, nullptr, 10);
+		size_t dot_pos = text.find('.');
+		int64_t frac = (dot_pos == std::string::npos || dot_pos > e_pos)
+		                   ? 0
+		                   : static_cast<int64_t>(e_pos - dot_pos - 1);
+		mantissa_scale = frac - exponent;
+	} else {
+		size_t dot_pos = text.find('.');
+		mantissa_scale = (dot_pos == std::string::npos)
+		                     ? 0
+		                     : static_cast<int64_t>(text.size() - dot_pos - 1);
+	}
+	if (mantissa_scale <= 0) {
+		// Python str() of an integral double is "2.0" — Decimal scale 1.
+		return 1;
+	}
+	return mantissa_scale;
+}
+
 static void PredecessorOfDoubleFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data;
@@ -7799,7 +7838,12 @@ static void PredecessorOfDoubleFunc(DataChunk &args, ExpressionState &state, Vec
 	for (idx_t i = 0; i < count; i++) {
 		auto ai = a_data.sel->get_index(i);
 		if (!a_data.validity.RowIsValid(ai)) { result_mask.SetInvalid(i); continue; }
-		result_data[i] = a_vals[ai] - 1e-8;
+		double v = a_vals[ai];
+		if (v <= -1e20) { result_mask.SetInvalid(i); continue; }
+		int64_t scale = python_double_decimal_scale(v);
+		if (scale < 0) { result_mask.SetInvalid(i); continue; }
+		double step = scale > 0 ? std::pow(10.0, -static_cast<double>(scale)) : 1e-8;
+		result_data[i] = v - step;
 	}
 }
 
@@ -7814,7 +7858,12 @@ static void SuccessorOfDoubleFunc(DataChunk &args, ExpressionState &state, Vecto
 	for (idx_t i = 0; i < count; i++) {
 		auto ai = a_data.sel->get_index(i);
 		if (!a_data.validity.RowIsValid(ai)) { result_mask.SetInvalid(i); continue; }
-		result_data[i] = a_vals[ai] + 1e-8;
+		double v = a_vals[ai];
+		if (v >= 1e20) { result_mask.SetInvalid(i); continue; }
+		int64_t scale = python_double_decimal_scale(v);
+		if (scale < 0) { result_mask.SetInvalid(i); continue; }
+		double step = scale > 0 ? std::pow(10.0, -static_cast<double>(scale)) : 1e-8;
+		result_data[i] = v + step;
 	}
 }
 
