@@ -3168,6 +3168,33 @@ class FunctionsMixin:
                         _ls_inner.from_clause.alias,
                         "_pt",
                     )
+                # QA-D3E-001: a query-over-CTE leaf projects
+                # `SELECT * FROM "CTE" AS X`; the rows-to-list coercion
+                # cannot alias a star (every expanded column would get the
+                # alias and the element list would silently hold
+                # patient_id values — UNION dedup then undercounts).
+                # Rewrite the star to the CTE's element column first,
+                # using definition metadata for the schema.
+                if (
+                    isinstance(_ls_inner, SQLSelect)
+                    and _ls_inner.columns
+                    and isinstance(_ls_inner.columns[0], SQLIdentifier)
+                    and _ls_inner.columns[0].name == "*"
+                    and isinstance(_ls_inner.from_clause, SQLAlias)
+                    and isinstance(_ls_inner.from_clause.expr, SQLIdentifier)
+                ):
+                    _cte_meta = self.context.definition_meta.get(
+                        _ls_inner.from_clause.expr.name
+                    )
+                    if _cte_meta is not None:
+                        _elem_col = (
+                            "resource"
+                            if getattr(_cte_meta, "has_resource", False)
+                            else "value"
+                        )
+                        _ls_inner.columns = [SQLQualifiedIdentifier(
+                            parts=[_ls_inner.from_clause.alias, _elem_col]
+                        )]
                 _coerced = _cql_rows(_leaf_sql)
                 if _coerced is not _leaf_sql:
                     _leaf_sql = _coerced

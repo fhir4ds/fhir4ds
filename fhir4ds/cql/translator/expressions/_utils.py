@@ -273,6 +273,23 @@ def _coerce_query_rows_to_list(node):
 
     value_alias = "__cql_list_value"
 
+    # QA-D3E-001: a star projection (`SELECT * FROM "CTE" AS X`) cannot be
+    # re-projected as `SELECT * AS __cql_list_value` — the alias renames
+    # EVERY expanded column and DuckDB resolves the qualified reference to
+    # the FIRST one (patient_id), so the element list silently holds
+    # patient ids instead of values. Callers with schema context must
+    # rewrite the star to the CTE's element column first (see the
+    # count-unnest leaf loop in _functions.py); coerce never aliases a
+    # star and degrades to no-op so mis-shapes fail loudly downstream.
+    _first_is_star = (
+        isinstance(first_expr, SQLIdentifier) and first_expr.name == "*"
+    ) or (
+        isinstance(first_expr, SQLQualifiedIdentifier)
+        and first_expr.parts[-1] == "*"
+    )
+    if _first_is_star:
+        return node
+
     # QA-D3H-001: a query used as a query source lowers to a one-row-per-
     # element projection whose WHERE/HAVING/ORDER BY may reference the
     # PROJECTED ALIAS (DuckDB allows alias references in WHERE):
