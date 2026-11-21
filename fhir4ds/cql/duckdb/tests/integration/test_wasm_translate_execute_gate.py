@@ -73,18 +73,31 @@ EXPECTED = {
     "DstDifferenceHoursCtor": "1",
     "DstDifferenceMinutesCtor": "45",
     "PartialPrecisionUncertain": None,
-    "DurationUncertainDays": '{"start":16,"end":44,"lowClosed":true,"highClosed":true}',
+    # Official fixture CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainInterval
+    # pins Interval[17, 44] (NOT [16, 44] — repaired v0.0.26 d3-HISTORIAN).
+    "DurationUncertainDays": '{"start":17,"end":44,"lowClosed":true,"highClosed":true}',
     "HighBoundaryDecimal": Decimal("1.58799999"),
     "LowBoundaryDecimal": Decimal("1.58700000"),
-    "PredecessorDecimal": 0.99999999,
+    # CQL 2.0 PredecessorOf1DPrecision (supersedes the 1.5 flat-1e-8 pin,
+    # which the conformance runner skips): predecessor of 1.0 is 0.9. The
+    # native DOUBLE overloads were aligned with the Python authority in
+    # v0.0.26 d3-HISTORIAN.
+    "PredecessorDecimal": 0.9,
     # CQL §22.21 age surfaces return VARCHAR (integer string when certain)
     # per the CQL-21 uncertainty doctrine.
     "AgeYearsAt": "44",
     "AgeWeeksAt": "2",
-    "NullInterval": None,
+    # Both engines (python fallback + no-python native) render Interval[null,
+    # null] as an interval VALUE with unknown bounds (CQL 1.5 §Interval:
+    # a null boundary is unknown, not a null interval). Repaired v0.0.26
+    # d3-HISTORIAN; previously None (stale, hidden behind the
+    # DurationUncertainDays failure).
+    "NullInterval": '{"low": null, "high": null, "lowClosed": true, "highClosed": true}',
     "IntervalIntersectOpenNullHigh": '{"low": "5", "high": null, "lowClosed": true, "highClosed": false}',
     "DateTimeIncludedInPrecisionNull": None,
-    "NullIntervalOverlaps": None,
+    # Official fixture TestMaxIntervalOverlapsTrue: CLOSED null bounds are the
+    # max interval → true (the OPEN form Interval(null, null) is null).
+    "NullIntervalOverlaps": True,
     "NullBoundaryProperIncluded": True,
     "DateTimeOverlapUncertain": None,
     "DateTimeOverlapYearMonthTrue": True,

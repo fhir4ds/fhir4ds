@@ -107,10 +107,13 @@ SELECT weeksBetween('2024-01-01', '2024-01-15');
 2
 
 # DurationBetween with one coarser operand returns uncertainty, not scalar low boundary.
+# CQL 1.5/2.0 Appendix B (Duration): months between @2012-01-02 and @2012 is
+# [0, 10] — whole calendar periods; the Difference form (below) is [0, 11]
+# (boundaries crossed). Expectation repaired v0.0.26 d3-HISTORIAN.
 query I
 SELECT cqlDurationBetween('2012-01-02', '2012', 'month');
 ----
-{"start":0,"end":11,"lowClosed":true,"highClosed":true}
+{"start":0,"end":10,"lowClosed":true,"highClosed":true}
 
 query I
 SELECT cqlDurationBetween('2005T', '2010T', 'year');
