@@ -3181,11 +3181,16 @@ class FunctionsMixin:
                     and isinstance(_ls_inner.columns[0], SQLIdentifier)
                     and _ls_inner.columns[0].name == "*"
                     and isinstance(_ls_inner.from_clause, SQLAlias)
-                    and isinstance(_ls_inner.from_clause.expr, SQLIdentifier)
-                ):
-                    _cte_meta = self.context.definition_meta.get(
-                        _ls_inner.from_clause.expr.name
+                    and isinstance(
+                        _ls_inner.from_clause.expr,
+                        (SQLIdentifier, RetrievePlaceholder),
                     )
+                ):
+                    _cte_meta = None
+                    if isinstance(_ls_inner.from_clause.expr, SQLIdentifier):
+                        _cte_meta = self.context.definition_meta.get(
+                            _ls_inner.from_clause.expr.name
+                        )
                     if _cte_meta is not None:
                         _elem_col = (
                             "resource"
@@ -3195,6 +3200,30 @@ class FunctionsMixin:
                         _ls_inner.columns = [SQLQualifiedIdentifier(
                             parts=[_ls_inner.from_clause.alias, _elem_col]
                         )]
+                    else:
+                        # QA-D4S-001: a plain retrieve-with-where leaf
+                        # (`[Procedure: "VS"] P where P.performed during ...`)
+                        # lowers to `SELECT * FROM <retrieve CTE> AS P` —
+                        # the retrieve CTE is NOT in definition_meta, so the
+                        # rewrite above skipped it and the rows-to-list
+                        # coercion no-ops on the star (QA-D3E-001 doctrine),
+                        # making the whole count-unnest union fall through
+                        # to the generic path (BinderException "Subquery
+                        # returns N columns"). Retrieve CTEs always project
+                        # (patient_id, resource); rewrite the star to the
+                        # qualified resource column. Only for leaves whose
+                        # FROM is the retrieve itself (placeholder) or whose
+                        # AST source is a Retrieve — arbitrary identifier
+                        # FROMs keep the prior skip.
+                        _leaf_src_expr = getattr(
+                            getattr(_leaf, "source", None), "expression", None
+                        )
+                        if isinstance(_ls_inner.from_clause.expr, RetrievePlaceholder) or (
+                            isinstance(_leaf_src_expr, _UnionRetrieve)
+                        ):
+                            _ls_inner.columns = [SQLQualifiedIdentifier(
+                                parts=[_ls_inner.from_clause.alias, "resource"]
+                            )]
                 _coerced = _cql_rows(_leaf_sql)
                 if _coerced is not _leaf_sql:
                     _leaf_sql = _coerced
