@@ -467,6 +467,14 @@ class HTTPTerminologyEndpoint:
             result = self._contains_to_coderefs(self._parse_contains(payload))
             self._on_call_success()
             return result
+        except TerminologyCapabilityError:
+            # QA-D12H-002 (v0.0.26 D12 HISTORIAN): a capability refusal is
+            # deterministic — retrying cannot help, so it must NOT count
+            # toward the circuit breaker (in-process doctrine, QA-D12S-001).
+            # Five refusals used to trip the breaker, whose short-circuit
+            # then returned [] silently — recreating the silent-under-match
+            # degradation the AMUX-115 ruling exists to prevent.
+            raise
         except Exception:
             self._on_call_failure()
             raise
@@ -522,11 +530,37 @@ class HTTPTerminologyEndpoint:
                         "activeOnly": "false",
                     },
                 )
+                # QA-D12H-001 (v0.0.26 D12 HISTORIAN): a 400/422 on the
+                # POSTed body is a capability refusal — the sidecar maps
+                # medterm4ds's intensional-expansion ValueErrors (QC-252
+                # unresolvable compose system, QC-246 null concept code)
+                # to HTTP 400, and the in-process adapter escalates the
+                # identical refusals to TerminologyCapabilityError
+                # (QA-D12S-001). Escalate here too so the two surfaces
+                # stay equivalent for callers and the resolver's
+                # degrade-vs-propagate branch sees the same type.
+                if response.status_code in (400, 422):
+                    raise TerminologyCapabilityError(
+                        f"endpoint refused intensional ValueSet expansion "
+                        f"for {value_set.get('url', '<intensional>')!r} "
+                        f"(HTTP {response.status_code})"
+                        f"{self._diagnostics_suffix(response)}. "
+                        "The ValueSet definition itself cannot be served by "
+                        "this backend (medterm4ds refuses unresolvable "
+                        "compose systems and null concept codes). "
+                        "Remediation: fix the compose system/code "
+                        "definitions, or point the endpoint at a full "
+                        "terminology server."
+                    )
                 response.raise_for_status()
                 payload = response.json()
             result = self._contains_to_coderefs(self._parse_contains(payload))
             self._on_call_success()
             return result
+        except TerminologyCapabilityError:
+            # QA-D12H-002: capability refusals never count toward the
+            # breaker (see expand()'s note for the full rationale).
+            raise
         except Exception:
             self._on_call_failure()
             raise

@@ -251,3 +251,61 @@ def test_parallel_dispatch_with_mocked_engine(monkeypatch):
     for conds in out:
         assert len(conds) == 1
         assert conds[0]["resourceType"] == "Condition"
+
+
+def test_worker_dict_carries_result_type_for_parallel_typing_d12h():
+    """QA-D12H-003 (v0.0.26 D12 HISTORIAN): the worker's concept->dict
+    conversion must carry ``result_type``.
+
+    The sync path hands the medterm4ds dataclass to
+    ``_build_derived_resource``, whose ``resource_type_for`` call maps
+    ``result_type='vaccine'`` to Immunization, ``'medication'`` to
+    MedicationStatement, etc. The PARALLEL path converts concepts to
+    dicts at the process boundary; without ``result_type`` the parent's
+    ``_safe_getattr(concept, "result_type")`` sees None and every
+    concept files as the DEFAULT ``Condition`` — a vaccine becomes a
+    diagnosis, silently, only in parallel mode.
+    """
+    from types import SimpleNamespace
+
+    def _fake_extract(text, **kw):
+        return [SimpleNamespace(
+            code="J07BB", source="ATC", system=None, display="flu vaccine",
+            matched_text="flu vaccine", status="affirmed", section=None,
+            confidence=0.9, match_grade="certain", ner_label=None,
+            result_type="vaccine", span_start=0, span_end=11,
+        )]
+
+    import fhir4ds.cql.loader.notes_pipeline as np_mod
+    original_fn = np_mod._WORKER_EXTRACT_FN
+    original_kwargs = np_mod._WORKER_EXTRACT_KWARGS
+    np_mod._WORKER_EXTRACT_FN = _fake_extract
+    np_mod._WORKER_EXTRACT_KWARGS = {"format": "codes"}
+    try:
+        @dataclass
+        class _F:
+            text: str
+            source_ref: str
+            path: str
+        out = np_mod._worker_extract_fragments(
+            ({"resourceType": "DocumentReference"},
+             [_F(text="flu vaccine given", source_ref="Doc/1", path="p")])
+        )
+        wdict = out[0][0]
+        assert wdict.get("result_type") == "vaccine", (
+            "worker dict must carry result_type or the parallel path "
+            f"degrades every concept to Condition; keys={sorted(wdict)}"
+        )
+        # End-to-end: the parent builds the derived resource from the
+        # worker dict and must reach the SAME type the sync path would.
+        pipeline = np_mod.NotesPipeline(np_mod.NotesPipelineConfig())
+        frag = SimpleNamespace(text="t", source_ref="Doc/1", path="p")
+        built = pipeline._build_derived_resource(wdict, frag, {})
+        assert built is not None
+        assert built["resourceType"] == "Immunization", (
+            f"parallel-path concept filed as {built['resourceType']} "
+            "(sync path files it as Immunization)"
+        )
+    finally:
+        np_mod._WORKER_EXTRACT_FN = original_fn
+        np_mod._WORKER_EXTRACT_KWARGS = original_kwargs
