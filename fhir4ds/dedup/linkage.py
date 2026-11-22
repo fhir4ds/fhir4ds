@@ -221,10 +221,15 @@ def delete_linkage(conn: duckdb.DuckDBPyConnection,
 def load_dedup_linkage_resources(
     conn: duckdb.DuckDBPyConnection,
 ) -> list[dict[str, Any]]:
-    """All stored dedup Linkage resources, ordered by dedup_id."""
+    """All stored dedup Linkage resources, ordered by dedup_id.
+
+    Returns ``[]`` when nothing was ever linked — the table is created
+    lazily by the first write, so the loader ensures existence first
+    (same create-first precedent as :func:`delete_linkage`)."""
     from ._conn import require_open_connection
 
     require_open_connection(conn, "load dedup linkage resources")
+    create_dedup_linkage_table(conn)
     rows = conn.execute(
         "SELECT resource FROM dedup_linkage ORDER BY dedup_id"
     ).fetchall()

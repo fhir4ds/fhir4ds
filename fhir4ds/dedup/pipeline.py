@@ -830,11 +830,46 @@ def _codes_payload(record: DedupRecord) -> list[str]:
     return sorted(f"{system}|{code}" for system, code in record.code_keys)
 
 
-def _near_miss_entry(records_by_rid: dict[str, DedupRecord],
+def _records_by_rid_multimap(
+        records: list[DedupRecord]) -> dict[str, list[DedupRecord]]:
+    """rid -> records index, tolerant of cross-type id collisions.
+
+    QA-D15H-001 (v0.0.26 D15 HISTORIAN): FHIR ids are unique per resource
+    TYPE, so one corpus may legally carry an Observation and a Condition
+    sharing an id. Near-miss edges are always same-type (built inside one
+    Stage-1 bucket / text group, both of which key on rtype), so the
+    lookup below resolves the pair by matching rtypes.
+    """
+    index: dict[str, list[DedupRecord]] = {}
+    for record in records:
+        index.setdefault(record.rid, []).append(record)
+    return index
+
+
+def _near_miss_pair(index: dict[str, list[DedupRecord]],
+                    rid_a: str, rid_b: str) -> tuple[DedupRecord,
+                                                     DedupRecord]:
+    """Resolve the same-type record pair for a near-miss edge.
+
+    Duplicate (rtype, id) identities were collapsed upstream, so at most
+    one candidate per rid matches the peer's rtype — the resolution is
+    unique for well-formed edges.
+    """
+    candidates_a = index[rid_a]
+    candidates_b = index[rid_b]
+    for left in candidates_a:
+        for right in candidates_b:
+            if left.rtype == right.rtype:
+                return left, right
+    raise KeyError(f"no same-type record pair for near-miss edge "
+                   f"({rid_a}, {rid_b})")
+
+
+def _near_miss_entry(records_by_rid: dict[str, list[DedupRecord]],
                      edge: dict, reason: str,
                      bucket: object) -> dict:
-    left = records_by_rid[edge["edge"][0]]
-    right = records_by_rid[edge["edge"][1]]
+    left, right = _near_miss_pair(records_by_rid,
+                                  edge["edge"][0], edge["edge"][1])
     entry = {
         "kind": "near_miss",
         "resource_type": left.rtype,
@@ -867,7 +902,7 @@ def _cross_bucket_near_misses(records: list[DedupRecord]) -> list[dict]:
             by_text.setdefault(
                 (record.patient_ref or "", record.rtype, text),
                 []).append(record)
-    records_by_rid = {r.rid: r for r in records}
+    records_by_rid = _records_by_rid_multimap(records)
     seen: set[tuple[str, str]] = set()
     entries: list[dict] = []
     for key in sorted(by_text):
@@ -1036,7 +1071,7 @@ def dedup_pass(resources: list[dict], *, default_tz: str = DEFAULT_TZ,
         records,
         concept_index if concept_index is not None else _NULL_INDEX,
         mode)
-    records_by_rid = {r.rid: r for r in records}
+    records_by_rid = _records_by_rid_multimap(records)
     singletons, multi_groups, component_edges, suppressed = \
         _partition_internal(records, code_fallback=mode)
     emitted: list[DedupRecord] = list(
@@ -1068,9 +1103,10 @@ def dedup_pass(resources: list[dict], *, default_tz: str = DEFAULT_TZ,
             for edge in tier2_edges:
                 a, b = edge["edge"]
                 if cluster_of.get(a) != cluster_of.get(b):
+                    left, _right = _near_miss_pair(records_by_rid, a, b)
                     near_misses.append(_near_miss_entry(
                         records_by_rid, edge, "temporal_rejected",
-                        list(_sort_key(records_by_rid[a]))))
+                        list(_sort_key(left))))
     for edge in suppressed:
         near_misses.append(_near_miss_entry(
             records_by_rid, edge, "mode_suppressed", edge["bucket"]))
