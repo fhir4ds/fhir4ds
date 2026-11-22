@@ -64,6 +64,14 @@ def create_app(
     """
     from fhir4ds import __version__ as engine_version
 
+    if config is not None and not isinstance(config, ServeConfig):
+        # QA-D8H-003 (INV-8): a str/dict config leaked a raw
+        # AttributeError ('str' object has no attribute 'database') far
+        # from the call site.
+        raise TypeError(
+            "config must be a ServeConfig or None, got "
+            f"{type(config).__name__}"
+        )
     settings = config or ServeConfig()
     if connection is None:
         connection = _connect(settings)
