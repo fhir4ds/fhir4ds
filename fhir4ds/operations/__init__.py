@@ -1,8 +1,27 @@
 """fhir4ds.operations — capabilities defined once, adapters are thin.
 
-Public surface (v1, schema: 1): parse_cql, translate_cql,
-evaluate_library, run_tests, fhirpath_eval, load_dataset,
-explain_patient. See docs/architecture/plans/FEATURE_OPERATIONS_LAYER.md.
+Public surface (schema: 1), all returning typed versioned envelopes:
+
+- parse: ``parse_cql``
+- translate: ``translate_cql``
+- evaluate: ``evaluate_library``, ``evaluate_snippet``, ``explain_patient``,
+  ``run_tests``
+- fhirpath: ``fhirpath_eval``
+- dataset: ``load_dataset``
+- validate/schema: ``validate_resource``, ``resource_schema``,
+  ``resource_schema_tree``
+- compare: ``compare_evidence``, ``evidence_payload_from_dict``
+- measure helpers: ``flatten_view``, ``dependency_closure``,
+  ``measure_from_definitions``, ``measure_population_map``,
+  ``measure_report_from_rows``, ``output_columns_from_measure``,
+  ``rows_from_measure_reports``
+- envelopes/parsers: ``DatasetSpec``, ``LibraryText``, ``TestsInput``,
+  ``TestCase``, ``diagnostic_from_exception``, plus the ``*_from_dict``
+  parsers; ``LibraryResolver``/``bundled_library_names`` for §3.3.1 source
+  resolution.
+
+See docs/architecture/plans/FEATURE_OPERATIONS_LAYER.md (and the measure
+helpers addendum) for the authoritative design.
 """
 
 from .capabilities.dataset_ops import DatasetResult, load_dataset
