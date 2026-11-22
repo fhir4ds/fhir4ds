@@ -6639,3 +6639,27 @@ fallback, via the documented `duckdb.__version__` spoof. Both DQM suites report
 
 Check the banner when reading a gate log: "Python fallback … (C++ extension NOT
 loaded)" means the run did NOT exercise the shipped binaries.
+
+## Resource Dedup — duplicate-id doctrine + membership guard (v0.0.26 D15 SKEPTIC, 2026-11-22)
+
+- **`(resourceType, id)` is the corpus resource identity.** Every dedup
+  bookkeeping structure (union-find parents, encounter feature maps,
+  component-edge maps, `records_by_rid`) keys on rid, so duplicate ids in one
+  corpus fabricated clusters with zero pair evidence and made results depend
+  on input order. `dedup_pass` and `encounter_pass` now collapse duplicate-id
+  resources deterministically to the smallest `json.dumps(sort_keys=True)`
+  form (the `MedicationIndex` precedent); stats carry
+  `duplicate_id_resources`. `_partition_internal` returns `component_edges`
+  as a list PARALLEL to `multi_groups` (never key edge evidence by rid).
+- **Falsy `membership` masters never group strangers**: a blank/whitespace
+  master id falls back to patient-identity grouping in `encounter_pass`
+  (cross-patient merge is the hard invariant). In-repo producers
+  (matching `build_membership`) emit union-find roots, never blanks.
+- Pinned (NOT A BUG): reference-resolved medication concepts are a HYBRID
+  tier — `code_fallback="off"` (canonical-only) never merges through them
+  while still counting `reference_resolved_records`. Patient-less coded
+  resources (patient_ref None) may merge on code+date+value equality — the
+  unknown-patient bucket is one epistemic group (the Encounter strategy
+  differs because its only signal is temporal). EMER hard-negative veto
+  boundary: gap > 2h (exactly 2h is neither candidate nor veto); overlap
+  containment >= 0.80 and adjacency gap <= 15m are inclusive.
