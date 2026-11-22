@@ -41,7 +41,7 @@ from .corrupt import (
     inject_duplicates,
 )
 
-__version__ = "0.0.1"
+__version__ = "0.0.25"
 
 __all__ = [
     "__version__",
