@@ -88,6 +88,32 @@ def _bundled_extension_filename() -> str | None:
     }.get(key)
 
 
+def _file_digest(path: "Path") -> str:
+    """Content digest of *path*, memoised on (path, size, mtime).
+
+    Used to verify a staged extension copy still matches its bundle without
+    re-hashing megabytes on every ``register()`` call — only the first call
+    per (bundle, staged) pair per process pays the hash cost.
+    """
+    import hashlib
+
+    stat = path.stat()
+    cache_key = (str(path), stat.st_size, stat.st_mtime_ns)
+    digest = _STAGED_DIGEST_CACHE.get(cache_key)
+    if digest is None:
+        h = hashlib.sha1()
+        with path.open("rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+        digest = h.hexdigest()
+        _STAGED_DIGEST_CACHE[cache_key] = digest
+    return digest
+
+
+# Memoised content digests for the staging validity check (see _file_digest).
+_STAGED_DIGEST_CACHE: dict = {}
+
+
 def _staged_load_path(ext_path: "Path") -> "Path":
     """DuckDB 2.x enforces the `.duckdb_extension` suffix at LOAD.
 
@@ -97,6 +123,15 @@ def _staged_load_path(ext_path: "Path") -> "Path":
     other suffix, so stage the bundle into a content-addressed cache
     under the loadable name before LOAD. The cache key is the bundle's
     size+mtime, so a wheel upgrade re-stages automatically.
+
+    The staged copy is validated by CONTENT (digest), not just size: a
+    same-size corruption of the staged file passes a size check, DuckDB
+    only validates the ELF/trailer structure at LOAD, so corrupted native
+    code would be served silently (D10-EXPLORER, v0.0.26). The copy is
+    published atomically (write-temp + ``os.replace``) so a concurrent
+    ``register()`` in another process can never LOAD a half-written
+    binary — parallel cold start used to intermittently fail with
+    "not a DuckDB extension" and silently lose the native engine.
     """
     import hashlib
     import re
@@ -114,8 +149,14 @@ def _staged_load_path(ext_path: "Path") -> "Path":
     cache_dir = Path(tempfile.gettempdir()) / "fhir4ds-ext-cache" / key
     cache_dir.mkdir(parents=True, exist_ok=True)
     staged = cache_dir / re.sub(r"\.duckdb[0-9]*_extension$", ".duckdb_extension", ext_path.name)
-    if not staged.exists() or staged.stat().st_size != stat.st_size:
-        staged.write_bytes(ext_path.read_bytes())
+    if (
+        not staged.exists()
+        or staged.stat().st_size != stat.st_size
+        or _file_digest(staged) != _file_digest(ext_path)
+    ):
+        tmp = cache_dir / f".{staged.name}.{os.getpid()}.{stat.st_mtime_ns}.tmp"
+        tmp.write_bytes(ext_path.read_bytes())
+        os.replace(tmp, staged)
     return staged
 
 
@@ -197,7 +238,17 @@ def _try_load_bundled_cpp_extension(con: "duckdb.DuckDBPyConnection") -> bool:
         try:
             ext_path = _staged_load_path(ext_path)
         except OSError as exc:
-            _logger.warning("duckdb_py: failed to stage 2.0 bundle for load: %s", exc)
+            # D10-EXPLORER (v0.0.26): strict mode must be honoured here too —
+            # a read-only/unwritable staging cache previously degraded to the
+            # fallback silently even with FHIR4DS_REQUIRE_CPP=1.
+            if os.environ.get("FHIR4DS_REQUIRE_CPP") == "1":
+                raise RuntimeError(
+                    "fhir4ds C++ extension: failed to stage the version-"
+                    "suffixed bundle for load (%s). Fix the staging cache "
+                    "directory permissions (see the fhir4ds-ext-cache "
+                    "directory under your temp dir)." % exc
+                ) from exc
+            _logger.warning("duckdb_fhirpath_py: failed to stage extension bundle for load: %s", exc)
             return False
 
     try:
@@ -210,6 +261,16 @@ def _try_load_bundled_cpp_extension(con: "duckdb.DuckDBPyConnection") -> bool:
         if "already loaded" in msg.lower():
             _logger.debug("duckdb_fhirpath_py: C++ extension already loaded")
             return True
+        # D10-EXPLORER (v0.0.26): strict mode must be honoured on LOAD
+        # failure as well — a present-but-corrupt bundle previously fell
+        # back to the Python UDFs silently even with FHIR4DS_REQUIRE_CPP=1.
+        if os.environ.get("FHIR4DS_REQUIRE_CPP") == "1":
+            raise RuntimeError(
+                "fhir4ds C++ extension: failed to load bundled C++ "
+                "extension: %s. The bundle may be corrupt — reinstall "
+                "fhir4ds-v2, or unset FHIR4DS_REQUIRE_CPP to allow the "
+                "Python UDF fallback." % msg
+            ) from exc
         if "unsigned" in msg or "signature" in msg:
             # The setting cannot be flipped after the database is running
             # (DuckDB rejects `SET allow_unsigned_extensions` mid-session with
