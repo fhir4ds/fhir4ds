@@ -460,9 +460,13 @@ def embedding_rules() -> list[MatchRule]:
         guards = entry[3] if len(entry) > 3 else ()
         fields = tuple(fields)
         bands = _approvable_rule_bands(fields)
-        assert bands and bands[0][0] == "tight", (
-            f"{rule_id}: tight band must be approvable (calibrated "
-            f"u-values out of budget)")
+        if not bands or bands[0][0] != "tight":
+            # Typed check (not ``assert``): the invariant must survive
+            # ``python -O`` — a recalibration pushing the tight band out of
+            # budget is an authoring error, not a runtime assumption.
+            raise ValueError(
+                f"{rule_id}: tight band must be approvable (calibrated "
+                f"u-values out of budget)")
         rules.append(MatchRule(
             rule_id=rule_id,
             fields=fields,

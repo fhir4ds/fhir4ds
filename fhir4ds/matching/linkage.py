@@ -64,12 +64,23 @@ def canonical_pair_key(new_patient_id: str, existing_patient_id: str,
 
 
 def _canonical_evidence(evidence: dict[str, str]) -> dict[str, str]:
-    """Direction-independent evidence: sort both sides of fuzzy ``x~y`` pairs."""
+    """Direction-independent evidence: sort both sides of fuzzy ``x~y`` pairs.
+
+    EMBED-mode evidence carries pair-level ``|``-annotations after the name
+    pair (``a~b|band=mid|model=...``); the annotations are split off BEFORE
+    sorting the two name sides and re-appended, so the canonical form never
+    depends on which side was the query patient (determinism doctrine) and
+    the annotations stay a pair-level suffix rather than migrating onto one
+    name token.
+    """
     canon: dict[str, str] = {}
     for field_name, value in evidence.items():
         if isinstance(value, str) and "~" in value:
-            left, right = value.split("~", 1)
+            name_part, sep, annotations = value.partition("|")
+            left, right = name_part.split("~", 1)
             value = "~".join(sorted((left, right)))
+            if sep:
+                value = f"{value}{sep}{annotations}"
         canon[field_name] = value
     return canon
 

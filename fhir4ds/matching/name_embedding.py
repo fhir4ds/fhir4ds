@@ -279,9 +279,15 @@ def _band_pair(a: str, b: str) -> Optional[str]:
 
 def name_distance_band(a: Optional[str], b: Optional[str]) -> Optional[str]:
     """Embedding band for a name pair, or None when the artifact is
-    degraded or the pair is not close enough for any band."""
+    degraded, the pair is not close enough for any band, or either name
+    carries no Latin-letter signal (non-Latin scripts normalize to the
+    empty string — a vacuous comparison that must never yield a band, lest
+    two distinct non-Latin given names embed identically and land in the
+    ``tight`` band; QA-D14S-002)."""
     if not a or not b:
         return None
     if not _load():
+        return None
+    if not _normalize(a).strip() or not _normalize(b).strip():
         return None
     return _band_pair(a, b)
