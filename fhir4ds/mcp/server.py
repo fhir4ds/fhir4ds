@@ -363,7 +363,13 @@ def build_server() -> Any:
 def main() -> None:
     import asyncio
 
-    # stdout hygiene (FDD §3.7): stdout belongs to JSON-RPC; engine prints go to stderr.
-    sys.stdout = sys.stderr  # type: ignore[assignment]
+    # stdout hygiene (FDD §3.7): stdout belongs to the JSON-RPC channel.
+    # Do NOT rebind sys.stdout: FastMCP's stdio transport wraps
+    # ``sys.stdout`` when ``run_stdio_async()`` starts, so the old
+    # ``sys.stdout = sys.stderr`` swap made every protocol response go to
+    # STDERR — invisible to real MCP clients (QA-D10H-001). Engine code
+    # must emit through ``logging`` (stderr by default) or explicit
+    # stderr writes; there are no bare ``print()`` calls on the serving
+    # paths (fhir4ds.operations/cql.loader/terminology audited 2026-11-22).
     server = build_server()
     asyncio.run(server.run_stdio_async())

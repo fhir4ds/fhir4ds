@@ -164,3 +164,69 @@ def test_resource_schema_tree_tool(server):
     r = _call(server, "resource_schema_tree_tool", resource_type="Patient")
     assert r["ok"] is True
     assert r["root"]["name"] == "Patient"
+
+
+def test_entry_point_stdio_responses_arrive_on_stdout():
+    """QA-D10H-001 (2026-11-22): the JSON-RPC channel is STDOUT.
+
+    ``main()`` used to swap ``sys.stdout = sys.stderr`` for print hygiene,
+    which made FastMCP's stdio transport (it wraps ``sys.stdout`` at call
+    time) write protocol responses to STDERR — invisible to every real
+    MCP client. A spawned entry-point process must answer ``initialize``
+    with a JSON line on stdout.
+    """
+    import json
+    import os
+    import selectors
+    import subprocess
+    import sys
+    import time
+
+    exe = os.path.join(sys.prefix, "bin", "fhir4ds-mcp")
+    # Prefer the installed entry point; fall back to invoking main()
+    # directly (same code path incl. the stdout wiring under test).
+    cmd = [exe] if os.path.exists(exe) else [
+        sys.executable,
+        "-c",
+        "import sys; from fhir4ds.mcp.server import main; sys.exit(main())",
+    ]
+    proc = subprocess.Popen(
+        cmd,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    init = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "pytest-d10h", "version": "0"},
+        },
+    }
+    try:
+        proc.stdin.write((json.dumps(init) + "\n").encode())
+        proc.stdin.flush()
+        sel = selectors.DefaultSelector()
+        sel.register(proc.stdout, selectors.EVENT_READ)
+        deadline = time.time() + 30
+        line = b""
+        while time.time() < deadline:
+            if sel.select(timeout=1.0):
+                line = proc.stdout.readline()
+                if line:
+                    break
+            if proc.poll() is not None:
+                break
+        assert line, (
+            "no initialize response on STDOUT; stderr was: "
+            + proc.stderr.read1(4000).decode(errors="replace")
+            if hasattr(proc.stderr, "read1")
+            else "no initialize response on STDOUT"
+        )
+        resp = json.loads(line.decode())
+        assert resp["result"]["serverInfo"]["name"] == "fhir4ds", resp
+    finally:
+        proc.kill()
