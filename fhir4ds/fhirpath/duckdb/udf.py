@@ -109,6 +109,13 @@ def _json_max_nesting_depth(resource: str) -> int:
     return max_depth
 
 
+# v0.0.26 Domain 7 HISTORIAN QA-D7H-001: word-form binary operators that
+# grow the AST spine when chained (see _expression_max_nesting_depth).
+_WORD_BINARY_OPERATORS = frozenset(
+    {"div", "mod", "and", "or", "xor", "implies", "in", "contains", "is", "as"}
+)
+
+
 def _expression_max_nesting_depth(expression: str) -> int:
     """Return maximum FHIRPath expression syntactic nesting depth.
 
@@ -185,6 +192,32 @@ def _expression_max_nesting_depth(expression: str) -> int:
             depth += 1
             if depth > max_depth:
                 max_depth = depth
+        elif ch in "+-*/=!<>~":
+            # v0.0.26 Domain 7 HISTORIAN QA-D7H-001: arithmetic/comparison
+            # binary operators grow the AST spine too (a left-associative
+            # ``1 + 1 + ...`` chain is a left-deep tree, one level per
+            # operator). Without this, a >=250-operator chain requested the
+            # 1000-frame budget floor and the recursive evaluator silently
+            # returned empty / classified is_valid False while native
+            # answered instantly. Overcounting (e.g. '!=' hitting both '!'
+            # and '=', unary minus) only over-provisions the budget — safe.
+            depth += 1
+            if depth > max_depth:
+                max_depth = depth
+        elif ch.isalpha() or ch == "_":
+            # Word operators (div/mod/and/or/xor/implies/in/contains/is/as)
+            # also grow the spine. Consume the whole identifier so operator
+            # substrings inside member names (e.g. `divergence`) never
+            # count. Keywords are case-sensitive lowercase in FHIRPath.
+            j = i + 1
+            while j < n and (expression[j].isalnum() or expression[j] == "_"):
+                j += 1
+            if expression[i:j] in _WORD_BINARY_OPERATORS:
+                depth += 1
+                if depth > max_depth:
+                    max_depth = depth
+            i = j
+            continue
         i += 1
 
     return max_depth
@@ -2564,7 +2597,15 @@ def fhirpath_is_valid_udf(expression: str | None) -> bool:
         return False
     if _has_invalid_math_literal_unions(stripped):
         return False
-    if _has_invalid_math_literal_operands(stripped):
+    # v0.0.26 Domain 7 HISTORIAN QA-D7H-001: the memoized scan recurses once
+    # per chain level (~2-3 frames/operator); a >=~450-operator chain blows
+    # the default recursion limit OUTSIDE the eval budget. Run it under the
+    # same sized budget the evaluator gets (the depth heuristic counts
+    # binary-operator spine growth).
+    if _run_with_recursion_budget(
+        lambda _expr=stripped: _has_invalid_math_literal_operands(_expr),
+        (10 * _expression_max_nesting_depth(stripped)) + 1000,
+    ):
         return False
     if _has_invalid_string_search_arity(stripped):
         return False
