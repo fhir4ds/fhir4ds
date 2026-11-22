@@ -983,15 +983,9 @@ class FHIRDataLoader:
         valuesets: List[Any],
         table_name: str = "valueset_codes"
     ) -> int:
-        if not isinstance(table_name, str) or not table_name.isidentifier():
-            raise ValueError(
-                f"table_name must be a valid SQL identifier, got {table_name!r}"
-            )
-        quoted_table_name = quote_identifier(table_name)
-        """
-        Load ValueSet codes into a table for fhirpath_in_valueset UDF.
+        """Load ValueSet codes into a table for fhirpath_in_valueset UDF.
 
-        Creates a table with columns:
+        Creates a table (default ``valueset_codes``) with columns:
         - valueset_url VARCHAR
         - system VARCHAR
         - code VARCHAR
@@ -1000,15 +994,29 @@ class FHIRDataLoader:
         This table is queried by the fhirpath_in_valueset UDF to check
         if a code is in a valueset without making API calls.
 
+        Loading is ADDITIVE: re-loading appends rows; duplicate rows are
+        inert (membership is a set). A ValueSet whose expansion/compose
+        yields ZERO codes loads as an empty entry with a WARNING
+        ("membership checks against it will always be false").
+
         Args:
             valuesets: List of ResolvedValueSet objects from DependencyResolver,
                       or list of dicts with 'url' and 'codes' keys.
-                      Each code should have 'system', 'code', and optionally 'display'.
-            table_name: Name of the table to create/populate
+                      Each code should have 'system', 'code', and optionally
+                      'display' (when present, display must be a string).
+                      Extraction failures are re-raised as ``ValueError``
+                      naming ``valuesets[i] (url=...)``.
+            table_name: Name of the table to create/populate. Must be a
+                      valid SQL identifier (default ``"valueset_codes"``).
 
         Returns:
-            Total number of codes loaded
+            Total number of codes loaded.
         """
+        if not isinstance(table_name, str) or not table_name.isidentifier():
+            raise ValueError(
+                f"table_name must be a valid SQL identifier, got {table_name!r}"
+            )
+        quoted_table_name = quote_identifier(table_name)
         if valuesets is None:
             raise TypeError("valuesets must be a list, got None")
         if not isinstance(valuesets, list):

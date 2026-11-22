@@ -575,6 +575,11 @@ def evaluate_measure_legacy(
                    through the ``terminology_closure`` table (which the caller
                    must have already loaded). Default ``False`` preserves the
                    existing literal-match SQL output byte-for-byte.
+        strict_profiles: STRICT PROFILE MODE (default True). When True a
+                   profile-qualified retrieve requires the profile canonical
+                   in the resource's ``meta.profile``; when False the filter
+                   is omitted and the retrieve matches the base resource
+                   type.
 
     Returns:
         DataFrame with one row per patient, one column per define.

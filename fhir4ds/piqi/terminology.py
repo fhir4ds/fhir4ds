@@ -160,7 +160,10 @@ def run_terminology_sam(connection, mnemonic: str, *, data_class: str,
         endpoint: an explicit TerminologyEndpoint (protocol-shaped).
         use_env: consult the env-driven factory when ``endpoint`` is
             omitted (opt-in so tests stay deterministic).
-        patient_id / source_table: the usual scoping knobs.
+        patient_id: optional scoping to a single patient id
+            (default ``None`` = all patients).
+        source_table: the physical table the coded attribute view reads
+            from (default ``"resources"``).
 
     Returns:
         Rows with the standard SAM columns plus ``provenance``; ``result``
