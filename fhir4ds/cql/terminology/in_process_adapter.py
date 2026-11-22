@@ -462,6 +462,9 @@ class InProcessTerminologyEndpoint:
 
         Short-circuits to ``[]`` when the circuit breaker is open.
         """
+        from .endpoint import require_dict_arg
+
+        require_dict_arg(value_set, "value_set")  # QA-D8E-001
         now = time.monotonic()
         if self._is_breaker_open(now):
             _logger.warning(
