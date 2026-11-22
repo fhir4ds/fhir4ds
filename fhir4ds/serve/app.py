@@ -73,6 +73,24 @@ def create_app(
             f"{type(config).__name__}"
         )
     settings = config or ServeConfig()
+    if connection is not None:
+        # QA-D13S-001 (INV-8, QA-D8H-003/QA-D11E-001 sibling): a str/int
+        # connection leaked a raw AttributeError ('execute') deep inside
+        # ensure_schema; a closed one leaked a bare ConnectionException.
+        import duckdb as _duckdb_mod
+
+        if not isinstance(connection, _duckdb_mod.DuckDBPyConnection):
+            raise TypeError(
+                "connection must be a DuckDB connection "
+                f"(see fhir4ds.connection.create_connection), got "
+                f"{type(connection).__name__}"
+            )
+        try:
+            connection.execute("SELECT 1").fetchone()
+        except _duckdb_mod.ConnectionException:
+            raise _duckdb_mod.ConnectionException(
+                "Cannot start fhir4ds serve: DuckDB connection is closed"
+            )
     if connection is None:
         connection = _connect(settings)
 
