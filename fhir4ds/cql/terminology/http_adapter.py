@@ -170,6 +170,13 @@ class HTTPTerminologyEndpoint:
         breaker_threshold: int = 5,
         breaker_cooldown_seconds: float = 60.0,
     ) -> None:
+        if not isinstance(base_url, str):
+            # QA-D8H-001 (INV-9 fail-fast): urlparse leaks a raw
+            # AttributeError ('int' object has no attribute 'decode')
+            # on non-str input — reject the type here, actionably.
+            raise TypeError(
+                f"base_url must be a str, got {type(base_url).__name__}"
+            )
         if not base_url:
             raise ValueError("base_url is required for HTTPTerminologyEndpoint")
         # Fail-fast URL validation (QA-014). Deferred failure at first
@@ -406,6 +413,9 @@ class HTTPTerminologyEndpoint:
 
         Short-circuits to ``[]`` when the circuit breaker is open.
         """
+        from .endpoint import require_str_arg
+
+        require_str_arg(valueset_url, "valueset_url")  # QA-D8H-002
         now = time.monotonic()
         if self._is_breaker_open(now):
             failures, tripped_until = self._breaker_snapshot()
@@ -529,6 +539,10 @@ class HTTPTerminologyEndpoint:
 
         Short-circuits to ``[]`` when the circuit breaker is open.
         """
+        from .endpoint import require_str_arg
+
+        require_str_arg(query, "query")  # QA-D8H-002
+        require_str_arg(category, "category")
         now = time.monotonic()
         if self._is_breaker_open(now):
             failures, tripped_until = self._breaker_snapshot()
@@ -598,6 +612,9 @@ class HTTPTerminologyEndpoint:
         ``search_batch`` itself does not wrap the loop, so an open
         breaker short-circuits each sub-call to ``[]`` without raising.
         """
+        from .endpoint import require_query_pairs
+
+        require_query_pairs(queries)  # QA-D8H-002
         if len(queries) <= 1:
             # Small batch — sequential is faster (no thread overhead).
             return [

@@ -360,6 +360,9 @@ class InProcessTerminologyEndpoint:
 
         Short-circuits to ``[]`` when the circuit breaker is open.
         """
+        from .endpoint import require_str_arg
+
+        require_str_arg(valueset_url, "valueset_url")  # QA-D8H-002
         now = time.monotonic()
         if self._is_breaker_open(now):
             _logger.warning(
@@ -627,6 +630,10 @@ class InProcessTerminologyEndpoint:
 
         Short-circuits to ``[]`` when the circuit breaker is open.
         """
+        from .endpoint import require_str_arg
+
+        require_str_arg(query, "query")  # QA-D8H-002
+        require_str_arg(category, "category")
         now = time.monotonic()
         if self._is_breaker_open(now):
             _logger.warning(
@@ -780,6 +787,9 @@ class InProcessTerminologyEndpoint:
 
         Note: the breaker is checked per-query inside ``search_text``.
         """
+        from .endpoint import require_query_pairs
+
+        require_query_pairs(queries)  # QA-D8H-002
         return [self.search_text(q, cat, mode=mode) for q, cat in queries]
 
     # ------------------------------------------------------------------
