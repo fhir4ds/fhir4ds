@@ -23,6 +23,7 @@ dependencies while already holding it, so an internal lock would deadlock.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import time
 import uuid
@@ -34,6 +35,8 @@ from urllib.parse import urlsplit
 from fhir4ds.operations.capabilities.viewdefinition_run import normalize_view_definition
 
 from .errors import bad_request
+
+logger = logging.getLogger(__name__)
 
 #: FHIR ``id`` lexical space (Id: ``[A-Za-z0-9\\-\\.]{1,64}``).
 ID_PATTERN = re.compile(r"^[A-Za-z0-9\-.]{1,64}$")
@@ -369,7 +372,25 @@ class TreeStore:
         return str(self._read_state().get("revision", ""))
 
     def current_seq(self) -> int:
-        return int(self._read_state().get("seq", 0))
+        """The persisted monotonic sequence.
+
+        QA-D13E-003: a tampered/corrupt state file whose ``seq`` is not an
+        integer must degrade to 0 (with a warning), never raise — this value
+        feeds ``create_app``'s writer construction, and a raise here takes
+        the whole surface down at boot. The post-rehydration
+        ``advance_to(next_seq)`` floor (QA-D13H-003) keeps ``_seq``
+        collision-free when the state file under-reports.
+        """
+        value = self._read_state().get("seq", 0)
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            logger.warning(
+                "publish state %s carries a non-integer seq %r; treating as 0",
+                STATE_PATH,
+                value,
+            )
+            return 0
 
     def stage_file(self, relative_path: str, text: str) -> None:
         self._write_text(relative_path, text)

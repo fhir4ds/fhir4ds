@@ -134,26 +134,42 @@ class GuardMiddleware:
                 )
 
         # Streaming cap: bodies without (or lying about) Content-Length.
+        #
+        # QA-D13E-002: once the cap trips and the 413 has been sent, the
+        # downstream app must not produce a SECOND response (a double
+        # ``http.response.start`` is an ASGI protocol violation, and client
+        # behavior across servers is undefined). Two cooperating pieces:
+        # ``capped_receive`` answers with a well-formed ``http.disconnect``
+        # after the deny (never ``None``), and ``capped_send`` drops any
+        # further response messages the app (or a framework error handler)
+        # tries to write afterwards — the 413 is the answer.
         received: list[bytes] = []
-        total = 0
+        state = {"total": 0, "denied": False}
 
         async def capped_receive() -> dict[str, Any]:
-            nonlocal total
             message = await receive()
             if message["type"] == "http.request":
-                total += len(message.get("body", b""))
-                if total > self._max_bytes:
-                    return await self._deny(
-                        send, 413, "too-costly", "request body exceeds the server limit"
-                    )
+                state["total"] += len(message.get("body", b""))
+                if state["total"] > self._max_bytes:
+                    if not state["denied"]:
+                        state["denied"] = True
+                        await self._deny(
+                            send, 413, "too-costly", "request body exceeds the server limit"
+                        )
+                    return {"type": "http.disconnect"}
                 received.append(message)
             return message
+
+        async def capped_send(message: dict[str, Any]) -> None:
+            if state["denied"]:
+                return  # the cap already answered; drop this write
+            await send(message)
 
         # The streaming cap always applies: a lying Content-Length header
         # (claiming less than the body actually sent) must not bypass it.
         # Well-behaved requests pass through capped_receive untouched — it
         # forwards every message verbatim while under the cap.
-        await self.app(scope, capped_receive, send)
+        await self.app(scope, capped_receive, capped_send)
 
     @staticmethod
     async def _deny(send: Any, status: int, code: str, message: str) -> None:

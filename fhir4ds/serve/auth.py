@@ -93,19 +93,29 @@ class KeyRegistry:
         Constant-time per candidate; the tier is not revealed on failure.
         Expired keys are skipped (and lazily dropped from the registry) —
         an expired key is exactly as unauthorized as a wrong key.
+
+        QA-D13E-004: comparisons run on UTF-8 bytes —
+        ``hmac.compare_digest`` raises ``TypeError`` for non-ASCII *strings*,
+        and a hostile key header (decoded latin-1) must yield the uniform
+        "not authorized" answer, never an unhandled exception.
         """
         if not presented:
             return None
+        presented_bytes = presented.encode("utf-8", "surrogatepass")
         expired: list[str] = []
         with self._lock:
-            if self._admin_key and hmac.compare_digest(presented, self._admin_key):
+            if self._admin_key and hmac.compare_digest(
+                presented_bytes, self._admin_key.encode("utf-8", "surrogatepass")
+            ):
                 return ROLE_ADMIN
             for label, key in self._write_keys.items():
                 deadline = self._expirations.get(label)
                 if deadline is not None and deadline <= time.time():
                     expired.append(label)
                     continue
-                if hmac.compare_digest(presented, key):
+                if hmac.compare_digest(
+                    presented_bytes, key.encode("utf-8", "surrogatepass")
+                ):
                     if expired:
                         self._drop_expired_locked(expired)
                     return ROLE_WRITE
@@ -212,6 +222,14 @@ class KeyRegistry:
             if deadline is not None and deadline <= now:
                 logger.info("key snapshot: sweeping expired key %r", label)
                 continue
+            if deadline is not None and not _representable_deadline(deadline):
+                # QA-D13E-005: an unrepresentable deadline is hostile
+                # snapshot data; drop the whole entry rather than adopt a
+                # key whose expiry cannot be rendered or reasoned about.
+                logger.warning(
+                    "key snapshot: dropping entry with unrepresentable expiry %r", label
+                )
+                continue
             adopted[label] = key
             if deadline is not None:
                 kept_expirations[label] = deadline
@@ -235,6 +253,10 @@ class KeyRegistry:
 
         Accepts a positive number of days (int or float; booleans rejected).
         Anything else is a typed ``AuthError`` — never silently permanent.
+        QA-D13E-005: the resulting deadline must be representable as a
+        datetime; ``expires_in_days=1e12`` used to add the key and then
+        crash every audit rendering (``OSError Errno 75``) — a persistent
+        500 on the whole key-management surface.
         """
         if expires_in_days is None:
             return None
@@ -242,7 +264,14 @@ class KeyRegistry:
             raise AuthError("expires_in_days must be a positive number of days")
         if expires_in_days <= 0:
             raise AuthError("expires_in_days must be a positive number of days")
-        return time.time() + float(expires_in_days) * 86400.0
+        deadline = time.time() + float(expires_in_days) * 86400.0
+        try:
+            datetime.fromtimestamp(deadline, tz=timezone.utc)
+        except (OSError, OverflowError, ValueError) as exc:
+            raise AuthError(
+                "expires_in_days is too large to represent as an expiry date"
+            ) from exc
+        return deadline
 
     def _drop_expired_locked(self, labels: list[str]) -> None:
         """Remove lazily-discovered expired keys (lock held)."""
@@ -307,11 +336,25 @@ def _parse_snapshot(snapshot: Any) -> tuple[dict[str, Any] | None, dict[str, flo
     return keys, expirations
 
 
+def _representable_deadline(deadline: float) -> bool:
+    """Whether ``datetime.fromtimestamp`` can render this epoch."""
+    try:
+        datetime.fromtimestamp(deadline, tz=timezone.utc)
+    except (OSError, OverflowError, ValueError):
+        return False
+    return True
+
+
 def _render_expiry(deadline: float | None) -> str | None:
     """ISO-8601 UTC rendering of a deadline, for audit surfaces."""
     if deadline is None:
         return None
-    return datetime.fromtimestamp(deadline, tz=timezone.utc).isoformat()
+    try:
+        return datetime.fromtimestamp(deadline, tz=timezone.utc).isoformat()
+    except (OSError, OverflowError, ValueError):
+        # Defense in depth: validation and adoption keep these out; a
+        # legacy snapshot that slips through must not 500 the audit view.
+        return None
 
 
 __all__ = [

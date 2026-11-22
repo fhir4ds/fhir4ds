@@ -21,6 +21,7 @@ try:
     from fastapi import FastAPI, Request
     from fastapi.exceptions import RequestValidationError
     from fastapi.responses import JSONResponse
+    from starlette.exceptions import HTTPException
 except ImportError as exc:  # actionable: name the missing extra, not the module
     raise RuntimeError(
         "fhir4ds.serve requires the optional serve extra: "
@@ -90,7 +91,7 @@ def create_app(
         except _duckdb_mod.ConnectionException:
             raise _duckdb_mod.ConnectionException(
                 "Cannot start fhir4ds serve: DuckDB connection is closed"
-            )
+            ) from None
     if connection is None:
         connection = _connect(settings)
 
@@ -313,6 +314,25 @@ def _install_error_handlers(app: FastAPI) -> None:
             ],
         }
         return JSONResponse(status_code=400, content=outcome, media_type=FHIR_JSON)
+
+    @app.exception_handler(HTTPException)
+    def handle_http_exception(request: Request, exc: HTTPException) -> JSONResponse:
+        """QA-D13E-001: framework HTTPExceptions must be OperationOutcomes too.
+
+        FastAPI converts body-READ failures that are not JSONDecodeError
+        (invalid UTF-8, a deep-nesting RecursionError) into
+        ``HTTPException(400, "There was an error parsing the body")``, which
+        its default handler renders as a bare ``{"detail": ...}`` — the one
+        error shape this surface must never emit.
+        """
+        detail = exc.detail if isinstance(exc.detail, str) else "Invalid request"
+        outcome = {
+            "resourceType": "OperationOutcome",
+            "issue": [Issue(code="structure", diagnostics=detail).to_dict()],
+        }
+        return JSONResponse(
+            status_code=exc.status_code, content=outcome, media_type=FHIR_JSON
+        )
 
     @app.exception_handler(Exception)
     def handle_unexpected(request: Request, exc: Exception) -> JSONResponse:
