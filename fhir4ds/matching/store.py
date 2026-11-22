@@ -15,6 +15,7 @@ import re
 import duckdb
 
 from .normalizers import extract_patient_fields
+from ._conn import require_open_connection
 
 __all__ = [
     "create_matching_tables",
@@ -46,6 +47,7 @@ _FHIR_ID_RE = re.compile(r"^[A-Za-z0-9-.]{1,64}$")
 
 
 def create_matching_tables(conn: duckdb.DuckDBPyConnection) -> None:
+    require_open_connection(conn, "create matching tables")
     conn.execute(FIELD_VALUES_DDL)
     # In-place migration for pre-AMUX-150 databases (single-column schema).
     columns = {
@@ -76,6 +78,7 @@ def index_entity(
     id validation mirrors :func:`index_patient`. Idempotent: deletes any
     prior rows for (entity_type, id) first. Returns rows inserted.
     """
+    require_open_connection(conn, f"index {entity_type or 'entity'}")
     if not isinstance(entity_type, str) or not entity_type:
         raise ValueError("entity_type must be a non-empty string")
     if not isinstance(resource, dict):
@@ -131,6 +134,7 @@ def exact_candidates(
     entity_type: str = "Patient",
 ) -> list[str]:
     """Distinct entity ids having an exact (field_name, value) row, sorted."""
+    require_open_connection(conn, "query exact candidates")
     result = conn.execute(
         "SELECT DISTINCT patient_id FROM field_values "
         "WHERE entity_type = ? AND field_name = ? AND value = ? "

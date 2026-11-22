@@ -34,6 +34,7 @@ from .fuzzy import dob_fuzzy_matches
 from .linkage import create_linkage_tables, upsert_linkage
 from .rules import CATEGORY1_RULES
 from .store import create_matching_tables
+from ._conn import require_open_connection
 
 __all__ = [
     "MEMBERSHIP_DDL",
@@ -260,6 +261,7 @@ def individual_context_patients(
     Requires ``build_membership`` to have run (the membership table must
     exist and be populated).
     """
+    require_open_connection(conn, "list individual context patients")
     rows = conn.execute(
         "SELECT individual_id, COUNT(*) AS member_count FROM patient_membership "
         "GROUP BY individual_id ORDER BY individual_id"
@@ -387,6 +389,7 @@ def individual_patients_view(conn: duckdb.DuckDBPyConnection) -> None:
     The CQL ``_patients`` swap itself is a later gated slice; this only
     provides the SQL substrate.
     """
+    require_open_connection(conn, "create individual patients view")
     conn.execute(MEMBERSHIP_DDL)
     conn.execute(_INDIVIDUAL_PATIENTS_VIEW_DDL)
     conn.execute(_INDIVIDUAL_RESOURCE_MAP_VIEW_DDL)

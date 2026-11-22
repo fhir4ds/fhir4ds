@@ -18,6 +18,7 @@ import json
 import duckdb
 
 from .engine import MatchResult
+from ._conn import require_open_connection
 
 __all__ = [
     "MATCH_AUDIT_DDL",
@@ -43,6 +44,7 @@ CREATE TABLE IF NOT EXISTS match_audit (
 
 
 def create_audit_tables(conn: duckdb.DuckDBPyConnection) -> None:
+    require_open_connection(conn, "create match audit tables")
     conn.execute(MATCH_AUDIT_SEQUENCE_DDL)
     conn.execute(MATCH_AUDIT_DDL)
 

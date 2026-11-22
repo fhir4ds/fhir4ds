@@ -40,6 +40,9 @@ CREATE TABLE IF NOT EXISTS dedup_audit (
 
 
 def create_dedup_audit_table(conn: duckdb.DuckDBPyConnection) -> None:
+    from ._conn import require_open_connection
+
+    require_open_connection(conn, "create dedup audit table")
     conn.execute(DEDUP_AUDIT_DDL)
 
 
@@ -84,6 +87,9 @@ def load_dedup_audit(conn: duckdb.DuckDBPyConnection,
                      run_id: str) -> list[dict]:
     """Audit rows for one run, ordered deterministically
     (dedup_id, survivor_rid)."""
+    from ._conn import require_open_connection
+
+    require_open_connection(conn, "load dedup audit")
     rows = conn.execute(
         "SELECT run_id, dedup_id, category, member_count, survivor_rid, "
         "rule, rule_json, cluster_evidence FROM dedup_audit "

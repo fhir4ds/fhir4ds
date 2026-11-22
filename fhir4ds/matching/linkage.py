@@ -30,6 +30,7 @@ from typing import Any, Optional
 import duckdb
 
 from .engine import MatchResult
+from ._conn import require_open_connection
 
 __all__ = [
     "MATCHING_EXTENSION_URL",
@@ -115,6 +116,7 @@ def build_linkage_resource(
 
 
 def create_linkage_tables(conn: duckdb.DuckDBPyConnection) -> None:
+    require_open_connection(conn, "create linkage tables")
     conn.execute(LINKAGE_DDL)
 
 
@@ -133,6 +135,7 @@ def upsert_linkage(
     rule firing with new evidence/match_type/confidence after a corpus
     change) overwrites, keeping decision history in the audit table.
     """
+    require_open_connection(conn, "upsert linkage")
     create_linkage_tables(conn)
     linkage_id = canonical_pair_key(new_patient_id, existing_patient_id,
                                     entity_type)
@@ -176,6 +179,7 @@ def upsert_linkage(
 
 def load_linkage_resources(conn: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:
     """All stored Linkage resources, ordered by canonical pair key."""
+    require_open_connection(conn, "load linkage resources")
     rows = conn.execute(
         "SELECT resource FROM linkage ORDER BY linkage_id"
     ).fetchall()

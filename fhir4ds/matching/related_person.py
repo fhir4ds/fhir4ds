@@ -154,6 +154,9 @@ def match_related_persons(
     """
     if not isinstance(run_id, str) or not run_id:
         raise ValueError("run_id must be a non-empty string")
+    from ._conn import require_open_connection
+
+    require_open_connection(conn, "match RelatedPersons")
     if membership is None:
         try:
             membership = _member_id(conn)

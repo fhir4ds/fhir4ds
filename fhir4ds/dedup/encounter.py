@@ -603,6 +603,10 @@ def run_encounter_dedup(
     own_connection = conn is None
     if own_connection:
         conn = duckdb.connect()
+    else:
+        from ._conn import require_open_connection
+
+        require_open_connection(conn, "run encounter dedup")
 
     result = encounter_pass(resources, default_tz=default_tz,
                             membership=membership)

@@ -396,6 +396,9 @@ def match_fields(
     (``MatchResult.threshold_enforcement``) and in the audit evidence.
     Patient matching never enforces (plain rule list, no threshold).
     """
+    from ._conn import require_open_connection
+
+    require_open_connection(conn, "match fields")
     create_matching_tables(conn)
     if approval_threshold is None:
         approval_threshold = getattr(rules, "approval_threshold", None)

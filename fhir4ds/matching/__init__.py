@@ -166,6 +166,9 @@ CREATE OR REPLACE MACRO matching_norm_text(x) AS
 
 def register_matching_macros(conn: duckdb.DuckDBPyConnection) -> None:
     """Register the matching helper SQL macros on a DuckDB connection."""
+    from ._conn import require_open_connection
+
+    require_open_connection(conn, "register matching macros")
     conn.execute(_NORM_TEXT_MACRO)
 
 

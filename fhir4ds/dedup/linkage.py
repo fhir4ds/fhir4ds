@@ -150,6 +150,9 @@ def build_linkage_resource(
 
 
 def create_dedup_linkage_table(conn: duckdb.DuckDBPyConnection) -> None:
+    from ._conn import require_open_connection
+
+    require_open_connection(conn, "create dedup linkage table")
     conn.execute(DEDUP_LINKAGE_DDL)
 
 
@@ -219,6 +222,9 @@ def load_dedup_linkage_resources(
     conn: duckdb.DuckDBPyConnection,
 ) -> list[dict[str, Any]]:
     """All stored dedup Linkage resources, ordered by dedup_id."""
+    from ._conn import require_open_connection
+
+    require_open_connection(conn, "load dedup linkage resources")
     rows = conn.execute(
         "SELECT resource FROM dedup_linkage ORDER BY dedup_id"
     ).fetchall()
