@@ -542,7 +542,27 @@ def register(con: "duckdb.DuckDBPyConnection", include_fhirpath: bool = True) ->
     Args:
         con: A DuckDB connection object.
         include_fhirpath: If True (default), also register FHIRPath UDFs.
+
+    Raises:
+        TypeError: If *con* is not a DuckDB connection.
+        duckdb.ConnectionException: If the connection is closed (wrapped with
+            an actionable message, mirroring ``fhir4ds.register``).
     """
+    if con is None:
+        raise TypeError("Expected a DuckDB connection for 'con', got None")
+    if not isinstance(con, duckdb.DuckDBPyConnection):
+        raise TypeError(
+            f"Expected a DuckDB connection for 'con', got {type(con).__name__}"
+        )
+    try:
+        con.execute("SELECT 1").fetchone()
+    except duckdb.ConnectionException:
+        raise duckdb.ConnectionException(
+            "Cannot register fhir4ds UDFs: DuckDB connection is closed"
+        ) from None
+    except duckdb.Error:
+        pass  # connection is alive, other DuckDB errors are expected
+
     # Try the bundled C++ extension first (bundled at wheel-build time when available)
     cpp_loaded = _try_load_bundled_cpp_extension(con)
     if cpp_loaded:

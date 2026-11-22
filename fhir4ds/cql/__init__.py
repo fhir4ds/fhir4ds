@@ -116,7 +116,27 @@ def register_udfs(
     Returns:
         ``True`` if CQL C++ extension was loaded, ``False`` if Python UDFs were
         used instead.
+
+    Raises:
+        TypeError: If *conn* is not a DuckDB connection.
+        duckdb.ConnectionException: If the connection is closed (wrapped with
+            an actionable message, mirroring ``fhir4ds.register``).
     """
+    if conn is None:
+        raise TypeError("Expected a DuckDB connection for 'conn', got None")
+    if not isinstance(conn, _duckdb_mod.DuckDBPyConnection):
+        raise TypeError(
+            f"Expected a DuckDB connection for 'conn', got {type(conn).__name__}"
+        )
+    try:
+        conn.execute("SELECT 1").fetchone()
+    except _duckdb_mod.ConnectionException:
+        raise _duckdb_mod.ConnectionException(
+            "Cannot register fhir4ds UDFs: DuckDB connection is closed"
+        ) from None
+    except _duckdb_mod.Error:
+        pass  # connection is alive, other DuckDB errors are expected
+
     # Check if CQL UDFs are already registered (not just fhirpath).
     try:
         conn.execute("SELECT AgeInYears(NULL)").fetchone()
