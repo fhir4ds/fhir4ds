@@ -277,11 +277,19 @@ def individual_context_patients(
 def _component_field_sets(
     conn: duckdb.DuckDBPyConnection, component_members: list[str]
 ) -> dict[str, dict[str, set[str]]]:
+    """Per-member value sets for the hard-contradiction fields.
+
+    PATIENT-scoped: the shared ``field_values`` index is entity-typed
+    (AMUX-150), and FHIR ids are per-resource-type — a Practitioner or
+    Organization sharing a member id must not leak its suffix/dob rows
+    into patient contradiction detection (QA-D14H-002).
+    """
     sets: dict[str, dict[str, set[str]]] = {m: {} for m in component_members}
     member_in = ", ".join("?" for _ in component_members)
     rows = conn.execute(
         f"SELECT patient_id, field_name, value FROM field_values "
-        f"WHERE field_name IN ('ssn4', 'dob', 'suffix') AND patient_id IN ({member_in}) "
+        f"WHERE entity_type = 'Patient' AND field_name IN "
+        f"('ssn4', 'dob', 'suffix') AND patient_id IN ({member_in}) "
         f"ORDER BY patient_id, field_name, value",
         component_members,
     ).fetchall()

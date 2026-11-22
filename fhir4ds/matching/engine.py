@@ -557,14 +557,18 @@ def evaluate_rule(
     )
     surviving: list[str] = []
     any_fuzzy = False
-    merged_bands: dict[str, str] = {}
+    # FHIR4-20: embed bands merge over SURVIVING candidates only, and the
+    # merge is LOOSEST-wins per embed field — identical to ``match_fields``
+    # (QA-D14H-001: a guard- or suffix-dropped candidate must not influence
+    # the confidence, and a later-sorted tighter band must not mask a
+    # looser surviving band).
+    survivor_bands: dict[str, str] = {}
+    band_order = [b for b, _u in rule.band_u_values]
     for pid in sorted(candidates):
         matched, fuzzy, _ev, bands = _verify_candidate(
             conn, rule, fields, pid, entity_type)
         if not matched:
             continue
-        if bands:
-            merged_bands.update(bands)
         if rule.guards and not _guards_pass(
             rule,
             fields,
@@ -579,6 +583,15 @@ def evaluate_rule(
         ):
             surviving.append(pid)
             any_fuzzy = any_fuzzy or fuzzy
+            for fname, band in bands.items():
+                band = band or "tight"
+                if fname not in survivor_bands or (
+                    band in band_order
+                    and band_order.index(band) > band_order.index(
+                        survivor_bands[fname])
+                ):
+                    survivor_bands[fname] = band
+    merged_bands = survivor_bands
     if len(surviving) == 1:
         return MatchResult(
             outcome="match",
