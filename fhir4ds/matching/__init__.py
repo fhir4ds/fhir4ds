@@ -34,6 +34,7 @@ from .entity_extractors import (
     extract_practitioner_fields,
 )
 from .entity_rules import (
+    LOCATION_APPROVAL_THRESHOLD,
     LOCATION_RULES,
     ORGANIZATION_APPROVAL_THRESHOLD,
     ORGANIZATION_RULES,
