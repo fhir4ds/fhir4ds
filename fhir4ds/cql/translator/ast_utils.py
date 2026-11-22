@@ -1251,3 +1251,115 @@ def extract_population_evidence_filters(where_expr) -> dict:
     for cte in ambiguous:
         filters.pop(cte, None)
     return filters
+
+
+def extract_population_evidence_filters_from_count(expr) -> dict:
+    """Extract per-retrieve-CTE filters from a COUNT-over-unnest expression.
+
+    QA-D9H-001 (v0.0.26 D9 HISTORIAN): a count-based criteria define
+    (``Count([Procedure: VS] P where <criteria>)``) lowers to
+    ``SELECT COUNT(_elem) FROM (SELECT unnest((SELECT ... FROM (SELECT
+    P.resource AS __cql_list_value FROM "CTE" AS P WHERE <criteria and
+    patient correlation>) AS src)) AS _elem) AS _agg_src``.  The boolean
+    EXISTS-based extractor cannot see this shape, so the count define
+    carried no ``population_evidence_filters`` and evidence cited every
+    retrieve member (including non-criteria decoys).
+
+    This walker finds every count-unnest chain in ``expr`` and reuses the
+    conservative EXISTS extractor on a synthetic star-select over the
+    innermost resource row source, inheriting all of its soundness rules
+    (alias-only conditions, no subqueries/raw SQL, one arm per CTE).
+    """
+    from ..translator.types import (
+        SQLBinaryOp,
+        SQLExists,
+        SQLFunctionCall,
+        SQLSelect,
+        SQLSubquery,
+    )
+
+    filters: dict = {}
+    if expr is None:
+        return filters
+
+    def _walk(node):
+        if isinstance(node, SQLSelect):
+            row = _count_unnest_row_select(node)
+            if row is not None:
+                synth = SQLExists(
+                    subquery=SQLSubquery(
+                        query=SQLSelect(
+                            columns=[_star()],
+                            from_clause=row.from_clause,
+                            where=row.where,
+                        )
+                    )
+                )
+                for cte, flt in extract_population_evidence_filters(synth).items():
+                    if cte in filters and filters[cte] != flt:
+                        # Conflicting filters across count chains: ambiguous.
+                        filters.pop(cte, None)
+                    else:
+                        filters[cte] = flt
+            for child in [node.from_clause, node.where, *(node.columns or [])]:
+                _walk(child)
+        elif isinstance(node, SQLBinaryOp):
+            _walk(node.left)
+            _walk(node.right)
+        elif isinstance(node, SQLFunctionCall):
+            for arg in (node.args or []):
+                _walk(arg)
+        elif isinstance(node, SQLSubquery):
+            _walk(node.query)
+        elif isinstance(node, SQLExists):
+            _walk(node.subquery)
+
+    def _star():
+        from ..translator.types import SQLIdentifier
+        return SQLIdentifier(name="*", quoted=False)
+
+    def _count_unnest_row_select(select):
+        """Return the innermost resource row select of a count-unnest chain."""
+        from ..translator.types import SQLAlias, SQLIdentifier
+
+        cols = select.columns or []
+        if len(cols) != 1:
+            return None
+        col = cols[0].expr if isinstance(cols[0], SQLAlias) else cols[0]
+        if not (isinstance(col, SQLFunctionCall) and col.name.upper() == "COUNT"):
+            return None
+        fc = select.from_clause
+        if not isinstance(fc, SQLAlias):
+            return None
+        inner = fc.expr
+        if isinstance(inner, SQLSubquery):
+            inner = inner.query
+        if not isinstance(inner, SQLSelect):
+            return None
+        icols = inner.columns or []
+        if len(icols) != 1:
+            return None
+        icol = icols[0].expr if isinstance(icols[0], SQLAlias) else icols[0]
+        if not (isinstance(icol, SQLFunctionCall) and icol.name.lower() == "unnest"):
+            return None
+        list_subq = icol.args[0] if icol.args else None
+        if isinstance(list_subq, SQLSubquery):
+            list_subq = list_subq.query
+        if not isinstance(list_subq, SQLSelect):
+            return None
+        lfc = list_subq.from_clause
+        if not isinstance(lfc, SQLAlias):
+            return None
+        row = lfc.expr
+        if isinstance(row, SQLSubquery):
+            row = row.query
+        if not isinstance(row, SQLSelect):
+            return None
+        rfc = row.from_clause
+        if not (isinstance(rfc, SQLAlias) and isinstance(rfc.expr, SQLIdentifier)
+                and rfc.expr.quoted):
+            return None
+        return row
+
+    _walk(expr)
+    return filters

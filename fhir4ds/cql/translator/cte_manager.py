@@ -731,6 +731,28 @@ class CTEManagerMixin:
                         and audit_expr.name in _audit_fn_names
                     )
 
+                    # QA-D9H-001 (v0.0.26 D9 HISTORIAN): resolve the
+                    # definition's transitive dependencies so referenced
+                    # definitions' evidence filters merge into this meta
+                    # (count-based criteria defines store theirs at their own
+                    # wrap time; a `X AND (CountDef >= N)` boolean would
+                    # otherwise cite every valueset member). Runs BEFORE the
+                    # is_already_audit short-circuit — audit_and/or trees
+                    # take that path. In POPULATION mode also adopt the
+                    # transitive source resource CTEs (population evidence
+                    # collection reads them from this meta); in FULL mode src
+                    # stays untouched so no duplicate unfiltered Strategy-3
+                    # parts are emitted beside the filtered Strategy-1 joins.
+                    _src = self._resolve_source_resource_ctes(
+                        sql_ast, target_meta=meta
+                    )
+                    if _src:
+                        _mode = getattr(self._context, "audit_mode", None)
+                        _mode_val = getattr(_mode, "value", _mode)
+                        if _mode_val == "population":
+                            _cur_src = list(getattr(meta, 'source_resource_ctes', []) or [])
+                            meta.source_resource_ctes = sorted(set(_cur_src) | set(_src))
+
                     if not is_already_audit and hasattr(self, '_pending_precte'):
                         # Build the non-audit WHERE clause (fast semi-join)
                         where_expr = self._correlate_exists_ast(sql_ast, outer_alias="_pt")
@@ -1056,6 +1078,21 @@ class CTEManagerMixin:
                     src = self._resolve_source_resource_ctes(sql_ast, target_meta=meta)
                     if src:
                         meta.source_resource_ctes = sorted(src)
+                    # QA-D9H-001 (v0.0.26 D9 HISTORIAN): count-based criteria
+                    # defines carry their row criteria inside a COUNT-over-
+                    # unnest chain, invisible to the EXISTS-based extractor.
+                    # Extract them so evidence cites only criteria-satisfying
+                    # resources (filters then merge upward to referencing
+                    # boolean definitions via _resolve_source_resource_ctes).
+                    from ..translator.ast_utils import (
+                        extract_population_evidence_filters_from_count as _extract_cnt,
+                    )
+                    _cnt_filters = _extract_cnt(sql_ast)
+                    if _cnt_filters:
+                        _cur = getattr(meta, 'population_evidence_filters', None) or {}
+                        for _cte, _flt in _cnt_filters.items():
+                            _cur[_cte] = _flt
+                        meta.population_evidence_filters = _cur
                 # Check if we can use LEFT JOIN instead of scalar subquery
                 if self._can_use_join_for_scalar(meta, sql_ast, joins):
                     # Use JOIN-based column reference instead of scalar subquery
@@ -2720,6 +2757,13 @@ class CTEManagerMixin:
 
         cte_names: set = set()
         self._extract_cte_names_from_ast(sql_ast, cte_names)
+        # QA-D9H-001: seed with definition names referenced from the CQL AST
+        # (comparison-wrapped count-define references live inside SQLRaw nodes
+        # the SQL walker cannot traverse).
+        if target_meta is not None:
+            for ref in (getattr(target_meta, "referenced_definitions", None) or []):
+                if ref in self._context.definition_meta:
+                    cte_names.add(ref)
 
         result: set = set()
         for cte_name in cte_names:

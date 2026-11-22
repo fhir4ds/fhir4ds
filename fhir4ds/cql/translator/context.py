@@ -384,6 +384,14 @@ class DefinitionMeta:
     # single-EXISTS-per-CTE, AND-chain conjuncts whose qualified references are
     # all rooted at the retrieve alias (no outer-scope references).
     population_evidence_filters: dict = field(default_factory=dict)
+    # QA-D9H-001 (v0.0.26 D9 HISTORIAN): definition names this define's CQL
+    # expression references (collected from the CQL AST at translate time —
+    # comparison-wrapped references to count defines render inside SQLRaw
+    # nodes that the SQL AST CTE-name walker deliberately cannot see).
+    # _resolve_source_resource_ctes seeds its walk with these names so a
+    # boolean population referencing `CountDef >= N` inherits the count
+    # define's source resource CTEs and evidence filters.
+    referenced_definitions: list = field(default_factory=list)
     # Stored audit target SQL expression (SQLSubquery) from First/Last attribution.
     # When a definition like "Lowest Systolic Reading" uses First() on a RESOURCE_ROWS
     # source, the winning resource's ID subquery is stored here so that downstream

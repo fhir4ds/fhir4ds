@@ -165,3 +165,40 @@ class TestSharedDefinitionPopulationJoinDedup:
         assert row["initial_population"]["result"] is True
         assert row["denominator"]["result"] is True
 
+
+class TestAliasCountAttributionD9Historian:
+    """QA-D9H-001 (v0.0.26 D9 HISTORIAN): count-based criteria bound to a
+    named define must keep resource-level evidence attribution.
+
+    ``define "NumCount": Count(<retrieve> P where ...)`` referenced by a
+    population criterion (``"NumCount" >= 1``) previously lost the
+    audit-evidence target entirely (target=null) even though the identical
+    INLINE count comparison names the winning resources (QA-021 count
+    attribution). The define's own SQL can synthesize the target twin
+    (Case 3 count-unnest); it must be stored on the definition metadata so
+    alias references recover it (Case 0)."""
+
+    CQL_COUNT = CQL.replace(
+        'define "Denominator Exclusion": "Initial Population" and "ExclEv"',
+        'define "NumCount": Count([Procedure: "Excl VS"] P where '
+        'P.performed during day of "Measurement Period")\n'
+        'define "Denominator Exclusion": "Initial Population" and ("NumCount" >= 1)')
+
+    def test_alias_count_evidence_names_winner_population_mode(self, con):
+        con, tmp_path = con
+        res = _evaluate(con, tmp_path, self.CQL_COUNT, audit_mode="population")
+        row = res.dataframe.to_dict("records")[0]
+        assert row["denominator_exclusion"]["result"] is True
+        targets = _cited_targets(row["denominator_exclusion"])
+        assert "Procedure/pr-w1-2026-06-15-428191000124101" in targets, targets
+        assert "Procedure/pr-w1-2025-06-15-428191000124101" not in targets, targets
+
+    def test_alias_count_evidence_names_winner_full_mode(self, con):
+        con, tmp_path = con
+        res = _evaluate(con, tmp_path, self.CQL_COUNT, audit_mode="full")
+        row = res.dataframe.to_dict("records")[0]
+        assert row["denominator_exclusion"]["result"] is True
+        targets = _cited_targets(row["denominator_exclusion"])
+        assert "Procedure/pr-w1-2026-06-15-428191000124101" in targets, targets
+        assert "Procedure/pr-w1-2025-06-15-428191000124101" not in targets, targets
+

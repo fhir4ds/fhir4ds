@@ -1656,6 +1656,11 @@ class ASTHelpersMixin:
                 self._extract_cte_names_from_ast(expr.else_clause, names)
         elif isinstance(expr, SQLExists):
             self._extract_cte_names_from_ast(expr.subquery, names)
+        elif isinstance(expr, SQLAlias):
+            # QA-D9H-001: aliased column expressions (SELECT unnest(...) AS
+            # _elem) wrap the payload; unwrap so the inner CTE references in
+            # the count-unnest chain stay visible to the columns traversal.
+            self._extract_cte_names_from_ast(expr.expr, names)
         elif isinstance(expr, SQLSubquery):
             self._extract_cte_names_from_ast(expr.query, names)
         elif isinstance(expr, SQLSelect):
@@ -1668,6 +1673,16 @@ class ASTHelpersMixin:
                     names.add(from_target.name)
                 else:
                     self._extract_cte_names_from_ast(from_target, names)
+            # QA-D9H-001 (v0.0.26 D9 HISTORIAN): the COUNT-over-unnest shape
+            # carries its innermost resource-CTE reference inside a COLUMN
+            # expression (SELECT unnest((SELECT ... FROM (SELECT P.resource
+            # FROM "CTE" AS P ...))) AS _elem) — not in FROM/WHERE. Without
+            # traversing columns, count-based criteria definitions resolve
+            # to ZERO source resource CTEs and their audit evidence
+            # disappears entirely in population mode.
+            for col in (expr.columns or []):
+                if col is not None:
+                    self._extract_cte_names_from_ast(col, names)
             if expr.where is not None:
                 self._extract_cte_names_from_ast(expr.where, names)
 

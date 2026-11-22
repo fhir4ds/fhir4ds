@@ -2317,12 +2317,53 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             # Detect Quantity fields in Tuple return clauses so downstream
             # property accesses on this definition can be identified as Quantity.
             meta.quantity_fields = self._detect_quantity_fields(definition.expression)
+            # QA-D9H-001: record referenced definition names from the CQL AST
+            # (see DefinitionMeta.referenced_definitions).
+            try:
+                from ..parser.ast_nodes import Identifier as _AstIdentifier
+                _refs: set = set()
+
+                def _walk_ast(node):
+                    if isinstance(node, _AstIdentifier):
+                        _refs.add(node.name)
+                    for f in getattr(node, "__dataclass_fields__", {}):
+                        child = getattr(node, f, None)
+                        if isinstance(child, (list, tuple)):
+                            for c in child:
+                                if c is not None:
+                                    _walk_ast(c)
+                        elif child is not None:
+                            _walk_ast(child)
+
+                _walk_ast(definition.expression)
+                meta.referenced_definitions = sorted(
+                    r for r in _refs if r in self._context.definition_meta
+                )
+            except Exception:  # noqa: BLE001 — metadata is best-effort
+                meta.referenced_definitions = []
             self._context.definition_meta[definition.name] = meta
 
             # In audit mode, preserve the _audit_target from First/Last so that
             # downstream comparisons referencing this CTE can populate `target`.
-            if self._context.audit_mode and hasattr(result, '_audit_target'):
-                meta.audit_target_expr = result._audit_target
+            # QA-D9H-001 (v0.0.26 D9 HISTORIAN): when the define's own SQL can
+            # SYNTHESIZE a target twin (QA-021 count-unnest shape, Case 1/2
+            # resource selects) but carries no explicit _audit_target, store
+            # the synthesized twin — otherwise a population criterion
+            # referencing the define BY ALIAS (`"NumCount" >= 1`) sees only
+            # `(SELECT sub.value FROM "NumCount")`, whose FROM CTE is the
+            # scalar count itself, and evidence loses resource attribution
+            # entirely (target=null) even though the identical inline count
+            # comparison names the winning resources.
+            if self._context.audit_mode:
+                stored_target = getattr(result, "_audit_target", None)
+                if stored_target is None:
+                    from .expressions._operators import _extract_audit_target
+                    try:
+                        stored_target = _extract_audit_target(result, self._context)
+                    except Exception:  # noqa: BLE001 — synthesis is best-effort
+                        stored_target = None
+                if stored_target is not None:
+                    meta.audit_target_expr = stored_target
 
             # Build final SQL with any accumulated CTEs
             if self._context.get_ctes():
