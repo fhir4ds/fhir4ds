@@ -108,6 +108,20 @@ for _group in TRANSLITERATION_GROUPS:
 _MAX_STACK = 3
 _CLINICAL_TYPES = ("Observation", "Condition", "Encounter")
 
+
+def _usable_patient_id(patient: dict) -> Optional[str]:
+    """The patient's id when it is a non-empty string, else ``None``.
+
+    ``load_corpus`` is tolerance-first (QA-D6S-001): structurally-valid
+    JSON with a non-string or missing ``id`` loads fine. Duplicate
+    injection cannot use such patients — dup ids, gold pairs and the
+    matching index all key on the id — so they pass through untouched
+    instead of crashing the harness (QA-D6H-001)."""
+    pid = patient.get("id")
+    if isinstance(pid, str) and pid:
+        return pid
+    return None
+
 #: Family-name pool for :func:`realisticize_names` (realistic US-style
 #: surnames; the given-name pool is derived from the matching engine's
 #: own nickname table — formal names and their diminutives).
@@ -164,8 +178,9 @@ def realisticize_names(patients: list[dict],
     given_pool = _given_name_pool()
     out: list[dict] = []
     replaced: list[str] = []
-    for patient in sorted(patients, key=lambda p: p["id"]):
-        if not _is_synthetic_name(patient):
+    for patient in sorted(patients, key=lambda p: str(p.get("id", ""))):
+        if not _is_synthetic_name(patient) or _usable_patient_id(
+                patient) is None:
             out.append(patient)
             continue
         clone = copy.deepcopy(patient)
@@ -175,7 +190,7 @@ def realisticize_names(patients: list[dict],
                           "family": family, "given": [given]}]
         replaced.append(patient["id"])
         out.append(clone)
-    return sorted(out, key=lambda p: p["id"]), replaced
+    return sorted(out, key=lambda p: str(p.get("id", ""))), replaced
 
 
 def rebase_future_birthdates(patients: list[dict]) -> tuple[list[dict], int]:
@@ -189,7 +204,7 @@ def rebase_future_birthdates(patients: list[dict]) -> tuple[list[dict], int]:
     """
     out: list[dict] = []
     shifted = 0
-    for patient in sorted(patients, key=lambda p: p["id"]):
+    for patient in sorted(patients, key=lambda p: str(p.get("id", ""))):
         dob = patient.get("birthDate")
         if isinstance(dob, str) and len(dob) >= 4:
             try:
@@ -206,7 +221,7 @@ def rebase_future_birthdates(patients: list[dict]) -> tuple[list[dict], int]:
                 shifted += 1
                 continue
         out.append(patient)
-    return sorted(out, key=lambda p: p["id"]), shifted
+    return sorted(out, key=lambda p: str(p.get("id", ""))), shifted
 
 
 # ---------------------------------------------------------------------------
@@ -602,9 +617,9 @@ def apply_profile(profile: str, patient: dict,
 # ---------------------------------------------------------------------------
 
 
-def _dup_id(base_id: str, k: int) -> str:
+def _dup_id(base_id: object, k: int) -> str:
     suffix = f"-d{k}"
-    stem = base_id[: 64 - len(suffix)]
+    stem = str(base_id)[: 64 - len(suffix)]
     return f"{stem}{suffix}"
 
 
@@ -682,7 +697,7 @@ def inject_duplicates(
     patients' clinical records are emitted with rewritten patient refs.
     """
     rng = random.Random(config.seed)
-    ordered = sorted(patients, key=lambda p: p["id"])
+    ordered = sorted(patients, key=lambda p: str(p.get("id", "")))
     names_replaced: list[str] = []
     dobs_rebased = 0
     if config.realistic_names:
@@ -690,26 +705,32 @@ def inject_duplicates(
     if config.rebase_future_birthdates:
         ordered, dobs_rebased = rebase_future_birthdates(ordered)
 
+    # QA-D6H-001: only patients with a usable string id can participate
+    # in injection; loader-tolerated unusable shapes pass through.
+    eligible = [p for p in ordered if _usable_patient_id(p) is not None]
+
     if config.num_patients == 0:
         return InjectionResult(
             patients=ordered,
-            clinical=sorted(clinical, key=lambda r: r.get("id", "")),
+            clinical=sorted(clinical,
+                            key=lambda r: str(r.get("id", ""))),
             gold_pairs=[], seed=config.seed, config=config,
-            honest_negative_ids=sorted(p["id"] for p in ordered),
+            honest_negative_ids=sorted(p["id"] for p in eligible),
             names_replaced=names_replaced,
             birthdates_rebased=dobs_rebased,
         )
 
     if config.num_patients is None:
-        selected = ordered
+        selected = eligible
     else:
         selected = sorted(
-            rng.sample(ordered, min(config.num_patients, len(ordered))),
+            rng.sample(eligible, min(config.num_patients,
+                                     len(eligible))),
             key=lambda p: p["id"])
     selected_ids = {p["id"] for p in selected}
 
     clinical_by_patient: dict[str, list[dict]] = {}
-    for resource in sorted(clinical, key=lambda r: r.get("id", "")):
+    for resource in sorted(clinical, key=lambda r: str(r.get("id", ""))):
         ref = None
         for field_name in ("subject", "patient"):
             holder = resource.get(field_name)
@@ -734,14 +755,16 @@ def inject_duplicates(
             gold.append(GoldPair(original["id"], dup_id, profiles))
             for resource in clinical_by_patient.get(original["id"], []):
                 dup_res = copy.deepcopy(resource)
-                dup_res["id"] = _dup_id(resource.get("id", "res"), k)
+                dup_res["id"] = _dup_id(resource.get("id") or "res", k)
                 _rewrite_patient_ref(dup_res, dup_id)
                 dup_clinical.append(dup_res)
 
-    all_patients = sorted(ordered + dup_patients, key=lambda p: p["id"])
+    all_patients = sorted(ordered + dup_patients,
+                          key=lambda p: str(p.get("id", "")))
     all_clinical = sorted(
-        list(clinical) + dup_clinical, key=lambda r: r.get("id", ""))
-    honest = sorted(p["id"] for p in ordered if p["id"] not in selected_ids)
+        list(clinical) + dup_clinical, key=lambda r: str(r.get("id", "")))
+    honest = sorted(p["id"] for p in eligible
+                    if p["id"] not in selected_ids)
     return InjectionResult(
         patients=all_patients,
         clinical=all_clinical,

@@ -937,8 +937,10 @@ def run_benchmark(corpus_path: Union[str, Path], output_dir: Union[str, Path],
         layout = prefer_terminology_layout()
         endpoint = InProcessTerminologyEndpoint()
         stats = run_autocoder(stripped, endpoint,
+                              min_match_grade=min_match_grade,
                               search_mode=search_mode)
         stats["medterm4ds_layout"] = layout
+        stats["endpoint"] = "in_process"
         report["autocoding"] = stats
         report["gold_accuracy"] = gold_accuracy(gold, stripped)
         report["after"] = evaluate_slice(before_corpus, rubric)

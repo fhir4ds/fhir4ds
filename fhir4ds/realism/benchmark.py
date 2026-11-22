@@ -69,12 +69,17 @@ def _inject(corpus_path: Union[str, Path], *, seed: int,
             rebase_dobs: bool,
             patient_limit: Optional[int]) -> tuple[InjectionResult, dict]:
     resources = load_corpus(corpus_path)
-    patients = sorted((r for r in resources
-                       if r["resourceType"] == "Patient"),
-                      key=lambda r: r["id"])
+    # QA-D6H-001: patients without a usable string id cannot be matched
+    # or injected; keep the corpus's clinical resources but exclude them
+    # from the patient set (tolerance-first, mirrors corrupt.py).
+    patients = sorted(
+        (r for r in resources
+         if r["resourceType"] == "Patient"
+         and isinstance(r.get("id"), str) and r["id"]),
+        key=lambda r: r["id"])
     clinical = sorted((r for r in resources
                        if r["resourceType"] != "Patient"),
-                      key=lambda r: r.get("id", ""))
+                      key=lambda r: str(r.get("id", "")))
     if patient_limit is not None:
         patients = patients[:patient_limit]
         keep = {p["id"] for p in patients}
@@ -241,7 +246,9 @@ def _piqi_section(injection: InjectionResult) -> dict:
         conn.execute("CREATE OR REPLACE TABLE resources (resource JSON)")
         resources = injection.patients + injection.clinical
         for resource in sorted(resources,
-                               key=lambda r: (r["resourceType"], r["id"])):
+                               key=lambda r: (str(r.get("resourceType",
+                                                        "")),
+                                              str(r.get("id", "")))):
             conn.execute("INSERT INTO resources VALUES (?)",
                          [json.dumps(resource)])
         load_piqi_views(conn, source_table="resources")
