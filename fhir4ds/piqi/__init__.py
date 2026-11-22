@@ -27,7 +27,7 @@ from .scorecard import (
 from .terminology import COULD_NOT_ASSESS, run_terminology_sam
 from .taxonomy import PIQIDimension, dimension_for_sam, resolve_dimension
 
-__version__ = "0.0.25"
+__version__ = "0.0.26"
 
 __all__ = [
     "__version__",
