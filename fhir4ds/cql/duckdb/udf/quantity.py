@@ -343,7 +343,8 @@ def _require_ureg():
     if ureg is None:
         raise ImportError(
             "Quantity UDFs require 'pint' to be installed and importable. "
-            "Reinstall duckdb-cql-py with its declared dependencies."
+            "Reinstall fhir4ds-v2 (pip install 'fhir4ds-v2') with its "
+            "declared dependencies."
         )
     return ureg
 
