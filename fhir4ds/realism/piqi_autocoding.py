@@ -99,10 +99,16 @@ def _observation_category(resource: dict) -> str:
 
 def build_slice(resources: list[dict], num_patients: int) -> list[dict]:
     """Deterministic slice: the first ``num_patients`` Patient ids
-    (sorted) plus every clinical resource whose subject is one of them."""
+    (sorted) plus every clinical resource whose subject is one of them.
+
+    QA-D6E-004: only patients with a usable STRING id can be keyed by
+    the slice (``load_corpus`` tolerates non-string/missing ids);
+    str()-coerced sort keys keep the ordering deterministic instead of
+    crashing with a raw TypeError on mixed id types."""
     patients = sorted(
         r["id"] for r in resources
-        if r.get("resourceType") == "Patient" and r.get("id"))
+        if r.get("resourceType") == "Patient"
+        and isinstance(r.get("id"), str) and r["id"])
     slice_ids = set(patients[:num_patients])
     if not slice_ids:
         raise ValueError("corpus contains no Patient resources to slice")
@@ -178,8 +184,8 @@ def strip_codings(resources: list[dict],
     stripped: list[dict] = []
     gold: list[dict] = []
     per_patient: Counter = Counter()
-    for r in sorted(resources, key=lambda x: (x.get("resourceType", ""),
-                                              x.get("id", ""))):
+    for r in sorted(resources, key=lambda x: (str(x.get("resourceType", "")),
+                                               str(x.get("id", "")))):
         rt = r.get("resourceType")
         conf = spec.get(rt)
         if conf is None:
@@ -435,8 +441,8 @@ def _load_resources_table(conn, resources: list[dict]) -> None:
     conn.executemany(
         "INSERT INTO resources VALUES (?)",
         [(json.dumps(r, sort_keys=True),) for r in sorted(
-            resources, key=lambda x: (x.get("resourceType", ""),
-                                      x.get("id", "")))])
+            resources, key=lambda x: (str(x.get("resourceType", "")),
+                                      str(x.get("id", ""))))])
 
 
 def evaluate_slice(resources: list[dict], rubric) -> dict:
@@ -817,7 +823,7 @@ def run_benchmark(corpus_path: Union[str, Path], output_dir: Union[str, Path],
 
         if phase == "autocode":
             partial_path = out / "report.partial.json"
-            report = json.loads(partial_path.read_text(encoding="utf-8"))
+            report = _load_partial(out)
             working = _load_jsonl(out / "nostrip_slice.jsonl")
             originals = copy.deepcopy(working)
             endpoint = (_test_endpoint or _make_endpoint(
@@ -839,8 +845,8 @@ def run_benchmark(corpus_path: Union[str, Path], output_dir: Union[str, Path],
             return report
 
         if phase == "after":
-            partial_path = out / "report.partial.json"
-            report = json.loads(partial_path.read_text(encoding="utf-8"))
+            report = _load_partial(out)
+            _check_artifact_corpus(report, corpus_path, num_patients, out)
             augmented = _load_jsonl(out / "augmented.jsonl")
             augmented_keys = {(r.get("resourceType"), r.get("id"))
                               for r in augmented}
@@ -849,8 +855,9 @@ def run_benchmark(corpus_path: Union[str, Path], output_dir: Union[str, Path],
                 if (r.get("resourceType"), r.get("id"))
                 not in augmented_keys] + augmented
             report["after"] = evaluate_slice(after_corpus, rubric)
-            report["recovery"] = recovery_table(report["baseline"],
-                                                report["after"])
+            report["recovery"] = recovery_table(
+                _require_partial_leg(report, out, "baseline"),
+                report["after"])
             (out / "piqi_autocoding_report.json").write_text(
                 json.dumps(report, indent=2, sort_keys=True) + "\n",
                 encoding="utf-8")
@@ -888,7 +895,7 @@ def run_benchmark(corpus_path: Union[str, Path], output_dir: Union[str, Path],
 
     if phase == "autocode":
         partial_path = out / "report.partial.json"
-        report = json.loads(partial_path.read_text(encoding="utf-8"))
+        report = _load_partial(out)
         stripped = _load_jsonl(out / "stripped.jsonl")
         gold = _load_jsonl(out / "gold.jsonl")
         endpoint = _make_endpoint(http_base_url,
@@ -911,8 +918,8 @@ def run_benchmark(corpus_path: Union[str, Path], output_dir: Union[str, Path],
         return report
 
     if phase == "after":
-        partial_path = out / "report.partial.json"
-        report = json.loads(partial_path.read_text(encoding="utf-8"))
+        report = _load_partial(out)
+        _check_artifact_corpus(report, corpus_path, num_patients, out)
         augmented = _load_jsonl(out / "augmented.jsonl")
         stripped_keys = {(r.get("resourceType"), r.get("id"))
                          for r in augmented}
@@ -921,8 +928,9 @@ def run_benchmark(corpus_path: Union[str, Path], output_dir: Union[str, Path],
             if (r.get("resourceType"), r.get("id")) not in stripped_keys
         ] + augmented
         report["after"] = evaluate_slice(before_corpus, rubric)
-        report["recovery"] = recovery_table(report["before"],
-                                            report["after"])
+        report["recovery"] = recovery_table(
+            _require_partial_leg(report, out, "before"),
+            report["after"])
         (out / "piqi_autocoding_report.json").write_text(
             json.dumps(report, indent=2, sort_keys=True) + "\n",
             encoding="utf-8")
@@ -990,8 +998,86 @@ def _dump_jsonl(path: Path, rows: list[dict]) -> None:
 
 
 def _load_jsonl(path: Path) -> list[dict]:
-    return [json.loads(line) for line in
-            path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    """Load a phase artifact JSONL file with a typed, attributed error
+    contract (QA-D6E-005): corrupt JSON and non-object lines raise
+    ``ValueError`` naming the artifact and the remedy instead of leaking
+    raw ``JSONDecodeError`` / ``AttributeError`` from deep inside a
+    later phase."""
+    rows: list[dict] = []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        raise ValueError(
+            f"phase artifact {path.name} not found; re-run the phase "
+            f"that produces it first") from None
+    for lineno, line in enumerate(lines, start=1):
+        if not line.strip():
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"phase artifact {path.name}: malformed JSON on line "
+                f"{lineno} ({exc}); re-run the phase that produces "
+                f"{path.name} to regenerate it") from exc
+        if not isinstance(obj, dict):
+            raise ValueError(
+                f"phase artifact {path.name}: line {lineno} is not a "
+                f"JSON object; re-run the phase that produces "
+                f"{path.name} to regenerate it")
+        rows.append(obj)
+    return rows
+
+
+def _load_partial(out: Path) -> dict:
+    """Load ``report.partial.json`` with the QA-D6E-005 typed contract."""
+    partial_path = out / "report.partial.json"
+    try:
+        text = partial_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise ValueError(
+            f"phase artifact report.partial.json not found in {out}; "
+            "run phase='piqi' first") from None
+    try:
+        report = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"phase artifact report.partial.json is corrupt ({exc}); "
+            "re-run phase='piqi' to regenerate it") from exc
+    if not isinstance(report, dict):
+        raise ValueError(
+            "phase artifact report.partial.json is not a JSON object; "
+            "re-run phase='piqi' to regenerate it")
+    return report
+
+
+def _require_partial_leg(report: dict, out: Path, key: str) -> dict:
+    leg = report.get(key)
+    if not isinstance(leg, dict):
+        raise ValueError(
+            f"phase artifact report.partial.json in {out} lacks the "
+            f"'{key}' leg (it was not produced by the piqi phase of "
+            "this experiment); re-run phase='piqi' first")
+    return leg
+
+
+def _check_artifact_corpus(report: dict, corpus_path, num_patients: int,
+                           out: Path) -> None:
+    """Refuse to merge phase artifacts produced against a DIFFERENT
+    corpus/slice (QA-D6E-005): the after-phase would otherwise silently
+    score a contaminated corpus and publish wrong recovery numbers."""
+    recorded = report.get("corpus_path")
+    if recorded is not None and recorded != str(corpus_path):
+        raise ValueError(
+            f"phase artifacts in {out} were produced against corpus "
+            f"{recorded!r}, but this run uses {str(corpus_path)!r}; "
+            "re-run the piqi/autocode phases for this corpus")
+    recorded_n = report.get("num_patients")
+    if recorded_n is not None and recorded_n != num_patients:
+        raise ValueError(
+            f"phase artifacts in {out} were produced with "
+            f"num_patients={recorded_n}, but this run uses "
+            f"{num_patients}; re-run the piqi/autocode phases")
 
 
 def summarize(report: dict) -> str:

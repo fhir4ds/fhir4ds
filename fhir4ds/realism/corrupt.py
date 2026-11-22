@@ -496,19 +496,32 @@ def _profile_dob_shift(patient: dict, rng: random.Random) -> bool:
         return False
     mode = rng.choice(("days", "month"))
     if mode == "days":
-        d = d + timedelta(days=rng.choice((-1, 1)) *
-                          rng.randint(1, 30))
+        try:
+            # QA-D6E-003: extent birthDates (0001-01-xx / 9999-12-xx) can
+            # under/overflow `date` — the profile is inapplicable, not a
+            # crash (a raw OverflowError took the whole inject run down).
+            d = d + timedelta(days=rng.choice((-1, 1)) *
+                              rng.randint(1, 30))
+        except OverflowError:
+            return False
     else:
         month = d.month + rng.choice((-1, 1))
         year = d.year + (0 if 1 <= month <= 12 else (-1 if month < 1 else 1))
         month = (month - 1) % 12 + 1
-        # clamp day to the target month length
+        # clamp day to the target month length; if NO day of the original
+        # date fits (9999-12 -> year 10000), the shift is inapplicable —
+        # returning True with an unchanged patient would lie on the gold
+        # pair (QA-D6E-003, part 2).
+        found = False
         for day in range(d.day, 0, -1):
             try:
                 d = date(year, month, day)
+                found = True
                 break
             except ValueError:
                 continue
+        if not found:
+            return False
     patient["birthDate"] = d.isoformat()
     return True
 

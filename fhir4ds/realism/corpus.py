@@ -65,7 +65,7 @@ def iter_ndjson_resources(text: str) -> Iterator[dict]:
         if not line:
             continue
         try:
-            obj = json.loads(line)
+            obj = _loads(line, f"NDJSON line {lineno}")
         except json.JSONDecodeError as exc:
             raise ValueError(
                 f"malformed JSON on NDJSON line {lineno}: {exc}") from exc
@@ -91,10 +91,23 @@ def _read_text(path: Path) -> str:
         else:
             data = path.read_bytes()
         return data.decode("utf-8-sig")
-    except (ValueError, OSError) as exc:
+    except (ValueError, OSError, EOFError) as exc:
         # BadGzipFile subclasses OSError; UnicodeDecodeError subclasses
-        # ValueError. Both are re-raised with file attribution.
+        # ValueError; a TRUNCATED gzip payload raises EOFError (QA-D6E-002)
+        # which subclasses neither. All are re-raised with file
+        # attribution.
         raise ValueError(f"{path.name}: cannot read corpus file ({exc})") from exc
+
+
+def _loads(text: str, name: str):
+    """``json.loads`` with the QA-D6E-001 guard: pathologically deep
+    nesting raises the parser's raw ``RecursionError`` — re-raise it as
+    an attributed ``ValueError`` like every other malformed-file signal."""
+    try:
+        return json.loads(text)
+    except RecursionError as exc:
+        raise ValueError(
+            f"{name}: JSON nesting too deep to parse") from exc
 
 
 def _is_data_file(name: str) -> bool:
@@ -116,21 +129,30 @@ def _stripped_suffix(path: Path) -> str:
 def bundle_entries(bundle: dict) -> Iterator[dict]:
     """Yield resources from a Bundle dict, flattening nested bundles.
 
-    Entries without a ``resource`` are skipped (quirk tolerance).
+    Entries without a ``resource`` are skipped (quirk tolerance). The
+    walk is ITERATIVE (explicit entry-iterator stack, document-order
+    DFS): the recursive form raised a raw ``RecursionError`` on deeply
+    nested bundle chains (QA-D6E-001).
     """
     if not isinstance(bundle, dict) or bundle.get("resourceType") != "Bundle":
         raise ValueError(
             "expected a FHIR Bundle (resourceType == 'Bundle'), got "
             + repr(bundle.get("resourceType") if isinstance(bundle, dict)
                    else type(bundle).__name__))
-    for entry in bundle.get("entry") or []:
+    stack: list[Iterator[dict]] = [iter(bundle.get("entry") or [])]
+    while stack:
+        try:
+            entry = next(stack[-1])
+        except StopIteration:
+            stack.pop()
+            continue
         if not isinstance(entry, dict):
             continue
         resource = entry.get("resource")
         if not is_fhir_resource(resource):
             continue
         if resource["resourceType"] == "Bundle":
-            yield from bundle_entries(resource)
+            stack.append(iter(resource.get("entry") or []))
         else:
             yield resource
 
@@ -161,14 +183,14 @@ def load_bundle_file(path: Union[str, Path]) -> list[dict]:
             line = line.strip()
             if not line:
                 continue
-            obj = json.loads(line)
+            obj = _loads(line, str(path))
             if not is_fhir_resource(obj):
                 raise ValueError(
                     f"{path}: JSONL line is not a FHIR resource")
             _extend_flattening(resources, [obj])
         return _sorted(resources)
     try:
-        obj = json.loads(text)
+        obj = _loads(text, str(path))
     except json.JSONDecodeError:
         # A .json file may hold a JSONL stream of resources/Bundles
         # (the same fallback the directory loader documents); the raw
@@ -179,7 +201,7 @@ def load_bundle_file(path: Union[str, Path]) -> list[dict]:
             if not line:
                 continue
             try:
-                line_obj = json.loads(line)
+                line_obj = _loads(line, str(path))
             except json.JSONDecodeError as exc:
                 raise ValueError(
                     f"{path}: neither a single JSON document nor a "
@@ -213,7 +235,7 @@ def load_ndjson_dir(path: Union[str, Path]) -> list[dict]:
             # Try single-document JSON first (Bundle or resource), then
             # fall back to JSONL lines (some mirrors stream bundles).
             try:
-                obj = json.loads(text)
+                obj = _loads(text, file.name)
             except json.JSONDecodeError:
                 obj = None
             if obj is not None and is_fhir_resource(obj):
