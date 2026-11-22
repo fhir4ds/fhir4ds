@@ -50,6 +50,7 @@ same resource SET yields identical clusters, Linkage, audit, and queue.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -355,6 +356,13 @@ def encounter_pass(resources: list[dict], *,
     """
     features: dict[str, EncounterFeatures] = {}
     records: list[DedupRecord] = []
+    # QA-D15S-001 (v0.0.26 D15 SKEPTIC): an Encounter id is the corpus
+    # identity — duplicate ids are the SAME resource re-supplied. Collapse
+    # deterministically to the smallest serialized form BEFORE any pairing:
+    # the feature map, union-find, and component bookkeeping all key on
+    # rid, so uncollapsed duplicates fabricated clusters (no pair
+    # evidence) and made results depend on input order.
+    encounters_by_id: dict[str, dict] = {}
     for resource in resources:
         if not isinstance(resource, dict) \
                 or resource.get("resourceType") != "Encounter":
@@ -362,6 +370,17 @@ def encounter_pass(resources: list[dict], *,
         rid = resource.get("id")
         if not isinstance(rid, str) or not rid:
             continue
+        existing = encounters_by_id.get(rid)
+        if existing is None or json.dumps(resource, sort_keys=True) < \
+                json.dumps(existing, sort_keys=True):
+            encounters_by_id[rid] = resource
+    duplicate_ids = len(resources) - len(encounters_by_id) - sum(
+        1 for r in resources
+        if not (isinstance(r, dict)
+                and r.get("resourceType") == "Encounter"
+                and isinstance(r.get("id"), str) and r.get("id")))
+    for rid in sorted(encounters_by_id):
+        resource = encounters_by_id[rid]
         records.append(_encounter_record(resource, default_tz))
         features[rid] = EncounterFeatures.from_resource(resource)
 
@@ -372,8 +391,13 @@ def encounter_pass(resources: list[dict], *,
             return None
         member = record.patient_ref[len("Patient/"):]
         individual = membership.get(member)
-        return f"ind:{individual}" if individual is not None \
-            else f"pat:{record.patient_ref}"
+        # QA-D15S-002 (v0.0.26 D15 SKEPTIC): a falsy/blank master must
+        # NEVER co-group unrelated patients (the documented "cross-
+        # patient encounters never merge" invariant); fall back to
+        # patient-identity grouping.
+        if isinstance(individual, str) and individual.strip():
+            return f"ind:{individual}"
+        return f"pat:{record.patient_ref}"
 
     groups: dict[str, list[DedupRecord]] = {}
     ungrouped: list[DedupRecord] = []
@@ -526,6 +550,7 @@ def encounter_pass(resources: list[dict], *,
         stats={
             "input_resources": len(resources),
             "records": len(records),
+            "duplicate_id_resources": duplicate_ids,
             "stage1_singletons": len(emitted),
             "escalated_groups": len(groups),
             "clusters": len(clusters),

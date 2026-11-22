@@ -21,6 +21,7 @@ Design grounding: FEATURE_TEMPORAL_DEDUP.md §2a/§2b/§2e, §3, §9.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field, replace
 from datetime import datetime
@@ -444,14 +445,17 @@ def _partition_internal(records: list[DedupRecord], *, code_fallback: str,
                         attach_keys: bool = False
                         ) -> tuple[list[DedupRecord],
                                    list[list[DedupRecord]],
-                                   dict[str, list[dict]],
+                                   list[list[dict]],
                                    list[dict]]:
     """Partition + cascade bookkeeping.
 
     Returns ``(singletons, multi_groups, component_edges, suppressed)``:
-    ``component_edges`` maps each multi-group's lead rid to the union
-    edges inside that component (tier ``canonical`` / ``hybrid`` /
-    ``text``); ``suppressed`` carries tier-2-compatible same-bucket
+    ``component_edges`` is a list PARALLEL to ``multi_groups`` — the
+    union edges inside that group's component (tier ``canonical`` /
+    ``hybrid`` / ``text``). Keying by the group's lead rid (the pre-fix
+    shape) collides when two groups share a lead rid (duplicate ids in
+    caller-built records), silently stripping the first group's edge
+    evidence. ``suppressed`` carries tier-2-compatible same-bucket
     pairs that did NOT union (audit_only mode), annotated with their
     bucket key. ``attach_keys`` derives coalesced match keys for raw
     (never-attached) records — dedup_pass attaches earlier because it
@@ -467,7 +471,7 @@ def _partition_internal(records: list[DedupRecord], *, code_fallback: str,
         buckets.setdefault(_sort_key(record), []).append(record)
     singletons: list[DedupRecord] = []
     multi_groups: list[list[DedupRecord]] = []
-    component_edges: dict[str, list[dict]] = {}
+    component_edges: list[list[dict]] = []
     suppressed: list[dict] = []
     for key in sorted(buckets):
         components, edges, supp = _code_components(
@@ -478,16 +482,16 @@ def _partition_internal(records: list[DedupRecord], *, code_fallback: str,
             suppressed.append(dict(edge, bucket=list(key)))
         for component in components:
             members = sorted(component, key=lambda r: r.rid)
-            member_ids = {m.rid for m in members}
             if len(members) == 1:
                 singletons.append(members[0])
                 continue
+            member_ids = {m.rid for m in members}
             multi_groups.append(members)
-            component_edges[members[0].rid] = sorted(
+            component_edges.append(sorted(
                 (e for e in edges
                  if e["edge"][0] in member_ids
                  and e["edge"][1] in member_ids),
-                key=lambda e: (e["tier"], e["edge"]))
+                key=lambda e: (e["tier"], e["edge"])))
     return singletons, multi_groups, component_edges, suppressed
 
 
@@ -908,6 +912,48 @@ class _LazyDefaultIndex:
 _NULL_INDEX = _LazyDefaultIndex()
 
 
+def _collapse_duplicate_ids(resources: list[dict]) -> tuple[list[dict], int]:
+    """Collapse resources sharing one ``(resourceType, id)`` identity.
+
+    Doctrine (D15 SKEPTIC, v0.0.26; MedicationIndex precedent): an id
+    is an identity only within a type+corpus — a re-supplied id is the
+    SAME resource, and every downstream bookkeeping structure (union
+    find, feature maps, edge evidence) keys on rid. Duplicate ids are
+    collapsed deterministically to the lexicographically smallest
+    ``json.dumps(sort_keys=True)`` form, so results depend on the
+    resource SET, never on input order. Resources lacking a usable
+    ``resourceType``/``id`` pass through untouched (``from_resource``
+    raises on them with attribution, as before).
+
+    Returns ``(collapsed_list, duplicate_count)``.
+    """
+    out: list[dict] = []
+    seen: dict[tuple[str, str], dict] = {}
+    pos: dict[tuple[str, str], int] = {}
+    duplicates = 0
+    for resource in resources:
+        rtype = resource.get("resourceType") if isinstance(resource, dict) \
+            else None
+        rid = resource.get("id") if isinstance(resource, dict) else None
+        if not (isinstance(rtype, str) and rtype
+                and isinstance(rid, str) and rid):
+            out.append(resource)
+            continue
+        key = (rtype, rid)
+        existing = seen.get(key)
+        if existing is None:
+            seen[key] = resource
+            pos[key] = len(out)
+            out.append(resource)
+            continue
+        duplicates += 1
+        if json.dumps(resource, sort_keys=True) < \
+                json.dumps(existing, sort_keys=True):
+            seen[key] = resource
+            out[pos[key]] = resource
+    return out, duplicates
+
+
 def _attach_match_keys(records: list[DedupRecord], index,
                        mode: str) -> list[DedupRecord]:
     """Derive each record's COALESCED match key (design redirect
@@ -977,9 +1023,11 @@ def dedup_pass(resources: list[dict], *, default_tz: str = DEFAULT_TZ,
     never pays the build.
     """
     mode = _validate_code_fallback(code_fallback)
+    stats_input_resources = len(resources)
     if medication_resolver is None:
         from .medication import LazyMedicationIndex
         medication_resolver = LazyMedicationIndex(resources)
+    resources, duplicate_ids = _collapse_duplicate_ids(resources)
     records = [DedupRecord.from_resource(r,
                                          code_resolver=medication_resolver)
                for r in resources]
@@ -996,8 +1044,7 @@ def dedup_pass(resources: list[dict], *, default_tz: str = DEFAULT_TZ,
     clusters: list[list[DedupRecord]] = []
     cluster_edges: list[list[dict]] = []
     near_misses: list[dict] = []
-    for group in multi_groups:
-        edges = component_edges.get(group[0].rid, [])
+    for group, edges in zip(multi_groups, component_edges):
         tier2_edges = [e for e in edges if e["tier"] != "canonical"]
         escalated = escalate(group, default_tz=default_tz)
         cluster_of: dict[str, int] = {}
@@ -1082,14 +1129,15 @@ def dedup_pass(resources: list[dict], *, default_tz: str = DEFAULT_TZ,
     cluster_edges = [e for _, e in pairs]
     duplicate_records = sum(len(c) for c in clusters)
     tier2_union_count = sum(
-        1 for edges in component_edges.values() for e in edges
+        1 for edges in component_edges for e in edges
         if e["tier"] != "canonical")
     return DedupResult(
         emitted=emitted,
         clusters=clusters,
         stats={
-            "input_resources": len(resources),
+            "input_resources": stats_input_resources,
             "records": len(records),
+            "duplicate_id_resources": duplicate_ids,
             "stage1_singletons": len(singletons),
             "escalated_groups": len(multi_groups),
             "clusters": len(clusters),
