@@ -51,9 +51,30 @@ def piqi_resolver() -> _t.Callable[[str], dict]:
     return resolve
 
 
+def _registry_value(canonical: str, what: str, hint: str) -> dict:
+    registry = _load_registry()
+    try:
+        return registry[canonical]
+    except KeyError:
+        total = sum(1 for k in registry if k.startswith(
+            CANONICAL_BASE + what + "/"))
+        raise ValueError(
+            f"unknown PIQI {what.lower()} — no packaged resource at "
+            f"canonical {canonical!r}; {total} packaged {what.lower()}(s) "
+            f"are available ({hint})") from None
+
+
 def get_view(view_name: str) -> dict:
-    """Return a packaged PIQI ViewDefinition dict by name."""
-    return _load_registry()[view_canonical(view_name)]
+    """Return a packaged PIQI ViewDefinition dict by name.
+
+    Raises :class:`ValueError` (unknown view name) or :class:`TypeError`
+    (non-string name) — never a bare ``KeyError``.
+    """
+    if not isinstance(view_name, str):
+        raise TypeError(
+            f"view name must be a str, got {type(view_name).__name__}")
+    return _registry_value(view_canonical(view_name), "ViewDefinition",
+                           "see fhir4ds.piqi.all_views()")
 
 
 def get_sam(instance_id: str) -> dict:
@@ -61,15 +82,32 @@ def get_sam(instance_id: str) -> dict:
 
     Accepts either the bare instance id (``labresult-test-iscomplete``)
     or the Library id (``piqi-sam-labresult-test-iscomplete``).
+
+    Raises :class:`ValueError` (unknown SAM id) or :class:`TypeError`
+    (non-string id) — never a bare ``KeyError``.
     """
+    if not isinstance(instance_id, str):
+        raise TypeError(
+            f"SAM instance id must be a str, got "
+            f"{type(instance_id).__name__}")
     lib_id = instance_id if instance_id.startswith("piqi-sam-") else (
         "piqi-sam-" + instance_id)
-    return _load_registry()[CANONICAL_BASE + "Library/" + lib_id]
+    return _registry_value(CANONICAL_BASE + "Library/" + lib_id, "Library",
+                           "ids start with 'piqi-sam-'")
 
 
 def get_rubric(name: str) -> dict:
-    """Return a packaged rubric SQLQuery Library (incl. criteria metadata)."""
-    return _load_registry()[CANONICAL_BASE + "Library/piqi-rubric-" + name]
+    """Return a packaged rubric SQLQuery Library (incl. criteria metadata).
+
+    Raises :class:`ValueError` (unknown rubric name) or :class:`TypeError`
+    (non-string name) — never a bare ``KeyError``.
+    """
+    if not isinstance(name, str):
+        raise TypeError(
+            f"rubric name must be a str, got {type(name).__name__}")
+    return _registry_value(
+        CANONICAL_BASE + "Library/piqi-rubric-" + name, "Library",
+        "ids start with 'piqi-rubric-'")
 
 
 def all_views() -> list[str]:

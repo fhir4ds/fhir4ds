@@ -87,6 +87,23 @@ class PIQIScorecard:
 
 def load_piqi_views(connection, *, source_table: str = "resources") -> list[str]:
     """Materialize every packaged PIQI ViewDefinition as ``piqi.<name>``."""
+    import duckdb as _duckdb_mod
+
+    if connection is None:
+        raise TypeError(
+            "Expected a DuckDB connection for 'connection', got None")
+    if not isinstance(connection, _duckdb_mod.DuckDBPyConnection):
+        raise TypeError(
+            "Expected a DuckDB connection for 'connection', got "
+            f"{type(connection).__name__}")
+    try:
+        connection.execute("SELECT 1").fetchone()
+    except _duckdb_mod.ConnectionException:
+        raise _duckdb_mod.ConnectionException(
+            "Cannot load PIQI views: DuckDB connection is closed"
+        ) from None
+    except _duckdb_mod.Error:
+        pass  # connection is alive; other errors are expected
     connection.execute("CREATE SCHEMA IF NOT EXISTS piqi")
     created = []
     gen = SQLGenerator(source_table=source_table)
@@ -116,7 +133,20 @@ def run_sam(connection, sam, *, patient_id: _t.Optional[str] = None,
     """
     from .registry import get_sam as _get
 
-    sam_dict = _get(sam) if isinstance(sam, str) else sam
+    if isinstance(sam, str):
+        sam_dict = _get(sam)
+    elif isinstance(sam, dict):
+        sam_dict = sam
+        missing = [k for k in ("id", "url") if not isinstance(
+            sam_dict.get(k), str) or not sam_dict.get(k)]
+        if missing:
+            raise ValueError(
+                f"custom SAM dict must carry non-empty string keys "
+                f"{missing}; got {sam_dict!r:.160}")
+    else:
+        raise TypeError(
+            f"sam must be a packaged SAM name (str) or a SAM Library "
+            f"dict, got {type(sam).__name__}")
     canonical = sam_dict["url"]
     wrapper = {
         "resourceType": "Library",
@@ -191,6 +221,15 @@ def run_parameterized_sam(connection, sam, parameters: dict, *,
     """
     import base64 as _b64
 
+    if not isinstance(sam, dict):
+        raise TypeError(
+            f"sam must be a SAM Library dict from "
+            f"fhir4ds.piqi.build_parameterized_sam (run_sam additionally "
+            f"accepts packaged SAM names), got {type(sam).__name__}")
+    if not isinstance(parameters, dict):
+        raise TypeError(
+            f"parameters must be a dict mapping declared SAM parameter "
+            f"names to values, got {type(parameters).__name__}")
     declared = [p["name"] for p in sam.get("parameter", [])]
     missing = [n for n in declared if n not in (parameters or {})]
     if missing:
@@ -270,6 +309,11 @@ def evaluate_rubric(connection, rubric, *, patient_id: _t.Optional[str] = None,
     generated ViewDefinition SQL reads from.
     """
     rubric_dict = get_rubric(rubric) if isinstance(rubric, str) else rubric
+    if not isinstance(rubric_dict, (tuple, dict)):
+        raise TypeError(
+            f"rubric must be a packaged rubric name (str), a rubric "
+            f"Library dict, or the (library, criteria) tuple from "
+            f"build_rubric; got {type(rubric).__name__}")
     if isinstance(rubric_dict, tuple):
         rubric_dict, criteria_meta = rubric_dict
     else:
