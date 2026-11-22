@@ -1848,10 +1848,16 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
 
             columns.append(SQLAlias(expr=expr, alias=output_col))
 
-        # Build LEFT JOINs only for defines that need them (scalars and unknowns)
+        # Build LEFT JOINs only for defines that need them (scalars and unknowns).
+        # QA-D9S-002: dedup — output_definition_names may list the same definition
+        # twice (e.g. Initial Population and Denominator both referencing the same
+        # boolean define); one JOIN per definition, or DuckDB raises
+        # "Ambiguous reference to table X (duplicate alias X)".
         joins = []
+        seen_join_defs: set = set()
         for def_name in output_definition_names:
-            if def_name in join_def_names:
+            if def_name in join_def_names and def_name not in seen_join_defs:
+                seen_join_defs.add(def_name)
                 joins.append(SQLJoin(
                     join_type="LEFT",
                     table=SQLIdentifier(name=def_name, quoted=True),
