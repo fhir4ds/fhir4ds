@@ -342,6 +342,15 @@ class TreeStore:
         for row in rows:
             if "_seq" not in row:
                 raise ValueError("publish rows require a writer-assigned _seq")
+            # QA-D13H-002: append must be idempotent per ``_seq``. A flush can
+            # fail AFTER this append (upload, staging, commit) while the rows
+            # stay in this buffer; the flush loop then re-buffers the same
+            # rows for retry, and a naive second append would publish every
+            # row twice. ``_seq`` is the writer-assigned identity of a row, so
+            # an already-buffered sequence is by definition the same row.
+            seq = int(row["_seq"])
+            if any(int(existing["_seq"]) == seq for existing in self._buffer):
+                continue
             self._buffer.append(dict(row))
 
     def commit(self) -> str:

@@ -207,6 +207,12 @@ def _configure_writes(context: ServeContext, settings: ServeConfig) -> Any:
         _, _, context.rehydrate_skipped_parts = rehydrate(
             context.connection, publish_store, context.store
         )
+        # QA-D13H-003: rehydration may have restored published rows whose
+        # ``_seq`` is ahead of meta/state.json (a crash between the part
+        # write and the state write). The writer must continue from the
+        # log's actual maximum, or the next write collides with a restored
+        # version and a later boot silently drops it.
+        context.writer.advance_to(versioning.next_seq(context.connection))
         _adopt_keys(context, publish_store)
     except Exception as exc:  # noqa: BLE001 - the surface stays up, loudly
         logger.exception("dataset rehydration failed; serving from a fresh log")
