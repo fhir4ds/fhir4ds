@@ -425,15 +425,29 @@ class InProcessTerminologyEndpoint:
                 )
                 self._on_call_failure()
                 return []
-            refs = []
-            for item in contains:
-                # FHIR-payload ``system`` values are canonical URLs;
-                # _normalize_system passes them through unchanged.
-                ref = self._to_coderef(
-                    item.get("system"), item.get("code"), item.get("display")
+            try:
+                refs = []
+                for item in contains:
+                    # QA-D12E-002 (v0.0.26 D12 EXPLORER): hostile result
+                    # shapes (non-dict contains items) are SKIPPED —
+                    # parity with the HTTP adapter's tolerant walk. The
+                    # conversion loop must not raise past the adapter.
+                    if not isinstance(item, dict):
+                        continue
+                    # FHIR-payload ``system`` values are canonical URLs;
+                    # _normalize_system passes them through unchanged.
+                    ref = self._to_coderef(
+                        item.get("system"), item.get("code"), item.get("display")
+                    )
+                    if ref is not None:
+                        refs.append(ref)
+            except Exception as e:  # pragma: no cover - medterm4ds drift guard
+                _logger.warning(
+                    "in_process expand conversion failed for %s: %s",
+                    valueset_url, e,
                 )
-                if ref is not None:
-                    refs.append(ref)
+                self._on_call_failure()
+                return []
             self._on_call_success()
             return refs
 
@@ -532,7 +546,18 @@ class InProcessTerminologyEndpoint:
                 # against 0.0.10 for every intensional ValueSet, and the
                 # exception was swallowed by the degrade path below — so
                 # expand_intensional() silently returned [] for every call.
-                if isinstance(result, tuple) and len(result) == 2:
+                # QA-D12E-002: a tuple of ANY OTHER arity is a hostile/
+                # drifted shape — degrade + breaker, never a raw crash.
+                if isinstance(result, tuple):
+                    if len(result) != 2:
+                        _logger.warning(
+                            "in_process expand_intensional got a %d-tuple "
+                            "result from medterm4ds (expected list or "
+                            "(codes, depth_cap_hit)); degrading to [].",
+                            len(result),
+                        )
+                        self._on_call_failure()
+                        return []
                     expanded, _depth_cap_hit = result
                 else:
                     expanded, _depth_cap_hit = result, False
@@ -557,13 +582,27 @@ class InProcessTerminologyEndpoint:
                 )
                 self._on_call_failure()
                 return []
-            refs = []
-            for item in expanded or []:
-                ref = self._to_coderef(
-                    item.get("system"), item.get("code"), item.get("display")
+            try:
+                refs = []
+                for item in expanded or []:
+                    # QA-D12E-002: hostile result shapes (non-dict items)
+                    # are skipped — never a raw AttributeError past the
+                    # adapter boundary.
+                    if not isinstance(item, dict):
+                        continue
+                    ref = self._to_coderef(
+                        item.get("system"), item.get("code"), item.get("display")
+                    )
+                    if ref is not None:
+                        refs.append(ref)
+            except Exception as e:  # pragma: no cover - medterm4ds drift guard
+                _logger.warning(
+                    "in_process expand_intensional conversion failed for %s: %s",
+                    value_set.get("url", "<intensional>"),
+                    e,
                 )
-                if ref is not None:
-                    refs.append(ref)
+                self._on_call_failure()
+                return []
             self._on_call_success()
             return refs
 
@@ -809,52 +848,72 @@ class InProcessTerminologyEndpoint:
                 return []
 
         results: list[SearchResult] = []
-        for r in raw_results:
-            if get_search_service is not None:
-                # SearchService SearchResult exposes code / source
-                # (mnemonic or URL) / display / score / match_grade.
-                # CanonicalSearchResult (mode='canonical') carries
-                # canonical_id / anchor_system / anchor_code /
-                # patient_friendly_name instead — map the ANCHOR row
-                # exactly like the HTTP sidecar's $search canonical
-                # branch (apps/fhir_api.py: anchor code/system/display
-                # with score + match_grade), so in-process and HTTP
-                # return the same codes for canonical mode.
-                # index_version is not part of the 0.0.9 contract
-                # (None -> AutoCoder pins "unknown").
-                if getattr(r, "canonical_id", None) is not None:
-                    system = getattr(r, "anchor_system", None)
-                    code = getattr(r, "anchor_code", None)
-                    display = getattr(r, "patient_friendly_name", None)
+        try:
+            for r in raw_results:
+                if get_search_service is not None:
+                    # SearchService SearchResult exposes code / source
+                    # (mnemonic or URL) / display / score / match_grade.
+                    # CanonicalSearchResult (mode='canonical') carries
+                    # canonical_id / anchor_system / anchor_code /
+                    # patient_friendly_name instead — map the ANCHOR row
+                    # exactly like the HTTP sidecar's $search canonical
+                    # branch (apps/fhir_api.py: anchor code/system/display
+                    # with score + match_grade), so in-process and HTTP
+                    # return the same codes for canonical mode.
+                    # index_version is not part of the 0.0.9 contract
+                    # (None -> AutoCoder pins "unknown").
+                    if getattr(r, "canonical_id", None) is not None:
+                        system = getattr(r, "anchor_system", None)
+                        code = getattr(r, "anchor_code", None)
+                        display = getattr(r, "patient_friendly_name", None)
+                    else:
+                        system = getattr(r, "source", None)
+                        code = getattr(r, "code", None)
+                        display = getattr(r, "display", None)
+                    score = getattr(r, "score", None)
+                    match_grade = getattr(r, "match_grade", None)
                 else:
-                    system = getattr(r, "source", None)
-                    code = getattr(r, "code", None)
-                    display = getattr(r, "display", None)
-                score = getattr(r, "score", None)
-                match_grade = getattr(r, "match_grade", None)
-            else:
-                code_obj = getattr(r, "code", None)
-                system = (
-                    getattr(code_obj, "source", None) if code_obj is not None else None
+                    code_obj = getattr(r, "code", None)
+                    system = (
+                        getattr(code_obj, "source", None)
+                        if code_obj is not None
+                        else None
+                    )
+                    code = getattr(code_obj, "code", None)
+                    display = getattr(r, "name", None)
+                    score = getattr(r, "score", 0.0)
+                    match_grade = getattr(r, "match_grade", "ambiguous")
+                ref = self._to_coderef(system, code, display)
+                if ref is None:
+                    continue
+                # QA-D12E-002: hostile score values (non-float strings)
+                # coerce to 0.0 — parity with the HTTP adapter's
+                # _extract_score — instead of raising ValueError past
+                # the adapter boundary.
+                try:
+                    safe_score = float(score) if score is not None else 0.0
+                except (TypeError, ValueError):
+                    safe_score = 0.0
+                results.append(
+                    SearchResult(
+                        system=ref.system,
+                        code=ref.code,
+                        display=ref.display,
+                        score=safe_score,
+                        match_grade=str(match_grade) if match_grade else "ambiguous",
+                        search_mode=mode,
+                        index_version=getattr(r, "index_version", None),
+                    )
                 )
-                code = getattr(code_obj, "code", None)
-                display = getattr(r, "name", None)
-                score = getattr(r, "score", 0.0)
-                match_grade = getattr(r, "match_grade", "ambiguous")
-            ref = self._to_coderef(system, code, display)
-            if ref is None:
-                continue
-            results.append(
-                SearchResult(
-                    system=ref.system,
-                    code=ref.code,
-                    display=ref.display,
-                    score=float(score) if score is not None else 0.0,
-                    match_grade=str(match_grade) if match_grade else "ambiguous",
-                    search_mode=mode,
-                    index_version=getattr(r, "index_version", None),
-                )
+        except Exception as e:  # pragma: no cover - medterm4ds drift guard
+            _logger.warning(
+                "in_process search_text conversion failed for %r (mode=%s): %s",
+                query,
+                mode,
+                e,
             )
+            self._on_call_failure()
+            return []
         self._on_call_success()
         return results
 

@@ -330,10 +330,18 @@ class HTTPTerminologyEndpoint:
 
         refs: list[CodeRef] = []
         for raw_system, code, display in iter_expansion_codes(contains):
-            system = SystemResolver.normalize(raw_system)
-            if system is None or code is None:
+            # QA-D12E-001 (v0.0.26 D12 EXPLORER): skip non-string systems
+            # BEFORE normalize — SystemResolver raises TypeError on
+            # non-str input, and one hostile contains[] entry must not
+            # poison the whole expansion (losing every valid sibling
+            # code and counting a phantom breaker failure). FHIR
+            # ``system`` is a uri (string); non-string = malformed.
+            if not isinstance(raw_system, str) or code is None:
                 # Skip half-formed entries — they cannot join against
                 # any valueset_codes row downstream.
+                continue
+            system = SystemResolver.normalize(raw_system)
+            if system is None:
                 continue
             refs.append(
                 CodeRef(
@@ -368,9 +376,15 @@ class HTTPTerminologyEndpoint:
             resource = entry.get("resource", entry) if isinstance(entry, dict) else None
             if not isinstance(resource, dict):
                 continue
-            system = SystemResolver.normalize(resource.get("system"))
+            # QA-D12E-001: same non-string-system guard as expand — a
+            # single hostile entry resource must not crash the query.
+            raw_system = resource.get("system")
             code = resource.get("code")
-            if system is None or code is None:
+            if not isinstance(raw_system, str) or code is None:
+                continue
+
+            system = SystemResolver.normalize(raw_system)
+            if system is None:
                 continue
 
             # Search metadata (score, mode, match-grade) can live in either:

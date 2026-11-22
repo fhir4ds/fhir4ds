@@ -85,7 +85,16 @@ def _collect_expansion_codes(
         code = item.get("code")
         # ``code`` 0..1 and blank means "not a selectable code" (grouping node).
         if isinstance(code, str) and code:
-            key = (system, code)
+            # QA-D12E-001 (v0.0.26 D12 EXPLORER): a hostile/non-string
+            # ``system`` (int, list, dict) is unhashable and used to raise
+            # TypeError out of the dedup — crashing the whole expansion
+            # walk for ONE malformed entry. Hash by repr for non-string
+            # systems; consumers (adapters, loader) apply their own skip
+            # policy to the emitted row.
+            dedup_system = (
+                system if isinstance(system, str) or system is None else repr(system)
+            )
+            key = (dedup_system, code)
             if key not in seen:
                 seen.add(key)
                 out.append(_code_row(system, code, item.get("display")))

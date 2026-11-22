@@ -749,3 +749,106 @@ def test_search_transient_error_still_degrades(
     adapter = InProcessTerminologyEndpoint()
     assert adapter.search_text("diabetes", "condition", mode="hybrid") == []
     assert adapter._consecutive_failures == 1
+
+
+# ----------------------------------------------------------------------
+# QA-D12E-002 (v0.0.26 Domain 12 EXPLORER): the result-CONVERSION loops
+# sat outside the drift-guard try/except — a hostile/ambiguous-shape
+# medterm4ds result (non-dict items, wrong-arity tuple) raised a raw
+# AttributeError OUT of the adapter (no degrade, no breaker accounting),
+# while the HTTP adapter tolerates the same garbage. Contract: hostile
+# result shapes degrade to [] + WARNING + breaker, matching the
+# medterm4ds-drift guard on the CALL itself.
+# ----------------------------------------------------------------------
+
+
+def test_qa_d12e002_expand_intensional_wrong_arity_tuple_degrades(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _install_medterm4ds_stub(monkeypatch)
+    fhir_api = sys.modules["medterm4ds.apps.fhir_api"]
+    fhir_api.expand_intensional_value_set = MagicMock(
+        return_value=([{"system": "SNOMEDCT_US", "code": "1"}], True, "extra")
+    )
+    from fhir4ds.cql.terminology.in_process_adapter import (
+        InProcessTerminologyEndpoint,
+    )
+
+    adapter = InProcessTerminologyEndpoint()
+    assert adapter.expand_intensional({"resourceType": "ValueSet"}) == []
+    assert adapter._consecutive_failures == 1
+
+
+def test_qa_d12e002_expand_intensional_non_dict_items_degrade(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _install_medterm4ds_stub(monkeypatch)
+    fhir_api = sys.modules["medterm4ds.apps.fhir_api"]
+    fhir_api.expand_intensional_value_set = MagicMock(
+        return_value=(["not-a-dict", 42, None], False)
+    )
+    from fhir4ds.cql.terminology.in_process_adapter import (
+        InProcessTerminologyEndpoint,
+    )
+
+    adapter = InProcessTerminologyEndpoint()
+    assert adapter.expand_intensional({"resourceType": "ValueSet"}) == []
+    # Non-dict items are SKIPPED (not a crash); the call still counts
+    # as a success (the endpoint answered; the garbage rows are dropped).
+    assert adapter._consecutive_failures == 0
+
+
+def test_qa_d12e002_expand_non_dict_contains_items_do_not_raise(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _install_medterm4ds_stub(monkeypatch)
+    fhir_api = sys.modules["medterm4ds.apps.fhir_api"]
+    fhir_api.expand_url_pattern = MagicMock(
+        return_value={"expansion": {"contains": [
+            "not-a-dict",
+            {"system": "SNOMEDCT_US", "code": "valid"},
+        ]}}
+    )
+    from fhir4ds.cql.terminology.in_process_adapter import (
+        InProcessTerminologyEndpoint,
+    )
+
+    adapter = InProcessTerminologyEndpoint()
+    refs = adapter.expand("http://snomed.info/sct?fhir_vs")
+    assert [r.code for r in refs] == ["valid"]
+    assert adapter._consecutive_failures == 0
+
+
+def test_qa_d12e002_search_hostile_score_string_degrades(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A search result whose score is a non-float string must not raise
+    past the adapter (HTTP adapter's _extract_score coerces to 0.0)."""
+    engine = _install_medterm4ds_stub(monkeypatch)
+
+    class _R:
+        source = "SNOMEDCT_US"
+        code = "1"
+        display = "d"
+        score = "not-a-float"
+        match_grade = "exact"
+
+    service = MagicMock(name="SearchService")
+    service.ensure_lexical = MagicMock(return_value=True)
+    service.ensure_semantic = MagicMock(return_value=True)
+    service.search = MagicMock(return_value=[_R()])
+    search_mod = types.ModuleType("medterm4ds.services.search")
+    search_mod.get_search_service = MagicMock(return_value=service)
+    monkeypatch.setitem(
+        sys.modules, "medterm4ds.services.search", search_mod
+    )
+    sys.modules["medterm4ds.services"].search = search_mod
+
+    from fhir4ds.cql.terminology.in_process_adapter import (
+        InProcessTerminologyEndpoint,
+    )
+
+    adapter = InProcessTerminologyEndpoint()
+    results = adapter.search_text("diabetes", "condition", mode="hybrid")
+    assert len(results) == 1 and results[0].score == 0.0
+    assert adapter._consecutive_failures == 0

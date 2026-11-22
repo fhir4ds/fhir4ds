@@ -798,3 +798,51 @@ def test_expand_transient_failure_still_counts_toward_breaker():
             adapter.expand("http://example.org/ValueSet/Foo")
     failures, _ = adapter._breaker_snapshot()
     assert failures == 1
+
+
+# ----------------------------------------------------------------------
+# QA-D12E-001 (v0.0.26 Domain 12 EXPLORER): hostile non-string `system`
+# values in an otherwise-valid 200 response must not poison the whole
+# expansion/search. `SystemResolver.normalize` raises TypeError on
+# non-str input, so ONE malformed contains/entry used to crash the
+# entire call (losing every valid code and counting a phantom breaker
+# failure). FHIR `system` is `uri` (string) — non-string entries are
+# malformed and must be SKIPPED, exactly like missing/None systems.
+# ----------------------------------------------------------------------
+
+
+def test_qa_d12e001_expand_skips_non_string_system_entries():
+    """A hostile contains[] entry with a non-string system (int, list)
+    is skipped; valid siblings survive and the breaker stays at 0."""
+    payload = _expand_payload([
+        {"system": "http://snomed.info/sct", "code": "73211009"},
+        {"system": 42, "code": "bad-int"},
+        {"system": ["http://x"], "code": "bad-list"},
+        {"system": True, "code": "bad-bool"},
+    ])
+    response = _MockResponse(payload)
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir")
+    with patch.object(adapter, "_client", return_value=_MockClient(response, [])):
+        refs = adapter.expand("http://example.org/ValueSet/Foo")
+    assert refs == [CodeRef(
+        system="http://snomed.info/sct", code="73211009", display=None
+    )]
+    failures, _ = adapter._breaker_snapshot()
+    assert failures == 0
+
+
+def test_qa_d12e001_search_skips_non_string_system_entries():
+    """Same doctrine on the $search path: one hostile entry resource
+    with a non-string system cannot crash the whole query."""
+    payload = _search_bundle([
+        {"system": 42, "code": "bad"},
+        {"system": {"nested": True}, "code": "bad-dict"},
+        {"system": "http://loinc.org", "code": "718-7", "display": "Hgb"},
+    ])
+    response = _MockResponse(payload)
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir")
+    with patch.object(adapter, "_client", return_value=_MockClient(response, [])):
+        results = adapter.search_text("hemoglobin", "lab")
+    assert [r.code for r in results] == ["718-7"]
+    failures, _ = adapter._breaker_snapshot()
+    assert failures == 0
