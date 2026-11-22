@@ -1878,8 +1878,17 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         evidence is unavailable.  Instead, collect evidence from the retrieve CTEs
         that the definition transitively depends on.  Each evidence fragment is a
         SQL expression that produces a list of evidence structs.
+
+        QA-D9S-001: when a boolean definition in the dependency chain carries
+        ``population_evidence_filters`` for a retrieve CTE (extracted from its
+        correlated EXISTS WHERE), those filters are re-applied to the evidence
+        subquery so evidence cites only resources satisfying the criteria.
+        Filters are gathered transitively through the definition chain; a CTE
+        with filters from more than one definition is left unfiltered
+        (ambiguous which arm's rows are the causal evidence).
         """
         from ..translator.context import RowShape
+        from ..translator.ast_utils import replace_qualified_alias
 
         meta = self._context.definition_meta.get(def_name)
         if meta is None:
@@ -1891,6 +1900,12 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             # Walk output definition → included definitions transitively
             self._resolve_transitive_resource_ctes(def_name, src_ctes, set())
 
+        # QA-D9S-001: the definition's meta carries per-CTE evidence filters
+        # merged transitively at translate time (context.definitions is cleared
+        # before population-SQL generation, so the chain cannot be walked here).
+        eff_filters: dict = dict(getattr(meta, 'population_evidence_filters', {}) or {})
+        eff_filters = {k: v for k, v in eff_filters.items() if k in src_ctes}
+
         retrieve_cte_names = getattr(self._context, '_audit_retrieve_cte_names', set())
         definition_cte_names = getattr(self._context, '_audit_definition_cte_names', set())
         all_audit_cte_names = retrieve_cte_names | definition_cte_names
@@ -1900,6 +1915,26 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             if cte_name in all_audit_cte_names:
                 # CTE has _audit_item: correlated subquery to collect evidence
                 quoted = f'"{cte_name}"'
+                flt = eff_filters.get(cte_name)
+                if flt:
+                    _alias, _conds = flt
+                    if _conds:
+                        # QA-D9S-001: re-apply the definition's EXISTS row
+                        # filters so evidence cites only criteria-satisfying
+                        # resources.
+                        ev_alias = f"__ev_{len(parts)}"
+                        cond_sql = " AND ".join(
+                            f"({replace_qualified_alias(c, _alias, ev_alias).to_sql()})"
+                            for c in _conds
+                        )
+                        parts.append(
+                            f"COALESCE((SELECT LIST({ev_alias}._audit_item) "
+                            f"FROM {quoted} AS {ev_alias} "
+                            f"WHERE {ev_alias}.patient_id = _pt.patient_id "
+                            f"AND {ev_alias}._audit_item IS NOT NULL "
+                            f"AND {cond_sql}), [])"
+                        )
+                        continue
                 parts.append(
                     f"COALESCE((SELECT LIST({quoted}._audit_item) "
                     f"FROM {quoted} WHERE {quoted}.patient_id = _pt.patient_id "

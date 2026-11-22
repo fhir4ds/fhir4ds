@@ -1556,14 +1556,31 @@ class ASTHelpersMixin:
                 # Strategy 1: retrieve/passthrough CTE → LEFT JOIN + _audit_item column.
                 quoted = f'"{cte_name}"'
                 evidence_parts.append(f'{quoted}._audit_item')
+                on_cond = SQLBinaryOp(
+                    operator="=",
+                    left=SQLQualifiedIdentifier(parts=[quoted, "patient_id"]),
+                    right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
+                )
+                # QA-D9S-001: re-apply the definition's EXISTS row filters
+                # (when this definition's correlated WHERE carried them) so
+                # evidence cites only criteria-satisfying resources.
+                _own_meta = self._context.definition_meta.get(name)
+                _flt = (_own_meta and getattr(
+                    _own_meta, 'population_evidence_filters', {}
+                ) or {}).get(cte_name)
+                if _flt:
+                    from ..translator.ast_utils import replace_qualified_alias
+                    _alias, _conds = _flt
+                    for _c in _conds:
+                        on_cond = SQLBinaryOp(
+                            operator="AND",
+                            left=on_cond,
+                            right=replace_qualified_alias(_c, _alias, quoted),
+                        )
                 join_clauses.append(SQLJoin(
                     join_type="LEFT",
                     table=SQLIdentifier(name=cte_name, quoted=True),
-                    on_condition=SQLBinaryOp(
-                        operator="=",
-                        left=SQLQualifiedIdentifier(parts=[quoted, "patient_id"]),
-                        right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
-                    ),
+                    on_condition=on_cond,
                 ))
                 continue
 

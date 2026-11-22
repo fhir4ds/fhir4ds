@@ -1142,3 +1142,112 @@ def replace_qualified_alias(
     # Fallback: return unchanged for any unknown node type
     return expr
 
+
+
+def extract_population_evidence_filters(where_expr) -> dict:
+    """Extract per-retrieve-CTE WHERE filters from a correlated EXISTS chain.
+
+    QA-D9S-001 (v0.0.26 D9 SKEPTIC): audit evidence must cite only resources
+    that satisfy the definition's criteria. Given the correlated WHERE of a
+    boolean definition (``_correlate_exists_ast`` output), extract the
+    row-level filters of each ``EXISTS (SELECT * FROM "CTE" AS A WHERE ...)``
+    conjunct so evidence collection can re-apply them.
+
+    Conservative by design:
+    - only top-level AND conjuncts are examined (an EXISTS under OR cannot be
+      transported soundly);
+    - the subquery must be a plain star-select over one aliased quoted CTE
+      (no JOIN/GROUP BY/HAVING/LIMIT/DISTINCT);
+    - each inner condition must reference ONLY the retrieve alias at the root
+      of every qualified identifier (the patient correlation
+      ``A.patient_id = _pt.patient_id`` is dropped along with any other
+      outer-scope reference) and must not contain subqueries or raw SQL;
+    - a CTE referenced by more than one EXISTS conjunct is skipped entirely
+      (ambiguous which arm's rows are the causal evidence).
+
+    Returns ``{cte_name: (exists_alias, [condition ASTs])}``.
+    """
+    from ..translator.types import (
+        SQLBinaryOp,
+        SQLExists,
+        SQLSubquery,
+        SQLSelect,
+        SQLAlias,
+        SQLIdentifier,
+        SQLQualifiedIdentifier,
+        SQLRaw,
+    )
+
+    def _split_and(expr, acc):
+        if isinstance(expr, SQLBinaryOp) and expr.operator == "AND":
+            _split_and(expr.left, acc)
+            _split_and(expr.right, acc)
+        else:
+            acc.append(expr)
+
+    def _refs_only_alias(node, alias) -> bool:
+        # Every qualified identifier must be rooted at the retrieve alias;
+        # subqueries/raw SQL are rejected (cannot verify their scoping).
+        if isinstance(node, SQLQualifiedIdentifier):
+            return bool(node.parts) and node.parts[0] == alias
+        if isinstance(node, (SQLRaw, SQLExists, SQLSubquery, SQLSelect)):
+            return False
+        for f in getattr(node, "__dataclass_fields__", {}):
+            child = getattr(node, f, None)
+            if isinstance(child, (list, tuple)):
+                for c in child:
+                    if c is not None and not _refs_only_alias(c, alias):
+                        return False
+            elif child is not None and not _refs_only_alias(child, alias):
+                return False
+        return True
+
+    conjuncts: list = []
+    if where_expr is not None:
+        _split_and(where_expr, conjuncts)
+
+    filters: dict = {}
+    seen_ctes: set = set()
+    ambiguous: set = set()
+    for c in conjuncts:
+        if not isinstance(c, SQLExists):
+            continue
+        query = c.subquery.query if isinstance(c.subquery, SQLSubquery) else None
+        if not isinstance(query, SQLSelect):
+            continue
+        cols = query.columns or []
+        if not (
+            len(cols) == 1
+            and isinstance(cols[0], SQLIdentifier)
+            and cols[0].name == "*"
+            and not cols[0].quoted
+        ):
+            continue
+        fc = query.from_clause
+        if not (
+            isinstance(fc, SQLAlias)
+            and isinstance(fc.expr, SQLIdentifier)
+            and fc.expr.quoted
+        ):
+            continue
+        cte_name, alias = fc.expr.name, fc.alias
+        if query.joins or query.group_by or query.having or query.limit or query.distinct:
+            continue
+        if cte_name in seen_ctes:
+            ambiguous.add(cte_name)
+            continue
+        seen_ctes.add(cte_name)
+        inner: list = []
+        if query.where is not None:
+            _split_and(query.where, inner)
+        keep = [ic for ic in inner if _refs_only_alias(ic, alias)]
+        if len(keep) != len(inner):
+            # A condition referenced the outer scope (or carried a subquery);
+            # only the correlation conjunct is expected to do so. Keeping the
+            # alias-only subset is still sound: those filters are necessary
+            # conditions for every matching row.
+            pass
+        filters[cte_name] = (alias, keep)
+    for cte in ambiguous:
+        filters.pop(cte, None)
+    return filters

@@ -743,6 +743,15 @@ class CTEManagerMixin:
                             from ..translator.expressions._query import _demote_audit_struct_to_bool
                             where_expr = _demote_audit_struct_to_bool(where_expr)
 
+                        # QA-D9S-001: capture the EXISTS row filters so audit
+                        # evidence cites only criteria-satisfying resources.
+                        from ..translator.ast_utils import (
+                            extract_population_evidence_filters as _extract_evf,
+                        )
+                        _evf = _extract_evf(where_expr)
+                        if _evf:
+                            meta.population_evidence_filters = _evf
+
                         # Generate a unique pre-compute CTE name
                         # TODO: Replace with AST node substitution
                         safe_name = name.replace('"', '').replace(' ', '_').replace('.', '_')[:60]
@@ -1006,7 +1015,7 @@ class CTEManagerMixin:
 
                 # In POPULATION audit mode, compute source resource CTEs for evidence collection
                 if self._context.audit_mode:
-                    src = self._resolve_source_resource_ctes(sql_ast)
+                    src = self._resolve_source_resource_ctes(sql_ast, target_meta=meta)
                     if src:
                         meta.source_resource_ctes = sorted(src)
 
@@ -1016,6 +1025,20 @@ class CTEManagerMixin:
                 # Audit macros and audit_comparison return structs — extract .result for WHERE clause
                 from ..translator.expressions._query import _demote_audit_struct_to_bool
                 where_expr = _demote_audit_struct_to_bool(where_expr)
+                # QA-D9S-001: capture the EXISTS row filters so audit evidence
+                # cites only criteria-satisfying resources (population mode).
+                # Merge (not assign): _resolve_source_resource_ctes above may
+                # already have merged filters from referenced definitions.
+                if self._context.audit_mode:
+                    from ..translator.ast_utils import (
+                        extract_population_evidence_filters as _extract_evf,
+                    )
+                    _evf = _extract_evf(where_expr)
+                    if _evf:
+                        _cur = getattr(meta, 'population_evidence_filters', None) or {}
+                        for _cte, _flt in _evf.items():
+                            _cur[_cte] = _flt
+                        meta.population_evidence_filters = _cur
                 return SQLSelect(
                     columns=[SQLQualifiedIdentifier(parts=["_pt", "patient_id"])],
                     from_clause=SQLAlias(
@@ -1030,7 +1053,7 @@ class CTEManagerMixin:
                 # In audit mode, compute which RESOURCE_ROWS CTEs this scalar ultimately
                 # depends on so comparison-based boolean definitions can collect evidence.
                 if self._context.audit_mode:
-                    src = self._resolve_source_resource_ctes(sql_ast)
+                    src = self._resolve_source_resource_ctes(sql_ast, target_meta=meta)
                     if src:
                         meta.source_resource_ctes = sorted(src)
                 # Check if we can use LEFT JOIN instead of scalar subquery
@@ -2649,6 +2672,7 @@ class CTEManagerMixin:
         self,
         sql_ast: "SQLExpression",
         _visited: Optional[set] = None,
+        target_meta: Optional["DefinitionMeta"] = None,
     ) -> set:
         """
         Recursively find all RESOURCE_ROWS CTE names that sql_ast transitively depends on.
@@ -2662,9 +2686,34 @@ class CTEManagerMixin:
         Called when building PATIENT_SCALAR non-boolean CTEs so that comparison-based
         boolean definitions higher up can locate evidence via Strategy 3 in
         _collect_audit_evidence_exprs.
+
+        QA-D9S-001: when ``target_meta`` is supplied, population evidence filters
+        recorded on referenced definitions' metas are merged into it (conflicting
+        filters for the same CTE from two different arms are dropped — ambiguous
+        which arm's rows are the causal evidence).  Merging happens here because
+        ``context.definitions`` is cleared before population-SQL generation, so the
+        dependency chain can only be walked at translate time; referenced
+        definitions translate first, so their filters (and everything they merged
+        transitively) are already final.
         """
         if _visited is None:
             _visited = set()
+
+        def _merge_filters(sub_meta) -> None:
+            if target_meta is None or sub_meta is None:
+                return
+            for cte, flt in (getattr(sub_meta, 'population_evidence_filters', {}) or {}).items():
+                cur = getattr(target_meta, 'population_evidence_filters', None) or {}
+                if cte in cur:
+                    if cur[cte] != flt:
+                        # Conflicting filters from two arms: ambiguous — drop.
+                        target_meta.population_evidence_filters = {
+                            k: v for k, v in cur.items() if k != cte
+                        }
+                    continue
+                cur[cte] = flt
+                target_meta.population_evidence_filters = cur
+
 
         retrieve_ctes = getattr(self._context, '_audit_retrieve_cte_names', set())
         definition_ctes = getattr(self._context, '_audit_definition_cte_names', set())
@@ -2680,10 +2729,12 @@ class CTEManagerMixin:
 
             if cte_name in retrieve_ctes or cte_name in definition_ctes:
                 result.add(cte_name)
+                _merge_filters(self._context.definition_meta.get(cte_name))
                 continue
 
             sub_meta = self._context.definition_meta.get(cte_name)
             if sub_meta is not None:
+                _merge_filters(sub_meta)
                 if sub_meta.source_resource_ctes:
                     result.update(sub_meta.source_resource_ctes)
                 elif sub_meta.has_resource:

@@ -375,6 +375,15 @@ class DefinitionMeta:
     # Consumed by _collect_audit_evidence_exprs (Strategy 3) to propagate evidence
     # through scalar intermediaries into comparison-based boolean definitions.
     audit_target_expr: Optional[Any] = None
+    # QA-D9S-001 (v0.0.26 D9 SKEPTIC): per-retrieve-CTE WHERE filters extracted
+    # from this definition's correlated EXISTS chain, so audit evidence cites
+    # only resources that actually satisfy the definition's criteria (e.g.
+    # `P.performed during day of "Measurement Period"`), not every
+    # valueset-matching resource. Maps retrieve CTE name -> (exists_alias,
+    # [condition ASTs referencing that alias]). Populated conservatively: only
+    # single-EXISTS-per-CTE, AND-chain conjuncts whose qualified references are
+    # all rooted at the retrieve alias (no outer-scope references).
+    population_evidence_filters: dict = field(default_factory=dict)
     # Stored audit target SQL expression (SQLSubquery) from First/Last attribution.
     # When a definition like "Lowest Systolic Reading" uses First() on a RESOURCE_ROWS
     # source, the winning resource's ID subquery is stored here so that downstream
