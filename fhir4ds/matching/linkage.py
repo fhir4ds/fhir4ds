@@ -63,6 +63,9 @@ def canonical_pair_key(new_patient_id: str, existing_patient_id: str,
     return f"{a}|{b}"
 
 
+_ANNOTATION_KEYS = ("band=", "model=")
+
+
 def _canonical_evidence(evidence: dict[str, str]) -> dict[str, str]:
     """Direction-independent evidence: sort both sides of fuzzy ``x~y`` pairs.
 
@@ -72,15 +75,35 @@ def _canonical_evidence(evidence: dict[str, str]) -> dict[str, str]:
     depends on which side was the query patient (determinism doctrine) and
     the annotations stay a pair-level suffix rather than migrating onto one
     name token.
+
+    Annotation split peels known ``key=value`` tokens from the RIGHT instead
+    of partitioning on the first ``|``: extractor-normalized values never
+    contain ``|``/``~`` (``norm_text`` strips both), but the public
+    ``match_fields`` field-map surface accepts arbitrary strings, and a
+    value carrying ``|`` must not crash the canonicalization or migrate a
+    name token into the annotation zone (QA-D14E-001).
     """
     canon: dict[str, str] = {}
     for field_name, value in evidence.items():
         if isinstance(value, str) and "~" in value:
-            name_part, sep, annotations = value.partition("|")
-            left, right = name_part.split("~", 1)
-            value = "~".join(sorted((left, right)))
-            if sep:
-                value = f"{value}{sep}{annotations}"
+            parts = value.split("|")
+            annotations: list[str] = []
+            while len(parts) > 1 and parts[-1].startswith(_ANNOTATION_KEYS):
+                annotations.insert(0, parts.pop())
+            name_part = "|".join(parts)
+            if "~" in name_part:
+                # A value containing '~' itself makes the pair split point
+                # ambiguous; try every split and keep the lexicographically
+                # smallest canonical form so both query directions agree.
+                candidates = []
+                for idx in range(len(name_part)):
+                    if name_part[idx] == "~":
+                        left, right = name_part[:idx], name_part[idx + 1:]
+                        candidates.append("~".join(sorted((left, right))))
+                if candidates:
+                    value = min(candidates)
+                    if annotations:
+                        value = "|".join([value, *annotations])
         canon[field_name] = value
     return canon
 
