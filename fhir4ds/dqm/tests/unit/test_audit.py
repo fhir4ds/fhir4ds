@@ -343,3 +343,34 @@ def test_compaction_handles_unhashable_thresholds():
     assert len(grouped) == 1
     assert len(grouped[0]["findings"]) == 2
     assert grouped[0]["threshold"] == {"value": 5, "unit": "mg"}
+
+
+class TestMultiTargetCompactionD9Skeptic:
+    """QA-D9S-003 (v0.0.26 D9 SKEPTIC): count-attribution twins aggregate
+    winning resource ids into one comma-joined target; compaction must split
+    it into one finding per cited resource."""
+
+    def test_comma_joined_multi_target_expands_into_findings(self):
+        ae = AuditEngine()
+        flat = [{
+            "trace": ["TwoExcl"],
+            "operator": ">=",
+            "threshold": "2",
+            "target": "Procedure/a-1,Procedure/a-2,Procedure/a-3",
+        }]
+        out = ae._compact_evidence(flat)
+        assert len(out) == 1
+        targets = [f["target"] for f in out[0]["findings"]]
+        assert targets == ["Procedure/a-1", "Procedure/a-2", "Procedure/a-3"]
+
+    def test_single_target_untouched(self):
+        ae = AuditEngine()
+        flat = [{"trace": [], "operator": "exists", "target": "Observation/o1"}]
+        out = ae._compact_evidence(flat)
+        assert [f["target"] for f in out[0]["findings"]] == ["Observation/o1"]
+
+    def test_non_reference_comma_text_untouched(self):
+        ae = AuditEngine()
+        flat = [{"trace": [], "operator": "=", "target": "a,b"}]
+        out = ae._compact_evidence(flat)
+        assert [f["target"] for f in out[0]["findings"]] == ["a,b"]
