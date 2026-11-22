@@ -146,8 +146,13 @@ ner = [
 ]
 # Agentic interfaces: MCP stdio server (fhir4ds-mcp). Optional per the
 # operations-layer FDD — core install stays dependency-lean.
+# Bounded <2 (QA-D10H-001, 2026-11-22): mcp 2.0 renames
+# mcp.server.fastmcp.FastMCP to mcp.server.mcpserver.MCPServer, so an
+# unbounded extra resolved to mcp 2.3.0 and fhir4ds-mcp died at startup
+# on a clean venv. The server targets the 1.x SDK; raise the bound only
+# together with a port (and a clean-venv entry-point smoke).
 mcp = [
-    "mcp>=1.2",
+    "mcp>=1.2,<2",
 ]
 dev = [
     "pytest>=7.0.0",
