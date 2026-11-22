@@ -1272,10 +1272,12 @@ def extract_population_evidence_filters_from_count(expr) -> dict:
     """
     from ..translator.types import (
         SQLBinaryOp,
+        SQLCast,
         SQLExists,
         SQLFunctionCall,
         SQLSelect,
         SQLSubquery,
+        SQLUnion,
     )
 
     filters: dict = {}
@@ -1284,8 +1286,7 @@ def extract_population_evidence_filters_from_count(expr) -> dict:
 
     def _walk(node):
         if isinstance(node, SQLSelect):
-            row = _count_unnest_row_select(node)
-            if row is not None:
+            for row in _count_unnest_row_selects(node):
                 synth = SQLExists(
                     subquery=SQLSubquery(
                         query=SQLSelect(
@@ -1301,8 +1302,21 @@ def extract_population_evidence_filters_from_count(expr) -> dict:
                         filters.pop(cte, None)
                     else:
                         filters[cte] = flt
-            for child in [node.from_clause, node.where, *(node.columns or [])]:
+            for child in [node.from_clause, node.where,
+                          *(node.columns or []),
+                          *(j.table for j in (node.joins or [])),
+                          *(j.on_condition for j in (node.joins or [])
+                            if j.on_condition is not None)]:
                 _walk(child)
+        elif isinstance(node, SQLUnion):
+            # QA-D9E-001 (v0.0.26 D9 EXPLORER): the union count's retrieve
+            # references live inside the union operands.
+            for operand in (node.operands or []):
+                _walk(operand)
+        elif isinstance(node, SQLCast):
+            # QA-D9E-001: arithmetic-wrapped counts lower through
+            # TRY_CAST(<count subquery> AS DOUBLE).
+            _walk(node.expression)
         elif isinstance(node, SQLBinaryOp):
             _walk(node.left)
             _walk(node.right)
@@ -1318,48 +1332,64 @@ def extract_population_evidence_filters_from_count(expr) -> dict:
         from ..translator.types import SQLIdentifier
         return SQLIdentifier(name="*", quoted=False)
 
-    def _count_unnest_row_select(select):
-        """Return the innermost resource row select of a count-unnest chain."""
+    def _count_unnest_row_selects(select):
+        """Innermost resource row selects of a count-unnest chain.
+
+        Returns a LIST (one entry per union arm — QA-D9E-001 v0.0.26
+        D9 EXPLORER: ``Count((A where ...) union (B where ...))`` lowers to
+        a UNION of unnest selects, one row source per arm).
+        """
         from ..translator.types import SQLAlias, SQLIdentifier
 
         cols = select.columns or []
         if len(cols) != 1:
-            return None
+            return []
         col = cols[0].expr if isinstance(cols[0], SQLAlias) else cols[0]
         if not (isinstance(col, SQLFunctionCall) and col.name.upper() == "COUNT"):
-            return None
+            return []
         fc = select.from_clause
         if not isinstance(fc, SQLAlias):
-            return None
-        inner = fc.expr
-        if isinstance(inner, SQLSubquery):
-            inner = inner.query
-        if not isinstance(inner, SQLSelect):
-            return None
-        icols = inner.columns or []
-        if len(icols) != 1:
-            return None
-        icol = icols[0].expr if isinstance(icols[0], SQLAlias) else icols[0]
-        if not (isinstance(icol, SQLFunctionCall) and icol.name.lower() == "unnest"):
-            return None
-        list_subq = icol.args[0] if icol.args else None
-        if isinstance(list_subq, SQLSubquery):
-            list_subq = list_subq.query
-        if not isinstance(list_subq, SQLSelect):
-            return None
-        lfc = list_subq.from_clause
-        if not isinstance(lfc, SQLAlias):
-            return None
-        row = lfc.expr
-        if isinstance(row, SQLSubquery):
-            row = row.query
-        if not isinstance(row, SQLSelect):
-            return None
-        rfc = row.from_clause
-        if not (isinstance(rfc, SQLAlias) and isinstance(rfc.expr, SQLIdentifier)
-                and rfc.expr.quoted):
-            return None
-        return row
+            return []
+
+        def _row_selects_of_arm(inner):
+            if isinstance(inner, SQLSubquery):
+                inner = inner.query
+            if not isinstance(inner, SQLSelect):
+                return []
+            unnest_col = None
+            for c in (inner.columns or []):
+                ce = c.expr if isinstance(c, SQLAlias) else c
+                if isinstance(ce, SQLFunctionCall) and ce.name.lower() == "unnest":
+                    unnest_col = ce
+                    break
+            if unnest_col is None or not unnest_col.args:
+                return []
+            list_subq = unnest_col.args[0]
+            if isinstance(list_subq, SQLSubquery):
+                list_subq = list_subq.query
+            if not isinstance(list_subq, SQLSelect):
+                return []
+            lfc = list_subq.from_clause
+            if not isinstance(lfc, SQLAlias):
+                return []
+            row = lfc.expr
+            if isinstance(row, SQLSubquery):
+                row = row.query
+            if not isinstance(row, SQLSelect):
+                return []
+            rfc = row.from_clause
+            if not (isinstance(rfc, SQLAlias) and isinstance(rfc.expr, SQLIdentifier)
+                    and rfc.expr.quoted):
+                return []
+            return [row]
+
+        from ..translator.types import SQLUnion
+        if isinstance(fc.expr, SQLUnion):
+            out = []
+            for operand in (fc.expr.operands or []):
+                out.extend(_row_selects_of_arm(operand))
+            return out
+        return _row_selects_of_arm(fc.expr)
 
     _walk(expr)
     return filters

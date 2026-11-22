@@ -486,70 +486,7 @@ class MeasureEvaluator:
             def _population_mask(col_name: str) -> pd.Series:
                 if col_name not in frame.columns:
                     return pd.Series(False, index=frame.index, dtype=bool)
-
-                def _is_true(value: Any) -> bool:
-                    if isinstance(value, dict):
-                        value = value.get("result", False)
-                    if value is None:
-                        return False
-                    if isinstance(value, np.ndarray):
-                        # QA-027 (iter 28): LIVE cells from LIST()-projected
-                        # raw-Boolean defines arrive as object-dtype ndarrays
-                        # of 'true'/'false' strings (pandas wraps the SQL
-                        # list). A singleton boolean-string element carries
-                        # the Boolean RESULT — element truthiness, not
-                        # presence. Other ndarray content (audit struct
-                        # arrays = resource evidence) keeps size>0 presence.
-                        if value.size == 1:
-                            el = value.reshape(-1)[0]
-                            if isinstance(el, str) and el.strip().lower() in (
-                                "true",
-                                "false",
-                            ):
-                                return el.strip().lower() == "true"
-                            if isinstance(el, (bool, np.bool_)):
-                                return bool(el)
-                        return value.size > 0
-                    if isinstance(value, (list, tuple, set)):
-                        # QA-021 (iter 4): LIST()-encoded cells from raw
-                        # Boolean CQL defines carry the Boolean RESULT
-                        # ([true]/[false]); presence-encoding is only valid
-                        # for resource-referencing populations. A list whose
-                        # elements are Booleans must use element truthiness
-                        # so [false] is a definitive negative per FHIR CQM
-                        # membership semantics.
-                        if value and all(
-                            isinstance(el, (bool, np.bool_)) for el in value
-                        ):
-                            return any(bool(el) for el in value)
-                        # QA-027 (iter 28): the LIVE lowering for raw-Boolean
-                        # property defines is from_json(fhirpath(...),
-                        # '["VARCHAR"]') which yields the STRINGS
-                        # 'true'/'false' — the isinstance-bool guard above
-                        # misses them, so ['false'] counted as
-                        # population-positive via presence. Treat
-                        # boolean-string elements with element truthiness
-                        # (case-insensitive, matching the SQL/VARCHAR
-                        # rendering); resource-reference strings and other
-                        # content keep presence semantics.
-                        if value and all(
-                            isinstance(el, str)
-                            and el.strip().lower() in ("true", "false")
-                            for el in value
-                        ):
-                            return any(
-                                el.strip().lower() == "true" for el in value
-                            )
-                        return len(value) > 0
-                    try:
-                        missing = pd.isna(value)
-                        if isinstance(missing, (bool, np.bool_)) and missing:
-                            return False
-                    except (TypeError, ValueError):
-                        pass
-                    return bool(value)
-
-                return frame[col_name].apply(_is_true).astype(bool)
+                return frame[col_name].apply(_audit_cell_is_true).astype(bool)
 
             population_masks = self._population_masks(frame, _population_mask)
             ip_mask = population_masks["initial_population"]
@@ -867,6 +804,19 @@ class MeasureEvaluator:
             raise DQMError("No evaluation has been run yet. Call evaluate() first.")
         if report_type == "individual":
             self._validate_individual_report_frame(df)
+        if report_type == "subject-list":
+            # QA-D9E-001 (v0.0.26 D9 EXPLORER): FHIR requires subject-list
+            # reports to name the members of each population via
+            # population.subjectResults references (R4 MeasureReport: "the
+            # report lists the patients that are members of each
+            # population"). Previously this documented report_type produced
+            # a summary-shaped report with no subjectResults — silently
+            # non-conformant. Members are carried as CONTAINED List
+            # resources referenced by local "#" URIs.
+            if "patient_id" not in df.columns:
+                raise DQMError(
+                    "Subject-list MeasureReport requires a patient_id column."
+                )
 
         summary_input: Any = result if isinstance(result, MeasureResult) else df
         summary = self.summary_report(summary_input)
@@ -886,9 +836,40 @@ class MeasureEvaluator:
                 "Pass period_start/period_end or set the 'Measurement Period' parameter."
             )
 
+        # QA-D9E-001 (v0.0.26 D9 EXPLORER): subject-list members per
+        # population, honoring the same attribution masks as the summary.
+        subject_members: dict[tuple[str, str], list[str]] = {}
+        if report_type == "subject-list":
+            if "_group_id" in df.columns:
+                group_frames = {
+                    gid: df[df["_group_id"] == gid].drop(columns=["_group_id"])
+                    for gid in df["_group_id"].unique()
+                }
+            else:
+                group_frames = {g.group_id: df for g in pop_map.groups}
+            for group in pop_map.groups:
+                gdf = group_frames.get(group.group_id)
+                if gdf is None or gdf.empty:
+                    continue
+                masks = self._population_masks(
+                    gdf, lambda col: gdf[col].apply(_audit_cell_is_true)
+                    if col in gdf.columns
+                    else pd.Series(False, index=gdf.index, dtype=bool)
+                )
+                for pop in group.populations:
+                    col_name = self._col_name(pop.population_code)
+                    mask = masks.get(col_name)
+                    if mask is None:
+                        continue
+                    members = sorted(
+                        str(pid) for pid in gdf.loc[mask, "patient_id"].tolist()
+                    )
+                    subject_members[(group.group_id, col_name)] = members
+
         # Build group populations — use per-group summary when available
         groups = []
-        for group in pop_map.groups:
+        contained_lists: list[dict[str, Any]] = []
+        for gi, group in enumerate(pop_map.groups):
             group_summary = group_summaries.get(group.group_id, summary)
             populations = []
             for pop in group.populations:
@@ -917,6 +898,23 @@ class MeasureEvaluator:
                     support = self._supporting_evidence_extensions(df, pop)
                     if support:
                         population_report.setdefault("extension", []).extend(support)
+                if report_type == "subject-list":
+                    members = subject_members.get((group.group_id, col_name))
+                    if members:
+                        list_id = f"sl-{gi}-{len(populations)}"
+                        contained_lists.append({
+                            "resourceType": "List",
+                            "id": list_id,
+                            "status": "current",
+                            "mode": "working",
+                            "entry": [
+                                {"item": {"reference": f"Patient/{pid}"}}
+                                for pid in members
+                            ],
+                        })
+                        population_report["subjectResults"] = {
+                            "reference": f"#{list_id}"
+                        }
                 populations.append(population_report)
             group_report: dict[str, Any] = {"population": populations}
             if group.source_group_id:
@@ -942,6 +940,8 @@ class MeasureEvaluator:
             "period": {"start": ps, "end": pe},
             "group": groups,
         }
+        if report_type == "subject-list" and contained_lists:
+            report["contained"] = contained_lists
 
         if report_type == "individual":
             report["meta"] = {
@@ -1787,6 +1787,56 @@ class MeasureEvaluator:
 
 
 # ── Module-level helpers ───────────────────────────────────────────────
+
+
+def _audit_cell_is_true(value: Any) -> bool:
+    """Population-cell truthiness (shared by summary masks and subject lists).
+
+    Handles audit structs (dict with ``result``), LIST()-encoded raw-Boolean
+    cells, ndarray-wrapped cells, and NaN/None. Extracted from the former
+    nested ``_is_true`` in ``_summary_for_df`` so ``to_measure_report`` can
+    build subject-list populations with identical semantics
+    (QA-D9E-001, v0.0.26 D9 EXPLORER).
+    """
+    if isinstance(value, dict):
+        value = value.get("result", False)
+    if value is None:
+        return False
+    if isinstance(value, np.ndarray):
+        # QA-027 (iter 28): LIVE cells from LIST()-projected raw-Boolean
+        # defines arrive as object-dtype ndarrays of 'true'/'false' strings
+        # (pandas wraps the SQL list). A singleton boolean-string element
+        # carries the Boolean RESULT — element truthiness, not presence.
+        # Other ndarray content (audit struct arrays = resource evidence)
+        # keeps size>0 presence.
+        if value.size == 1:
+            el = value.reshape(-1)[0]
+            if isinstance(el, str) and el.strip().lower() in ("true", "false"):
+                return el.strip().lower() == "true"
+            if isinstance(el, (bool, np.bool_)):
+                return bool(el)
+        return value.size > 0
+    if isinstance(value, (list, tuple, set)):
+        # QA-021 (iter 4): LIST()-encoded cells from raw Boolean CQL defines
+        # carry the Boolean RESULT ([true]/[false]); presence-encoding is
+        # only valid for resource-referencing populations.
+        if value and all(isinstance(el, (bool, np.bool_)) for el in value):
+            return any(bool(el) for el in value)
+        # QA-027 (iter 28): boolean-STRING elements ('true'/'false') use
+        # element truthiness; resource-reference strings keep presence.
+        if value and all(
+            isinstance(el, str) and el.strip().lower() in ("true", "false")
+            for el in value
+        ):
+            return any(el.strip().lower() == "true" for el in value)
+        return len(value) > 0
+    try:
+        missing = pd.isna(value)
+        if isinstance(missing, (bool, np.bool_)) and missing:
+            return False
+    except (TypeError, ValueError):
+        pass
+    return bool(value)
 
 
 def _to_date_str(val: Any) -> str:

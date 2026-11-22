@@ -421,6 +421,20 @@ def _extract_audit_target(
                 t = _extract_audit_target(col, context)
                 if t is not None:
                     return t
+    if isinstance(expr, SQLBinaryOp):
+        # QA-D9E-001 (v0.0.26 D9 EXPLORER): arithmetic over counts
+        # (`"NumCount" + 0`, `"A" + "B"`) hides the count subqueries from
+        # the synthesized audit-target twin — recurse so the comparison
+        # wrapper and the define-wrap twin storage still name the winning
+        # resources. When BOTH operands carry a twin (count + count),
+        # combine them (concat_ws skips NULLs); the comma-joined form is
+        # split into one finding per resource at compaction (QA-D9S-003).
+        t_left = _extract_audit_target(expr.left, context)
+        t_right = _extract_audit_target(expr.right, context)
+        if t_left is not None and t_right is not None:
+            return SQLFunctionCall(
+                name="concat_ws", args=[SQLLiteral(","), t_left, t_right])
+        return t_left if t_left is not None else t_right
     if isinstance(expr, SQLSelect) and expr.columns:
         for col in expr.columns:
             t = _extract_audit_target(col, context)
@@ -609,8 +623,15 @@ def _synthesize_target_from_count_unnest(select: "SQLSelect"):
     aggregate shape whose list source coerces rows from a resource-bearing
     CTE. Returns the QA-021 single-row comma-joined resource-id subquery, or
     None when the shape does not match.
+
+    QA-D9E-001 (v0.0.26 D9 EXPLORER): also recognizes the UNION-of-unnests
+    FROM (``Count((A where ...) union (B where ...))`` — the canonical eCQM
+    union numerator shape): one row select per union arm, aggregated through
+    a UNION so multi-winner evidence names the winning resources of BOTH
+    arms.
     """
     from ...translator.types import SQLAlias as _SA, SQLSelect as _SS, SQLSubquery as _SQ
+    from ...translator.types import SQLUnion as _SU
 
     def _single_col_expr(sel):
         if not sel or not getattr(sel, "columns", None) or len(sel.columns) != 1:
@@ -622,41 +643,87 @@ def _synthesize_target_from_count_unnest(select: "SQLSelect"):
     col = _single_col_expr(select)
     if not (isinstance(col, SQLFunctionCall) and col.name.upper() == "COUNT"):
         return None
-    # FROM must be (SELECT unnest(X) AS _elem) AS <agg alias>
+    # FROM must be (SELECT unnest(X) AS _elem) AS <agg alias>, or a UNION of
+    # (SELECT patient_id, unnest(X) AS _elem) arms.
     fc = select.from_clause
     if not isinstance(fc, _SA):
         return None
-    unnest_sel = fc.expr if isinstance(fc.expr, (_SQ, _SS)) else None
-    if isinstance(unnest_sel, _SQ):
-        unnest_sel = unnest_sel.query
-    if not isinstance(unnest_sel, _SS):
-        return None
-    unnest_col = _single_col_expr(unnest_sel)
-    if not (isinstance(unnest_col, SQLFunctionCall) and unnest_col.name.lower() == "unnest"):
-        return None
-    list_subq = unnest_col.args[0] if unnest_col.args else None
-    if isinstance(list_subq, _SQ):
-        list_subq = list_subq.query
-    if not isinstance(list_subq, _SS):
-        return None
-    # list subquery FROM (SELECT * AS __cql_list_value FROM <CTE> AS <row> [WHERE w]) AS _cql_list_source
-    lfc = list_subq.from_clause
-    if not isinstance(lfc, _SA):
-        return None
-    row_sel = lfc.expr if isinstance(lfc.expr, (_SQ, _SS)) else None
-    if isinstance(row_sel, _SQ):
-        row_sel = row_sel.query
-    if not isinstance(row_sel, _SS):
-        return None
-    rfc = row_sel.from_clause
-    if not isinstance(rfc, _SA):
-        return None
-    row_alias = rfc.alias
-    from ..placeholder import RetrievePlaceholder as _RP
-    if not isinstance(rfc.expr, (SQLIdentifier, _RP)):
-        return None
-    resource_ref = SQLQualifiedIdentifier(parts=[row_alias, "resource"])
-    id_expr = _build_resource_id_expr(resource_ref)
+
+    def _unnest_row_select(arm):
+        """Row select of one unnest arm, or None."""
+        unnest_col = None
+        for c in (arm.columns or []):
+            ce = c.expr if isinstance(c, SQLAlias) else c
+            if isinstance(ce, SQLFunctionCall) and ce.name.lower() == "unnest":
+                unnest_col = ce
+                break
+        if unnest_col is None or not unnest_col.args:
+            return None
+        list_subq = unnest_col.args[0]
+        if isinstance(list_subq, _SQ):
+            list_subq = list_subq.query
+        if not isinstance(list_subq, _SS):
+            return None
+        lfc = list_subq.from_clause
+        if not isinstance(lfc, _SA):
+            return None
+        row_sel = lfc.expr if isinstance(lfc.expr, (_SQ, _SS)) else None
+        if isinstance(row_sel, _SQ):
+            row_sel = row_sel.query
+        return row_sel if isinstance(row_sel, _SS) else None
+
+    if isinstance(fc.expr, _SU):
+        arm_selects = []
+        for operand in (fc.expr.operands or []):
+            arm = operand.query if isinstance(operand, _SQ) else operand
+            if not isinstance(arm, _SS):
+                return None
+            row_sel = _unnest_row_select(arm)
+            if row_sel is None:
+                return None
+            arm_selects.append(row_sel)
+        if not arm_selects:
+            return None
+    else:
+        unnest_sel = fc.expr if isinstance(fc.expr, (_SQ, _SS)) else None
+        if isinstance(unnest_sel, _SQ):
+            unnest_sel = unnest_sel.query
+        if not isinstance(unnest_sel, _SS):
+            return None
+        row_sel = _unnest_row_select(unnest_sel)
+        if row_sel is None:
+            return None
+        arm_selects = [row_sel]
+
+    def _arm_id_select(row_sel):
+        rfc = row_sel.from_clause
+        if not isinstance(rfc, _SA):
+            return None
+        from ..placeholder import RetrievePlaceholder as _RP
+        if not isinstance(rfc.expr, (SQLIdentifier, _RP)):
+            return None
+        resource_ref = SQLQualifiedIdentifier(parts=[rfc.alias, "resource"])
+        return SQLSelect(
+            columns=[SQLAlias(
+                expr=_build_resource_id_expr(resource_ref), alias="id")],
+            from_clause=rfc,
+            where=row_sel.where,
+            order_by=row_sel.order_by,
+            limit=row_sel.limit,
+        )
+
+    arm_id_selects = []
+    for row_sel in arm_selects:
+        arm_id = _arm_id_select(row_sel)
+        if arm_id is None:
+            return None
+        arm_id_selects.append(arm_id)
+    if len(arm_id_selects) == 1:
+        id_source = SQLSubquery(query=arm_id_selects[0])
+    else:
+        id_source = SQLSubquery(query=_SU(
+            operands=arm_id_selects, distinct=True))
+
     target_select = SQLSelect(
         columns=[
             SQLFunctionCall(
@@ -668,7 +735,10 @@ def _synthesize_target_from_count_unnest(select: "SQLSelect"):
                             SQLFunctionCall(
                                 name="list_sort",
                                 args=[SQLFunctionCall(name="list_distinct", args=[
-                                    SQLFunctionCall(name="list", args=[id_expr]),
+                                    SQLFunctionCall(name="list", args=[
+                                        SQLQualifiedIdentifier(
+                                            parts=["_d9u_tgt", "id"]),
+                                    ]),
                                 ])],
                             ),
                             SQLLiteral(value=","),
@@ -678,10 +748,7 @@ def _synthesize_target_from_count_unnest(select: "SQLSelect"):
                 ],
             ),
         ],
-        from_clause=rfc,
-        where=row_sel.where,
-        order_by=row_sel.order_by,
-        limit=row_sel.limit,
+        from_clause=SQLAlias(expr=id_source, alias="_d9u_tgt"),
     )
     return SQLSubquery(query=target_select)
 
@@ -1919,9 +1986,20 @@ class OperatorsMixin:
         # Extract audit target (winner resource ID) from operands if available.
         # First/Last/Min/Max attach _audit_target on the returned SQLExpression.
         target_expr: SQLExpression = SQLCast(expression=SQLNull(), target_type="VARCHAR")
-        target = _extract_audit_target(left_sql, self.context) or _extract_audit_target(right_sql, self.context)
-        if target is not None:
-            target_expr = target
+        left_target = _extract_audit_target(left_sql, self.context)
+        right_target = _extract_audit_target(right_sql, self.context)
+        # QA-D9E-001 (v0.0.26 D9 EXPLORER): arithmetic between two count
+        # defines (`"A" + "B" >= N`) carries one twin per operand — combine
+        # them (concat_ws skips NULL twins) so evidence names the winners of
+        # BOTH causal arms; the comma-joined form is split into one finding
+        # per resource at compaction (QA-D9S-003).
+        if left_target is not None and right_target is not None:
+            target_expr = SQLFunctionCall(
+                name="concat_ws", args=[SQLLiteral(","), left_target, right_target])
+        else:
+            target = left_target or right_target
+            if target is not None:
+                target_expr = target
 
         return SQLFunctionCall(
             name="audit_comparison",

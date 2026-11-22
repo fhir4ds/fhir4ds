@@ -259,8 +259,47 @@ class CTEManagerMixin:
 
     def _rewrite_cte_references(self, expr: Any, name_map: Dict[str, str]) -> Any:
         """Rewrite CTE references in a SQL AST without round-tripping through SQL strings."""
+        return self._rewrite_cte_references_impl(expr, name_map, None)
+
+    def _rewrite_cte_references_impl(self, expr: Any, name_map: Dict[str, str],
+                                     _bound_aliases) -> Any:
         if expr is None or not name_map:
             return expr
+
+        # QA-D9E-001 (v0.0.26 D9 EXPLORER): a query alias that shadows a
+        # definition name (``exists ([Proc] E where E.performed ...)`` with a
+        # define also named "E") must NOT be rewritten — the alias-qualified
+        # reference is locally bound, not a CTE reference. Collect every
+        # alias bound anywhere in this expression and skip qualified rewrites
+        # whose first part matches one. Unaliased join tables keep their
+        # CTE-name references rewritable (alias=None below).
+        if _bound_aliases is None:
+            _bound_aliases = set()
+
+        def _collect_aliases(node, _depth: int = 0):
+            # Generic walk (QA-D9E-001 doctrine, mirrors
+            # _collect_defined_aliases): iterate dataclass fields so no
+            # select hides behind an unhandled node type.
+            if _depth > 200 or node is None:
+                return
+            if isinstance(node, SQLSelect):
+                fc = node.from_clause
+                if isinstance(fc, SQLAlias) and fc.alias:
+                    _bound_aliases.add(fc.alias)
+                for j in (node.joins or []):
+                    if getattr(j, "alias", None):
+                        _bound_aliases.add(j.alias)
+            elif isinstance(node, SQLJoin):
+                if getattr(node, "alias", None):
+                    _bound_aliases.add(node.alias)
+            for f in getattr(node, "__dataclass_fields__", {}):
+                child = getattr(node, f, None)
+                if isinstance(child, (list, tuple)):
+                    for c in child:
+                        if c is not None:
+                            _collect_aliases(c, _depth + 1)
+                elif child is not None:
+                    _collect_aliases(child, _depth + 1)
 
         from ..translator.types import (
             SQLAlias,
@@ -290,8 +329,11 @@ class CTEManagerMixin:
             SQLWindowFunction,
         )
 
+        if not _bound_aliases:
+            _collect_aliases(expr)
+
         if isinstance(expr, tuple) and len(expr) == 2:
-            return (self._rewrite_cte_references(expr[0], name_map), expr[1])
+            return (self._rewrite_cte_references_impl(expr[0], name_map, _bound_aliases), expr[1])
 
         if isinstance(expr, SQLIdentifier):
             if expr.quoted and expr.name in name_map:
@@ -307,6 +349,10 @@ class CTEManagerMixin:
                 if isinstance(first_part, str) and first_part.startswith('"') and first_part.endswith('"')
                 else first_part
             )
+            if normalized_first in _bound_aliases:
+                # Locally bound alias (query alias shadowing a definition
+                # name) — never a CTE reference.
+                return expr
             replacement = name_map.get(normalized_first)
             if replacement is None:
                 return expr
@@ -320,10 +366,10 @@ class CTEManagerMixin:
         if isinstance(expr, SQLFunctionCall):
             return SQLFunctionCall(
                 name=expr.name,
-                args=[self._rewrite_cte_references(arg, name_map) for arg in expr.args],
+                args=[self._rewrite_cte_references_impl(arg, name_map, _bound_aliases) for arg in expr.args],
                 distinct=expr.distinct,
                 order_by=[
-                    (self._rewrite_cte_references(order_expr, name_map), direction)
+                    (self._rewrite_cte_references_impl(order_expr, name_map, _bound_aliases), direction)
                     for order_expr, direction in expr.order_by
                 ] if expr.order_by else None,
             )
@@ -331,14 +377,14 @@ class CTEManagerMixin:
         if isinstance(expr, SQLBinaryOp):
             return SQLBinaryOp(
                 operator=expr.operator,
-                left=self._rewrite_cte_references(expr.left, name_map),
-                right=self._rewrite_cte_references(expr.right, name_map),
+                left=self._rewrite_cte_references_impl(expr.left, name_map, _bound_aliases),
+                right=self._rewrite_cte_references_impl(expr.right, name_map, _bound_aliases),
             )
 
         if isinstance(expr, SQLUnaryOp):
             return SQLUnaryOp(
                 operator=expr.operator,
-                operand=self._rewrite_cte_references(expr.operand, name_map),
+                operand=self._rewrite_cte_references_impl(expr.operand, name_map, _bound_aliases),
                 prefix=expr.prefix,
             )
 
@@ -346,51 +392,51 @@ class CTEManagerMixin:
             return SQLCase(
                 when_clauses=[
                     (
-                        self._rewrite_cte_references(condition, name_map),
-                        self._rewrite_cte_references(result, name_map),
+                        self._rewrite_cte_references_impl(condition, name_map, _bound_aliases),
+                        self._rewrite_cte_references_impl(result, name_map, _bound_aliases),
                     )
                     for condition, result in expr.when_clauses
                 ],
-                else_clause=self._rewrite_cte_references(expr.else_clause, name_map)
+                else_clause=self._rewrite_cte_references_impl(expr.else_clause, name_map, _bound_aliases)
                 if expr.else_clause else None,
-                operand=self._rewrite_cte_references(expr.operand, name_map)
+                operand=self._rewrite_cte_references_impl(expr.operand, name_map, _bound_aliases)
                 if expr.operand else None,
             )
 
         if isinstance(expr, SQLArray):
             return SQLArray(
-                elements=[self._rewrite_cte_references(elem, name_map) for elem in expr.elements]
+                elements=[self._rewrite_cte_references_impl(elem, name_map, _bound_aliases) for elem in expr.elements]
             )
 
         if isinstance(expr, SQLList):
             return SQLList(
-                items=[self._rewrite_cte_references(item, name_map) for item in expr.items]
+                items=[self._rewrite_cte_references_impl(item, name_map, _bound_aliases) for item in expr.items]
             )
 
         if isinstance(expr, SQLLambda):
             return SQLLambda(
                 param=expr.param,
-                body=self._rewrite_cte_references(expr.body, name_map),
+                body=self._rewrite_cte_references_impl(expr.body, name_map, _bound_aliases),
             )
 
         if isinstance(expr, SQLAlias):
             return SQLAlias(
-                expr=self._rewrite_cte_references(expr.expr, name_map),
+                expr=self._rewrite_cte_references_impl(expr.expr, name_map, _bound_aliases),
                 alias=expr.alias,
                 implicit_alias=expr.implicit_alias,
             )
 
         if isinstance(expr, SQLInterval):
             return SQLInterval(
-                low=self._rewrite_cte_references(expr.low, name_map) if expr.low else None,
-                high=self._rewrite_cte_references(expr.high, name_map) if expr.high else None,
+                low=self._rewrite_cte_references_impl(expr.low, name_map, _bound_aliases) if expr.low else None,
+                high=self._rewrite_cte_references_impl(expr.high, name_map, _bound_aliases) if expr.high else None,
                 low_closed=expr.low_closed,
                 high_closed=expr.high_closed,
             )
 
         if isinstance(expr, SQLCast):
             return SQLCast(
-                expression=self._rewrite_cte_references(expr.expression, name_map),
+                expression=self._rewrite_cte_references_impl(expr.expression, name_map, _bound_aliases),
                 target_type=expr.target_type,
                 try_cast=expr.try_cast,
             )
@@ -398,34 +444,34 @@ class CTEManagerMixin:
         if isinstance(expr, SQLJoin):
             return SQLJoin(
                 join_type=expr.join_type,
-                table=self._rewrite_cte_references(expr.table, name_map),
+                table=self._rewrite_cte_references_impl(expr.table, name_map, _bound_aliases),
                 alias=expr.alias,
-                on_condition=self._rewrite_cte_references(expr.on_condition, name_map)
+                on_condition=self._rewrite_cte_references_impl(expr.on_condition, name_map, _bound_aliases)
                 if expr.on_condition else None,
             )
 
         if isinstance(expr, SQLSelect):
             return SQLSelect(
                 columns=[
-                    self._rewrite_cte_references(col, name_map)
+                    self._rewrite_cte_references_impl(col, name_map, _bound_aliases)
                     for col in (expr.columns or [])
                 ],
-                from_clause=self._rewrite_cte_references(expr.from_clause, name_map)
+                from_clause=self._rewrite_cte_references_impl(expr.from_clause, name_map, _bound_aliases)
                 if expr.from_clause else None,
                 joins=[
-                    self._rewrite_cte_references(join, name_map)
+                    self._rewrite_cte_references_impl(join, name_map, _bound_aliases)
                     for join in (expr.joins or [])
                 ],
-                where=self._rewrite_cte_references(expr.where, name_map)
+                where=self._rewrite_cte_references_impl(expr.where, name_map, _bound_aliases)
                 if expr.where else None,
                 group_by=[
-                    self._rewrite_cte_references(group_expr, name_map)
+                    self._rewrite_cte_references_impl(group_expr, name_map, _bound_aliases)
                     for group_expr in expr.group_by
                 ] if expr.group_by else None,
-                having=self._rewrite_cte_references(expr.having, name_map)
+                having=self._rewrite_cte_references_impl(expr.having, name_map, _bound_aliases)
                 if expr.having else None,
                 order_by=[
-                    (self._rewrite_cte_references(order_expr, name_map), direction)
+                    (self._rewrite_cte_references_impl(order_expr, name_map, _bound_aliases), direction)
                     for order_expr, direction in expr.order_by
                 ] if expr.order_by else None,
                 limit=expr.limit,
@@ -435,47 +481,47 @@ class CTEManagerMixin:
 
         if isinstance(expr, SQLSubquery):
             return SQLSubquery(
-                query=self._rewrite_cte_references(expr.query, name_map),
+                query=self._rewrite_cte_references_impl(expr.query, name_map, _bound_aliases),
             )
 
         if isinstance(expr, SQLExists):
             return SQLExists(
-                subquery=self._rewrite_cte_references(expr.subquery, name_map),
+                subquery=self._rewrite_cte_references_impl(expr.subquery, name_map, _bound_aliases),
             )
 
         if isinstance(expr, SQLUnion):
             return SQLUnion(
-                operands=[self._rewrite_cte_references(op, name_map) for op in expr.operands],
+                operands=[self._rewrite_cte_references_impl(op, name_map, _bound_aliases) for op in expr.operands],
                 distinct=expr.distinct,
             )
 
         if isinstance(expr, SQLIntersect):
             return SQLIntersect(
-                operands=[self._rewrite_cte_references(op, name_map) for op in expr.operands],
+                operands=[self._rewrite_cte_references_impl(op, name_map, _bound_aliases) for op in expr.operands],
             )
 
         if isinstance(expr, SQLExcept):
             return SQLExcept(
-                operands=[self._rewrite_cte_references(op, name_map) for op in expr.operands],
+                operands=[self._rewrite_cte_references_impl(op, name_map, _bound_aliases) for op in expr.operands],
             )
 
         if isinstance(expr, SQLExtract):
             return SQLExtract(
                 extract_field=expr.extract_field,
-                source=self._rewrite_cte_references(expr.source, name_map)
+                source=self._rewrite_cte_references_impl(expr.source, name_map, _bound_aliases)
                 if expr.source else None,
             )
 
         if isinstance(expr, SQLNamedArg):
             return SQLNamedArg(
                 name=expr.name,
-                value=self._rewrite_cte_references(expr.value, name_map)
+                value=self._rewrite_cte_references_impl(expr.value, name_map, _bound_aliases)
                 if expr.value else None,
             )
 
         if isinstance(expr, SQLStructFieldAccess):
             return SQLStructFieldAccess(
-                expr=self._rewrite_cte_references(expr.expr, name_map),
+                expr=self._rewrite_cte_references_impl(expr.expr, name_map, _bound_aliases),
                 field_name=expr.field_name,
             )
 
@@ -483,15 +529,15 @@ class CTEManagerMixin:
             return SQLWindowFunction(
                 function=expr.function,
                 function_args=[
-                    self._rewrite_cte_references(arg, name_map)
+                    self._rewrite_cte_references_impl(arg, name_map, _bound_aliases)
                     for arg in expr.function_args
                 ],
                 partition_by=[
-                    self._rewrite_cte_references(partition_expr, name_map)
+                    self._rewrite_cte_references_impl(partition_expr, name_map, _bound_aliases)
                     for partition_expr in expr.partition_by
                 ],
                 order_by=[
-                    (self._rewrite_cte_references(order_expr, name_map), direction)
+                    (self._rewrite_cte_references_impl(order_expr, name_map, _bound_aliases), direction)
                     for order_expr, direction in expr.order_by
                 ],
                 frame_clause=expr.frame_clause,
@@ -499,18 +545,18 @@ class CTEManagerMixin:
 
         if isinstance(expr, SQLEvidenceItem):
             return SQLEvidenceItem(
-                target=self._rewrite_cte_references(expr.target, name_map),
-                attribute=self._rewrite_cte_references(expr.attribute, name_map),
-                value=self._rewrite_cte_references(expr.value, name_map),
+                target=self._rewrite_cte_references_impl(expr.target, name_map, _bound_aliases),
+                attribute=self._rewrite_cte_references_impl(expr.attribute, name_map, _bound_aliases),
+                value=self._rewrite_cte_references_impl(expr.value, name_map, _bound_aliases),
                 operator_str=expr.operator_str,
-                threshold=self._rewrite_cte_references(expr.threshold, name_map),
+                threshold=self._rewrite_cte_references_impl(expr.threshold, name_map, _bound_aliases),
                 trace=list(expr.trace),
             )
 
         if isinstance(expr, SQLAuditStruct):
             return SQLAuditStruct(
-                result_expr=self._rewrite_cte_references(expr.result_expr, name_map),
-                evidence_expr=self._rewrite_cte_references(expr.evidence_expr, name_map),
+                result_expr=self._rewrite_cte_references_impl(expr.result_expr, name_map, _bound_aliases),
+                evidence_expr=self._rewrite_cte_references_impl(expr.evidence_expr, name_map, _bound_aliases),
             )
 
         return expr
@@ -1059,6 +1105,22 @@ class CTEManagerMixin:
                     if _evf:
                         _cur = getattr(meta, 'population_evidence_filters', None) or {}
                         for _cte, _flt in _evf.items():
+                            _cur[_cte] = _flt
+                        meta.population_evidence_filters = _cur
+                    # QA-D9E-001 (v0.0.26 D9 EXPLORER): a Boolean define can
+                    # carry its COUNT inline under arithmetic
+                    # (`(Count(...) + 0) >= 1`) — the WHERE keeps the count
+                    # subquery (never converted to EXISTS), so the EXISTS
+                    # extractor finds nothing. Reuse the count-unnest
+                    # extractor so the criteria filters still apply and
+                    # evidence cites only criteria-satisfying resources.
+                    from ..translator.ast_utils import (
+                        extract_population_evidence_filters_from_count as _extract_cnt_b,
+                    )
+                    _cnt_filters = _extract_cnt_b(where_expr)
+                    if _cnt_filters:
+                        _cur = getattr(meta, 'population_evidence_filters', None) or {}
+                        for _cte, _flt in _cnt_filters.items():
                             _cur[_cte] = _flt
                         meta.population_evidence_filters = _cur
                 return SQLSelect(

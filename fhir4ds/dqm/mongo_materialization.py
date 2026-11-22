@@ -1845,13 +1845,13 @@ def _compact_row(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def _jsonable(value: Any) -> Any:
-    if isinstance(value, datetime):
-        return value.isoformat()
-    # QA-D9H-002 (v0.0.26 D9 HISTORIAN): mirror the hapi twin — pandas NaN
-    # (missing cells in multi-group frames and absent columns) must become
-    # None, not float('nan'). NaN flows into result_json documents (BSON
-    # NaN) and into json.dumps(audit_json) where it renders as the invalid
-    # JSON token `NaN`.
+    # QA-D9E-001 (v0.0.26 D9 EXPLORER): mirror the hapi twin's ORDER — the
+    # pandas isna guard must run BEFORE the datetime branch (pd.NaT IS a
+    # datetime subclass, so isoformat() rendered the string 'NaT' instead
+    # of None), and datetimes render via str() for byte-identical compact
+    # rows across the two backends.
+    if value is None:
+        return None
     try:
         import pandas as pd
     except ImportError:  # pragma: no cover
@@ -1862,6 +1862,13 @@ def _jsonable(value: Any) -> Any:
                 return None
         except (TypeError, ValueError):
             pass
+    if isinstance(value, datetime):
+        return str(value)
+    # QA-D9H-002 (v0.0.26 D9 HISTORIAN): mirror the hapi twin — pandas NaN
+    # (missing cells in multi-group frames and absent columns) must become
+    # None, not float('nan'). NaN flows into result_json documents (BSON
+    # NaN) and into json.dumps(audit_json) where it renders as the invalid
+    # JSON token `NaN`.
     if hasattr(value, "item"):
         try:
             return value.item()

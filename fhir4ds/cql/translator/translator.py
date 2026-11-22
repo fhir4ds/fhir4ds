@@ -2322,6 +2322,29 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             try:
                 from ..parser.ast_nodes import Identifier as _AstIdentifier
                 _refs: set = set()
+                # QA-D9E-001 (v0.0.26 D9 EXPLORER): query-source aliases are
+                # Identifier nodes too — a define named like a query alias
+                # would otherwise be recorded as "referenced" and its
+                # evidence filters/sources merged into THIS definition
+                # (wrong attribution). Collect bound alias names first and
+                # exclude them; over-exclusion only degrades evidence
+                # conservatively.
+                _bound_aliases: set = set()
+
+                def _collect_aliases(node):
+                    for cls_name in ("QuerySource", "AliasedQuerySource"):
+                        if type(node).__name__ == cls_name:
+                            alias = getattr(node, "alias", None)
+                            if alias:
+                                _bound_aliases.add(alias)
+                    for f in getattr(node, "__dataclass_fields__", {}):
+                        child = getattr(node, f, None)
+                        if isinstance(child, (list, tuple)):
+                            for c in child:
+                                if c is not None:
+                                    _collect_aliases(c)
+                        elif child is not None:
+                            _collect_aliases(child)
 
                 def _walk_ast(node):
                     if isinstance(node, _AstIdentifier):
@@ -2335,9 +2358,12 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                         elif child is not None:
                             _walk_ast(child)
 
+                _collect_aliases(definition.expression)
                 _walk_ast(definition.expression)
                 meta.referenced_definitions = sorted(
-                    r for r in _refs if r in self._context.definition_meta
+                    r for r in _refs
+                    if r in self._context.definition_meta
+                    and r not in _bound_aliases
                 )
             except Exception:  # noqa: BLE001 — metadata is best-effort
                 meta.referenced_definitions = []
