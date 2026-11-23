@@ -86,7 +86,18 @@ result = run_dedup(resources, run_id="dedup-002", code_fallback="audit_only")
 
 Encounters and the identity resources of §5 are the resource types with **no code to put in an event key** — they get their own strategies, chosen by what *can* be compared: Encounters by time, identity resources by identifiers.
 
-Encounters are deduplicated by **temporal overlap**, not codes — one visit split into overlapping segments. The pass is grouping-first (a patient-membership map from [patient matching](/docs/user-guide/matching/patient-matching/) can be supplied so cross-patient encounters can never merge), then merges edges under a scoring table over overlap/adjacency signals with EMER (emergency-department) hard negatives as vetoes:
+Encounters are deduplicated by **temporal overlap**, not codes — one visit split into overlapping segments. As with patient matching, a patient-membership map from [patient matching](/docs/user-guide/matching/patient-matching/) can be supplied so cross-patient encounters can never merge.
+
+Overlap alone merges (≥80% shared period, or a ≤15-minute handoff gap on the same day); beyond the temporal core, the scorer adds **identity-style corroboration from the encounter's own references** — a shared practitioner participant, the same organization (`serviceProvider`), or a shared location each add evidence (references compared by their trailing id, the same convention used throughout matching):
+
+| Signal | Contribution |
+|---|---|
+| Period overlap ≥ 80% | merges on its own (temporal core) |
+| Handoff gap ≤ 15 min, same local day | temporal core (ED-to-admit) |
+| ≥ 1 shared practitioner / same organization / shared location | corroborating evidence |
+| Identical class, service type, or shared reason codes | minor corroboration |
+
+**Known-distinct guard:** two emergency-department visits for the same patient with disjoint periods ≥ 2 hours apart are treated as genuinely separate visits — they never merge directly, *and* a chain of merges that would indirectly pull them into one cluster is refused. Refused merges are recorded for review (`encounter_edge_refused` curation entries) rather than silently dropped.
 
 ```python
 from fhir4ds.dedup import run_encounter_dedup
@@ -94,8 +105,6 @@ from fhir4ds.dedup import run_encounter_dedup
 result = run_encounter_dedup(encounters, run_id="enc-001")
 result.stats   # clusters, refused edges, merges
 ```
-
-**Single-encounter semantics (CR-003):** a merge edge whose admission would place a vetoed pair inside one cluster is refused (edges admitted in sorted order — deterministic) and audit-recorded as a `encounter_edge_refused` curation entry. Direct vetoes and veto-free clusters are unaffected.
 
 ## 5. Non-coded identity resources (Practitioner, Organization, Location)
 
@@ -126,9 +135,9 @@ report.counts   # audited matches -> one FHIR Linkage per matched pair
 
 Three design rules distinguish entity matching from patient matching:
 
-- **Thresholds are ENFORCED (CR-002).** Each rule set carries an approval budget — practitioners and organizations **1e-8**, locations **1e-6** (identity resources tolerate a higher collision budget than patient EMPI merges). The engine refuses a candidate whose rule P(collision) exceeds the budget *unless* exactly-agreeing corroborating fields bring the combined evidence (rule P × field u-probabilities) back under it. Patient matching stays un-enforced and byte-identical.
+- **A strict evidence bar is enforced.** Unlike patient matching — where a borderline link is left for review — entity matching *refuses* a candidate unless the evidence clears a fixed bar: either a strong identifier agrees on its own (an NPI, a shared phone-plus-name-plus-address combination), or a weaker match is backed by additional fields that agree exactly. The bar is set per entity type (strictest for practitioners and organizations, slightly looser for locations) and is deliberately higher than what it takes to merge two records for the *same* patient — mis-merging two different clinics or providers is costlier than a missed duplicate.
 - **Name-only NEVER links an entity.** A surname is shared across one facility's practitioners and every city has an "Imaging Center" — every rule anchors on at least one hard identifier (NPI, phone, address, email, geo coordinates).
-- **Hard anchors fire alone when unique.** Practitioner rule P1 is NPI-only (NPIs are issued-unique, P ≈ 1e-9); organization/locations anchor on phone/address/geo combinations with fuzzy-agreement and sibling guards.
+- **Strong identifiers link on their own.** Two practitioners sharing an NPI are the same person — NPIs are issued unique, so no further agreement is needed. Organization and location rules combine phone, address and geo-coordinate anchors, with fuzzy agreement on names and guards against near-miss look-alikes.
 
 The O5 organization rule (shared chain-pharmacy phone pools) ships **disabled** — enable only if measurement on real corpora shows recall loss.
 
