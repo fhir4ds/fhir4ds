@@ -38,7 +38,12 @@ dependencies = [
     # fhir4ds/tests/test_duckdb2_dual_support.py and
     # fhir4ds/tests/test_packaging.py.
     "duckdb>=1.5.5,<2; python_version < '3.11'",
-    "duckdb>=2.0.0,<2.1; python_version >= '3.11'",
+    # Capped below 2.0.1: DuckDB enforces an exact version match when
+    # loading extension binaries, and the bundled .duckdb2_extension slots
+    # are built against v2.0.0. duckdb 2.0.1 (2026-11-20) rejects them,
+    # silently forcing the (much slower) Python fallback. Lift the cap when
+    # per-patch 2.0.x slots exist.
+    "duckdb>=2.0.0,<2.0.1; python_version >= '3.11'",
     # duckdb 2.x Python client requires pytz for TIMESTAMPTZ rendering;
     # 2.x wheels are cp311+ so the marker scopes it to exactly those.
     "pytz; python_version >= '3.11'",
@@ -68,7 +73,12 @@ duckdb1 = [
     "duckdb>=1.5.5,<2",
 ]
 duckdb2 = [
-    "duckdb>=2.0.0,<2.1; python_version >= '3.11'",
+    # Capped below 2.0.1: DuckDB enforces an exact version match when
+    # loading extension binaries, and the bundled .duckdb2_extension slots
+    # are built against v2.0.0. duckdb 2.0.1 (2026-11-20) rejects them,
+    # silently forcing the (much slower) Python fallback. Lift the cap when
+    # per-patch 2.0.x slots exist.
+    "duckdb>=2.0.0,<2.0.1; python_version >= '3.11'",
 ]
 # FHIR R4 / SQL-on-FHIR HTTP surface (``fhir4ds serve``).
 # The engine already depends on duckdb + pyarrow, so parquet output needs

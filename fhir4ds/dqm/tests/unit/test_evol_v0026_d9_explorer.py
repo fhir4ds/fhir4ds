@@ -295,7 +295,9 @@ def test_subject_list_requires_patient_column(con):
         populations={}, parameters={"Measurement Period": ("2026-01-01", "2026-12-31")},
         measure_url="u", pop_map=None)
     mr.pop_map = None
-    with pytest.raises(Exception):
+    from fhir4ds.dqm.errors import DQMError
+
+    with pytest.raises(DQMError, match="No evaluation has been run yet"):
         ev.to_measure_report(mr, report_type="subject-list")
 
 
@@ -303,11 +305,12 @@ def test_mongo_jsonable_nat_renders_none_not_nat_string():
     """QA-D9E-002 twin: pandas NaT is a datetime SUBCLASS, so the datetime
     isoformat/str branch must run AFTER the isna guard — NaT renders None,
     never the string 'NaT'; datetimes render identically in both backends."""
-    import pandas as pd
     import numpy as np
-    from fhir4ds.dqm.mongo_materialization import _jsonable
+    import pandas as pd
+
     from fhir4ds.dqm.hapi_materialization import _compact_row as _hapi_row
     from fhir4ds.dqm.mongo_materialization import _compact_row as _mongo_row
+    from fhir4ds.dqm.mongo_materialization import _jsonable
     for nat in (pd.NaT, np.datetime64("NaT")):
         assert _jsonable(nat) is None, nat
     ts = pd.Timestamp("2026-03-10T08:30:00")

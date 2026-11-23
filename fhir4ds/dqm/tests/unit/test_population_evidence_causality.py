@@ -15,7 +15,6 @@ import json
 
 import pytest
 
-
 CQL = """library D9S version '1.0.0'
 using FHIR version '4.0.1'
 valueset "Enc VS": 'http://example.org/ValueSet/enc'

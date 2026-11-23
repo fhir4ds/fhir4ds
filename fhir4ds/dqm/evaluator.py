@@ -852,9 +852,9 @@ class MeasureEvaluator:
                 if gdf is None or gdf.empty:
                     continue
                 masks = self._population_masks(
-                    gdf, lambda col: gdf[col].apply(_audit_cell_is_true)
-                    if col in gdf.columns
-                    else pd.Series(False, index=gdf.index, dtype=bool)
+                    gdf, lambda col, _gdf=gdf: _gdf[col].apply(_audit_cell_is_true)
+                    if col in _gdf.columns
+                    else pd.Series(False, index=_gdf.index, dtype=bool)
                 )
                 for pop in group.populations:
                     col_name = self._col_name(pop.population_code)

@@ -32,7 +32,7 @@ recorded), **known issues**, and **upgrade** notes.
   statements, and terminology SAMs that resolve against the local ValueSet
   cache or a terminology endpoint and return an explicit
   *could not assess* when neither is available. See the new
-  [PIQI guide](/docs/user-guide/quality/piqi).
+  [PIQI guide](/docs/user-guide/quality/piqi/).
 - **Realism harness** (`fhir4ds.realism`). Deterministic corpus generation
   for testing identity pipelines at scale: realisticized synthetic
   populations, seeded corruption profiles (name typos, transliterations,
@@ -46,13 +46,13 @@ recorded), **known issues**, and **upgrade** notes.
   **precision at 1.0000 with zero new false positives** (recall
   0.9380 → 0.9394). Rules are additive and degrade to exact Category-1
   behavior when the artifact is absent. See the new
-  [Patient Matching guide](/docs/user-guide/matching/patient-matching).
+  [Patient Matching guide](/docs/user-guide/matching/patient-matching/).
 - **Matching & deduplication hardened**: enforced approval thresholds with
   independent-field corroboration for identity entities (CR-002),
   veto-constrained single-encounter merging (CR-003), the three-tier
   code-fallback cascade with a deterministic curation queue, duplicate-id
   corpus collapse, and falsy-master cross-patient merge guards. See the new
-  [Resource Dedup guide](/docs/user-guide/matching/resource-dedup).
+  [Resource Dedup guide](/docs/user-guide/matching/resource-dedup/).
 - **~75 QA fixes across the stack** from the 15-domain × 3-personality
   evolution campaign (1 CRITICAL: an exponential scan in
   `fhirpath_is_valid` that could hang DuckDB on ≥20-operator arithmetic

@@ -129,10 +129,10 @@ rows = run_terminology_sam(
 rows[0]["result"] is COULD_NOT_ASSESS   # True when unresolvable
 ```
 
-Pass `endpoint=` (a `TerminologyEndpoint`) to consult a server — see the [Terminology Service guide](/docs/user-guide/terminology/terminology-service).
+Pass `endpoint=` (a `TerminologyEndpoint`) to consult a server — see the [Terminology Service guide](/docs/user-guide/terminology/terminology-service/).
 
 ## 7. Where to go next
 
 - [PIQI API Reference](/docs/api-reference/piqi/) — scorecard facade, authoring builders, registry and terminology surfaces.
-- [ViewDefinition Modeling](/docs/user-guide/modeling/viewdef) — the flattening layer the PIQI views are written against.
-- [Digital Quality Measures](/docs/user-guide/quality/dqm) — CQL-based *measure* evaluation, for when the question is population membership rather than data quality.
+- [ViewDefinition Modeling](/docs/user-guide/modeling/viewdef/) — the flattening layer the PIQI views are written against.
+- [Digital Quality Measures](/docs/user-guide/quality/dqm/) — CQL-based *measure* evaluation, for when the question is population membership rather than data quality.

@@ -176,5 +176,5 @@ See the [Matching API Reference](/docs/api-reference/matching/) for the full sur
 
 ## 8. Where to go next
 
-- [Resource Deduplication](/docs/user-guide/matching/resource-dedup) — temporal duplicate resources (Observations, Conditions, Encounters) inside one patient's record.
-- [Terminology Service](/docs/user-guide/terminology/terminology-service) — the code-system knowledge that dedup's canonical tier resolves against.
+- [Resource Deduplication](/docs/user-guide/matching/resource-dedup/) — temporal duplicate resources (Observations, Conditions, Encounters) inside one patient's record.
+- [Terminology Service](/docs/user-guide/terminology/terminology-service/) — the code-system knowledge that dedup's canonical tier resolves against.

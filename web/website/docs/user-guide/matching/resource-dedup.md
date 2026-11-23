@@ -80,7 +80,7 @@ result = run_dedup(resources, run_id="dedup-002", code_fallback="audit_only")
 
 ## 4. The Encounter strategy
 
-Encounters are deduplicated by **temporal overlap**, not codes — one visit split into overlapping segments. The pass is grouping-first (a patient-membership map from [patient matching](/docs/user-guide/matching/patient-matching) can be supplied so cross-patient encounters can never merge), then merges edges under a scoring table over overlap/adjacency signals with EMER (emergency-department) hard negatives as vetoes:
+Encounters are deduplicated by **temporal overlap**, not codes — one visit split into overlapping segments. The pass is grouping-first (a patient-membership map from [patient matching](/docs/user-guide/matching/patient-matching/) can be supplied so cross-patient encounters can never merge), then merges edges under a scoring table over overlap/adjacency signals with EMER (emergency-department) hard negatives as vetoes:
 
 ```python
 from fhir4ds.dedup import run_encounter_dedup
@@ -136,5 +136,5 @@ Pass `include_singletons_in_audit=True` to also record one row per non-duplicate
 
 ## 8. Where to go next
 
-- [Patient Matching](/docs/user-guide/matching/patient-matching) — the identity layer that groups records into individuals before resource dedup runs.
+- [Patient Matching](/docs/user-guide/matching/patient-matching/) — the identity layer that groups records into individuals before resource dedup runs.
 - [Dedup API Reference](/docs/api-reference/dedup/) — normalizers, partition/escalate primitives, and the full runner surface.
