@@ -24,6 +24,8 @@ pip install fhir4ds-v2
 
 The main pass (`run_dedup`) covers the coded resource types — Observation, Condition, Procedure, Immunization, MedicationRequest and peers. Two resources are duplicates when their **code identity** and **temporal signature** agree:
 
+**Medication references are resolved when present.** MedicationRequest, MedicationDispense and MedicationAdministration may carry `medication[x]` as a `medicationReference` instead of an inline code. The resolver works strictly within the input corpus, contained-first (`#<id>` fragments against the same resource's `contained` list — the dominant real-world pattern), then corpus-wide (`Medication/<id>`, anchored-tail matched, `_history`-stripped). A resolved Medication's codings join the resource's key with provenance `reference_resolved` (a hybrid-tier participant — see §3). An unresolved reference never unions: the record stays a singleton and lands in the curation queue as `unresolved_medication_reference`. Immunization carries its `vaccineCode` inline, so no resolution applies.
+
 ```python
 from fhir4ds.dedup import run_dedup
 
@@ -68,9 +70,9 @@ When two resources in the same patient/temporal/value bucket carry *disjoint* co
 
 | Priority | Tier | Rule | Merge provenance |
 |---|---|---|---|
-| **1** | **Canonical** | Literal `(system, code)` set intersection. Intersecting code sets never fall through to lower tiers. | `canonical` |
-| **2** | **Hybrid search** | The resource's display text is resolved against the bundled concept index (LOINC, SNOMED, RxNorm, CVX — built deterministically from the expanded ValueSet fixtures) using hybrid retrieval = **BM25 + character-trigram fuzzy**, no model artifact. A *confident* resolution (top-1 score at or above the threshold AND a clear margin over the runner-up) assigns the resolved canonical concept to the resource's key — so a LOINC/SNOMED twin pair merges through ordinary partitioning. Unconfident resolution falls through. | `hybrid` (+ index version, score, and margin in the audit trail) |
-| **3** | **Text (last)** | Still-unresolved resources key on the conservative normalized display text (casefold, NFKC, punctuation, UCUM unit aliases — no stemming, no synonyms: "Hemoglobin" must never bucket with "Hemoglobin A1c"). Resolved concepts **outrank** display equality: equal text with different confident canonical keys never merges. | `text` |
+| **1** | Canonical | Literal `(system, code)` set intersection. Intersecting code sets never fall through to lower tiers. | `canonical` |
+| **2** | Hybrid | The resource's display text is resolved against the bundled concept index (LOINC, SNOMED, RxNorm, CVX — built deterministically from the expanded ValueSet fixtures) using hybrid retrieval = **BM25 + character-trigram fuzzy**, no model artifact. A *confident* resolution (top-1 score at or above the threshold AND a clear margin over the runner-up) assigns the resolved canonical concept to the resource's key — so a LOINC/SNOMED twin pair merges through ordinary partitioning. Unconfident resolution falls through. | `hybrid` (+ index version, score, and margin in the audit trail) |
+| **3** | Text | Still-unresolved resources key on the conservative normalized display text (casefold, NFKC, punctuation, UCUM unit aliases — no stemming, no synonyms: "Hemoglobin" must never bucket with "Hemoglobin A1c"). Resolved concepts **outrank** display equality: equal text with different confident canonical keys never merges. | `text` |
 
 Medication resources whose concept arrives by **reference resolution** (a `medicationReference` dereferenced to a `Medication.code`) participate through the hybrid tier; `code_fallback="off"` restricts matching to the canonical tier only while still counting reference-resolved records.
 
@@ -81,6 +83,8 @@ result = run_dedup(resources, run_id="dedup-002", code_fallback="audit_only")
 ```
 
 ## 4. The Encounter strategy
+
+Encounters and the identity resources of §5 are the resource types with **no code to put in an event key** — they get their own strategies, chosen by what *can* be compared: Encounters by time, identity resources by identifiers.
 
 Encounters are deduplicated by **temporal overlap**, not codes — one visit split into overlapping segments. The pass is grouping-first (a patient-membership map from [patient matching](/docs/user-guide/matching/patient-matching/) can be supplied so cross-patient encounters can never merge), then merges edges under a scoring table over overlap/adjacency signals with EMER (emergency-department) hard negatives as vetoes:
 
