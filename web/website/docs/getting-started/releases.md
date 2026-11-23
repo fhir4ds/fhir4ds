@@ -52,7 +52,7 @@ recorded), **known issues**, and **upgrade** notes.
   veto-constrained single-encounter merging (CR-003), the three-tier
   code-fallback cascade with a deterministic curation queue, duplicate-id
   corpus collapse, and falsy-master cross-patient merge guards. See the new
-  [Resource Dedup guide](/docs/user-guide/matching/resource-dedup/).
+  the Resource Dedup module.
 - **~75 QA fixes across the stack** from the 15-domain × 3-personality
   evolution campaign (1 CRITICAL: an exponential scan in
   `fhirpath_is_valid` that could hang DuckDB on ≥20-operator arithmetic

@@ -74,7 +74,7 @@ const sidebars: SidebarsConfig = {
           label: 'Identity & Matching',
           items: [
             'user-guide/matching/patient-matching',
-            'user-guide/matching/resource-dedup',
+            // 'user-guide/matching/resource-dedup',  // hidden pre-launch (draft)
           ],
         },
         {
