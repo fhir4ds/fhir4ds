@@ -1,0 +1,64 @@
+{
+  "name": "piqi_allergy",
+  "status": "draft",
+  "resource": "AllergyIntolerance",
+  "select": [
+    {
+      "column": [
+        {
+          "name": "element_id",
+          "path": "id",
+          "type": "id"
+        },
+        {
+          "name": "patient_id",
+          "path": "patient.reference.replace('urn:uuid:', '').split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "substance_text",
+          "path": "code.text",
+          "type": "string"
+        },
+        {
+          "name": "substance_codings",
+          "path": "code.coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "category_text",
+          "path": "category.first()",
+          "type": "code"
+        },
+        {
+          "name": "reaction_text",
+          "path": "reaction.first().manifestation.first().text",
+          "type": "string"
+        },
+        {
+          "name": "reaction_codings",
+          "path": "reaction.first().manifestation.first().coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "effectiveDate",
+          "path": "onset.ofType(dateTime).toString()",
+          "type": "string"
+        },
+        {
+          "name": "severity_text",
+          "path": "extension.where(url='https://fhir4ds.org/piqi/StructureDefinition/severity').first().value.ofType(CodeableConcept).text",
+          "type": "string"
+        },
+        {
+          "name": "severity_codings",
+          "path": "extension.where(url='https://fhir4ds.org/piqi/StructureDefinition/severity').first().value.ofType(CodeableConcept).coding",
+          "type": "Coding",
+          "collection": true
+        }
+      ]
+    }
+  ]
+}

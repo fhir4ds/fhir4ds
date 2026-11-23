@@ -1,0 +1,46 @@
+{
+  "resourceType": "https://sql-on-fhir.org/ig/StructureDefinition/ViewDefinition",
+  "id": "organization-match-fields",
+  "name": "organization_match_fields",
+  "resource": "Organization",
+  "description": "RAW organization-match field substrate (AMUX-150 chunk B). Unnormalized columns; normalization and identifier classification (NPI / CLIA / TAX with exact-OID tax matching) live in fhir4ds.matching.entity_extractors.extract_organization_fields. Auditable raw counterpart per FEATURE_NON_CODED_DEDUP.md §3.2.",
+  "select": [
+    {
+      "column": [
+        { "path": "id", "name": "organization_id", "type": "string" },
+        { "path": "name", "name": "org_name", "type": "string" },
+        { "path": "alias", "name": "alias", "collection": true, "type": "string" },
+        {
+          "path": "identifier.where(system.contains('us-npi') or system.contains('2.16.840.1.113883.4.6')).value",
+          "name": "npi",
+          "collection": true,
+          "type": "string"
+        },
+        {
+          "path": "identifier.where(system.contains('clia') or system.contains('2.16.840.1.113883.4.82')).value",
+          "name": "clia",
+          "collection": true,
+          "type": "string"
+        },
+        {
+          "path": "identifier.where(system = 'urn:oid:2.16.840.1.113883.4.2' or system.lower().contains('tax') or system.lower().contains('tin') or system.lower().contains('ein')).value",
+          "name": "tax_id",
+          "collection": true,
+          "type": "string"
+        },
+        {
+          "path": "address.line.first()",
+          "name": "street",
+          "collection": true,
+          "type": "string"
+        },
+        {
+          "path": "telecom.where(system = 'phone').value",
+          "name": "phone",
+          "collection": true,
+          "type": "string"
+        }
+      ]
+    }
+  ]
+}

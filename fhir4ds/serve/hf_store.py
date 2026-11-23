@@ -145,6 +145,7 @@ class HfDatasetStore(TreeStore):
                     raise
                 attempt += 1
                 self._revision = self._head_revision()
+                self._resync_local_tree()
                 logger.warning(
                     "publish conflict on %s; retrying on %s", self._repo_id, self._revision
                 )
@@ -153,6 +154,29 @@ class HfDatasetStore(TreeStore):
             self._revision = str(getattr(result, "oid", "") or self._head_revision())
             self.clear_dirty()
             return
+
+    def _resync_local_tree(self) -> None:
+        """Re-fetch the branch head tree after a publish conflict.
+
+        QA-D13H-004: a conflict means the branch moved under us — usually a
+        concurrent commit, but a dataset RECREATED under a live publisher
+        also surfaces as one. Re-running ``snapshot_download`` re-syncs the
+        local cache with the remote tree (under the Hub's ``local_dir``
+        semantics, files removed from the repo are removed locally too), so
+        the retry builds on the remote reality instead of a stale cache that
+        still lists files the recreation deleted. Dirty — not yet uploaded —
+        files are preserved across the re-sync.
+        """
+        dirty = sorted(self.dirty_paths())
+        preserved = {
+            relative: (self.root / relative).read_bytes() for relative in dirty
+        }
+        self._downloaded = False
+        self._ensure_downloaded()
+        for relative, data in preserved.items():
+            target = self.root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
 
 
 def _is_parent_conflict(exc: Exception) -> bool:

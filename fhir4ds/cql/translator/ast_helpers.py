@@ -1556,14 +1556,31 @@ class ASTHelpersMixin:
                 # Strategy 1: retrieve/passthrough CTE → LEFT JOIN + _audit_item column.
                 quoted = f'"{cte_name}"'
                 evidence_parts.append(f'{quoted}._audit_item')
+                on_cond = SQLBinaryOp(
+                    operator="=",
+                    left=SQLQualifiedIdentifier(parts=[quoted, "patient_id"]),
+                    right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
+                )
+                # QA-D9S-001: re-apply the definition's EXISTS row filters
+                # (when this definition's correlated WHERE carried them) so
+                # evidence cites only criteria-satisfying resources.
+                _own_meta = self._context.definition_meta.get(name)
+                _flt = (_own_meta and getattr(
+                    _own_meta, 'population_evidence_filters', {}
+                ) or {}).get(cte_name)
+                if _flt:
+                    from ..translator.ast_utils import replace_qualified_alias
+                    _alias, _conds = _flt
+                    for _c in _conds:
+                        on_cond = SQLBinaryOp(
+                            operator="AND",
+                            left=on_cond,
+                            right=replace_qualified_alias(_c, _alias, quoted),
+                        )
                 join_clauses.append(SQLJoin(
                     join_type="LEFT",
                     table=SQLIdentifier(name=cte_name, quoted=True),
-                    on_condition=SQLBinaryOp(
-                        operator="=",
-                        left=SQLQualifiedIdentifier(parts=[quoted, "patient_id"]),
-                        right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
-                    ),
+                    on_condition=on_cond,
                 ))
                 continue
 
@@ -1617,12 +1634,30 @@ class ASTHelpersMixin:
         from ..translator.types import (
             SQLIdentifier, SQLBinaryOp, SQLFunctionCall, SQLQualifiedIdentifier,
             SQLUnaryOp, SQLCase, SQLExists, SQLSubquery, SQLSelect, SQLAlias,
+            SQLUnion, SQLJoin, SQLCast,
         )
         if isinstance(expr, SQLIdentifier) and expr.quoted:
             names.add(expr.name)
         elif isinstance(expr, SQLQualifiedIdentifier):
             if expr.parts and expr.parts[0].startswith('"') and expr.parts[0].endswith('"'):
                 names.add(expr.parts[0].strip('"'))
+        elif isinstance(expr, SQLCast):
+            # QA-D9E-001 (v0.0.26 D9 EXPLORER): arithmetic-wrapped counts
+            # lower through TRY_CAST(<count subquery> AS DOUBLE) — without
+            # unwrapping the cast the CTE reference inside is invisible.
+            self._extract_cte_names_from_ast(expr.expression, names)
+        elif isinstance(expr, SQLUnion):
+            # QA-D9E-001 (v0.0.26 D9 EXPLORER): the count-unnest UNION shape
+            # (`Count((A where ...) union (B where ...))`) carries its
+            # retrieve CTE references inside the union operands of the
+            # aggregate's FROM — without traversing them the union count
+            # resolves to zero source resource CTEs.
+            for operand in (expr.operands or []):
+                self._extract_cte_names_from_ast(operand, names)
+        elif isinstance(expr, SQLJoin):
+            self._extract_cte_names_from_ast(expr.table, names)
+            if expr.on_condition is not None:
+                self._extract_cte_names_from_ast(expr.on_condition, names)
         elif isinstance(expr, SQLBinaryOp):
             self._extract_cte_names_from_ast(expr.left, names)
             self._extract_cte_names_from_ast(expr.right, names)
@@ -1639,6 +1674,11 @@ class ASTHelpersMixin:
                 self._extract_cte_names_from_ast(expr.else_clause, names)
         elif isinstance(expr, SQLExists):
             self._extract_cte_names_from_ast(expr.subquery, names)
+        elif isinstance(expr, SQLAlias):
+            # QA-D9H-001: aliased column expressions (SELECT unnest(...) AS
+            # _elem) wrap the payload; unwrap so the inner CTE references in
+            # the count-unnest chain stay visible to the columns traversal.
+            self._extract_cte_names_from_ast(expr.expr, names)
         elif isinstance(expr, SQLSubquery):
             self._extract_cte_names_from_ast(expr.query, names)
         elif isinstance(expr, SQLSelect):
@@ -1651,6 +1691,26 @@ class ASTHelpersMixin:
                     names.add(from_target.name)
                 else:
                     self._extract_cte_names_from_ast(from_target, names)
+            # QA-D9E-001 (v0.0.26 D9 EXPLORER): a count feeding arithmetic is
+            # hoisted into a LEFT/CROSS JOIN LATERAL before the population
+            # source-CTE resolution runs — without traversing the join
+            # tables, the retrieve CTE reference inside the lateral is
+            # invisible and the definition resolves to ZERO source resource
+            # CTEs (population-mode evidence disappears entirely).
+            for join in (expr.joins or []):
+                self._extract_cte_names_from_ast(join.table, names)
+                if join.on_condition is not None:
+                    self._extract_cte_names_from_ast(join.on_condition, names)
+            # QA-D9H-001 (v0.0.26 D9 HISTORIAN): the COUNT-over-unnest shape
+            # carries its innermost resource-CTE reference inside a COLUMN
+            # expression (SELECT unnest((SELECT ... FROM (SELECT P.resource
+            # FROM "CTE" AS P ...))) AS _elem) — not in FROM/WHERE. Without
+            # traversing columns, count-based criteria definitions resolve
+            # to ZERO source resource CTEs and their audit evidence
+            # disappears entirely in population mode.
+            for col in (expr.columns or []):
+                if col is not None:
+                    self._extract_cte_names_from_ast(col, names)
             if expr.where is not None:
                 self._extract_cte_names_from_ast(expr.where, names)
 
@@ -1682,10 +1742,28 @@ class ASTHelpersMixin:
         # Build individual evidence list expressions, one per CTE.
         part_exprs: list[str] = []
         _evidence_alias_counter = 0
+        # QA-D9E-001 (v0.0.26 D9 EXPLORER): the definition's per-CTE evidence
+        # filters (merged transitively at translate time) must apply to the
+        # Strategy-3 correlated subquery too — otherwise the subquery cites
+        # every valueset member (including out-of-criteria decoys) beside the
+        # twin/JOIN-filtered evidence.
+        _own_meta = self._context.definition_meta.get(definition_name)
+        _own_filters = (_own_meta and getattr(
+            _own_meta, 'population_evidence_filters', {}) or {})
         for p in evidence_parts:
             if p.startswith('<SUBQUERY:'):
                 cte_name = p[len('<SUBQUERY:'):-1]
                 quoted = f'"{cte_name}"'
+                _flt = _own_filters.get(cte_name)
+                _filter_sql = ""
+                if _flt:
+                    from ..translator.ast_utils import replace_qualified_alias
+                    _alias, _conds = _flt
+                    if _conds:
+                        _filter_sql = " AND " + " AND ".join(
+                            f"({replace_qualified_alias(c, _alias, '_sub').to_sql()})"
+                            for c in _conds
+                        )
                 # Extract resource type from CTE name (e.g., "Condition: Diabetes" → "Condition")
                 resource_type = cte_name.split(":")[0].strip() if ":" in cte_name else cte_name
                 escaped_cte = cte_name.replace("'", "''")
@@ -1718,7 +1796,7 @@ class ASTHelpersMixin:
                     f"operator := 'exists', "
                     f"threshold := \'{escaped_right}\', "
                     f"trace := CAST(['{escaped_cte}'] AS VARCHAR[])"
-                    f")) END FROM {quoted} AS _sub WHERE _sub.patient_id = _pt.patient_id), "
+                    f")) END FROM {quoted} AS _sub WHERE _sub.patient_id = _pt.patient_id{_filter_sql}), "
                     f"[])"
                 )
             elif p.startswith('<CMP_EVIDENCE:'):

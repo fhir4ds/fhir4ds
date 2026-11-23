@@ -48,6 +48,7 @@ __all__ = [
     "Query",
     "QuerySource",
     "Retrieve",
+    "RetrieveFilter",
     "WithClause",
     "LetClause",
     "SortClause",

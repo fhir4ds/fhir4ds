@@ -1,0 +1,48 @@
+{
+  "name": "piqi_procedure",
+  "status": "draft",
+  "resource": "Procedure",
+  "select": [
+    {
+      "column": [
+        {
+          "name": "element_id",
+          "path": "id",
+          "type": "id"
+        },
+        {
+          "name": "patient_id",
+          "path": "subject.reference.replace('urn:uuid:', '').split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "procedure_text",
+          "path": "code.text",
+          "type": "string"
+        },
+        {
+          "name": "procedure_codings",
+          "path": "code.coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "procedureDateTime",
+          "path": "performed.ofType(dateTime).toString()",
+          "type": "string"
+        },
+        {
+          "name": "procedureReason_text",
+          "path": "reasonCode.first().text",
+          "type": "string"
+        },
+        {
+          "name": "procedureReason_codings",
+          "path": "reasonCode.first().coding",
+          "type": "Coding",
+          "collection": true
+        }
+      ]
+    }
+  ]
+}

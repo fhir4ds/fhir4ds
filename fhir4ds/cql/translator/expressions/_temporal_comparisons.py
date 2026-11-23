@@ -35,6 +35,17 @@ _NUMERIC_POINT_KINDS = {"Integer", "Long", "Decimal"}
 # FunctionRef handled alongside these.
 _INTERVAL_SCALAR_OPERATORS = {"start of", "end of", "point from", "width of"}
 
+# QA-D4H-001: CQL 1.5 mandates timezone normalization for comparisons at
+# hour-or-finer precision (§Same As: normalization applies "only when the
+# comparison precision is hours, minutes, seconds, or milliseconds"; the
+# Java reference engine normalizes via DateTime.getNormalized). The
+# LEFT()-string decomposition compares RAW LOCAL components, so sub-day
+# `during <prec> of` must route through the precision-aware interval UDFs
+# (intervalContainsPrecise / intervalIncludedInPrecise), which normalize on
+# BOTH engines. Day-and-coarser keeps the optimized decomposition (pinned
+# CQL-14 doctrine: raw components at day precision by design).
+_SUBDAY_PRECISIONS = ("hour", "minute", "second", "millisecond")
+
 
 class TemporalComparisonMixin:
     """Temporal comparison operator translations for CQL to SQL.
@@ -43,6 +54,27 @@ class TemporalComparisonMixin:
     ``self`` has ``translate``, ``context``, ``_KNOWN_CHOICE_PATHS``, and the
     other helpers available on ExpressionTranslator.
     """
+
+    def _default_comparison_precision_for(self, expr=None):
+        """Effective #DefaultComparisonPrecision for ONE comparison (CQL20-D).
+
+        CQL 2.0 (FHIR-41326): precision-less Date/DateTime/Time comparisons
+        in a library declaring ``#DefaultComparisonPrecision: <p>`` are
+        performed at ``<p>`` — a compile-time determination that applies
+        only where the author omitted an explicit precision (explicit
+        precision is untouched; the rewrite targets the precision-less
+        operator spellings only).
+
+        Returns None when no directive is in effect or the operands are
+        numeric/Quantity intervals (the precision-qualified lowering paths
+        are temporal-only; numeric bounds keep their dedicated comparators).
+        """
+        precision = getattr(self.context, "default_comparison_precision", None)
+        if precision is None:
+            return None
+        if expr is not None and self._numeric_interval_point_kind(expr):
+            return None
+        return precision
 
     def _numeric_interval_point_kind(self, expr) -> str | None:
         """Classify the point type of a no-precision same/same-or interval
@@ -317,6 +349,27 @@ class TemporalComparisonMixin:
         # Fallback: pass through as-is (should not reach here normally)
         return SQLBinaryOp(operator="=", left=left, right=right)
 
+    def _subday_during_precise_udf(
+        self, point_sql: SQLExpression, interval_sql: SQLExpression, precision: str
+    ) -> SQLExpression | None:
+        """QA-D4H-001: sub-day ``during <prec> of`` via the tz-normalizing
+        precision-aware UDFs. Returns None when the precision is day-or-
+        coarser or the interval operand is not statically recognized (the
+        raw-SQL fallback stays available for dynamic FHIR Periods)."""
+        if precision not in _SUBDAY_PRECISIONS:
+            return None
+        if not self._is_fhir_interval_expression(interval_sql):
+            return None
+        point_arg = (
+            self._quantity_interval_point_arg(point_sql)
+            if self._is_quantity_interval_sql(interval_sql)
+            else self._ensure_interval_varchar(point_sql)
+        )
+        return SQLFunctionCall(
+            name="intervalContainsPrecise",
+            args=[interval_sql, point_arg, SQLLiteral(value=precision)],
+        )
+
     def _translate_during_operator(
         self, operator: str, left: SQLExpression, right: SQLExpression
     ) -> SQLExpression:
@@ -332,6 +385,19 @@ class TemporalComparisonMixin:
         for precision in precisions:
             pattern = f"during {precision} of"
             if operator == pattern:
+                # QA-D4H-001: sub-day precision compares timezone-normalized
+                # instants via the precision-aware UDFs when the interval
+                # operand is statically recognized.
+                if self._is_fhir_interval_expression(right):
+                    if self._is_fhir_interval_expression(left):
+                        return SQLFunctionCall(
+                            name="intervalIncludedInPrecise",
+                            args=[left, right, SQLLiteral(value=precision)],
+                        )
+                    precise = self._subday_during_precise_udf(left, right, precision)
+                    if precise is not None:
+                        return precise
+
                 # Truncate the left side to the precision
                 left_truncated = self._truncate_to_precision(left, precision)
 

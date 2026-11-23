@@ -343,7 +343,8 @@ def _require_ureg():
     if ureg is None:
         raise ImportError(
             "Quantity UDFs require 'pint' to be installed and importable. "
-            "Reinstall duckdb-cql-py with its declared dependencies."
+            "Reinstall fhir4ds-v2 (pip install 'fhir4ds-v2') with its "
+            "declared dependencies."
         )
     return ureg
 
@@ -485,21 +486,59 @@ def _compare_cql_duration_quantities(q1_dict: dict, q2_dict: dict, op: str):
     precision1 = _decimal_equivalence_precision(q1_dict)
     precision2 = _decimal_equivalence_precision(q2_dict)
 
+    # Exact rational comparison: the day-conversion tables store values as
+    # context-rounded Decimals (1/24 rounds at 28 digits), so Decimal
+    # arithmetic makes 1 'h' and 60 'min' differ by 1 ulp and equality
+    # wrongly returns False. Fractions keep the comparison exact.
+    from fractions import Fraction
+    from decimal import localcontext
+
+    def _exact_days(value, table, unit):
+        # table[unit] is a context-rounded Decimal (1/24 at 28 digits);
+        # limit_denominator recovers the exact rational it was rounded
+        # from, so 1 'h' and 60 'min' compare exactly equal.
+        return Fraction(value) * Fraction(table[unit]).limit_denominator(10**9)
+
+    def _to_decimal(frac):
+        with localcontext() as ctx:
+            ctx.prec = 60
+            return Decimal(frac.numerator) / Decimal(frac.denominator)
+
     if op in ("~", "!~"):
-        left = value1 * _CQL_EQUIVALENT_DURATION_DAYS[unit1]
-        right = value2 * _CQL_EQUIVALENT_DURATION_DAYS[unit2]
+        left = _to_decimal(_exact_days(value1, _CQL_EQUIVALENT_DURATION_DAYS, unit1))
+        right = _to_decimal(_exact_days(value2, _CQL_EQUIVALENT_DURATION_DAYS, unit2))
         return _apply_quantity_compare(left, right, op, precision1, precision2)
 
     if unit1 in _CQL_VARIABLE_CALENDAR_UNITS or unit2 in _CQL_VARIABLE_CALENDAR_UNITS:
         if unit1 in _CQL_VARIABLE_CALENDAR_UNITS and unit2 in _CQL_VARIABLE_CALENDAR_UNITS:
-            left = value1 * _CQL_VARIABLE_CALENDAR_UNITS[unit1]
-            right = value2 * _CQL_VARIABLE_CALENDAR_UNITS[unit2]
-            return _apply_quantity_compare(left, right, op, precision1, precision2)
+            left = _exact_days(value1, _CQL_VARIABLE_CALENDAR_UNITS, unit1)
+            right = _exact_days(value2, _CQL_VARIABLE_CALENDAR_UNITS, unit2)
+            if op == ">":
+                return left > right
+            if op == "<":
+                return left < right
+            if op == ">=":
+                return left >= right
+            if op == "<=":
+                return left <= right
+            if op == "==":
+                return left == right
+            return left != right
         return None
 
-    left = value1 * _CQL_DEFINITE_DURATION_DAYS[unit1]
-    right = value2 * _CQL_DEFINITE_DURATION_DAYS[unit2]
-    return _apply_quantity_compare(left, right, op, precision1, precision2)
+    left = _exact_days(value1, _CQL_DEFINITE_DURATION_DAYS, unit1)
+    right = _exact_days(value2, _CQL_DEFINITE_DURATION_DAYS, unit2)
+    if op == ">":
+        return left > right
+    if op == "<":
+        return left < right
+    if op == ">=":
+        return left >= right
+    if op == "<=":
+        return left <= right
+    if op == "==":
+        return left == right
+    return left != right
 
 
 def _parse_quantity(value: str | None) -> dict | None:
@@ -574,8 +613,21 @@ def _quantity_to_pint(q_dict: dict | None):
         ucum_code = q_dict["code"]
         value = float(value)
         pint_unit = _ucum_to_pint_unit(ucum_code)
-        return value * ureg(pint_unit)
-    except (TypeError, ValueError, UndefinedUnitError) as e:
+        parsed_unit = ureg(pint_unit)
+        if not hasattr(parsed_unit, "magnitude") or not hasattr(
+                parsed_unit, "units"):
+            # Digit-only "unit" spellings (e.g. the CMS72 fixture quirk
+            # {"value":100,"unit":"0"}) parse in pint as plain numbers,
+            # so `value * parsed_unit` would return a bare float/int and
+            # every downstream Quantity call (`.to`, `.magnitude`) would
+            # raise AttributeError. Treat as unconvertible (AMUX-145
+            # phase 0.5 root-cause fix at the source).
+            raise UndefinedUnitError(ucum_code)
+        return value * parsed_unit
+    except (TypeError, ValueError, UndefinedUnitError, AssertionError) as e:
+        # AssertionError: pint raises bare asserts for some exotic UCUM
+        # spellings (REALISM-F1: MIMIC micro units '#/hpf', '#/lpf', '#/uL')
+        # — unconvertible, never a crash.
         _logger.warning("_quantity_to_pint conversion failed: %s", e)
         return None
 
@@ -1143,6 +1195,21 @@ def quantityConvert(q_json: str | None, target_unit: str) -> str | None:
         return None
 
 
+def _exact_decimal_text(value) -> str:
+    """Serialize a Decimal exactly — never through float (REV-26-001).
+
+    CQL-10 doctrine: exact-Decimal end-to-end. ``str(float(d))`` loses
+    precision beyond 15 significant digits and switches to scientific
+    notation (the known DuckDB VARCHAR->DECIMAL cast hazard). Mirrors the
+    native quantity JSON value rendering: plain fixed-point text with at
+    least one fractional digit.
+    """
+    text = format(value, "f")
+    if "." not in text:
+        text += ".0"
+    return text
+
+
 def quantityNegate(q_json: str | None) -> str | None:
     """Negate a quantity (CQL unary minus on Quantity).
 
@@ -1174,7 +1241,7 @@ def quantityNegate(q_json: str | None) -> str | None:
     code = data.get("code") or unit or "1"
     return (
         '{"value":'
-        + str(float(-current))
+        + _exact_decimal_text(current.copy_negate())
         + ',"unit":'
         + orjson.dumps(unit if unit is not None else code).decode("utf-8")
         + ',"code":'
@@ -1185,6 +1252,95 @@ def quantityNegate(q_json: str | None) -> str | None:
         ).decode("utf-8")
         + "}"
     )
+
+
+def roundQuantity(q_json: str | None, precision: str | int | None = None) -> str | None:
+    """Round a Quantity's value (CQL 2.0 Round(Quantity[, precision])).
+
+    CQL 2.0 Appendix B §Round: "When invoked with a Quantity argument,
+    units are not impacted (i.e. the result has the same units as the
+    input)." The value rounds traditionally (ties away from zero, matching
+    the number Round doctrine Round(-0.5) = -1); precision null/omitted
+    is 0. Null quantity -> null.
+
+    Mirrors ``quantityNegate``: edit the raw JSON value and preserve the
+    unit/code/system fields verbatim (no pint round-trip, which would
+    rewrite calendar-duration keywords).
+    """
+    from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+
+    if not q_json:
+        return None
+    match = _JSON_VALUE_RE.search(q_json)
+    if not match:
+        return None
+    try:
+        current = Decimal(match.group(1))
+    except (InvalidOperation, TypeError):
+        return None
+    try:
+        prec = int(precision) if precision is not None else 0
+    except (TypeError, ValueError):
+        prec = 0
+    try:
+        quantum = Decimal(1).scaleb(-prec)
+        rounded = current.quantize(quantum, rounding=ROUND_HALF_UP)
+    except (InvalidOperation, ValueError):
+        return None
+    try:
+        data = orjson.loads(q_json)
+    except JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    unit = data.get("unit")
+    code = data.get("code") or unit or "1"
+    return (
+        '{"value":'
+        + _exact_decimal_text(rounded)
+        + ',"unit":'
+        + orjson.dumps(unit if unit is not None else code).decode("utf-8")
+        + ',"code":'
+        + orjson.dumps(code).decode("utf-8")
+        + ',"system":'
+        + orjson.dumps(
+            data.get("system", "http://unitsofmeasure.org")
+        ).decode("utf-8")
+        + "}"
+    )
+
+
+def _round_quantity_1arg(q_json: str | None) -> str | None:
+    return roundQuantity(q_json, None)
+
+
+def _round_quantity_2arg(q_json: str | None, precision) -> str | None:
+    return roundQuantity(q_json, precision)
+
+
+def quantityComparable(q1_json: str | None, q2_json: str | None) -> bool | None:
+    """CQL 2.0 Comparable(left Quantity, right Quantity) Boolean.
+
+    Appendix B §Comparable: "returns true if the left Quantity can be
+    compared to the right Quantity (i.e. the units are commensurable).
+    Otherwise, the result is false. ... If either argument is null, the
+    result is null."
+
+    Implementation: after the null-argument guard, comparable iff the
+    shared unit-aware comparison ladder reaches a determined outcome —
+    i.e. ``quantityCompare(q1, q2, '==')`` is non-null. All incomparable
+    unit pairs ('cm' vs 'cm2', calendar 'year' vs UCUM 'a', calendar vs
+    sub-week definite durations, unknown UCUM codes) return null from
+    quantityCompare and therefore false here. Values do not affect the
+    result beyond the must-be-present requirement.
+    """
+    q1_dict = _parse_quantity(q1_json)
+    q2_dict = _parse_quantity(q2_json)
+    if not q1_dict or not q2_dict:
+        return None
+    if q1_dict.get("value") is None or q2_dict.get("value") is None:
+        return None
+    return quantityCompare(q1_json, q2_json, "==") is not None
 
 
 def quantityAbs(q_json: str | None) -> str | None:
@@ -1497,6 +1653,19 @@ def registerQuantityUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     con.create_function("quantity_convert", quantityConvert, null_handling="special")  # Alias with snake_case
     con.create_function("quantityNegate", quantityNegate, null_handling="special")
     con.create_function("quantityAbs", quantityAbs, null_handling="special")
+    # CQL 2.0 Round(Quantity[, precision]) — value rounds, unit preserved.
+    con.create_function(
+        "RoundQuantity", _round_quantity_1arg,
+        parameters=["VARCHAR"], return_type="VARCHAR",
+        null_handling="special",
+    )
+    con.create_function(
+        "RoundQuantityTo", _round_quantity_2arg,
+        parameters=["VARCHAR", "BIGINT"], return_type="VARCHAR",
+        null_handling="special",
+    )
+    # CQL 2.0 Comparable(Quantity, Quantity) — unit commensurability.
+    con.create_function("Comparable", quantityComparable, null_handling="special")
     con.create_function("quantityMultiply", quantityMultiply, null_handling="special")
     con.create_function("quantityDivide", quantityDivide, null_handling="special")
     con.create_function("quantityTruncatedDivide", quantityTruncatedDivide, null_handling="special")

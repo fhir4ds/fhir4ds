@@ -87,6 +87,71 @@ if TYPE_CHECKING:
     from ...translator.expressions import ExpressionTranslator
 
 
+def resolve_additional_retrieve_filter(mf, context) -> tuple:
+    """Resolve one CQL 2.0 multi-filter retrieve filter to (kind, target).
+
+    kind: 'in' (exact ValueSet membership), '~in' (equivalent membership),
+    'code' (exact direct-code), '~code' (equivalent direct-code). target:
+    ValueSet URL or ``urn:cql:code:<system>|<code>``.
+
+    Shared by the retrieve translation (``_query.py``) AND the
+    function-promotion pre-scan (``translator.py::
+    _retrieve_promotion_source``) so both encode additional filters onto
+    the valueset key identically — a divergence keys a promoted function
+    against the UNFILTERED CTE name (AMUX-152 #7).
+    """
+    operand = mf.terminology
+    code_target = None
+    valueset_target = None
+
+    if isinstance(operand, CodeSelector):
+        cs_url = context.codesystems.get(operand.system, operand.system)
+        code_target = f"urn:cql:code:{cs_url}|{operand.code}"
+    else:
+        if isinstance(operand, Identifier):
+            name = operand.name
+        elif isinstance(operand, QualifiedIdentifier) and operand.parts:
+            name = operand.parts[-1]
+        elif isinstance(operand, Property) and isinstance(
+            getattr(operand, "source", None), Identifier
+        ):
+            name = operand.path
+        else:
+            name = str(operand)
+        code_info = context.codes.get(name)
+        if code_info:
+            cs_name = code_info.get("codesystem", "")
+            cs_url = context.codesystems.get(cs_name, cs_name)
+            code_target = f"urn:cql:code:{cs_url}|{code_info.get('code', '')}"
+        elif name in context.valuesets:
+            valueset_target = context.valuesets[name]
+        else:
+            # Unknown name: mirror the primary-filter fallback — treat
+            # as a ValueSet reference (URL or prefixed name).
+            from ..patterns.retrieve import _VALUESET_PREFIX_CONFIG
+            if name.startswith("http") or name.startswith("urn:"):
+                valueset_target = name
+            else:
+                default_prefix = _VALUESET_PREFIX_CONFIG.get(
+                    "default_prefix", "http://cts.nlm.nih.gov/fhir/ValueSet/"
+                )
+                valueset_target = f"{default_prefix}{name}"
+
+    comparator = mf.comparator
+    if comparator in ("=", "contains"):
+        if code_target is not None:
+            return "code", code_target
+        return "in", valueset_target
+    if comparator in ("~", "~contains"):
+        if code_target is not None:
+            return "~code", code_target
+        return "~in", valueset_target
+    # 'in' / '~in'
+    if code_target is not None:
+        return ("code" if comparator == "in" else "~code"), code_target
+    return comparator, valueset_target
+
+
 def _demoted_rows_source_cte(sql_expr) -> "str | None":
     """Recognize the scalar LIMIT-1 demotion of a RESOURCE_ROWS definition.
 
@@ -359,6 +424,33 @@ def _src_list_projection_is_list_valued(source_expr) -> bool:
     first = source_expr.query.columns[0]
     expr = first.expr if isinstance(first, SQLAlias) else first
     return _is_list_valued_projection(expr)
+
+
+def _is_tuple_list_field_source(node) -> bool:
+    """True for the tuple-list-field property projection shape.
+
+    ``Tuple { days: { Tuple { ... }, ... } }.days`` lowers (via
+    ``_translate_property``'s list-valued tuple-field branch) to::
+
+        COALESCE(from_json(json_extract_string(<tuple json>, '$.days'),
+                           '["VARCHAR"]'), [])
+
+    — a DuckDB ``VARCHAR[]`` of element JSON texts. When used as a query
+    source with an alias, it must UNNEST like array sources so the alias
+    iterates elements; without this, WHERE/RETURN clauses inline the whole
+    list into ``fhirpath(VARCHAR[], ...)`` calls, which binder-fail
+    (d3-SKEPTIC v0.0.26 carry-in 2).
+    """
+    if not (isinstance(node, SQLFunctionCall) and node.name == "COALESCE" and len(node.args) == 2):
+        return False
+    inner = node.args[0]
+    if not (isinstance(inner, SQLFunctionCall) and inner.name == "from_json" and len(inner.args) == 2):
+        return False
+    type_arg = inner.args[1]
+    return (
+        isinstance(type_arg, SQLLiteral)
+        and type_arg.value == '["VARCHAR"]'
+    )
 
 
 def _demote_audit_struct_to_bool(expr: SQLExpression) -> SQLExpression:
@@ -1728,7 +1820,9 @@ class QueryMixin:
             resource_type not in _spec_resource_types()
             and resource_type not in schema_types
         ):
-            from ...errors import TranslationError
+            # TranslationError is imported at module level (line 32); a local
+            # import here would shadow it and break other raises in this
+            # function scope (UnboundLocalError).
             raise TranslationError(
                 f"Unknown FHIR resource type '{resource_type}' in retrieve "
                 f"[{resource_type}]. Use a resource type from the FHIR "
@@ -1739,6 +1833,7 @@ class QueryMixin:
         terminology = getattr(node, 'terminology', None)
         valueset = None
         code_property = None
+        equivalent_terminology = False
 
         if terminology:
             if isinstance(terminology, str):
@@ -1764,38 +1859,70 @@ class QueryMixin:
                     valueset_name = terminology.path
                 elif isinstance(terminology, QualifiedIdentifier) and terminology.parts:
                     valueset_name = terminology.parts[-1]
-                elif isinstance(terminology, BinaryExpression) and terminology.operator in ('in', '~', '='):
+                elif isinstance(terminology, BinaryExpression) and terminology.operator in ('in', '~', '=', '~in', '~contains'):
                     # Handle: [Resource: codePath in "ValueSet Name"]
                     # Handle: [Resource: code = "Code Name"]
+                    # CQL 2.0 (FHIR-31392/31675): [Resource: codePath ~in "VS"]
+                    #   — equivalent-based ValueSet membership on the path.
+                    # CQL 2.0 (FHIR-31392): [Resource: codePath ~contains "Code"]
+                    #   — the element at codePath equivalently-contains the
+                    #   declared code (retrieve form of EquivalentContains;
+                    #   "contexts where one argument refers to a structure and
+                    #   so cannot be reversed").
+                    equivalent_terminology = terminology.operator in ('~in', '~contains')
                     left = terminology.left
                     if isinstance(left, Identifier):
                         code_property = left.name
                     right = terminology.right
-                    if isinstance(right, Identifier):
-                        valueset_name = right.name
-                    else:
-                        valueset_name = str(right)
-                    # QA-019 (iter 3, 2026-09-28): right operand naming a
-                    # declared CODESYSTEM means the LEFT operand is the code
-                    # VALUE — resolve to direct-code membership instead of
-                    # the in_valueset path (which fabricates an NLM ValueSet
-                    # URL for a codesystem name). Mirrors translator.py
-                    # `_translate_retrieve_terminology`.
-                    if valueset_name is not None and valueset_name not in (
-                        self.context.valuesets,
-                        self.context.codes,
-                    ):
-                        cs_url = self.context.codesystems.get(valueset_name)
-                        if cs_url is not None:
-                            left_value = (
-                                left.value
-                                if isinstance(left, Literal)
-                                else getattr(left, "name", None)
+                    if terminology.operator == '~contains':
+                        # Right operand is the CODE being tested (a declared
+                        # code reference; a bare string literal has no system
+                        # and cannot form a code membership test).
+                        right_name = (
+                            right.name if isinstance(right, Identifier)
+                            else (right.parts[-1] if isinstance(right, QualifiedIdentifier) and right.parts else None)
+                        )
+                        code_info = self.context.codes.get(right_name) if right_name else None
+                        if code_info:
+                            cs_name = code_info.get("codesystem", "")
+                            cs_url = self.context.codesystems.get(cs_name, cs_name)
+                            code_val = code_info.get("code", "")
+                            valueset = f"urn:cql:code:{cs_url}|{code_val}"
+                            valueset_name = None
+                        else:
+                            raise TranslationError(
+                                f"Retrieve '~contains' comparator requires a declared "
+                                f"code reference on the right side; got "
+                                f"{right!r}. Declare it with `code \"name\": 'value' "
+                                f"from \"CodeSystem\"` and reference it by quoted "
+                                f"identifier: [Resource: path ~contains \"name\"]."
                             )
-                            if isinstance(left_value, str):
-                                valueset = f"urn:cql:code:{cs_url}|{left_value}"
-                                code_property = None
-                                valueset_name = None
+                    else:
+                        if isinstance(right, Identifier):
+                            valueset_name = right.name
+                        else:
+                            valueset_name = str(right)
+                        # QA-019 (iter 3, 2026-09-28): right operand naming a
+                        # declared CODESYSTEM means the LEFT operand is the code
+                        # VALUE — resolve to direct-code membership instead of
+                        # the in_valueset path (which fabricates an NLM ValueSet
+                        # URL for a codesystem name). Mirrors translator.py
+                        # `_translate_retrieve_terminology`.
+                        if valueset_name is not None and valueset_name not in (
+                            self.context.valuesets,
+                            self.context.codes,
+                        ):
+                            cs_url = self.context.codesystems.get(valueset_name)
+                            if cs_url is not None:
+                                left_value = (
+                                    left.value
+                                    if isinstance(left, Literal)
+                                    else getattr(left, "name", None)
+                                )
+                                if isinstance(left_value, str):
+                                    valueset = f"urn:cql:code:{cs_url}|{left_value}"
+                                    code_property = None
+                                    valueset_name = None
                 else:
                     valueset_name = str(terminology)
 
@@ -1820,13 +1947,39 @@ class QueryMixin:
                 default_prefix = _VALUESET_PREFIX_CONFIG.get("default_prefix", "http://cts.nlm.nih.gov/fhir/ValueSet/")
                 valueset = f"{default_prefix}{valueset}"
 
+        # Return placeholder. CQL 2.0 equivalent-terminology retrieves
+        # (`code ~in "VS"` / `path ~contains "Code"`) carry a leading '~'
+        # marker on the valueset string so retrieve keys (built from this
+        # string) distinguish exact vs equivalent membership CTEs; the
+        # marker is stripped in build_retrieve_cte.
+        marked_valueset = f"~{valueset}" if equivalent_terminology and valueset else valueset
+        # CQL 2.0 multi-filter retrieves (FHIR-31397): resolve each
+        # additional comma-separated filter to a (kind, target) and encode
+        # it onto the valueset string so retrieve keys/CTEs distinguish
+        # filtered retrieves (decoded into ANDed WHERE predicates in
+        # build_retrieve_cte).
+        for mf in getattr(node, "additional_filters", None) or []:
+            kind, target = self._resolve_additional_retrieve_filter(mf)
+            from ..cte_builder import encode_retrieve_filter
+            marked_valueset = (marked_valueset or "") + encode_retrieve_filter(
+                mf.property, kind, target
+            )
         # Return placeholder
         return RetrievePlaceholder(
             resource_type=resource_type,
-            valueset=valueset,
+            valueset=marked_valueset or None,
             profile_url=profile_url,
-            code_property=code_property
+            code_property=code_property,
         )
+
+    def _resolve_additional_retrieve_filter(self, mf) -> tuple:
+        """Resolve one CQL 2.0 multi-filter retrieve filter to (kind, target).
+
+        kind: 'in' (exact ValueSet membership), '~in' (equivalent
+        membership), 'code' (exact direct-code), '~code' (equivalent
+        direct-code). target: ValueSet URL or ``urn:cql:code:<system>|<code>``.
+        """
+        return resolve_additional_retrieve_filter(mf, self.context)
 
     def _translate_query_source(self, node, boolean_context: bool = False) -> SQLExpression:
         """Handle: [Condition: "Diabetes"] D (the source with alias)"""
@@ -5723,8 +5876,19 @@ class QueryMixin:
             not _multi_source_done
             and isinstance(result, SQLFunctionCall)
             and alias
-            and result.name.lower() in ("cqlchildren", "cqldescendants")
+            and (
+                result.name.lower() in ("cqlchildren", "cqldescendants")
+                or _is_tuple_list_field_source(result)
+            )
         ):
+            # Children()/Descendants() query sources iterate one structural
+            # item per row (CQL §22.9/§22.10) so WHERE/RETURN alias
+            # references bind to each element, not the whole list. Tuple-
+            # list-field property sources (e.g. `(Tuple { days: {...} }.days)
+            # D`) lower to the same list shape (VARCHAR[] of element JSON
+            # texts) and iterate identically — without this, the whole list
+            # was inlined into fhirpath(VARCHAR[], ...) calls
+            # (BinderException; d3-SKEPTIC v0.0.26 carry-in 2).
             from ...parser.ast_nodes import FunctionRef as _FnRef, QuerySource as _QSrc
             _lt_param = f"_lt_{alias}"
             if isinstance(node.source, list) and node.source:

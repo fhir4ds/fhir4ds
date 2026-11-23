@@ -1,0 +1,40 @@
+{
+  "resourceType": "https://sql-on-fhir.org/ig/StructureDefinition/ViewDefinition",
+  "id": "practitioner-match-fields",
+  "name": "practitioner_match_fields",
+  "resource": "Practitioner",
+  "description": "RAW practitioner-match field substrate (AMUX-150 chunk B). Columns are deliberately UNNORMALIZED; normalization (norm_text/norm_phone/norm_name_parts and the NPI system match) lives in fhir4ds.matching.entity_extractors.extract_practitioner_fields, which feeds the entity-scoped field_values index. Auditable raw counterpart per FEATURE_NON_CODED_DEDUP.md §3.2.",
+  "select": [
+    {
+      "column": [
+        { "path": "id", "name": "practitioner_id", "type": "string" },
+        { "path": "name.given", "name": "first", "collection": true, "type": "string" },
+        { "path": "name.family", "name": "last", "collection": true, "type": "string" },
+        {
+          "path": "identifier.where(system.contains('us-npi') or system.contains('2.16.840.1.113883.4.6')).value",
+          "name": "npi",
+          "collection": true,
+          "type": "string"
+        },
+        {
+          "path": "address.line.first()",
+          "name": "street",
+          "collection": true,
+          "type": "string"
+        },
+        {
+          "path": "telecom.where(system = 'phone').value",
+          "name": "phone",
+          "collection": true,
+          "type": "string"
+        },
+        {
+          "path": "telecom.where(system = 'email').value",
+          "name": "email",
+          "collection": true,
+          "type": "string"
+        }
+      ]
+    }
+  ]
+}

@@ -89,6 +89,18 @@ def _install_medterm4ds_stub(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
     monkeypatch.setitem(sys.modules, "medterm4ds.apps", apps_pkg)
     monkeypatch.setitem(sys.modules, "medterm4ds.apps.fhir_api", fhir_api_mod)
 
+    # D12 SKEPTIC (v0.0.26) order-flake fix: the adapter's search_text
+    # prefers ``medterm4ds.services.search`` and falls back to the legacy
+    # discovery path only when that import FAILS. When the REAL
+    # medterm4ds is installed in the test environment, any earlier test
+    # that imported it leaves ``medterm4ds.services.search`` cached in
+    # sys.modules — the fake non-package ``medterm4ds.services`` above
+    # then cannot shadow it, the adapter takes the real search-service
+    # path, and the legacy-path mocks below are never invoked (the 3
+    # documented order-dependent failures). Drop any cached real module
+    # so the stub fully controls which path is exercised.
+    monkeypatch.delitem(sys.modules, "medterm4ds.services.search", raising=False)
+
     # Stash the terminology mock on the engine so tests that only grab
     # the engine return value can still reach the terminology via
     # ``engine.terminology`` if needed.
@@ -295,8 +307,16 @@ def test_mt006_connect_runtime_error_gets_config_hint(
     assert "/nonexistent/mt.db" in msg
 
 
-def test_mt006_connect_passes_cache_indexes(monkeypatch: pytest.MonkeyPatch) -> None:
-    """MT-006: the long-lived adapter engine persists BM25 indexes."""
+def test_mt006_connect_call_contract(monkeypatch: pytest.MonkeyPatch) -> None:
+    """MT-006 + D12 SKEPTIC: connect() is called with db_path ONLY.
+
+    Since medterm4ds 0.0.12, ``cache_indexes`` only takes effect together
+    with ``prepare_cache=True`` (and medterm4ds QC-470 recommends NOT
+    preparing read-mostly workloads), so the former ``cache_indexes=True``
+    was a silent no-op under the pinned >=0.0.14 contract and has been
+    dropped. Pin the new call shape so a future re-addition is a
+    deliberate decision, not drift.
+    """
     _install_medterm4ds_stub(monkeypatch)
     import medterm4ds as fake_pkg
 
@@ -307,7 +327,8 @@ def test_mt006_connect_passes_cache_indexes(monkeypatch: pytest.MonkeyPatch) -> 
 
     InProcessTerminologyEndpoint(medterm4ds_db_path="/tmp/mt.db")
     assert connect_mock.call_args.kwargs.get("db_path") == "/tmp/mt.db"
-    assert connect_mock.call_args.kwargs.get("cache_indexes") is True
+    assert "cache_indexes" not in connect_mock.call_args.kwargs
+    assert "prepare_cache" not in connect_mock.call_args.kwargs
 
 
 def test_mt005_expand_intensional_wired_in_process(
@@ -569,3 +590,265 @@ def test_expand_intensional_positional_count_and_include_retired(
     adapter._engine = object()
     adapter.expand_intensional({"resourceType": "ValueSet", "compose": {}})
     assert seen == {"count": 1000, "include_retired": True}
+
+
+# ----------------------------------------------------------------------
+# D12 SKEPTIC (v0.0.26): capability escalation + import-stack actionability
+# ----------------------------------------------------------------------
+
+
+def test_expand_value_error_escapes_as_capability_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """QA-D12S-001: medterm4ds ValueError (unsupported URL form) is a
+    CAPABILITY refusal, not a transient fault — it must raise
+    TerminologyCapabilityError (mirroring the sidecar's ValueError->400
+    mapping and the HTTP adapter's 400/422 escalation) instead of
+    silently returning [] + poisoning the breaker."""
+    _install_medterm4ds_stub(monkeypatch)
+
+    import medterm4ds.apps.fhir_api as fhir_api_mod
+    from fhir4ds.cql.terminology.errors import TerminologyCapabilityError
+
+    fhir_api_mod.expand_url_pattern = MagicMock(
+        side_effect=ValueError(
+            "Unsupported fhir_vs URL pattern: 'http://cts.nlm.nih.gov/fhir/"
+            "ValueSet/1.2.3'. Only SNOMED CT intensional expansions are "
+            "implemented."
+        )
+    )
+
+    from fhir4ds.cql.terminology.in_process_adapter import (
+        InProcessTerminologyEndpoint,
+    )
+
+    adapter = InProcessTerminologyEndpoint()
+    with pytest.raises(TerminologyCapabilityError) as exc:
+        adapter.expand("http://cts.nlm.nih.gov/fhir/ValueSet/1.2.3")
+    # Actionable: names the URL and the remediation.
+    assert "1.2.3" in str(exc.value)
+    assert "expand_intensional" in str(exc.value)
+    # Capability refusals must NOT count as breaker failures.
+    assert adapter._consecutive_failures == 0
+
+
+def test_expand_intensional_value_error_escapes_as_capability_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """QA-D12S-001 (intensional twin): QC-252/QC-246-class ValueErrors from
+    expand_intensional_value_set are request-form refusals (the sidecar
+    maps them to 400) — escalate, don't degrade."""
+    _install_medterm4ds_stub(monkeypatch)
+
+    import medterm4ds.apps.fhir_api as fhir_api_mod
+    from fhir4ds.cql.terminology.errors import TerminologyCapabilityError
+
+    fhir_api_mod.expand_intensional_value_set = MagicMock(
+        side_effect=ValueError(
+            "Unresolvable compose system URI: 'http://example.org/nope'"
+        )
+    )
+
+    from fhir4ds.cql.terminology.in_process_adapter import (
+        InProcessTerminologyEndpoint,
+    )
+
+    adapter = InProcessTerminologyEndpoint()
+    with pytest.raises(TerminologyCapabilityError):
+        adapter.expand_intensional(
+            {"resourceType": "ValueSet",
+             "compose": {"include": [{"system": "http://example.org/nope"}]}}
+        )
+    assert adapter._consecutive_failures == 0
+
+
+def test_expand_facade_fallback_value_error_also_capability(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """QA-D12S-001: the Terminology.expand_url facade fallback path raises
+    the same capability class when medterm4ds refuses the URL form."""
+    engine = _install_medterm4ds_stub(monkeypatch)
+    terminology = engine.terminology
+
+    monkeypatch.delitem(sys.modules, "medterm4ds.apps.fhir_api")
+    monkeypatch.delitem(sys.modules, "medterm4ds.apps")
+    terminology.expand_url = MagicMock(
+        side_effect=ValueError("Unsupported fhir_vs URL pattern: 'x'")
+    )
+
+    from fhir4ds.cql.terminology.errors import TerminologyCapabilityError
+    from fhir4ds.cql.terminology.in_process_adapter import (
+        InProcessTerminologyEndpoint,
+    )
+
+    adapter = InProcessTerminologyEndpoint()
+    with pytest.raises(TerminologyCapabilityError):
+        adapter.expand("http://snomed.info/sct?fhir_vs=isa/123")
+    assert adapter._consecutive_failures == 0
+
+
+def _install_search_service_stub(
+    monkeypatch: pytest.MonkeyPatch, search_side_effect: Exception
+) -> None:
+    """Install a fake ``medterm4ds.services.search`` module whose service
+    reports both artifact families available but whose ``search`` raises."""
+    service = MagicMock(name="SearchService")
+    service.ensure_lexical = MagicMock(return_value=True)
+    service.ensure_semantic = MagicMock(return_value=True)
+    service.lexical_available = True
+    service.semantic_available = True
+    service.search = MagicMock(side_effect=search_side_effect)
+    search_mod = types.ModuleType("medterm4ds.services.search")
+    search_mod.get_search_service = MagicMock(return_value=service)
+    services_pkg = sys.modules["medterm4ds.services"]
+    monkeypatch.setitem(sys.modules, "medterm4ds.services.search", search_mod)
+    services_pkg.search = search_mod
+
+
+def test_search_import_error_is_actionable_runtime_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """QA-D12S-002: cached model artifacts pass the availability gate, but an
+    unimportable ML runtime (ModuleNotFoundError: transformers) is a PERMANENT
+    environment condition — it must raise the actionable RuntimeError (same
+    class as the QA-001 artifact gate), not silently return [] and poison the
+    breaker."""
+    _install_medterm4ds_stub(monkeypatch)
+    _install_search_service_stub(
+        monkeypatch, ModuleNotFoundError("No module named 'transformers'")
+    )
+
+    from fhir4ds.cql.terminology.in_process_adapter import (
+        InProcessTerminologyEndpoint,
+    )
+
+    adapter = InProcessTerminologyEndpoint()
+    with pytest.raises(RuntimeError) as exc:
+        adapter.search_text("diabetes", "condition", mode="hybrid")
+    msg = str(exc.value)
+    assert "transformers" in msg
+    assert "lexical" in msg  # the fallback mode remediation must be named
+    # Permanent condition: not a breaker failure.
+    assert adapter._consecutive_failures == 0
+
+
+def test_search_transient_error_still_degrades(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """QA-D12S-002 companion: genuine transient faults keep the documented
+    WARNING + [] + breaker path."""
+    _install_medterm4ds_stub(monkeypatch)
+    _install_search_service_stub(
+        monkeypatch, RuntimeError("duckdb connection reset")
+    )
+
+    from fhir4ds.cql.terminology.in_process_adapter import (
+        InProcessTerminologyEndpoint,
+    )
+
+    adapter = InProcessTerminologyEndpoint()
+    assert adapter.search_text("diabetes", "condition", mode="hybrid") == []
+    assert adapter._consecutive_failures == 1
+
+
+# ----------------------------------------------------------------------
+# QA-D12E-002 (v0.0.26 Domain 12 EXPLORER): the result-CONVERSION loops
+# sat outside the drift-guard try/except — a hostile/ambiguous-shape
+# medterm4ds result (non-dict items, wrong-arity tuple) raised a raw
+# AttributeError OUT of the adapter (no degrade, no breaker accounting),
+# while the HTTP adapter tolerates the same garbage. Contract: hostile
+# result shapes degrade to [] + WARNING + breaker, matching the
+# medterm4ds-drift guard on the CALL itself.
+# ----------------------------------------------------------------------
+
+
+def test_qa_d12e002_expand_intensional_wrong_arity_tuple_degrades(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _install_medterm4ds_stub(monkeypatch)
+    fhir_api = sys.modules["medterm4ds.apps.fhir_api"]
+    fhir_api.expand_intensional_value_set = MagicMock(
+        return_value=([{"system": "SNOMEDCT_US", "code": "1"}], True, "extra")
+    )
+    from fhir4ds.cql.terminology.in_process_adapter import (
+        InProcessTerminologyEndpoint,
+    )
+
+    adapter = InProcessTerminologyEndpoint()
+    assert adapter.expand_intensional({"resourceType": "ValueSet"}) == []
+    assert adapter._consecutive_failures == 1
+
+
+def test_qa_d12e002_expand_intensional_non_dict_items_degrade(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _install_medterm4ds_stub(monkeypatch)
+    fhir_api = sys.modules["medterm4ds.apps.fhir_api"]
+    fhir_api.expand_intensional_value_set = MagicMock(
+        return_value=(["not-a-dict", 42, None], False)
+    )
+    from fhir4ds.cql.terminology.in_process_adapter import (
+        InProcessTerminologyEndpoint,
+    )
+
+    adapter = InProcessTerminologyEndpoint()
+    assert adapter.expand_intensional({"resourceType": "ValueSet"}) == []
+    # Non-dict items are SKIPPED (not a crash); the call still counts
+    # as a success (the endpoint answered; the garbage rows are dropped).
+    assert adapter._consecutive_failures == 0
+
+
+def test_qa_d12e002_expand_non_dict_contains_items_do_not_raise(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = _install_medterm4ds_stub(monkeypatch)
+    fhir_api = sys.modules["medterm4ds.apps.fhir_api"]
+    fhir_api.expand_url_pattern = MagicMock(
+        return_value={"expansion": {"contains": [
+            "not-a-dict",
+            {"system": "SNOMEDCT_US", "code": "valid"},
+        ]}}
+    )
+    from fhir4ds.cql.terminology.in_process_adapter import (
+        InProcessTerminologyEndpoint,
+    )
+
+    adapter = InProcessTerminologyEndpoint()
+    refs = adapter.expand("http://snomed.info/sct?fhir_vs")
+    assert [r.code for r in refs] == ["valid"]
+    assert adapter._consecutive_failures == 0
+
+
+def test_qa_d12e002_search_hostile_score_string_degrades(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A search result whose score is a non-float string must not raise
+    past the adapter (HTTP adapter's _extract_score coerces to 0.0)."""
+    engine = _install_medterm4ds_stub(monkeypatch)
+
+    class _R:
+        source = "SNOMEDCT_US"
+        code = "1"
+        display = "d"
+        score = "not-a-float"
+        match_grade = "exact"
+
+    service = MagicMock(name="SearchService")
+    service.ensure_lexical = MagicMock(return_value=True)
+    service.ensure_semantic = MagicMock(return_value=True)
+    service.search = MagicMock(return_value=[_R()])
+    search_mod = types.ModuleType("medterm4ds.services.search")
+    search_mod.get_search_service = MagicMock(return_value=service)
+    monkeypatch.setitem(
+        sys.modules, "medterm4ds.services.search", search_mod
+    )
+    sys.modules["medterm4ds.services"].search = search_mod
+
+    from fhir4ds.cql.terminology.in_process_adapter import (
+        InProcessTerminologyEndpoint,
+    )
+
+    adapter = InProcessTerminologyEndpoint()
+    results = adapter.search_text("diabetes", "condition", mode="hybrid")
+    assert len(results) == 1 and results[0].score == 0.0
+    assert adapter._consecutive_failures == 0

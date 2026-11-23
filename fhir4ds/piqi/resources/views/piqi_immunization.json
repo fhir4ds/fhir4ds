@@ -1,0 +1,52 @@
+{
+  "name": "piqi_immunization",
+  "status": "draft",
+  "resource": "Immunization",
+  "select": [
+    {
+      "column": [
+        {
+          "name": "element_id",
+          "path": "id",
+          "type": "id"
+        },
+        {
+          "name": "patient_id",
+          "path": "patient.reference.replace('urn:uuid:', '').split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "immunization_text",
+          "path": "vaccineCode.text",
+          "type": "string"
+        },
+        {
+          "name": "immunization_codings",
+          "path": "vaccineCode.coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "lotNumber",
+          "path": "lotNumber",
+          "type": "string"
+        },
+        {
+          "name": "administrationDate",
+          "path": "occurrence.ofType(dateTime).toString()",
+          "type": "string"
+        },
+        {
+          "name": "expirationDate",
+          "path": "expirationDate.toString()",
+          "type": "string"
+        },
+        {
+          "name": "reaction_text",
+          "path": "reaction.first().detail.display",
+          "type": "string"
+        }
+      ]
+    }
+  ]
+}

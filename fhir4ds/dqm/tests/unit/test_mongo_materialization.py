@@ -303,6 +303,37 @@ def test_split_patient_result_rows_keeps_compact_and_full_audit():
     assert audit["rows"][0]["evidence_Helper"][0]["target"] == "Observation/o1"
 
 
+def test_compact_row_normalizes_nan_to_none_d9_historian():
+    """QA-D9H-002 (v0.0.26 D9 HISTORIAN): the mongo twin must match hapi —
+    pandas NaN cells (missing columns in multi-group frames) become None,
+    never float('nan') (BSON NaN in result documents; invalid ``NaN`` token
+    in the json.dumps'd audit text)."""
+    import math
+
+    compact, audit = split_patient_result_rows(
+        [
+            {
+                "patient_id": "patient-1",
+                "numerator": {"result": True, "evidence": []},
+                "denominator_exclusion": float("nan"),
+                "plain": 3.5,
+            }
+        ]
+    )
+    row = compact["rows"][0]
+    assert row["denominator_exclusion"] is None, row
+    assert not isinstance(row["denominator_exclusion"], float) or not math.isnan(
+        row["denominator_exclusion"]
+    )
+    assert row["numerator"] is True
+    assert row["plain"] == 3.5
+    # full audit rows get the same normalization
+    assert audit["rows"][0]["denominator_exclusion"] is None
+    # and the audit payload must serialize as strict JSON (no NaN token)
+    text = json.dumps(audit, default=str)
+    assert "NaN" not in text
+
+
 def test_mongo_cli_requires_nested_subcommand(capsys):
     exit_code = main(["dqm", "mongo"])
 

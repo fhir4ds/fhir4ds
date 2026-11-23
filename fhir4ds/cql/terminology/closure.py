@@ -291,8 +291,17 @@ def _insert_seed_rows(
     rows = [(normalized_anc_sys, ancestor_code, normalized_anc_sys, ancestor_code, closure_set)]
     seen = {(normalized_anc_sys, ancestor_code, normalized_anc_sys, ancestor_code)}
     for ref in descendants:
+        # QA-D12E-003 (v0.0.26 D12 EXPLORER): hostile descendant refs —
+        # None/empty system (NOT NULL violation on insert) or empty code
+        # — are SKIPPED. One malformed ref must not crash the whole
+        # build with a raw ConstraintException that bypasses the
+        # on_expand_error policy.
         desc_sys = SystemResolver.normalize(ref.system) or ref.system
         desc_code = ref.code
+        if not isinstance(desc_sys, str) or not desc_sys:
+            continue
+        if not isinstance(desc_code, str) or not desc_code:
+            continue
         key = (normalized_anc_sys, ancestor_code, desc_sys, desc_code)
         if key in seen:
             continue

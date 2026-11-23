@@ -375,6 +375,23 @@ class DefinitionMeta:
     # Consumed by _collect_audit_evidence_exprs (Strategy 3) to propagate evidence
     # through scalar intermediaries into comparison-based boolean definitions.
     audit_target_expr: Optional[Any] = None
+    # QA-D9S-001 (v0.0.26 D9 SKEPTIC): per-retrieve-CTE WHERE filters extracted
+    # from this definition's correlated EXISTS chain, so audit evidence cites
+    # only resources that actually satisfy the definition's criteria (e.g.
+    # `P.performed during day of "Measurement Period"`), not every
+    # valueset-matching resource. Maps retrieve CTE name -> (exists_alias,
+    # [condition ASTs referencing that alias]). Populated conservatively: only
+    # single-EXISTS-per-CTE, AND-chain conjuncts whose qualified references are
+    # all rooted at the retrieve alias (no outer-scope references).
+    population_evidence_filters: dict = field(default_factory=dict)
+    # QA-D9H-001 (v0.0.26 D9 HISTORIAN): definition names this define's CQL
+    # expression references (collected from the CQL AST at translate time —
+    # comparison-wrapped references to count defines render inside SQLRaw
+    # nodes that the SQL AST CTE-name walker deliberately cannot see).
+    # _resolve_source_resource_ctes seeds its walk with these names so a
+    # boolean population referencing `CountDef >= N` inherits the count
+    # define's source resource CTEs and evidence filters.
+    referenced_definitions: list = field(default_factory=list)
     # Stored audit target SQL expression (SQLSubquery) from First/Last attribution.
     # When a definition like "Lowest Systolic Reading" uses First() on a RESOURCE_ROWS
     # source, the winning resource's ID subquery is stored here so that downstream
@@ -444,6 +461,20 @@ class SQLTranslationContext:
     codesystem_versions: Dict[str, str] = field(default_factory=dict)
     codes: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
+    # CQL 2.0 model definitions (trial-use, chunk CQL20-E):
+    # `define type` named class types — name -> element list
+    # [(element_name, cql_type_str), ...] plus model metadata.
+    declared_types: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    # `define context <X> of type T with key { ... }` — context name ->
+    # {context_type, key_elements}.
+    declared_contexts: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    # `define implicit|explicit conversion from A to B using F` declarations.
+    declared_conversions: List[Dict[str, Any]] = field(default_factory=list)
+    # CQL 2.0 `define context` binding active for this library's
+    # `context` statement (None when not declared): name/context_type/
+    # key_elements of the declared context.
+    active_context_info: Optional[Dict[str, Any]] = None
+
     # Function definitions in current library
     _functions: Dict[str, FunctionInfo] = field(default_factory=dict)
     # Overloaded function storage: name -> list of all overloads
@@ -484,6 +515,19 @@ class SQLTranslationContext:
     # interval parameters, or scalar value for non-interval parameters.
     # Populated from both runtime arguments and CQL default values.
     _parameter_bindings: Dict[str, Any] = field(default_factory=dict)
+
+    # CQL 2.0 include `bind` clauses (FHIR-33126): parameter name in an
+    # INCLUDED library → the SQL expression the bind expression translated
+    # to in the INCLUDING library's context. Checked BEFORE bindings (a
+    # bind clause "overrides any parameter values provided by the
+    # evaluation environment"). Only ever populated on child (included
+    # library) contexts.
+    _parameter_bound_expressions: Dict[str, Any] = field(default_factory=dict)
+
+    # CQL 2.0 #DefaultComparisonPrecision (FHIR-41326): the effective
+    # precision precision-less Date/DateTime/Time comparisons in THIS
+    # library are lowered at, or None for the spec default (millisecond).
+    default_comparison_precision: Optional[str] = None
 
     # Execution context type
     _context_type: str = "Unfiltered"
@@ -1080,10 +1124,19 @@ class SQLTranslationContext:
         if getattr(self, "_patient_property_defs", None):
             self._patient_property_defs.clear()
         self.codes.clear()
+        self.declared_types.clear()
+        self.declared_contexts.clear()
+        self.declared_conversions.clear()
         self._ctes.clear()
         self._patient_context = PatientContext()
         self._measurement_period = MeasurementPeriod()
         self._parameter_bindings = {}
+        self._parameter_bound_expressions = {}
+        # CQL 2.0 declared-context binding (CQL20-E, AMUX-152 #16): reset
+        # so a REUSED context never leaks the previous library's declared
+        # context into the next translation.
+        self.active_context_info = None
+        self.default_comparison_precision = None
         self._context_type = "Unfiltered"
         self._definition_names.clear()
         self._included_definition_names.clear()

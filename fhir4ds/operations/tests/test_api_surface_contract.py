@@ -1,8 +1,10 @@
-"""Domain 11 (v0.0.25) — public API surface contract freeze.
+"""Domain 11 — public API surface contract freeze.
 
 Pins, as executable contract:
 1. every public package's ``__all__`` names are importable (``from pkg import *``
-   never breaks);
+   never breaks) — including the v0.0.26 packages ``fhir4ds.piqi`` and
+   ``fhir4ds.realism`` (QA-D11S-001: they were missing from the freeze, the
+   same guard class that caught the shipped LOCATION_APPROVAL_THRESHOLD bug);
 2. ``__version__`` is uniform across the public packages;
 3. the cross-package import graph stays one-way (viewdef/fhirpath never import
    the layers above them);
@@ -23,6 +25,8 @@ PUBLIC_PACKAGES = [
     "fhir4ds.operations",
     "fhir4ds.matching",
     "fhir4ds.dedup",
+    "fhir4ds.piqi",
+    "fhir4ds.realism",
     "fhir4ds.viewdef",
     "fhir4ds.fhirpath",
 ]

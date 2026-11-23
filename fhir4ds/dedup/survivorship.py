@@ -54,6 +54,9 @@ DEDUP_EXTENSION_URL = "http://fhir4ds.com/fhir/StructureDefinition/dedup"
 #: Clinical-metadata richness keys (design §2d "richest metadata"):
 #: deterministic count of PRESENT keys (key exists, value is not None;
 #: an explicitly empty list still counts as authored presence).
+#: AMUX-150 chunk C: the Encounter corroboration keys join the tuple —
+#: non-encounter resources never carry them, so their richness is
+#: unchanged.
 RICHNESS_KEYS: tuple[str, ...] = (
     "encounter",
     "performer",
@@ -62,6 +65,12 @@ RICHNESS_KEYS: tuple[str, ...] = (
     "dataAbsentReason",
     "bodySite",
     "method",
+    # AMUX-150 encounter corroboration keys
+    "class",
+    "participant",
+    "location",
+    "serviceProvider",
+    "serviceType",
 )
 
 #: Signature tier for ranking level 1. DT_Z and DT_OFFSET share the top

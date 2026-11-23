@@ -639,10 +639,18 @@ def createValuesetMembershipUdf(
     """
     normalized_by_url: Dict[str, tuple[Any, int, Set[tuple]]] = {}
 
-    def _normalized(url: str) -> Set[tuple]:
+    def _normalized(url: str) -> Set[tuple] | None:
+        """Normalized entries for ``url``, or None when NOT loaded.
+
+        Distinguishes not-loaded (key absent -> None, membership NULL per
+        CQL 3VL) from loaded-but-empty (key present, zero entries -> empty
+        set, membership False), matching the native cache semantics where
+        an url present in ``g_valueset_cache`` with zero entries answers
+        False.
+        """
         entries = valueset_codes_cache.get(url)
-        if not entries:
-            return set()
+        if entries is None:
+            return None
         cached = normalized_by_url.get(url)
         if cached is not None and cached[0] is entries and cached[1] == len(entries):
             return cached[2]
@@ -665,7 +673,7 @@ def createValuesetMembershipUdf(
 
         try:
             vs_codes = _normalized(valueset_url)
-            if not vs_codes:
+            if vs_codes is None:
                 if not valueset_codes_cache:
                     _logger.warning(
                         "in_valueset called but no valueset data is loaded. "
@@ -742,6 +750,140 @@ def createValuesetMembershipUdf(
 # ========================================
 # Registration
 # ========================================
+
+def _equivalence_key(value: str) -> str:
+    """CQL Code/system equivalence key (CQL 1.5 §Equivalent, Code `~`).
+
+    Code equivalence compares code and system elements using String
+    equivalence: case-insensitive with per-whitespace-character
+    normalization. We approximate the per-character whitespace rule with
+    a whitespace-collapse (``' '.join(s.split())``) plus ``casefold`` —
+    the same key the translator's clinical equivalence lowering uses
+    (CQL-02 doctrine ``_cql_string_equivalence_key``).
+    """
+    return " ".join(value.split()).casefold()
+
+
+def createEquivalentValuesetMembershipUdf(
+    valueset_codes_cache: Dict[str, Set[str]]
+) -> Callable[[str | None, str, str], bool]:
+    """
+    Create an EQUIVALENT valueset membership UDF (CQL 2.0 ``~in``/``~contains``).
+
+    Mirrors :func:`createValuesetMembershipUdf` but matches codes and code
+    systems using CQL Code ``~`` equivalence (case-insensitive,
+    whitespace-normalized) instead of exact string equality. This backs the
+    CQL 2.0 EquivalentIn (ValueSet) / EquivalentContains (ValueSet)
+    operators (FHIR-31675 / FHIR-33247); the 1.5 ``in`` operator keeps the
+    exact-match surface.
+
+    The cache contract is identical to :func:`createValuesetMembershipUdf`
+    (read LIVE, both bare-string and ``(system, code)`` entry shapes).
+    """
+    normalized_by_url: Dict[str, tuple[Any, int, Dict[tuple, Dict[tuple, tuple]]]] = {}
+
+    def _normalized(url: str) -> Dict[tuple, Dict[tuple, tuple]] | None:
+        """Map equivalence-keyed cache entries back to their raw pairs.
+
+        Result shape: ``{ (syskey, codekey): { raw_sys_key: raw_pair } }``
+        where ``raw_sys_key`` collapses entries that share an equivalence
+        key so multi-system ambiguity detection stays exact.
+
+        Returns None when the ValueSet is NOT loaded (key absent —
+        membership NULL per CQL 3VL) and an empty dict when it is loaded
+        with zero entries (membership False), matching the native
+        EquivalentInValuesetFunc loaded-empty semantics.
+        """
+        entries = valueset_codes_cache.get(url)
+        if entries is None:
+            return None
+        cached = normalized_by_url.get(url)
+        if cached is not None and cached[0] is entries and cached[1] == len(entries):
+            return cached[2]
+        index: Dict[tuple, Dict[tuple, tuple]] = {}
+        if all(isinstance(entry, str) for entry in entries):
+            pairs = {("", code) for code in entries}
+        else:
+            pairs = set(entries)
+        for system, code in pairs:
+            key = (_equivalence_key(system or ""), _equivalence_key(code or ""))
+            index.setdefault(key, {})[_equivalence_key(system or "")] = (system, code)
+        normalized_by_url[url] = (entries, len(entries), index)
+        return index
+
+    def cql_equivalent_in_valueset(resource: str | None, path: str, valueset_url: str) -> bool | None:
+        """Equivalent membership check (CQL 2.0 ``~in``/``~contains`` ValueSet).
+
+        Returns None (SQL NULL) for null inputs or unknown valueset data per
+        CQL three-valued logic. Null code arguments must be folded to False
+        by the TRANSLATOR (spec: "If the code argument is null, the result
+        is false") — this UDF only sees non-null synthetic resources.
+        """
+        if not resource or not valueset_url:
+            return None
+
+        try:
+            index = _normalized(valueset_url)
+            if index is None:
+                if not valueset_codes_cache:
+                    _logger.warning(
+                        "cql_equivalent_in_valueset called but no valueset data "
+                        "is loaded. Load valuesets first with "
+                        "registerValuesetUdfs()."
+                    )
+                return None
+
+            codes = extractCodes(resource, path)
+            ambiguous = False
+            for system, code in codes:
+                code_key = _equivalence_key(code or "")
+                system_key = _equivalence_key(system or "")
+                norm_system = _normalize_system(system)
+                # Direct equivalent match: same equivalence-keyed
+                # (system, code) pair in the cache.
+                for candidate_system in (system, norm_system):
+                    cand_key = (_equivalence_key(candidate_system or ""), code_key)
+                    if cand_key in index:
+                        return True
+                # String-overload scan (source code has no system): any
+                # cache entry with an equivalent code element matches; if
+                # entries under multiple DISTINCT systems match, the
+                # operation is ambiguous per spec → NULL (3VL), mirroring
+                # the exact-match UDF's doctrine.
+                if not system:
+                    distinct_systems = set()
+                    empty_system_match = False
+                    for (_, cached_code_key), by_system in index.items():
+                        if cached_code_key != code_key:
+                            continue
+                        for syskey in by_system:
+                            if syskey:
+                                distinct_systems.add(syskey)
+                            else:
+                                empty_system_match = True
+                    if len(distinct_systems) <= 1:
+                        if distinct_systems or empty_system_match:
+                            return True
+                    else:
+                        ambiguous = True
+                # Code-only cache entries (empty system) match any source.
+                if ("", code_key) in index:
+                    return True
+
+            if ambiguous:
+                return None
+
+            if not codes:
+                if _check_not_done_valueset(resource, path, valueset_url):
+                    return True
+
+            return False
+        except (orjson.JSONDecodeError, ValueError, KeyError, TypeError, AttributeError) as e:
+            _logger.warning("UDF cql_equivalent_in_valueset failed: %s", e)
+            return None
+
+    return cql_equivalent_in_valueset
+
 
 def registerValuesetUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     """
@@ -825,5 +967,6 @@ __all__ = [
     "codingMatches",
     "resolveProfileUrl",
     "createValuesetMembershipUdf",
+    "createEquivalentValuesetMembershipUdf",
     "registerValuesetUdfs",
 ]

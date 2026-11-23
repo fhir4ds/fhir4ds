@@ -979,7 +979,14 @@ def _worker_extract_fragments(
             if isinstance(concept, dict):
                 fragment_out.append(concept)
             else:
-                # Convert dataclass-like to dict at the process boundary
+                # Convert dataclass-like to dict at the process boundary.
+                # QA-D12H-003: ``result_type`` MUST travel across the
+                # boundary — ``_build_derived_resource`` maps it to the
+                # derived FHIR resource type (vaccine->Immunization,
+                # medication->MedicationStatement, ...). Without it every
+                # parallel-path concept files as the DEFAULT Condition,
+                # silently misclassifying vaccines as diagnoses in
+                # parallel mode only.
                 fragment_out.append({
                     "code": _safe_getattr(concept, "code"),
                     "display": _safe_getattr(concept, "display"),
@@ -990,6 +997,7 @@ def _worker_extract_fragments(
                     "span_start": _safe_getattr(concept, "span_start"),
                     "span_end": _safe_getattr(concept, "span_end"),
                     "status": _safe_getattr(concept, "status"),
+                    "result_type": _safe_getattr(concept, "result_type"),
                 })
         out.append(fragment_out)
     return out

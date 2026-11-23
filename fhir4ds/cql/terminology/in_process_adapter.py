@@ -26,6 +26,7 @@ import time
 from typing import Any, Optional
 
 from ..duckdb.udf.system_resolver import SystemResolver
+from .errors import TerminologyCapabilityError
 from .system_mappings import (
     CATEGORY_TO_SOURCES,
     SOURCE_MNEMONIC_TO_URL,
@@ -207,19 +208,24 @@ class InProcessTerminologyEndpoint:
                     search_index_dir,
                 )
             try:
+                # D12 SKEPTIC (v0.0.26): no cache_indexes kwarg. Since
+                # medterm4ds 0.0.12, connect()'s cache_indexes only takes
+                # effect together with prepare_cache=True, and medterm4ds's
+                # own QC-470 recommends NOT preparing read-mostly workloads
+                # (index creation adds ~28s + ~0.8GB at startup for little
+                # gain). The former ``cache_indexes=True`` call was a
+                # silent no-op under the pinned >=0.0.14 contract.
                 self._terminology = _m.connect(
                     db_path=medterm4ds_db_path,
-                    cache_indexes=True,
                 )
             except TypeError:
-                # medterm4ds without cache_indexes (pre-0.0.2 drift).
-                self._terminology = _m.connect(db_path=medterm4ds_db_path)
+                # medterm4ds without the db_path kwarg (pre-0.0.2 drift).
+                self._terminology = _m.connect()
             # Terminology.engine is a LocalDuckDBEngine (subclass of
-            # DiscoveryEngine via the runtime-checkable Protocol).
-            # cache_indexes=True: this adapter holds one long-lived
-            # engine by design, so persisting BM25 indexes into the
-            # prepared cache matches the architecture (no per-call
-            # rebuild churn).
+            # DiscoveryEngine via the runtime-checkable Protocol). The
+            # engine is intentionally NOT prepared at connect time (see
+            # the D12 note above): search serves directly off the lookup
+            # database, matching medterm4ds's own server defaults.
             self._engine = self._terminology.engine
         except RuntimeError as e:
             # medterm4ds 0.0.2 raises RuntimeError when db_path is set
@@ -360,6 +366,9 @@ class InProcessTerminologyEndpoint:
 
         Short-circuits to ``[]`` when the circuit breaker is open.
         """
+        from .endpoint import require_str_arg
+
+        require_str_arg(valueset_url, "valueset_url")  # QA-D8H-002
         now = time.monotonic()
         if self._is_breaker_open(now):
             _logger.warning(
@@ -389,21 +398,56 @@ class InProcessTerminologyEndpoint:
                     if isinstance(expanded, dict)
                     else []
                 )
+            except ValueError as e:
+                # QA-D12S-001 (v0.0.26 Domain 12 SKEPTIC): medterm4ds's
+                # expand_url_pattern raises ValueError precisely for
+                # capability refusals (unsupported URL form / unrecognized
+                # system / unsupported fhir_vs value) — the sidecar maps
+                # these to HTTP 400, and the HTTP adapter escalates those
+                # to TerminologyCapabilityError. Escalate here too so the
+                # in-process surface cannot silently degrade a canonical-
+                # URL expansion to empty membership (AMUX-115 ruling: a
+                # backend that cannot serve the request AT ALL must fail
+                # loudly). Capability refusals are not faults: they do NOT
+                # count toward the circuit breaker.
+                raise TerminologyCapabilityError(
+                    f"in-process medterm4ds refused ValueSet expansion "
+                    f"for {valueset_url!r}: {e}. The medterm4ds engine "
+                    "resolves only SNOMED CT fhir_vs implicit URLs — it "
+                    "has no registry of stored ValueSets by canonical "
+                    "URL. Load the ValueSet locally, POST its definition "
+                    "via expand_intensional(), or point the endpoint at "
+                    "a full terminology server."
+                ) from e
             except Exception as e:  # pragma: no cover - medterm4ds drift guard
                 _logger.warning(
                     "in_process expand failed for %s: %s", valueset_url, e
                 )
                 self._on_call_failure()
                 return []
-            refs = []
-            for item in contains:
-                # FHIR-payload ``system`` values are canonical URLs;
-                # _normalize_system passes them through unchanged.
-                ref = self._to_coderef(
-                    item.get("system"), item.get("code"), item.get("display")
+            try:
+                refs = []
+                for item in contains:
+                    # QA-D12E-002 (v0.0.26 D12 EXPLORER): hostile result
+                    # shapes (non-dict contains items) are SKIPPED —
+                    # parity with the HTTP adapter's tolerant walk. The
+                    # conversion loop must not raise past the adapter.
+                    if not isinstance(item, dict):
+                        continue
+                    # FHIR-payload ``system`` values are canonical URLs;
+                    # _normalize_system passes them through unchanged.
+                    ref = self._to_coderef(
+                        item.get("system"), item.get("code"), item.get("display")
+                    )
+                    if ref is not None:
+                        refs.append(ref)
+            except Exception as e:  # pragma: no cover - medterm4ds drift guard
+                _logger.warning(
+                    "in_process expand conversion failed for %s: %s",
+                    valueset_url, e,
                 )
-                if ref is not None:
-                    refs.append(ref)
+                self._on_call_failure()
+                return []
             self._on_call_success()
             return refs
 
@@ -414,6 +458,17 @@ class InProcessTerminologyEndpoint:
         ):
             try:
                 mt_refs = self._terminology.expand_url(valueset_url)
+            except ValueError as e:
+                # QA-D12S-001: facade fallback — same capability-refusal
+                # class as the helper path (the facade delegates to
+                # expand_url_pattern). Escalate, don't degrade.
+                raise TerminologyCapabilityError(
+                    f"in-process medterm4ds refused ValueSet expansion "
+                    f"for {valueset_url!r}: {e}. Remediation: load the "
+                    "ValueSet locally, POST its definition via "
+                    "expand_intensional(), or point the endpoint at a "
+                    "full terminology server."
+                ) from e
             except Exception as e:  # pragma: no cover - medterm4ds drift guard
                 _logger.warning(
                     "in_process expand_url failed for %s: %s", valueset_url, e
@@ -459,6 +514,9 @@ class InProcessTerminologyEndpoint:
 
         Short-circuits to ``[]`` when the circuit breaker is open.
         """
+        from .endpoint import require_dict_arg
+
+        require_dict_arg(value_set, "value_set")  # QA-D8E-001
         now = time.monotonic()
         if self._is_breaker_open(now):
             _logger.warning(
@@ -488,10 +546,34 @@ class InProcessTerminologyEndpoint:
                 # against 0.0.10 for every intensional ValueSet, and the
                 # exception was swallowed by the degrade path below — so
                 # expand_intensional() silently returned [] for every call.
-                if isinstance(result, tuple) and len(result) == 2:
+                # QA-D12E-002: a tuple of ANY OTHER arity is a hostile/
+                # drifted shape — degrade + breaker, never a raw crash.
+                if isinstance(result, tuple):
+                    if len(result) != 2:
+                        _logger.warning(
+                            "in_process expand_intensional got a %d-tuple "
+                            "result from medterm4ds (expected list or "
+                            "(codes, depth_cap_hit)); degrading to [].",
+                            len(result),
+                        )
+                        self._on_call_failure()
+                        return []
                     expanded, _depth_cap_hit = result
                 else:
                     expanded, _depth_cap_hit = result, False
+            except ValueError as e:
+                # QA-D12S-001: QC-252 (unresolvable compose system) and
+                # QC-246 (null concept code) ValueErrors are request-form
+                # refusals — the sidecar maps them to HTTP 400. Escalate
+                # per the AMUX-115 ruling; do not degrade to [].
+                raise TerminologyCapabilityError(
+                    f"in-process medterm4ds refused intensional ValueSet "
+                    f"expansion for {value_set.get('url', '<intensional>')!r}: "
+                    f"{e}. The ValueSet definition itself cannot be served "
+                    "by this backend. Remediation: fix the compose "
+                    "system/code definitions, or point the endpoint at a "
+                    "full terminology server."
+                ) from e
             except Exception as e:  # pragma: no cover - medterm4ds drift guard
                 _logger.warning(
                     "in_process expand_intensional failed for %s: %s",
@@ -500,13 +582,27 @@ class InProcessTerminologyEndpoint:
                 )
                 self._on_call_failure()
                 return []
-            refs = []
-            for item in expanded or []:
-                ref = self._to_coderef(
-                    item.get("system"), item.get("code"), item.get("display")
+            try:
+                refs = []
+                for item in expanded or []:
+                    # QA-D12E-002: hostile result shapes (non-dict items)
+                    # are skipped — never a raw AttributeError past the
+                    # adapter boundary.
+                    if not isinstance(item, dict):
+                        continue
+                    ref = self._to_coderef(
+                        item.get("system"), item.get("code"), item.get("display")
+                    )
+                    if ref is not None:
+                        refs.append(ref)
+            except Exception as e:  # pragma: no cover - medterm4ds drift guard
+                _logger.warning(
+                    "in_process expand_intensional conversion failed for %s: %s",
+                    value_set.get("url", "<intensional>"),
+                    e,
                 )
-                if ref is not None:
-                    refs.append(ref)
+                self._on_call_failure()
+                return []
             self._on_call_success()
             return refs
 
@@ -519,6 +615,15 @@ class InProcessTerminologyEndpoint:
                 mt_refs = self._terminology.expand_intensional(
                     value_set, count=1000
                 )
+            except ValueError as e:
+                # QA-D12S-001: facade fallback — capability refusal class.
+                raise TerminologyCapabilityError(
+                    f"in-process medterm4ds refused intensional ValueSet "
+                    f"expansion for {value_set.get('url', '<intensional>')!r}: "
+                    f"{e}. Remediation: fix the compose system/code "
+                    "definitions, or point the endpoint at a full "
+                    "terminology server."
+                ) from e
             except Exception as e:  # pragma: no cover - medterm4ds drift guard
                 _logger.warning(
                     "in_process expand_intensional failed for %s: %s",
@@ -627,6 +732,10 @@ class InProcessTerminologyEndpoint:
 
         Short-circuits to ``[]`` when the circuit breaker is open.
         """
+        from .endpoint import require_str_arg
+
+        require_str_arg(query, "query")  # QA-D8H-002
+        require_str_arg(category, "category")
         now = time.monotonic()
         if self._is_breaker_open(now):
             _logger.warning(
@@ -690,6 +799,24 @@ class InProcessTerminologyEndpoint:
                     # (medterm4ds QC-400) exactly like the HTTP sidecar.
                     engine=self._engine,
                 )
+            except ImportError as e:
+                # QA-D12S-002 (v0.0.26 Domain 12 SKEPTIC): the availability
+                # gate above is FILE-based — cached SapBERT artifacts pass
+                # ``ensure_semantic()`` even when the ML runtime (torch /
+                # transformers) is not importable in this environment. An
+                # unimportable dependency is a PERMANENT condition, not a
+                # transient fault: raise the actionable error (same class
+                # as the QA-001 artifact gate) instead of silently
+                # returning [] and poisoning the breaker for the modes
+                # that DO work (lexical).
+                raise RuntimeError(
+                    f"medterm4ds search stack not importable for "
+                    f"mode={mode!r}: {e}. The model artifacts are cached "
+                    "but the ML runtime they require is not installed. "
+                    "Remediation: install the extraction stack "
+                    "(pip install 'fhir4ds-v2[ner]'), or use "
+                    "mode='lexical' when only the BM25 indexes are needed."
+                ) from e
             except Exception as e:  # pragma: no cover - medterm4ds drift guard
                 _logger.warning(
                     "in_process search_text failed for %r (mode=%s): %s",
@@ -721,52 +848,72 @@ class InProcessTerminologyEndpoint:
                 return []
 
         results: list[SearchResult] = []
-        for r in raw_results:
-            if get_search_service is not None:
-                # SearchService SearchResult exposes code / source
-                # (mnemonic or URL) / display / score / match_grade.
-                # CanonicalSearchResult (mode='canonical') carries
-                # canonical_id / anchor_system / anchor_code /
-                # patient_friendly_name instead — map the ANCHOR row
-                # exactly like the HTTP sidecar's $search canonical
-                # branch (apps/fhir_api.py: anchor code/system/display
-                # with score + match_grade), so in-process and HTTP
-                # return the same codes for canonical mode.
-                # index_version is not part of the 0.0.9 contract
-                # (None -> AutoCoder pins "unknown").
-                if getattr(r, "canonical_id", None) is not None:
-                    system = getattr(r, "anchor_system", None)
-                    code = getattr(r, "anchor_code", None)
-                    display = getattr(r, "patient_friendly_name", None)
+        try:
+            for r in raw_results:
+                if get_search_service is not None:
+                    # SearchService SearchResult exposes code / source
+                    # (mnemonic or URL) / display / score / match_grade.
+                    # CanonicalSearchResult (mode='canonical') carries
+                    # canonical_id / anchor_system / anchor_code /
+                    # patient_friendly_name instead — map the ANCHOR row
+                    # exactly like the HTTP sidecar's $search canonical
+                    # branch (apps/fhir_api.py: anchor code/system/display
+                    # with score + match_grade), so in-process and HTTP
+                    # return the same codes for canonical mode.
+                    # index_version is not part of the 0.0.9 contract
+                    # (None -> AutoCoder pins "unknown").
+                    if getattr(r, "canonical_id", None) is not None:
+                        system = getattr(r, "anchor_system", None)
+                        code = getattr(r, "anchor_code", None)
+                        display = getattr(r, "patient_friendly_name", None)
+                    else:
+                        system = getattr(r, "source", None)
+                        code = getattr(r, "code", None)
+                        display = getattr(r, "display", None)
+                    score = getattr(r, "score", None)
+                    match_grade = getattr(r, "match_grade", None)
                 else:
-                    system = getattr(r, "source", None)
-                    code = getattr(r, "code", None)
-                    display = getattr(r, "display", None)
-                score = getattr(r, "score", None)
-                match_grade = getattr(r, "match_grade", None)
-            else:
-                code_obj = getattr(r, "code", None)
-                system = (
-                    getattr(code_obj, "source", None) if code_obj is not None else None
+                    code_obj = getattr(r, "code", None)
+                    system = (
+                        getattr(code_obj, "source", None)
+                        if code_obj is not None
+                        else None
+                    )
+                    code = getattr(code_obj, "code", None)
+                    display = getattr(r, "name", None)
+                    score = getattr(r, "score", 0.0)
+                    match_grade = getattr(r, "match_grade", "ambiguous")
+                ref = self._to_coderef(system, code, display)
+                if ref is None:
+                    continue
+                # QA-D12E-002: hostile score values (non-float strings)
+                # coerce to 0.0 — parity with the HTTP adapter's
+                # _extract_score — instead of raising ValueError past
+                # the adapter boundary.
+                try:
+                    safe_score = float(score) if score is not None else 0.0
+                except (TypeError, ValueError):
+                    safe_score = 0.0
+                results.append(
+                    SearchResult(
+                        system=ref.system,
+                        code=ref.code,
+                        display=ref.display,
+                        score=safe_score,
+                        match_grade=str(match_grade) if match_grade else "ambiguous",
+                        search_mode=mode,
+                        index_version=getattr(r, "index_version", None),
+                    )
                 )
-                code = getattr(code_obj, "code", None)
-                display = getattr(r, "name", None)
-                score = getattr(r, "score", 0.0)
-                match_grade = getattr(r, "match_grade", "ambiguous")
-            ref = self._to_coderef(system, code, display)
-            if ref is None:
-                continue
-            results.append(
-                SearchResult(
-                    system=ref.system,
-                    code=ref.code,
-                    display=ref.display,
-                    score=float(score) if score is not None else 0.0,
-                    match_grade=str(match_grade) if match_grade else "ambiguous",
-                    search_mode=mode,
-                    index_version=getattr(r, "index_version", None),
-                )
+        except Exception as e:  # pragma: no cover - medterm4ds drift guard
+            _logger.warning(
+                "in_process search_text conversion failed for %r (mode=%s): %s",
+                query,
+                mode,
+                e,
             )
+            self._on_call_failure()
+            return []
         self._on_call_success()
         return results
 
@@ -780,6 +927,9 @@ class InProcessTerminologyEndpoint:
 
         Note: the breaker is checked per-query inside ``search_text``.
         """
+        from .endpoint import require_query_pairs
+
+        require_query_pairs(queries)  # QA-D8H-002
         return [self.search_text(q, cat, mode=mode) for q, cat in queries]
 
     # ------------------------------------------------------------------

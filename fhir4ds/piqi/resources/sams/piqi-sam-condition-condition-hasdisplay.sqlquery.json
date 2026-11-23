@@ -1,0 +1,39 @@
+{
+  "resourceType": "Library",
+  "id": "piqi-sam-condition-condition-hasdisplay",
+  "url": "https://fhir4ds.org/piqi/Library/piqi-sam-condition-condition-hasdisplay",
+  "name": "PIQI_SAM_ConditionConditionHasdisplay",
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "system": "http://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
+    ]
+  },
+  "relatedArtifact": [
+    {
+      "type": "depends-on",
+      "label": "view_piqi_condition",
+      "resource": "https://fhir4ds.org/piqi/ViewDefinition/piqi_condition"
+    },
+    {
+      "type": "depends-on",
+      "label": "prereq_condition_condition_ispopulated",
+      "resource": "https://fhir4ds.org/piqi/Library/piqi-sam-condition-condition-ispopulated"
+    }
+  ],
+  "parameter": [],
+  "content": [
+    {
+      "contentType": "application/sql;dialect=duckdb",
+      "data": "U0VMRUNUIHYucGF0aWVudF9pZCBBUyBwYXRpZW50X2lkLCB2LmVsZW1lbnRfaWQgQVMgZWxlbWVudF9pZCwKICAnQ29uZGl0aW9uJyBBUyBkYXRhX2NsYXNzLCAnY29uZGl0aW9uJyBBUyBlbnRpdHksICdDb25jZXB0X0hhc0Rpc3BsYXknIEFTIHNhbV9tbmVtb25pYywKICBDQVNFIFdIRU4gbGVuKGxpc3RfZmlsdGVyKENPQUxFU0NFKHYuY29uZGl0aW9uX2NvZGluZ3MsIFtdKSwgYyAtPiBDT0FMRVNDRShqc29uX2V4dHJhY3Rfc3RyaW5nKGMsICckLmRpc3BsYXknKSwgJycpIDw+ICcnKSkgPiAwIFRIRU4gJ3Bhc3MnIEVMU0UgJ2ZhaWwnIEVORCBBUyByZXN1bHQsCiAgQ0FTRSBXSEVOIGxlbihsaXN0X2ZpbHRlcihDT0FMRVNDRSh2LmNvbmRpdGlvbl9jb2RpbmdzLCBbXSksIGMgLT4gQ09BTEVTQ0UoanNvbl9leHRyYWN0X3N0cmluZyhjLCAnJC5kaXNwbGF5JyksICcnKSA8PiAnJykpID4gMCBUSEVOICdjb25kaXRpb24gaGFzIGF0IGxlYXN0IG9uZSBjb2Rpbmcgd2l0aCBkaXNwbGF5JyBFTFNFICdjb25kaXRpb24gaGFzIG5vIGNvZGluZyB3aXRoIGRpc3BsYXknIEVORCBBUyBkZXRhaWwKRlJPTSAidmlld19waXFpX2NvbmRpdGlvbiIgdgpKT0lOICJwcmVyZXFfY29uZGl0aW9uX2NvbmRpdGlvbl9pc3BvcHVsYXRlZCIgcCBPTiBwLnBhdGllbnRfaWQgPSB2LnBhdGllbnRfaWQgQU5EIHAuZWxlbWVudF9pZCA9IHYuZWxlbWVudF9pZCBBTkQgcC5yZXN1bHQgPSAncGFzcycKT1JERVIgQlkgdi5wYXRpZW50X2lkLCB2LmVsZW1lbnRfaWQ="
+    }
+  ]
+}

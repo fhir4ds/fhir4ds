@@ -109,6 +109,13 @@ def _json_max_nesting_depth(resource: str) -> int:
     return max_depth
 
 
+# v0.0.26 Domain 7 HISTORIAN QA-D7H-001: word-form binary operators that
+# grow the AST spine when chained (see _expression_max_nesting_depth).
+_WORD_BINARY_OPERATORS = frozenset(
+    {"div", "mod", "and", "or", "xor", "implies", "in", "contains", "is", "as"}
+)
+
+
 def _expression_max_nesting_depth(expression: str) -> int:
     """Return maximum FHIRPath expression syntactic nesting depth.
 
@@ -185,6 +192,32 @@ def _expression_max_nesting_depth(expression: str) -> int:
             depth += 1
             if depth > max_depth:
                 max_depth = depth
+        elif ch in "+-*/=!<>~":
+            # v0.0.26 Domain 7 HISTORIAN QA-D7H-001: arithmetic/comparison
+            # binary operators grow the AST spine too (a left-associative
+            # ``1 + 1 + ...`` chain is a left-deep tree, one level per
+            # operator). Without this, a >=250-operator chain requested the
+            # 1000-frame budget floor and the recursive evaluator silently
+            # returned empty / classified is_valid False while native
+            # answered instantly. Overcounting (e.g. '!=' hitting both '!'
+            # and '=', unary minus) only over-provisions the budget — safe.
+            depth += 1
+            if depth > max_depth:
+                max_depth = depth
+        elif ch.isalpha() or ch == "_":
+            # Word operators (div/mod/and/or/xor/implies/in/contains/is/as)
+            # also grow the spine. Consume the whole identifier so operator
+            # substrings inside member names (e.g. `divergence`) never
+            # count. Keywords are case-sensitive lowercase in FHIRPath.
+            j = i + 1
+            while j < n and (expression[j].isalnum() or expression[j] == "_"):
+                j += 1
+            if expression[i:j] in _WORD_BINARY_OPERATORS:
+                depth += 1
+                if depth > max_depth:
+                    max_depth = depth
+            i = j
+            continue
         i += 1
 
     return max_depth
@@ -1271,38 +1304,60 @@ def _iter_top_level_math_operators(text: str) -> list[tuple[str, int, int]]:
 
 
 def _has_invalid_math_literal_operands(expression: str) -> bool:
-    stripped = _strip_wrapping_parens(expression.strip())
-    if not stripped:
+    # v0.0.26 Domain 1 EXPLORER: the per-operator left/right recursion below
+    # is exponential without memoization (T(n) = 3*T(n-1) for an n-operator
+    # chain — each of the n top-level operators recurses into its full left
+    # prefix AND right suffix). A ~20-operator arithmetic chain made the
+    # fallback fhirpath_is_valid UDF hang for minutes / intermittently
+    # SIGSEGV, while native is instant. Memoize per distinct substring: the
+    # recursion only ever produces substrings, so the memo collapses the
+    # call tree to O(n^2) distinct subproblems.
+    memo: dict[str, bool] = {}
+
+    def _check(expr: str) -> bool:
+        cached = memo.get(expr)
+        if cached is not None:
+            return cached
+        memo[expr] = False  # provisional; overwritten below (no cycles: tree recursion)
+        result = _check_uncached(expr)
+        memo[expr] = result
+        return result
+
+    def _check_uncached(stripped_full: str) -> bool:
+        stripped = _strip_wrapping_parens(stripped_full.strip())
+        if not stripped:
+            return False
+
+        logical_parts = _split_top_level_keyword_segments(stripped, ("implies", "and", "or", "xor"))
+        if logical_parts is not None:
+            return any(_check(part) for part in logical_parts)
+
+        # FP-02 SKEPTIC QA-001 (2026-08-16): §6.8 precedence — arithmetic
+        # operators (#04 `* / div mod`, #05 `+ - &`) bind TIGHTER than the '|'
+        # union operator (#07), so `1 + 2 | 3` parses as `(1 + 2) | 3` and the
+        # `+` operand is only the adjacent term. Analyze each top-level union
+        # segment independently instead of attributing the whole textual side
+        # of a math operator to it. Parenthesized unions like `(1 | 2) + 3`
+        # contain no top-level pipe and are still flagged below.
+        pipe_parts = _split_top_level_pipe_segments(stripped)
+        if pipe_parts is not None:
+            return any(_check(part) for part in pipe_parts)
+
+        operators = _iter_top_level_math_operators(stripped)
+        if not operators:
+            return False
+        for _operator, start, end in operators:
+            left = stripped[:start].strip()
+            right = stripped[end:].strip()
+            if _literal_union_has_multiple_effective_items(left):
+                return True
+            if _literal_union_has_multiple_effective_items(right):
+                return True
+            if _check(left) or _check(right):
+                return True
         return False
 
-    logical_parts = _split_top_level_keyword_segments(stripped, ("implies", "and", "or", "xor"))
-    if logical_parts is not None:
-        return any(_has_invalid_math_literal_operands(part) for part in logical_parts)
-
-    # FP-02 SKEPTIC QA-001 (2026-08-16): §6.8 precedence — arithmetic
-    # operators (#04 `* / div mod`, #05 `+ - &`) bind TIGHTER than the '|'
-    # union operator (#07), so `1 + 2 | 3` parses as `(1 + 2) | 3` and the
-    # `+` operand is only the adjacent term. Analyze each top-level union
-    # segment independently instead of attributing the whole textual side
-    # of a math operator to it. Parenthesized unions like `(1 | 2) + 3`
-    # contain no top-level pipe and are still flagged below.
-    pipe_parts = _split_top_level_pipe_segments(stripped)
-    if pipe_parts is not None:
-        return any(_has_invalid_math_literal_operands(part) for part in pipe_parts)
-
-    operators = _iter_top_level_math_operators(stripped)
-    if not operators:
-        return False
-    for _operator, start, end in operators:
-        left = stripped[:start].strip()
-        right = stripped[end:].strip()
-        if _literal_union_has_multiple_effective_items(left):
-            return True
-        if _literal_union_has_multiple_effective_items(right):
-            return True
-        if _has_invalid_math_literal_operands(left) or _has_invalid_math_literal_operands(right):
-            return True
-    return False
+    return _check(expression)
 
 
 def _has_invalid_string_search_literal_unions(expression: str) -> bool:
@@ -2542,7 +2597,15 @@ def fhirpath_is_valid_udf(expression: str | None) -> bool:
         return False
     if _has_invalid_math_literal_unions(stripped):
         return False
-    if _has_invalid_math_literal_operands(stripped):
+    # v0.0.26 Domain 7 HISTORIAN QA-D7H-001: the memoized scan recurses once
+    # per chain level (~2-3 frames/operator); a >=~450-operator chain blows
+    # the default recursion limit OUTSIDE the eval budget. Run it under the
+    # same sized budget the evaluator gets (the depth heuristic counts
+    # binary-operator spine growth).
+    if _run_with_recursion_budget(
+        lambda _expr=stripped: _has_invalid_math_literal_operands(_expr),
+        (10 * _expression_max_nesting_depth(stripped)) + 1000,
+    ):
         return False
     if _has_invalid_string_search_arity(stripped):
         return False

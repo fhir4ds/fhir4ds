@@ -26,6 +26,37 @@ from typing import Callable, List, Optional, Union
 from ..errors import ParseError
 
 _logger = logging.getLogger(__name__)
+
+# Sentinel distinguishing "not yet seen" from a None (unversioned) reference.
+_UNSET = object()
+
+
+# CQL 2.0 directives (FHIR-41326): comparison precisions supported by
+# #DefaultComparisonPrecision. 'week' is deliberately absent — CQL §8
+# timing comparisons "involving weeks are not supported".
+_COMPARISON_PRECISIONS = (
+    "year", "month", "day", "hour", "minute", "second", "millisecond",
+)
+
+# Token type names accepted as an unquoted directive value (temporal
+# precision keywords, singular and plural).
+_DIRECTIVE_PRECISION_TOKENS = {
+    "YEAR", "MONTH", "WEEK", "DAY", "HOUR", "MINUTE", "SECOND", "MILLISECOND",
+    "YEARS", "MONTHS", "WEEKS", "DAYS", "HOURS", "MINUTES", "SECONDS",
+    "MILLISECONDS",
+}
+
+# Token type names accepted as a directive NAME (keywordIdentifier-class
+# tokens that may legally appear as directive identifiers).
+_DIRECTIVE_NAME_TOKENS = {
+    "YEAR", "MONTH", "WEEK", "DAY", "HOUR", "MINUTE", "SECOND", "MILLISECOND",
+    "DATE", "TIME", "CODE", "CONCEPT", "DEFAULT", "VERSION", "DISPLAY",
+}
+
+
+def _version_display(version: Optional[str]) -> str:
+    return f"'{version}'" if version is not None else "(no version)"
+
 from ..parser.ast_nodes import (
     AliasRef,
     AggregateClause,
@@ -44,6 +75,7 @@ from ..parser.ast_nodes import (
     DateTimeLiteral,
     Definition,
     DifferenceBetween,
+    Directive,
     DistinctExpression,
     DurationBetween,
     ExistsExpression,
@@ -73,6 +105,12 @@ from ..parser.ast_nodes import (
     QuerySource,
     Quantity,
     Retrieve,
+    RetrieveFilter,
+    TypeDefinition,
+    TypeElement,
+    ContextInfoDefinition,
+    ContextRelationship,
+    ConversionDefinition,
     ReturnClause,
     SingletonExpression,
     SkipExpression,
@@ -92,6 +130,16 @@ from ..parser.ast_nodes import (
     ChoiceTypeSpecifier,
 )
 from ..parser.lexer import Lexer, Token, TokenType
+
+# Bare date-time precision keywords that may appear as a `convert .. to`
+# unit target (CQL 2.0 grammar: unit : dateTimePrecision |
+# pluralDateTimePrecision | STRING).
+_PRECISION_UNIT_TOKENS = (
+    TokenType.YEAR, TokenType.MONTH, TokenType.WEEK, TokenType.DAY,
+    TokenType.HOUR, TokenType.MINUTE, TokenType.SECOND, TokenType.MILLISECOND,
+    TokenType.YEARS, TokenType.MONTHS, TokenType.WEEKS, TokenType.DAYS,
+    TokenType.HOURS, TokenType.MINUTES, TokenType.SECONDS, TokenType.MILLISECONDS,
+)
 
 
 class CQLParser:
@@ -213,6 +261,12 @@ class CQLParser:
 
         This is the main entry point for parsing CQL source code.
         """
+        # CQL 2.0 directives (trial-use, FHIR-41326): zero or more '#'
+        # directives may precede the library declaration.
+        directives: List[Directive] = []
+        while self.check(TokenType.HASH):
+            directives.append(self._parse_directive())
+
         # Parse library declaration
         self.expect(TokenType.LIBRARY, "Expected 'library' declaration")
         identifier = self._parse_identifier_name()
@@ -227,13 +281,201 @@ class CQLParser:
             version_token = self.expect(TokenType.STRING, "Expected version string")
             version = version_token.value
 
-        library = Library(identifier=identifier, version=version)
+        library = Library(identifier=identifier, version=version, directives=directives)
 
         # Parse library body
         while not self.check(TokenType.EOF):
             self._parse_library_element(library)
 
+        self._check_multiple_versions(library)
+
         return library
+
+    def _check_multiple_versions(self, library: Library) -> None:
+        """CQL 2.0 (FHIR-57620) multi-version constraints.
+
+        Developer's Guide (post-reconciliation 2.0 text):
+
+        * "A given library SHALL NOT include multiple versions of the same
+          library."
+        * "Multiple versions of the same model SHALL NOT be referenced in
+          the same library."
+
+        Only explicitly-DIFFERENT version specifiers are "multiple
+        versions"; an unversioned reference alongside a versioned one is
+        left to the implementation environment (it resolves to whatever
+        version the environment supplies). Discrepancies arriving
+        transitively through included libraries are also an
+        implementation-environment concern and are not checked here.
+        """
+        model_versions: dict[str, Optional[str]] = {}
+        for using in library.using:
+            # Compare on the unqualified model name: the same model may be
+            # referenced with or without namespace qualifiers.
+            unqualified = using.model.rsplit(".", 1)[-1]
+            seen = model_versions.get(unqualified, _UNSET)
+            if (
+                seen is not _UNSET
+                and seen is not None
+                and using.version is not None
+                and seen != using.version
+            ):
+                token = self.current()
+                raise ParseError(
+                    "Multiple versions of the same model SHALL NOT be "
+                    f"referenced in the same library (model '{unqualified}' "
+                    f"referenced with version "
+                    f"{_version_display(seen)} and "
+                    f"{_version_display(using.version)}) "
+                    "[CQL 2.0, FHIR-57620]",
+                    position=(token.line, token.column),
+                )
+            model_versions[unqualified] = (
+                using.version
+                # AMUX-152 #15: an unversioned reference must NOT
+                # overwrite a stored version with None — that masks a
+                # later differently-versioned reference as no-conflict.
+                # Keep the first non-None version.
+                if (using.version is not None or seen is _UNSET)
+                else seen
+            )
+
+        library_versions: dict[str, Optional[str]] = {}
+        for inc in library.includes:
+            seen = library_versions.get(inc.path, _UNSET)
+            if (
+                seen is not _UNSET
+                and seen is not None
+                and inc.version is not None
+                and seen != inc.version
+            ):
+                token = self.current()
+                raise ParseError(
+                    "A library SHALL NOT include multiple versions of the "
+                    f"same library ('{inc.path}' included with version "
+                    f"{_version_display(seen)} and "
+                    f"{_version_display(inc.version)}) "
+                    "[CQL 2.0, FHIR-57620]",
+                    position=(token.line, token.column),
+                )
+            # AMUX-152 #15: keep the first non-None version — an
+            # unversioned include must not mask a later version conflict.
+            library_versions[inc.path] = (
+                inc.version if (inc.version is not None or seen is _UNSET) else seen
+            )
+
+    def _parse_directive(self) -> Directive:
+        """Parse a CQL 2.0 ``#`` directive (trial-use, FHIR-41326).
+
+        Grammar (HL7/cql master ``cql.g4``)::
+
+            directive : '#' identifier (':' STRING)? ;
+
+        The Developer's Guide additionally shows unquoted values and, for
+        ``#DefaultComparisonPrecision``, an inclusion-behavior clause::
+
+            #DefaultComparisonPrecision: minutes
+            #DefaultComparisonPrecision: 'minutes' check included libraries
+
+        Both spellings are accepted: the value may be a quoted STRING or a
+        temporal-precision keyword, optionally followed by one of the three
+        ``<default|override|check> included libraries`` clauses.
+        """
+        hash_token = self.expect(TokenType.HASH, "Expected '#' directive")
+        name_token = self.current()
+        if name_token.type not in (TokenType.IDENTIFIER, TokenType.QUOTED_IDENTIFIER) and not (
+            name_token.type.name in _DIRECTIVE_NAME_TOKENS
+        ):
+            raise ParseError(
+                f"Expected directive identifier after '#' at line "
+                f"{name_token.line}, column {name_token.column}",
+                position=(name_token.line, name_token.column),
+            )
+        name = name_token.value
+        self.advance()
+
+        value: Optional[str] = None
+        inclusion_behavior: Optional[str] = None
+
+        if self.match_and_advance(TokenType.COLON):
+            value_token = self.current()
+            if value_token.type == TokenType.STRING:
+                value = value_token.value
+                # Normalize plural precision spellings to the singular
+                # comparison precision ('minutes' -> 'minute'), exactly
+                # like the unquoted token branch — the directive grammar
+                # accepts quoted precision strings and the quoted form is
+                # equivalent to the unquoted one (AMUX-152 #5).
+                lowered = value.lower()
+                if lowered.endswith("s") and lowered[:-1] in _COMPARISON_PRECISIONS:
+                    value = lowered[:-1]
+                self.advance()
+            elif value_token.type.name in _DIRECTIVE_PRECISION_TOKENS:
+                value = value_token.value.lower()
+                # Normalize plural precision spellings to the singular
+                # comparison precision ('minutes' -> 'minute').
+                if value.endswith("s") and value[:-1] in _COMPARISON_PRECISIONS:
+                    value = value[:-1]
+                self.advance()
+            else:
+                raise ParseError(
+                    f"Expected a quoted string or precision value after "
+                    f"'#:{name}:' at line {value_token.line}, column "
+                    f"{value_token.column}",
+                    position=(value_token.line, value_token.column),
+                )
+
+            # Optional inclusion-behavior clause (only meaningful for
+            # DefaultComparisonPrecision; rejected elsewhere below).
+            behavior = self._try_parse_inclusion_behavior()
+            if behavior is not None:
+                inclusion_behavior = behavior
+                if name != "DefaultComparisonPrecision":
+                    raise ParseError(
+                        f"Inclusion behavior '{inclusion_behavior}' is only "
+                        f"valid on the #DefaultComparisonPrecision directive "
+                        f"(found on #{name}) [CQL 2.0, FHIR-41326]",
+                        position=(hash_token.line, hash_token.column),
+                    )
+
+        return Directive(name=name, value=value, inclusion_behavior=inclusion_behavior)
+
+    def _try_parse_inclusion_behavior(self) -> Optional[str]:
+        """Parse an optional ``<default|override|check> included libraries`` clause.
+
+        Returns the clause string (e.g. ``default included libraries``) or
+        None when the next tokens do not form one.
+        """
+        first = self.current()
+        if first.type == TokenType.DEFAULT:
+            mode = "default"
+        elif first.type == TokenType.IDENTIFIER and first.value in ("override", "check"):
+            mode = first.value
+        else:
+            return None
+        self.advance()
+
+        included_token = self.current()
+        if included_token.type != TokenType.INCLUDED_IN or included_token.value != "included":
+            raise ParseError(
+                f"Expected 'included libraries' after '{mode}' in directive "
+                f"inclusion behavior at line {included_token.line}, column "
+                f"{included_token.column} [CQL 2.0, FHIR-41326]",
+                position=(included_token.line, included_token.column),
+            )
+        self.advance()
+
+        libraries_token = self.current()
+        if libraries_token.type != TokenType.IDENTIFIER or libraries_token.value != "libraries":
+            raise ParseError(
+                f"Expected 'libraries' after '{mode} included' in directive "
+                f"inclusion behavior at line {libraries_token.line}, column "
+                f"{libraries_token.column} [CQL 2.0, FHIR-41326]",
+                position=(libraries_token.line, libraries_token.column),
+            )
+        self.advance()
+
+        return f"{mode} included libraries"
 
     def _parse_library_element(self, library: Library) -> None:
         """Parse a library element (using, include, define, etc.)."""
@@ -270,13 +512,24 @@ class CQLParser:
         """Parse a using definition (e.g., 'using FHIR version \"4.0.1\"')."""
         self.expect(TokenType.USING, "Expected 'using'")
         model = self._parse_identifier_name()
+        # FHIR-31019 (CQL 2.0): qualified model names — hl7.fhir.us.core.USCore
+        while self.match(TokenType.DOT):
+            self.advance()  # consume DOT
+            model = f"{model}.{self._parse_identifier_name()}"
+
         version = None
+        alias = None
 
         if self.match_and_advance(TokenType.VERSION):
             version_token = self.expect(TokenType.STRING, "Expected version string")
             version = version_token.value
 
-        return UsingDefinition(model=model, version=version)
+        # FHIR-48762 (CQL 2.0): model aliases — `using X version 'y' called Z`.
+        # When absent, the unqualified model name is the local identifier.
+        if self.match_and_advance(TokenType.CALLED):
+            alias = self._parse_identifier_name()
+
+        return UsingDefinition(model=model, version=version, alias=alias)
 
     def parse_include_definition(self) -> IncludeDefinition:
         """Parse an include definition."""
@@ -291,6 +544,7 @@ class CQLParser:
 
         version = None
         alias = None
+        bindings = None
 
         if self.match_and_advance(TokenType.VERSION):
             version_token = self.expect(TokenType.STRING, "Expected version string")
@@ -299,7 +553,48 @@ class CQLParser:
         if self.match_and_advance(TokenType.CALLED):
             alias = self._parse_identifier_name()
 
-        return IncludeDefinition(path=path, version=version, alias=alias)
+        # CQL 2.0 (FHIR-33126, trial-use): 'bind' tupleSelector supplying
+        # values for parameters in the included library:
+        #   include X called C bind { AsOf: end of "Measurement Period" }
+        if (
+            self.match(TokenType.IDENTIFIER)
+            and self.current().value == "bind"
+            and self.peek(1).type == TokenType.LBRACE
+        ):
+            self.advance()  # consume 'bind'
+            bindings = self._parse_bind_tuple_selector()
+
+        return IncludeDefinition(path=path, version=version, alias=alias, bindings=bindings)
+
+    def _parse_bind_tuple_selector(self):
+        """Parse the ``{ Param: expr, ... }`` tuple of an include ``bind`` clause."""
+        self.expect(TokenType.LBRACE, "Expected '{' to open bind clause")
+        bindings = {}
+        if self.match_and_advance(TokenType.RBRACE):
+            raise ParseError(
+                "Include bind clause must bind at least one parameter "
+                "(empty '{}' is not allowed) [CQL 2.0, FHIR-33126]"
+            )
+        while True:
+            name_token = self.current()
+            name = self._parse_identifier_name()
+            if name in bindings:
+                raise ParseError(
+                    f"Duplicate parameter binding '{name}' in include bind "
+                    f"clause at line {name_token.line}, column "
+                    f"{name_token.column} [CQL 2.0, FHIR-33126]",
+                    position=(name_token.line, name_token.column),
+                )
+            self.expect(
+                TokenType.COLON,
+                f"Expected ':' after parameter name '{name}' in bind clause",
+            )
+            bindings[name] = self.parse_expression()
+            if self.match_and_advance(TokenType.COMMA):
+                continue
+            self.expect(TokenType.RBRACE, "Expected '}' to close bind clause")
+            break
+        return bindings
 
     def parse_parameter_definition(self) -> ParameterDefinition:
         """Parse a parameter definition."""
@@ -356,6 +651,32 @@ class CQLParser:
         ):
             access_level = self.advance().value
 
+        # CQL 2.0 model-definition statements (trial-use): `define type`,
+        # `define context <X> of type ...`, and
+        # `define implicit|explicit conversion ...`. These keywords lex as
+        # plain identifiers, so disambiguate against an expression define
+        # (whose name would be followed by ':') by lookahead.
+        _tok = self.current()
+        _tok_val = getattr(_tok, "value", "")
+        if (
+            _tok.type == TokenType.IDENTIFIER
+            and _tok_val == "type"
+            and self.peek(1).type in (TokenType.IDENTIFIER, TokenType.QUOTED_IDENTIFIER)
+        ):
+            return self._parse_type_definition(access_level)
+        if (
+            _tok.type == TokenType.CONTEXT
+            and self.peek(1).type != TokenType.COLON
+            and self.peek(2).type == TokenType.OF
+        ):
+            return self._parse_context_info_definition(access_level)
+        if (
+            _tok.type == TokenType.IDENTIFIER
+            and _tok_val in ("implicit", "explicit")
+            and getattr(self.peek(1), "value", "") == "conversion"
+        ):
+            return self._parse_conversion_definition(access_level)
+
         # Check for fluent function definition
         is_fluent = self.match(TokenType.FLUENT)
         if is_fluent:
@@ -372,6 +693,152 @@ class CQLParser:
 
         expression = self.parse_expression()
         return Definition(name=name, expression=expression, access_level=access_level)
+
+    def _parse_type_definition(self, access_level: Optional[str] = None) -> TypeDefinition:
+        """Parse a CQL 2.0 `define type` declaration (FHIR-34014, trial-use).
+
+        Grammar: 'define' accessModifier? 'type' qualifiedIdentifier
+        baseTypeSpecifier? typeElements? typeInfo contextRelationship*
+        """
+        self._expect_keyword("type")
+        name = self._parse_identifier_name()
+        while self.match_and_advance(TokenType.DOT):
+            # The grammar admits a qualified identifier; keep the full name
+            # (namespace-qualified declarations register under the last
+            # segment for local reference).
+            name = f"{name}.{self._parse_identifier_name()}"
+
+        base_type = None
+        if self._match_keyword("extends"):
+            base_type = self._parse_named_type_specifier()
+
+        elements = []
+        if self.match_and_advance(TokenType.LBRACE):
+            while not self.match(TokenType.RBRACE):
+                elem_name = self._parse_identifier_name()
+                elem_type = self.parse_type_specifier()
+                elements.append(TypeElement(name=elem_name, type_specifier=elem_type))
+                if not self.match_and_advance(TokenType.COMMA):
+                    break
+            self.expect(TokenType.RBRACE, "Expected '}' closing type elements")
+
+        # typeInfo clause: ('label' identifier)? ('identifier' STRING)?
+        # 'retrievable'? ('primary' 'code' 'path' simplePath)?
+        label = None
+        identifier = None
+        retrievable = False
+        primary_code_path = None
+        if self._match_keyword("label"):
+            label = self._parse_identifier_name()
+        if self._match_keyword("identifier"):
+            identifier = self.expect(
+                TokenType.STRING, "Expected string after 'identifier'"
+            ).value
+        if self._match_keyword("retrievable"):
+            retrievable = True
+        if self._match_keyword("primary"):
+            self._expect_lexeme("code")
+            self._expect_lexeme("path")
+            primary_code_path = self._parse_identifier_name()
+            while self.match_and_advance(TokenType.DOT):
+                primary_code_path = f"{primary_code_path}.{self._parse_identifier_name()}"
+
+        # contextRelationship*: 'related' 'to' qualifiedIdentifier 'by'
+        # '{' qualifiedIdentifierOrFunctionIdentifier (',' ...)* '}'
+        relationships = []
+        while self._match_keyword("related"):
+            self._expect_keyword("to")
+            ctx_name = self._parse_identifier_name()
+            while self.match_and_advance(TokenType.DOT):
+                ctx_name = f"{ctx_name}.{self._parse_identifier_name()}"
+            self._expect_keyword("by")
+            self.expect(TokenType.LBRACE, "Expected '{' after 'by'")
+            keys = [self._parse_identifier_name()]
+            while self.match_and_advance(TokenType.COMMA):
+                keys.append(self._parse_identifier_name())
+            self.expect(TokenType.RBRACE, "Expected '}' after relationship keys")
+            relationships.append(ContextRelationship(context=ctx_name, key_elements=keys))
+
+        return TypeDefinition(
+            name=name,
+            base_type=base_type,
+            elements=elements,
+            access_level=access_level or "public",
+            label=label,
+            identifier=identifier,
+            retrievable=retrievable,
+            primary_code_path=primary_code_path,
+            context_relationships=relationships,
+        )
+
+    def _parse_context_info_definition(
+        self, access_level: Optional[str] = None
+    ) -> ContextInfoDefinition:
+        """Parse a CQL 2.0 `define context X of type T with key { ... }`
+        model declaration (trial-use)."""
+        self.expect(TokenType.CONTEXT, "Expected 'context'")
+        name = self._parse_identifier_name()
+        self.expect(TokenType.OF, "Expected 'of'")
+        self._expect_keyword("type")
+        context_type = self._parse_named_type_specifier()
+        key_elements = []
+        if self.match_and_advance(TokenType.WITH):
+            self._expect_keyword("key")
+            self.expect(TokenType.LBRACE, "Expected '{' after 'key'")
+            key_elements = [self._parse_identifier_name()]
+            while self.match_and_advance(TokenType.COMMA):
+                key_elements.append(self._parse_identifier_name())
+            self.expect(TokenType.RBRACE, "Expected '}' after key elements")
+        return ContextInfoDefinition(
+            name=name, context_type=context_type, key_elements=key_elements
+        )
+
+    def _parse_conversion_definition(
+        self, access_level: Optional[str] = None
+    ) -> ConversionDefinition:
+        """Parse a CQL 2.0 `define implicit|explicit conversion from A to B
+        using Func` declaration (trial-use)."""
+        implicit_ = self.advance().value == "implicit"
+        self._expect_keyword("conversion")
+        self.expect(TokenType.FROM, "Expected 'from'")
+        from_type = self.parse_type_specifier()
+        self.expect(TokenType.TO, "Expected 'to'")
+        to_type = self.parse_type_specifier()
+        self.expect(TokenType.USING, "Expected 'using'")
+        func_name = self._parse_identifier_name()
+        while self.match_and_advance(TokenType.DOT):
+            func_name = f"{func_name}.{self._parse_identifier_name()}"
+        return ConversionDefinition(
+            from_type=from_type,
+            to_type=to_type,
+            function_name=func_name,
+            implicit_=implicit_,
+            access_level=access_level or "public",
+        )
+
+    def _match_keyword(self, keyword: str) -> bool:
+        """Match a plain-identifier lexeme (non-keyword grammar word)."""
+        tok = self.current()
+        if tok is not None and tok.type == TokenType.IDENTIFIER and tok.value == keyword:
+            self.advance()
+            return True
+        return False
+
+    def _expect_keyword(self, keyword: str):
+        tok = self.current()
+        if tok is None or tok.value != keyword:
+            got = getattr(tok, "value", "<eof>")
+            raise ParseError(message=f"Expected '{keyword}'. Got '{got}'")
+        self.advance()
+
+    def _expect_lexeme(self, word: str):
+        """Expect a lexeme by VALUE regardless of its token type (grammar
+        words that the lexer promotes to keywords, e.g. 'code')."""
+        tok = self.current()
+        if tok is None or tok.value != word:
+            got = getattr(tok, "value", "<eof>")
+            raise ParseError(message=f"Expected '{word}'. Got '{got}'")
+        self.advance()
 
     def _parse_function_definition(
         self, fluent: bool = False, access_level: Optional[str] = None
@@ -1275,6 +1742,19 @@ class CQLParser:
                 # Convert-to-Quantity-unit: `convert X to 'm2'` (quoted UCUM
                 # unit target; used by the us-cql-ig shared libraries).
                 # Lowered to quantityConvert by the translator.
+                unit = self.advance().value
+                return BinaryExpression(
+                    operator="convert",
+                    left=operand,
+                    right=Literal(value=unit, type="String"),
+                )
+            if self.match(*_PRECISION_UNIT_TOKENS):
+                # CQL 2.0 grammar (FHIR-52783 surface):
+                #   'convert' expression 'to' (typeSpecifier | unit)
+                # where `unit` also admits bare date-time precision keywords
+                # (year..millisecond, singular and plural). The reference
+                # implementation lowers unit targets to ConvertQuantity, so
+                # parse them exactly like the quoted-unit form.
                 unit = self.advance().value
                 return BinaryExpression(
                     operator="convert",
@@ -2199,6 +2679,7 @@ class CQLParser:
         terminology = None
         terminology_property = None
         navigation_path = None
+        additional_filters: list = []
 
         # Check for navigation (->) for related context retrieve
         if self.match_and_advance(TokenType.ARROW):
@@ -2214,8 +2695,58 @@ class CQLParser:
 
             terminology = self.parse_expression()
 
+            # CQL 2.0 multi-filter retrieve (FHIR-31397): comma-separated
+            # additional filters, each `<path> <comparator> <terminology>`
+            # (Logical Spec CodeFilterElement shape — explicit property and
+            # comparator; all filters ANDed).
+            while self.match_and_advance(TokenType.COMMA):
+                prop = self._parse_identifier_name()
+                while self.match_and_advance(TokenType.DOT):
+                    prop = f"{prop}.{self._parse_identifier_name()}"
+                comparator = self._parse_retrieve_filter_comparator()
+                operand = self.parse_expression()
+                additional_filters.append(
+                    RetrieveFilter(
+                        property=prop, comparator=comparator, terminology=operand
+                    )
+                )
+
         self.expect(TokenType.RBRACKET, "Expected ']'")
-        return Retrieve(type=resource_type, terminology=terminology, terminology_property=terminology_property, navigation_path=navigation_path, model=model_qualifier)
+        return Retrieve(
+            type=resource_type,
+            terminology=terminology,
+            terminology_property=terminology_property,
+            navigation_path=navigation_path,
+            model=model_qualifier,
+            additional_filters=additional_filters,
+        )
+
+    def _parse_retrieve_filter_comparator(self) -> str:
+        """Parse a multi-filter retrieve comparator: in / ~in / = / ~ /
+        contains / ~contains (the retrieve codeComparator set)."""
+        if self.match(TokenType.TILDE) and self.peek(1).type in (
+            TokenType.IN, TokenType.CONTAINS,
+        ):
+            self.advance()  # consume TILDE
+            if self.match_and_advance(TokenType.IN):
+                return "~in"
+            self.advance()  # CONTAINS
+            return "~contains"
+        if self.match_and_advance(TokenType.TILDE):
+            return "~"
+        if self.match_and_advance(TokenType.IN):
+            return "in"
+        if self.match_and_advance(TokenType.CONTAINS):
+            return "contains"
+        if self.match_and_advance(TokenType.EQUALS):
+            return "="
+        got = self.peek().value if self.peek() else "<eof>"
+        raise ParseError(
+            message=(
+                "Expected a retrieve filter comparator (in, ~in, =, ~, "
+                f"contains, ~contains) after the filter property; got '{got}'."
+            )
+        )
 
     def parse_tuple_expression(self) -> TupleExpression:
         """Parse a tuple literal expression."""
@@ -3341,7 +3872,27 @@ def parse_cql(source: str) -> Library:
     lexer = Lexer(source)
     tokens = lexer.tokenize()
     parser = CQLParser(tokens)
-    return parser.parse_library()
+    library = parser.parse_library()
+
+    # CQL 2.0 parameter constraints (FHIR-48682, trial-use): the @constraint
+    # / @message / @constraintScope tags live in block comments the lexer
+    # skips, so they are extracted from the raw source and attached to the
+    # Library node here (single choke point).
+    from .annotations import extract_parameter_constraints, parse_library_tags
+
+    try:
+        library.parameter_constraints = extract_parameter_constraints(
+            parse_library_tags(source)
+        )
+    except ValueError as exc:
+        line = 1
+        column = 1
+        raise ParseError(
+            f"Invalid parameter constraint annotation: {exc}",
+            position=(line, column),
+        ) from exc
+
+    return library
 
 
 def parse_expression(source: str) -> Expression:

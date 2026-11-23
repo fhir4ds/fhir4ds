@@ -21,7 +21,7 @@ from typing import Any
 
 from .config import ServeConfig
 
-__version__ = "0.0.25"
+__version__ = "0.0.26"
 
 __all__ = ["create_app", "ServeConfig", "__version__"]
 

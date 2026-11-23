@@ -1,0 +1,94 @@
+{
+  "name": "piqi_medication_statement",
+  "status": "draft",
+  "resource": "MedicationStatement",
+  "select": [
+    {
+      "column": [
+        {
+          "name": "element_id",
+          "path": "id",
+          "type": "id"
+        },
+        {
+          "name": "patient_id",
+          "path": "subject.reference.replace('urn:uuid:', '').split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "medication_text",
+          "path": "medication.ofType(CodeableConcept).text",
+          "type": "string"
+        },
+        {
+          "name": "medication_codings",
+          "path": "medication.ofType(CodeableConcept).coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "startDate",
+          "path": "iif(effective.ofType(dateTime).exists(), effective.ofType(dateTime).toString(), iif(effective.ofType(Period).exists(), effective.ofType(Period).start, ''))",
+          "type": "string"
+        },
+        {
+          "name": "endDate",
+          "path": "iif(effective.ofType(Period).exists(), effective.ofType(Period).end, '')",
+          "type": "string"
+        },
+        {
+          "name": "doseAmount",
+          "path": "dosage.first().doseAndRate.first().doseQuantity.value",
+          "type": "decimal"
+        },
+        {
+          "name": "doseAmountUnit_text",
+          "path": "dosage.first().doseAndRate.first().doseQuantity.unit",
+          "type": "string"
+        },
+        {
+          "name": "doseRoute_text",
+          "path": "dosage.first().route.text",
+          "type": "string"
+        },
+        {
+          "name": "doseRoute_codings",
+          "path": "dosage.first().route.coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "doseQuantity",
+          "path": "iif(false, 0, {})",
+          "type": "decimal"
+        },
+        {
+          "name": "doseQuantityUnit",
+          "path": "iif(false, '', {})",
+          "type": "string"
+        },
+        {
+          "name": "instructions",
+          "path": "dosage.first().text",
+          "type": "string"
+        },
+        {
+          "name": "indication_text",
+          "path": "reasonCode.first().text",
+          "type": "string"
+        },
+        {
+          "name": "indication_codings",
+          "path": "reasonCode.first().coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "fillStatus_text",
+          "path": "iif(false, '', {})",
+          "type": "string"
+        }
+      ]
+    }
+  ]
+}

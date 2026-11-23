@@ -115,6 +115,18 @@ class ResourceWriter:
         """Last assigned sequence (the next write takes ``seq + 1``)."""
         return self._seq
 
+    def advance_to(self, seq: int) -> None:
+        """Raise the writer's sequence floor (never lower it).
+
+        QA-D13H-003: a boot after a mid-flush crash can restore published
+        rows whose ``_seq`` is AHEAD of ``meta/state.json`` (the crash
+        happened between writing the part and writing the state). The writer
+        was constructed from the stale state, so without this floor the next
+        write would reissue a colliding ``_seq`` — and the following boot's
+        ``NOT EXISTS`` rehydration dedup would silently drop that write.
+        """
+        self._seq = max(self._seq, int(seq))
+
     # -- writes ----------------------------------------------------------
 
     def create(self, resource_type: str, resource: dict) -> WriteResult:
@@ -742,6 +754,17 @@ def search_resources(resource_type: str, request: Request) -> Response:
     """Search the latest-wins view. Unsupported parameters are a 400."""
     context = context_for(request)
     query = search.parse_search(resource_type, request.query_params)
+    # QA-D13H-001: the resource-type set is CLOSED (the write path enforces
+    # the same set in ``_require_type``). Answering an unknown type with an
+    # empty searchset makes a typo'd type indistinguishable from "no data" —
+    # the exact silent-wrong-answer failure this search surface must not make.
+    from fhir4ds.viewdef.metadata import KNOWN_FHIR_RESOURCE_TYPES
+
+    if resource_type not in KNOWN_FHIR_RESOURCE_TYPES:
+        raise not_found(
+            f"{resource_type!r} is not a FHIR resource type served here",
+            expression=["resourceType"],
+        )
     count, offset = search_controls(request.query_params)
     capped = context.config.capped_limit(count)
     resources, total = context.run_locked(

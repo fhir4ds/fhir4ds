@@ -490,3 +490,22 @@ def test_expand_intensional_unenumerable_exclude_moot_when_no_codes(
         }
     }
     assert endpoint.expand_intensional(vs) == []
+
+
+def test_intensional_compose_refusal_is_capability_class_d12h():
+    """QA-D12H-004 (v0.0.26 D12 HISTORIAN): a permanent form-refusal raises
+    TerminologyCapabilityError, matching the HTTP/in-process capability
+    split (AMUX-115). VSAC cannot resolve filter/valueSet compose blocks
+    server-side — that is a capability gap of this backend, not a
+    transient fault, so callers branching on the error type (e.g.
+    DependencyResolver's degrade-vs-propagate split) classify it
+    correctly.
+    """
+    from fhir4ds.cql.terminology.errors import TerminologyCapabilityError
+
+    adapter = VCACTerminologyEndpoint()
+    vs = {"resourceType": "ValueSet", "compose": {"include": [
+        {"system": "http://snomed.info/sct",
+         "filter": [{"property": "concept", "op": "is-a", "value": "x"}]}]}}
+    with pytest.raises(TerminologyCapabilityError):
+        adapter.expand_intensional(vs)

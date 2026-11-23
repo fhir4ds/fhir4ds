@@ -199,6 +199,9 @@ const config: Config = {
           editUrl: 'https://github.com/fhir4ds/fhir4ds/edit/main/web/website/',
           showReadingTime: true,
           postsPerPage: 8,
+          // Default is 5 — with 7+ posts the oldest articles (e.g. the
+          // All of Us OMOP study) silently fell off the timeline rail.
+          blogSidebarCount: 'ALL',
         },
         sitemap: {
           // AMUX-51 thin-page triage: standalone demo shells are UI

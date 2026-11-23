@@ -9,6 +9,80 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 _logger = logging.getLogger(__name__)
 
 
+def _synthetic_membership_resource(value_sql) -> "SQLExpression":
+    """Wrap a scalar operand into a synthetic resource for membership UDFs.
+
+    ``in_valueset`` / ``cql_equivalent_in_valueset`` navigate a FHIR
+    resource + element path (``extractCodes``). A non-resource scalar
+    operand (e.g. a ``First(...)`` subquery yielding a CodeableConcept
+    JSON, or a string-valued expression) must be wrapped first:
+
+    * JSON-object text (CodeableConcept/Coding) embeds as the ``code``
+      element: ``{"code": <parsed value>}``.
+    * Scalar strings synthesize a system-less coding so the UDF's
+      String-overload scan applies:
+      ``{"code":{"coding":[{"code": <json-quoted string>}]}}``.
+    * Anything else (NULL / malformed) stays NULL → UDF returns SQL NULL
+      per CQL 3VL.
+    """
+    is_json_object = SQLBinaryOp(
+        operator="AND",
+        left=SQLFunctionCall(
+            name="starts_with", args=[value_sql, SQLLiteral("{")],
+        ),
+        right=SQLFunctionCall(name="json_valid", args=[value_sql]),
+    )
+    concept_wrap = SQLFunctionCall(
+        name="json_object",
+        args=[SQLLiteral("code"), SQLCast(expression=value_sql, target_type="JSON")],
+    )
+    # to_json() renders the scalar as a JSON literal (string quoted).
+    string_wrap = SQLBinaryOp(
+        operator="||",
+        left=SQLBinaryOp(
+            operator="||",
+            left=SQLLiteral('{"code":{"coding":[{"code":'),
+            right=SQLFunctionCall(name="to_json", args=[value_sql]),
+        ),
+        right=SQLLiteral('}]}}'),
+    )
+    return SQLCase(
+        when_clauses=[(is_json_object, concept_wrap)],
+        else_clause=SQLCase(
+            when_clauses=[
+                (
+                    SQLUnaryOp(
+                        operator="IS NOT NULL",
+                        operand=SQLFunctionCall(name="trim", args=[value_sql]),
+                        prefix=False,
+                    ),
+                    string_wrap,
+                )
+            ],
+            else_clause=SQLLiteral(value=None),
+        ),
+    )
+
+
+def _terminological_equivalence_key(value: Any) -> Any:
+    """String equivalence key for CQL Code ``~`` element comparison.
+
+    Mirrors ``_code_equivalence_key``'s element rule (CQL 1.5 §Equivalent,
+    Code): casefold + whitespace normalization; None stays None (null is
+    not equivalent to '').
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return value
+    return " ".join(value.split()).casefold()
+
+
+def _code_equivalence_fold(left: Any, right: Any) -> bool:
+    """Equivalent comparison of two Code system/code element values."""
+    return _terminological_equivalence_key(left) == _terminological_equivalence_key(right)
+
+
 def _is_patient_id_correlation(w) -> bool:
     """Return True if *w* is purely ``sub.patient_id = X.patient_id``."""
     from ...translator.types import SQLBinaryOp, SQLQualifiedIdentifier
@@ -347,6 +421,20 @@ def _extract_audit_target(
                 t = _extract_audit_target(col, context)
                 if t is not None:
                     return t
+    if isinstance(expr, SQLBinaryOp):
+        # QA-D9E-001 (v0.0.26 D9 EXPLORER): arithmetic over counts
+        # (`"NumCount" + 0`, `"A" + "B"`) hides the count subqueries from
+        # the synthesized audit-target twin — recurse so the comparison
+        # wrapper and the define-wrap twin storage still name the winning
+        # resources. When BOTH operands carry a twin (count + count),
+        # combine them (concat_ws skips NULLs); the comma-joined form is
+        # split into one finding per resource at compaction (QA-D9S-003).
+        t_left = _extract_audit_target(expr.left, context)
+        t_right = _extract_audit_target(expr.right, context)
+        if t_left is not None and t_right is not None:
+            return SQLFunctionCall(
+                name="concat_ws", args=[SQLLiteral(","), t_left, t_right])
+        return t_left if t_left is not None else t_right
     if isinstance(expr, SQLSelect) and expr.columns:
         for col in expr.columns:
             t = _extract_audit_target(col, context)
@@ -530,6 +618,141 @@ def _build_resource_id_expr(resource_ref: "SQLExpression") -> "SQLExpression":
     )
 
 
+def _synthesize_target_from_count_unnest(select: "SQLSelect"):
+    """Target twin for the ``COUNT(...) FROM (SELECT unnest(...) AS _elem)``
+    aggregate shape whose list source coerces rows from a resource-bearing
+    CTE. Returns the QA-021 single-row comma-joined resource-id subquery, or
+    None when the shape does not match.
+
+    QA-D9E-001 (v0.0.26 D9 EXPLORER): also recognizes the UNION-of-unnests
+    FROM (``Count((A where ...) union (B where ...))`` — the canonical eCQM
+    union numerator shape): one row select per union arm, aggregated through
+    a UNION so multi-winner evidence names the winning resources of BOTH
+    arms.
+    """
+    from ...translator.types import SQLAlias as _SA, SQLSelect as _SS, SQLSubquery as _SQ
+    from ...translator.types import SQLUnion as _SU
+
+    def _single_col_expr(sel):
+        if not sel or not getattr(sel, "columns", None) or len(sel.columns) != 1:
+            return None
+        c = sel.columns[0]
+        return c.expr if isinstance(c, SQLAlias) else c
+
+    # Column must be a bare COUNT aggregate
+    col = _single_col_expr(select)
+    if not (isinstance(col, SQLFunctionCall) and col.name.upper() == "COUNT"):
+        return None
+    # FROM must be (SELECT unnest(X) AS _elem) AS <agg alias>, or a UNION of
+    # (SELECT patient_id, unnest(X) AS _elem) arms.
+    fc = select.from_clause
+    if not isinstance(fc, _SA):
+        return None
+
+    def _unnest_row_select(arm):
+        """Row select of one unnest arm, or None."""
+        unnest_col = None
+        for c in (arm.columns or []):
+            ce = c.expr if isinstance(c, SQLAlias) else c
+            if isinstance(ce, SQLFunctionCall) and ce.name.lower() == "unnest":
+                unnest_col = ce
+                break
+        if unnest_col is None or not unnest_col.args:
+            return None
+        list_subq = unnest_col.args[0]
+        if isinstance(list_subq, _SQ):
+            list_subq = list_subq.query
+        if not isinstance(list_subq, _SS):
+            return None
+        lfc = list_subq.from_clause
+        if not isinstance(lfc, _SA):
+            return None
+        row_sel = lfc.expr if isinstance(lfc.expr, (_SQ, _SS)) else None
+        if isinstance(row_sel, _SQ):
+            row_sel = row_sel.query
+        return row_sel if isinstance(row_sel, _SS) else None
+
+    if isinstance(fc.expr, _SU):
+        arm_selects = []
+        for operand in (fc.expr.operands or []):
+            arm = operand.query if isinstance(operand, _SQ) else operand
+            if not isinstance(arm, _SS):
+                return None
+            row_sel = _unnest_row_select(arm)
+            if row_sel is None:
+                return None
+            arm_selects.append(row_sel)
+        if not arm_selects:
+            return None
+    else:
+        unnest_sel = fc.expr if isinstance(fc.expr, (_SQ, _SS)) else None
+        if isinstance(unnest_sel, _SQ):
+            unnest_sel = unnest_sel.query
+        if not isinstance(unnest_sel, _SS):
+            return None
+        row_sel = _unnest_row_select(unnest_sel)
+        if row_sel is None:
+            return None
+        arm_selects = [row_sel]
+
+    def _arm_id_select(row_sel):
+        rfc = row_sel.from_clause
+        if not isinstance(rfc, _SA):
+            return None
+        from ..placeholder import RetrievePlaceholder as _RP
+        if not isinstance(rfc.expr, (SQLIdentifier, _RP)):
+            return None
+        resource_ref = SQLQualifiedIdentifier(parts=[rfc.alias, "resource"])
+        return SQLSelect(
+            columns=[SQLAlias(
+                expr=_build_resource_id_expr(resource_ref), alias="id")],
+            from_clause=rfc,
+            where=row_sel.where,
+            order_by=row_sel.order_by,
+            limit=row_sel.limit,
+        )
+
+    arm_id_selects = []
+    for row_sel in arm_selects:
+        arm_id = _arm_id_select(row_sel)
+        if arm_id is None:
+            return None
+        arm_id_selects.append(arm_id)
+    if len(arm_id_selects) == 1:
+        id_source = SQLSubquery(query=arm_id_selects[0])
+    else:
+        id_source = SQLSubquery(query=_SU(
+            operands=arm_id_selects, distinct=True))
+
+    target_select = SQLSelect(
+        columns=[
+            SQLFunctionCall(
+                name="COALESCE",
+                args=[
+                    SQLFunctionCall(
+                        name="array_to_string",
+                        args=[
+                            SQLFunctionCall(
+                                name="list_sort",
+                                args=[SQLFunctionCall(name="list_distinct", args=[
+                                    SQLFunctionCall(name="list", args=[
+                                        SQLQualifiedIdentifier(
+                                            parts=["_d9u_tgt", "id"]),
+                                    ]),
+                                ])],
+                            ),
+                            SQLLiteral(value=","),
+                        ],
+                    ),
+                    SQLCast(expression=SQLNull(), target_type="VARCHAR"),
+                ],
+            ),
+        ],
+        from_clause=SQLAlias(expr=id_source, alias="_d9u_tgt"),
+    )
+    return SQLSubquery(query=target_select)
+
+
 def _synthesize_target_from_resource_select(
     select: "SQLSelect",
     context: "Optional[SQLTranslationContext]" = None,
@@ -561,6 +784,17 @@ def _synthesize_target_from_resource_select(
     col = select.columns[0]
     if isinstance(col, SQLAlias):
         col = col.expr
+
+    # Case 3: COUNT-over-unnest (CMS74 union-unnest count machinery,
+    # d3-SKEPTIC v0.0.26 audit-evidence repair). The count lowers to
+    # `SELECT COUNT(_elem) FROM (SELECT unnest(<list subq>) AS _elem) AS
+    # _agg_src`, where the list subquery coerces rows from an innermost
+    # `SELECT * AS __cql_list_value FROM <CTE> AS <row> WHERE <w>`.
+    # Synthesize the target from that innermost CTE with the same row
+    # filters so multi-winner evidence names the resources (QA-021).
+    _c3 = _synthesize_target_from_count_unnest(select)
+    if _c3 is not None:
+        return _c3
 
     # Case 1: directly selecting 'resource' column
     if isinstance(col, SQLQualifiedIdentifier) and col.parts[-1] == "resource":
@@ -775,6 +1009,8 @@ def _is_quantity_expression(expr: SQLExpression) -> bool:
             "quantityAdd", "quantity_add", "quantitySubtract", "quantity_subtract",
             "quantityMultiply", "quantityDivide", "quantityTruncatedDivide",
             "quantityModulo", "quantityConvert", "quantity_convert",
+            # CQL 2.0 Round(Quantity) — result keeps Quantity shape
+            "RoundQuantity", "RoundQuantityTo",
         })
         if expr.name in _QUANTITY_RETURNING_FUNCS:
             return True
@@ -1594,6 +1830,13 @@ class OperatorsMixin:
                 return True
             if registry.resolve_named_profile(type_name) is not None:
                 return True
+        # CQL 2.0 `define type` declarations (CQL20-E): a declared named
+        # class type is a valid target for is/as/cast.
+        declared = getattr(self.context, "declared_types", None)
+        if declared is not None and (
+            type_name in declared or bare in declared
+        ):
+            return True
         fhir_schema = getattr(self.context, "fhir_schema", None)
         if fhir_schema is not None:
             if bare in getattr(fhir_schema, "resources", {}):
@@ -1608,6 +1851,60 @@ class OperatorsMixin:
             raise TranslationError(
                 f"CQL type operator '{operator}' references unknown type '{type_name}'"
             )
+
+    def _resolve_declared_conversion(self, target_specifier, source_type_name):
+        """Resolve a user-declared CQL 2.0 conversion for a `convert X to T`.
+
+        Returns the conversion function name (possibly library-qualified) to
+        invoke, or None when no declared conversion applies. A declared
+        conversion matches when its to-type equals the requested target AND
+        its from-type matches the source's static type (a bare ``System.``
+        prefix on either side is normalized away — AMUX-152 #3). The
+        single-candidate shortcut applies only when the from-type matches
+        (or the source's static type is unknown).
+        """
+        def _norm_type(t: Optional[str]) -> str:
+            low = (t or "").strip().lower()
+            if low.startswith("system."):
+                low = low[len("system."):]
+            return low
+
+        conversions = getattr(self.context, "declared_conversions", None) or []
+        if not conversions:
+            return None
+        try:
+            target_full = self._type_specifier_name(target_specifier)
+        except Exception:
+            target_full = getattr(target_specifier, "name", "")
+        target_lower = _norm_type(target_full)
+        matches = [
+            c for c in conversions
+            if _norm_type(c["to"]) == target_lower and target_lower != ""
+        ]
+        if not matches:
+            return None
+        # Normalize the source type once; with a known static source type
+        # even a SINGLE candidate must match its declared from-type
+        # (`convert 'hello' to Fahr` must not lower to a Cels->Fahr body).
+        source_lower = _norm_type(source_type_name)
+        from_matches = [
+            c for c in matches
+            if source_lower != "" and _norm_type(c["from"]) == source_lower
+        ]
+        if source_lower == "":
+            # Source static type unknown: cannot statically disprove the
+            # single candidate; keep the 2.0-era convenience.
+            if len(matches) == 1:
+                return matches[0]["function"]
+            return None
+        if len(from_matches) == 1:
+            return from_matches[0]["function"]
+        if len(from_matches) > 1:
+            raise TranslationError(
+                f"Ambiguous declared conversion to '{target_full}': "
+                f"{[c['function'] for c in from_matches]}."
+            )
+        return None
 
     def _is_cql_conversion_unit_target(self, type_name: str) -> bool:
         return type_name.lower() in {
@@ -1689,9 +1986,20 @@ class OperatorsMixin:
         # Extract audit target (winner resource ID) from operands if available.
         # First/Last/Min/Max attach _audit_target on the returned SQLExpression.
         target_expr: SQLExpression = SQLCast(expression=SQLNull(), target_type="VARCHAR")
-        target = _extract_audit_target(left_sql, self.context) or _extract_audit_target(right_sql, self.context)
-        if target is not None:
-            target_expr = target
+        left_target = _extract_audit_target(left_sql, self.context)
+        right_target = _extract_audit_target(right_sql, self.context)
+        # QA-D9E-001 (v0.0.26 D9 EXPLORER): arithmetic between two count
+        # defines (`"A" + "B" >= N`) carries one twin per operand — combine
+        # them (concat_ws skips NULL twins) so evidence names the winners of
+        # BOTH causal arms; the comma-joined form is split into one finding
+        # per resource at compaction (QA-D9S-003).
+        if left_target is not None and right_target is not None:
+            target_expr = SQLFunctionCall(
+                name="concat_ws", args=[SQLLiteral(","), left_target, right_target])
+        else:
+            target = left_target or right_target
+            if target is not None:
+                target_expr = target
 
         return SQLFunctionCall(
             name="audit_comparison",
@@ -2907,6 +3215,20 @@ class OperatorsMixin:
                 target_type_name = self._type_specifier_name(expr.right)
             target_type_name = target_type_name.split(".")[-1].lower()
             source_type_name = self._static_structural_type_name(expr.left)
+            # CQL 2.0 define conversion (CQL20-E, trial-use): an explicit
+            # `convert X to T` may reference a user-declared conversion
+            # (`define implicit|explicit conversion from F to T using Func`).
+            # Honor the declared function when the source's static type
+            # matches the declared from-type, or when the built-in
+            # conversion table has no mapping for the target.
+            declared_conv = self._resolve_declared_conversion(
+                expr.right, source_type_name
+            )
+            if declared_conv is not None:
+                return self.translate(
+                    FunctionRef(name=declared_conv, arguments=[expr.left]),
+                    usage=ExprUsage.SCALAR,
+                )
             if target_type_name == "concept" and source_type_name is not None:
                 if self._structural_type_conforms(source_type_name, "List<Code>"):
                     concept_source = left
@@ -2984,9 +3306,29 @@ class OperatorsMixin:
             return SQLBinaryOp(operator="OR", left=not_left, right=right)
 
         if operator in ("~contains", "~in"):
-            # CQL 2.0 equivalence membership (trial-use). List membership
-            # only; interval operands raise a typed error rather than
-            # silently using equality semantics.
+            # CQL 2.0 equivalence membership (trial-use). Two surfaces:
+            # 1. TERMINOLOGICAL overloads (FHIR-31675/33247): Code/Concept/
+            #    String/List ~in ValueSet|CodeSystem and the converse
+            #    ValueSet|CodeSystem ~contains <code> — equivalent-based
+            #    membership, routed through _translate_in_op with
+            #    equivalent=True (A ~in B ≡ B ~contains A per spec).
+            # 2. List membership (CQL20-A chunk): element-wise equivalence.
+            vocab_ast = expr.right if operator == "~in" else expr.left
+            if self._is_terminology_reference(vocab_ast):
+                # Normalize to the `in` orientation (code ~in vocab).
+                swapped = (
+                    expr if operator == "~in"
+                    else BinaryExpression(operator="~in", left=expr.right, right=expr.left)
+                )
+                swapped_left = left if operator == "~in" else right
+                swapped_right = right if operator == "~in" else left
+                in_result = self._translate_in_op(
+                    "~in", swapped_left, swapped_right, swapped, boolean_context,
+                    equivalent=True,
+                )
+                return self._maybe_wrap_age_membership_audit(
+                    in_result, swapped, swapped_left, swapped_right
+                )
             list_sql, elem_sql = (
                 (left, right) if operator == "~contains" else (right, left)
             )
@@ -3622,6 +3964,25 @@ class OperatorsMixin:
                 r = self._unwrap_precision_wrapper(right)
                 return SQLFunctionCall(name="intervalProperlyContains", args=[r, self._ensure_interval_varchar(left)])
             return SQLFunctionCall(name="intervalProperlyContains", args=[right, self._ensure_interval_varchar(left)])
+        # CQL 2.0 #DefaultComparisonPrecision (FHIR-41326, chunk CQL20-D):
+        # precision-less temporal comparison keywords lower exactly as if
+        # the author had written the precision explicitly. Explicit
+        # precision spellings never match these bare forms, so they are
+        # untouched. Numeric/Quantity intervals are excluded (their
+        # dedicated comparators are not precision-qualified).
+        _default_prec = self._default_comparison_precision_for(expr)
+        if _default_prec:
+            _rewrites = {
+                "before": f"before {_default_prec} of",
+                "after": f"after {_default_prec} of",
+                "on or before": f"on or before {_default_prec} of",
+                "on or after": f"on or after {_default_prec} of",
+                "same as": f"same {_default_prec} as",
+                "same or before": f"same {_default_prec} or before",
+                "same or after": f"same {_default_prec} or after",
+            }
+            operator = _rewrites.get(operator, operator)
+
         if operator == "before":
             return self._translate_before_op(operator, left, right, expr)
         if operator == "after":
@@ -4330,8 +4691,18 @@ class OperatorsMixin:
             result = SQLUnaryOp(operator="NOT", operand=result)
         return result
 
-    def _translate_in_op(self, operator, left, right, expr, boolean_context) -> SQLExpression:
-        """Extracted from _translate_binary_expression."""
+    def _translate_in_op(self, operator, left, right, expr, boolean_context, equivalent: bool = False) -> SQLExpression:
+        """Extracted from _translate_binary_expression.
+
+        ``equivalent=True`` selects CQL 2.0 EquivalentIn/EquivalentContains
+        semantics (FHIR-31675/33247): ValueSet membership routes through
+        ``cql_equivalent_in_valueset`` (Code ``~`` equivalence: code+system
+        compared case-insensitively with whitespace normalization) and
+        CodeSystem comparisons equivalence-normalize the system. The legacy
+        1.5 ``in`` keeps the exact-match ``in_valueset`` surface.
+        """
+        # CQL 2.0 ~in/~contains ValueSet membership UDF (equivalence-based).
+        _membership_udf = "cql_equivalent_in_valueset" if equivalent else "in_valueset"
         def _code_entries_from_ast(node) -> Optional[list[dict[str, Any]]]:
             if isinstance(node, Literal) and node.value is None:
                 return []
@@ -4594,6 +4965,12 @@ class OperatorsMixin:
         vs_url: Optional[str] = None
         if isinstance(expr.right, Identifier):
             vs_name = expr.right.name
+        elif isinstance(expr.right, QualifiedIdentifier) and expr.right.parts:
+            # Library-qualified ValueSet reference (e.g. Common."Example VS").
+            # Included libraries' valuesets are merged into this context by
+            # name, so the last path segment resolves (same doctrine as the
+            # retrieve translator's QualifiedIdentifier branch).
+            vs_name = expr.right.parts[-1]
         elif isinstance(expr.right, ParameterPlaceholder):
             # Function inlining substitutes ValueSet parameters with ParameterPlaceholder
             # whose sql_expr is the translated argument (typically SQLIdentifier for valueset names)
@@ -4609,7 +4986,7 @@ class OperatorsMixin:
             if static_code_entries is not None:
                 return _or_chain([
                     SQLFunctionCall(
-                        name="in_valueset",
+                        name=_membership_udf,
                         args=[_synthetic_code_resource(entry), SQLLiteral("code"), SQLLiteral(vs_url)],
                     )
                     for entry in static_code_entries
@@ -4618,7 +4995,7 @@ class OperatorsMixin:
             if static_string_codes is not None:
                 return _or_chain([
                     SQLFunctionCall(
-                        name="in_valueset",
+                        name=_membership_udf,
                         args=[
                             _synthetic_code_resource({"system": "", "code": code}),
                             SQLLiteral("code"),
@@ -4634,8 +5011,27 @@ class OperatorsMixin:
                     and len(left.args) == 2):
                 resource_arg = left.args[0]
                 path_arg = left.args[1]
-            else:
+            elif isinstance(left, (SQLIdentifier, SQLQualifiedIdentifier)):
+                # A bare column/qualified reference may name a resource
+                # column (e.g. `X.code in "VS"` reached via alias binding) —
+                # keep the legacy resource+path shape.
                 resource_arg = left
+                path_arg = SQLLiteral("code")
+            else:
+                # Non-resource SCALAR operand (d3-SKEPTIC v0.0.26 QA-D3S-004):
+                # e.g. `First([Observation] O return O.code) ~in "VS"` lowers
+                # to a scalar subquery whose value is the CodeableConcept
+                # JSON itself. The membership UDF navigates resource+path
+                # (extractCodes), so feeding the bare concept with path
+                # 'code' finds no coding under a CodeableConcept document
+                # and silently returns False. Wrap the value as the 'code'
+                # element of a synthetic resource, shape-discriminated:
+                # JSON-object values (CodeableConcept/Coding) embed parsed;
+                # scalar strings synthesize a system-less coding so the
+                # UDF's String-overload scan applies; anything else (null/
+                # malformed) stays NULL per CQL 3VL.
+                _v = SQLCast(expression=left, target_type="VARCHAR")
+                resource_arg = _synthetic_membership_resource(_v)
                 path_arg = SQLLiteral("code")
             # When the resource argument is a list-returning
             # expression (e.g. encounterDiagnosis() results),
@@ -4655,7 +5051,7 @@ class OperatorsMixin:
                     from_clause=SQLAlias(
                         expr=_inner_from, alias="_ivt"),
                     where=SQLFunctionCall(
-                        name="in_valueset",
+                        name=_membership_udf,
                         args=[
                             SQLIdentifier(name=_iv_param),
                             path_arg,
@@ -4666,7 +5062,7 @@ class OperatorsMixin:
                 return SQLExists(
                     subquery=SQLSubquery(query=_iv_select))
             return SQLFunctionCall(
-                name="in_valueset",
+                name=_membership_udf,
                 args=[resource_arg, path_arg, SQLLiteral(vs_url)],
             )
 
@@ -4681,6 +5077,19 @@ class OperatorsMixin:
                 return SQLLiteral(value=False)
             static_code_entries = _code_entries_from_ast(expr.left)
             if static_code_entries is not None:
+                if equivalent:
+                    # CQL 2.0 EquivalentIn (CodeSystem): Code `~` equivalence
+                    # compares the system element case-insensitively with
+                    # whitespace normalization (CQL 1.5 §Equivalent Code).
+                    return SQLLiteral(
+                        value=any(
+                            _code_equivalence_fold(
+                                _normalize_code_entry(entry).get("system", ""),
+                                codesystem_url,
+                            )
+                            for entry in static_code_entries
+                        )
+                    )
                 return SQLLiteral(
                     value=any(
                         _normalize_code_entry(entry).get("system", "") == codesystem_url
@@ -4704,8 +5113,9 @@ class OperatorsMixin:
                 # "If the code argument is null, the result is false" rule.
                 if all(code == "" for code in static_string_codes):
                     return SQLLiteral(value=False)
+                op_spelling = "'~in'" if equivalent else "'in'"
                 raise TranslationError(
-                    f"String 'in CodeSystem' membership for "
+                    f"String {op_spelling} CodeSystem membership for "
                     f"{expr.right.name!r} ({codesystem_url!r}) is unsupported: "
                     f"CQL requires a terminology service to verify code "
                     f"membership in an externally-defined code system. "
@@ -4722,10 +5132,21 @@ class OperatorsMixin:
                 if isinstance(path_arg, SQLLiteral) and isinstance(path_arg.value, str):
                     escaped_system = escape_fhirpath_string_literal(codesystem_url)
                     path = path_arg.value
-                    fhirpath_expr = (
-                        f"({path}.coding.where(system='{escaped_system}').exists() "
-                        f"or {path}.where(system='{escaped_system}').exists())"
-                    )
+                    if equivalent:
+                        # CQL 2.0 EquivalentIn (CodeSystem): FHIRPath `~` is
+                        # String equivalence (case-insensitive,
+                        # whitespace-normalized) in both the native and
+                        # fallback FHIRPath engines (FP-13 doctrine), matching
+                        # CQL Code `~` system-element semantics.
+                        fhirpath_expr = (
+                            f"({path}.coding.where(system ~ '{escaped_system}').exists() "
+                            f"or {path}.where(system ~ '{escaped_system}').exists())"
+                        )
+                    else:
+                        fhirpath_expr = (
+                            f"({path}.coding.where(system='{escaped_system}').exists() "
+                            f"or {path}.where(system='{escaped_system}').exists())"
+                        )
                     return SQLFunctionCall(
                         name="fhirpath_bool",
                         args=[resource_arg, SQLLiteral(fhirpath_expr)],
@@ -6301,6 +6722,13 @@ class OperatorsMixin:
             else:
                 left_start = left
                 left_end = None
+            # QA-D4H-001: sub-day precision compares timezone-normalized
+            # instants via the precision-aware UDFs (only when no
+            # AND-stripped extras need recombining).
+            if extra_condition_ast is None:
+                precise = self._subday_during_precise_udf(left_start, interval_expr, precision)
+                if precise is not None:
+                    return precise
             left_start_truncated = self._truncate_to_precision(left_start, precision)
 
             # Gap 11: Extract interval bounds and use boundary-aware comparisons
@@ -6686,6 +7114,10 @@ class OperatorsMixin:
                     if isinstance(precision, str):
                         precision = precision.lower()
                     interval_expr = self.translate(expr.right.operand.right, usage=ExprUsage.SCALAR)
+                    # QA-D4H-001: sub-day precision compares tz-normalized instants
+                    precise = self._subday_during_precise_udf(interval_start, interval_expr, precision)
+                    if precise is not None:
+                        return precise
                     left_truncated = self._ensure_date_cast(
                         self._truncate_to_precision(interval_start, precision))
                     # Try boundary-aware comparison via _extract_interval_bounds
@@ -6947,6 +7379,12 @@ class OperatorsMixin:
                                 operator="and", left=extra_condition_ast, right=cond
                             )
                     interval_expr = self.translate(actual_interval_ast, usage=ExprUsage.SCALAR)
+                    # QA-D4H-001: sub-day precision compares tz-normalized instants
+                    # (only when no AND-stripped extras need recombining)
+                    if extra_condition_ast is None:
+                        precise = self._subday_during_precise_udf(interval_end, interval_expr, precision)
+                        if precise is not None:
+                            return precise
                     left_truncated = self._ensure_date_cast(
                         self._truncate_to_precision(interval_end, precision))
                     # Try boundary-aware comparison via _extract_interval_bounds
@@ -7017,6 +7455,11 @@ class OperatorsMixin:
                                 operator="and", left=extra_condition_ast, right=cond
                             )
                     interval_expr = self.translate(actual_interval_ast, boolean_context=False)
+                    # QA-D4H-001: sub-day precision compares tz-normalized instants
+                    if extra_condition_ast is None:
+                        precise = self._subday_during_precise_udf(interval_end, interval_expr, precision)
+                        if precise is not None:
+                            return precise
                     left_truncated = self._ensure_date_cast(
                         self._truncate_to_precision(interval_end, precision))
                     right_start = SQLFunctionCall(name="intervalStart", args=[interval_expr])
@@ -8162,13 +8605,27 @@ class OperatorsMixin:
                 or self._is_timeofday_cql_expr(expr.right)
             )
         ):
-            cmp_result = SQLFunctionCall(
-                name="cqlDateTimeEqual",
-                args=[
-                    SQLCast(expression=left, target_type="VARCHAR"),
-                    SQLCast(expression=right, target_type="VARCHAR"),
-                ],
-            )
+            # CQL 2.0 #DefaultComparisonPrecision (FHIR-41326): equivalence
+            # compares "in the same way as equality", so the default
+            # precision applies here too.
+            _equiv_dcp = self._default_comparison_precision_for(expr)
+            if _equiv_dcp:
+                cmp_result = SQLFunctionCall(
+                    name="cqlSameAsP",
+                    args=[
+                        SQLCast(expression=left, target_type="VARCHAR"),
+                        SQLCast(expression=right, target_type="VARCHAR"),
+                        SQLLiteral(value=_equiv_dcp),
+                    ],
+                )
+            else:
+                cmp_result = SQLFunctionCall(
+                    name="cqlDateTimeEqual",
+                    args=[
+                        SQLCast(expression=left, target_type="VARCHAR"),
+                        SQLCast(expression=right, target_type="VARCHAR"),
+                    ],
+                )
             equiv_temporal = SQLCase(
                 when_clauses=[
                     (
@@ -8304,13 +8761,27 @@ class OperatorsMixin:
                 or self._is_timeofday_cql_expr(expr.right)
             )
         ):
-            cmp_result = SQLFunctionCall(
-                name="cqlDateTimeEqual",
-                args=[
-                    SQLCast(expression=left, target_type="VARCHAR"),
-                    SQLCast(expression=right, target_type="VARCHAR"),
-                ],
-            )
+            # CQL 2.0 #DefaultComparisonPrecision (FHIR-41326): equivalence
+            # compares "in the same way as equality", so the default
+            # precision applies here too.
+            _equiv_dcp = self._default_comparison_precision_for(expr)
+            if _equiv_dcp:
+                cmp_result = SQLFunctionCall(
+                    name="cqlSameAsP",
+                    args=[
+                        SQLCast(expression=left, target_type="VARCHAR"),
+                        SQLCast(expression=right, target_type="VARCHAR"),
+                        SQLLiteral(value=_equiv_dcp),
+                    ],
+                )
+            else:
+                cmp_result = SQLFunctionCall(
+                    name="cqlDateTimeEqual",
+                    args=[
+                        SQLCast(expression=left, target_type="VARCHAR"),
+                        SQLCast(expression=right, target_type="VARCHAR"),
+                    ],
+                )
             # Equivalence is null-safe: NULL (uncertain) -> False, never NULL.
             equiv_temporal = SQLCase(
                 when_clauses=[
@@ -8865,6 +9336,41 @@ class OperatorsMixin:
                     or self._is_timeofday_cql_expr(expr.right)
                 )
             ):
+                # CQL 2.0 #DefaultComparisonPrecision (FHIR-41326): lower
+                # precision-less symbolic comparisons on temporal operands
+                # at the library's default precision — same lowering the
+                # author-written precision spelling receives.
+                _dcp = self._default_comparison_precision_for(expr)
+                if _dcp:
+                    _prec_udf_map = {
+                        "<": "cqlBeforeP",
+                        ">": "cqlAfterP",
+                        "<=": "cqlSameOrBeforeP",
+                        ">=": "cqlSameOrAfterP",
+                        "=": "cqlSameAsP",
+                        "!=": "cqlSameAsP",  # negate below
+                        "<>": "cqlSameAsP",  # negate below
+                    }
+                    udf_name = _prec_udf_map.get(operator)
+                    if udf_name:
+                        result = SQLFunctionCall(
+                            name=udf_name,
+                            args=[
+                                SQLCast(expression=left, target_type="VARCHAR"),
+                                SQLCast(expression=right, target_type="VARCHAR"),
+                                SQLLiteral(value=_dcp),
+                            ],
+                        )
+                        if operator in ("!=", "<>"):
+                            result = SQLCase(
+                                when_clauses=[
+                                    (SQLUnaryOp(operator="IS NULL", operand=result, prefix=False),
+                                     SQLNull()),
+                                    (result, SQLLiteral(value=False)),
+                                ],
+                                else_clause=SQLLiteral(value=True),
+                            )
+                        return result
                 _udf_map = {
                     "<": "cqlBefore",
                     ">": "cqlAfter",
@@ -9555,6 +10061,29 @@ class OperatorsMixin:
             result = SQLCast(expression=result, target_type=narrow, try_cast=True)
         return self._maybe_wrap_audit_comparison(result, operator, left, right)
 
+
+    def _is_terminology_reference(self, node: Any) -> bool:
+        """True when ``node`` statically references a ValueSet or CodeSystem.
+
+        CQL 2.0 EquivalentIn/EquivalentContains terminological overloads can
+        "only be invoked by referencing a defined codesystem or valueset or
+        CodeSystem/ValueSet-valued expression" — resolve Identifier /
+        QualifiedIdentifier (including define-alias chains) through the same
+        resolvers the legacy ``in`` path uses.
+        """
+        if isinstance(node, Identifier):
+            name: Optional[str] = node.name
+        elif isinstance(node, QualifiedIdentifier) and node.parts:
+            name = node.parts[-1]
+        else:
+            return False
+        if self.context.is_alias(name):
+            return False
+        if self._resolve_valueset_identifier(name) is not None:
+            return True
+        if self._resolve_codesystem_identifier(name) is not None:
+            return True
+        return False
 
     def _resolve_valueset_identifier(self, ident_name: str, _depth: int = 0) -> Optional[str]:
         """Resolve a valueset identifier to its canonical URL."""

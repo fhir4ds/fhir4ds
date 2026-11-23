@@ -66,6 +66,16 @@ CREATE TABLE IF NOT EXISTS dedup_linkage (
 
 _LOINC = "http://loinc.org"
 
+#: AMUX-150 chunk A: per-type window-rule prefixes for the coded
+#: medication/diagnostic types (category OTHER — the spellings keep the
+#: Linkage windowRule vocabulary honest about WHAT merged).
+_CHUNK_A_RULE_PREFIX: dict[str, str] = {
+    "MedicationRequest": "MEDREQ",
+    "MedicationDispense": "MEDDISP",
+    "MedicationAdministration": "MEDADMIN",
+    "DiagnosticReport": "DIAGRP",
+}
+
 
 def infer_window_rule(cluster: list[DedupRecord]) -> str:
     """Deterministic label for the Stage-2 rule that plausibly fired.
@@ -74,14 +84,21 @@ def infer_window_rule(cluster: list[DedupRecord]) -> str:
     imprecise-signature spread in an OTHER cluster implies the §2b
     subsumption rule; LAB/VITAL clusters refine by the vendored window
     exception code sets (any-member, matching the escalation semantics).
+    AMUX-150: homogeneous chunk-A clusters carry medication/report
+    spellings instead of the generic OTHER_* labels.
     """
     category = cluster[0].category if cluster else "OTHER"
     signatures = {r.nd.signature if r.nd is not None else None
                   for r in cluster}
+    rtypes = {r.rtype for r in cluster}
     if category == "OTHER":
-        if signatures & {"YEAR", "MONTH"} and len(signatures) > 1:
-            return "OTHER_SUBSUMPTION"
-        return "OTHER_SAME_DATE"
+        prefix = next(iter(rtypes)) in _CHUNK_A_RULE_PREFIX \
+            and len(rtypes) == 1 \
+            and _CHUNK_A_RULE_PREFIX[next(iter(rtypes))] or None
+        suffix = "SUBSUMPTION" \
+            if signatures & {"YEAR", "MONTH"} and len(signatures) > 1 \
+            else "SAME_DATE"
+        return f"{prefix}_{suffix}" if prefix else f"OTHER_{suffix}"
     if category == "LAB":
         for record in cluster:
             for system, code in record.code_keys:
@@ -133,6 +150,9 @@ def build_linkage_resource(
 
 
 def create_dedup_linkage_table(conn: duckdb.DuckDBPyConnection) -> None:
+    from ._conn import require_open_connection
+
+    require_open_connection(conn, "create dedup linkage table")
     conn.execute(DEDUP_LINKAGE_DDL)
 
 
@@ -201,7 +221,15 @@ def delete_linkage(conn: duckdb.DuckDBPyConnection,
 def load_dedup_linkage_resources(
     conn: duckdb.DuckDBPyConnection,
 ) -> list[dict[str, Any]]:
-    """All stored dedup Linkage resources, ordered by dedup_id."""
+    """All stored dedup Linkage resources, ordered by dedup_id.
+
+    Returns ``[]`` when nothing was ever linked — the table is created
+    lazily by the first write, so the loader ensures existence first
+    (same create-first precedent as :func:`delete_linkage`)."""
+    from ._conn import require_open_connection
+
+    require_open_connection(conn, "load dedup linkage resources")
+    create_dedup_linkage_table(conn)
     rows = conn.execute(
         "SELECT resource FROM dedup_linkage ORDER BY dedup_id"
     ).fetchall()

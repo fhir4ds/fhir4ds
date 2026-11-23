@@ -170,6 +170,13 @@ class HTTPTerminologyEndpoint:
         breaker_threshold: int = 5,
         breaker_cooldown_seconds: float = 60.0,
     ) -> None:
+        if not isinstance(base_url, str):
+            # QA-D8H-001 (INV-9 fail-fast): urlparse leaks a raw
+            # AttributeError ('int' object has no attribute 'decode')
+            # on non-str input — reject the type here, actionably.
+            raise TypeError(
+                f"base_url must be a str, got {type(base_url).__name__}"
+            )
         if not base_url:
             raise ValueError("base_url is required for HTTPTerminologyEndpoint")
         # Fail-fast URL validation (QA-014). Deferred failure at first
@@ -323,10 +330,18 @@ class HTTPTerminologyEndpoint:
 
         refs: list[CodeRef] = []
         for raw_system, code, display in iter_expansion_codes(contains):
-            system = SystemResolver.normalize(raw_system)
-            if system is None or code is None:
+            # QA-D12E-001 (v0.0.26 D12 EXPLORER): skip non-string systems
+            # BEFORE normalize — SystemResolver raises TypeError on
+            # non-str input, and one hostile contains[] entry must not
+            # poison the whole expansion (losing every valid sibling
+            # code and counting a phantom breaker failure). FHIR
+            # ``system`` is a uri (string); non-string = malformed.
+            if not isinstance(raw_system, str) or code is None:
                 # Skip half-formed entries — they cannot join against
                 # any valueset_codes row downstream.
+                continue
+            system = SystemResolver.normalize(raw_system)
+            if system is None:
                 continue
             refs.append(
                 CodeRef(
@@ -361,9 +376,15 @@ class HTTPTerminologyEndpoint:
             resource = entry.get("resource", entry) if isinstance(entry, dict) else None
             if not isinstance(resource, dict):
                 continue
-            system = SystemResolver.normalize(resource.get("system"))
+            # QA-D12E-001: same non-string-system guard as expand — a
+            # single hostile entry resource must not crash the query.
+            raw_system = resource.get("system")
             code = resource.get("code")
-            if system is None or code is None:
+            if not isinstance(raw_system, str) or code is None:
+                continue
+
+            system = SystemResolver.normalize(raw_system)
+            if system is None:
                 continue
 
             # Search metadata (score, mode, match-grade) can live in either:
@@ -406,6 +427,9 @@ class HTTPTerminologyEndpoint:
 
         Short-circuits to ``[]`` when the circuit breaker is open.
         """
+        from .endpoint import require_str_arg
+
+        require_str_arg(valueset_url, "valueset_url")  # QA-D8H-002
         now = time.monotonic()
         if self._is_breaker_open(now):
             failures, tripped_until = self._breaker_snapshot()
@@ -457,6 +481,14 @@ class HTTPTerminologyEndpoint:
             result = self._contains_to_coderefs(self._parse_contains(payload))
             self._on_call_success()
             return result
+        except TerminologyCapabilityError:
+            # QA-D12H-002 (v0.0.26 D12 HISTORIAN): a capability refusal is
+            # deterministic — retrying cannot help, so it must NOT count
+            # toward the circuit breaker (in-process doctrine, QA-D12S-001).
+            # Five refusals used to trip the breaker, whose short-circuit
+            # then returned [] silently — recreating the silent-under-match
+            # degradation the AMUX-115 ruling exists to prevent.
+            raise
         except Exception:
             self._on_call_failure()
             raise
@@ -484,6 +516,9 @@ class HTTPTerminologyEndpoint:
 
         Short-circuits to ``[]`` when the circuit breaker is open.
         """
+        from .endpoint import require_dict_arg
+
+        require_dict_arg(value_set, "value_set")  # QA-D8E-001
         now = time.monotonic()
         if self._is_breaker_open(now):
             failures, tripped_until = self._breaker_snapshot()
@@ -509,11 +544,37 @@ class HTTPTerminologyEndpoint:
                         "activeOnly": "false",
                     },
                 )
+                # QA-D12H-001 (v0.0.26 D12 HISTORIAN): a 400/422 on the
+                # POSTed body is a capability refusal — the sidecar maps
+                # medterm4ds's intensional-expansion ValueErrors (QC-252
+                # unresolvable compose system, QC-246 null concept code)
+                # to HTTP 400, and the in-process adapter escalates the
+                # identical refusals to TerminologyCapabilityError
+                # (QA-D12S-001). Escalate here too so the two surfaces
+                # stay equivalent for callers and the resolver's
+                # degrade-vs-propagate branch sees the same type.
+                if response.status_code in (400, 422):
+                    raise TerminologyCapabilityError(
+                        f"endpoint refused intensional ValueSet expansion "
+                        f"for {value_set.get('url', '<intensional>')!r} "
+                        f"(HTTP {response.status_code})"
+                        f"{self._diagnostics_suffix(response)}. "
+                        "The ValueSet definition itself cannot be served by "
+                        "this backend (medterm4ds refuses unresolvable "
+                        "compose systems and null concept codes). "
+                        "Remediation: fix the compose system/code "
+                        "definitions, or point the endpoint at a full "
+                        "terminology server."
+                    )
                 response.raise_for_status()
                 payload = response.json()
             result = self._contains_to_coderefs(self._parse_contains(payload))
             self._on_call_success()
             return result
+        except TerminologyCapabilityError:
+            # QA-D12H-002: capability refusals never count toward the
+            # breaker (see expand()'s note for the full rationale).
+            raise
         except Exception:
             self._on_call_failure()
             raise
@@ -529,6 +590,10 @@ class HTTPTerminologyEndpoint:
 
         Short-circuits to ``[]`` when the circuit breaker is open.
         """
+        from .endpoint import require_str_arg
+
+        require_str_arg(query, "query")  # QA-D8H-002
+        require_str_arg(category, "category")
         now = time.monotonic()
         if self._is_breaker_open(now):
             failures, tripped_until = self._breaker_snapshot()
@@ -598,6 +663,9 @@ class HTTPTerminologyEndpoint:
         ``search_batch`` itself does not wrap the loop, so an open
         breaker short-circuits each sub-call to ``[]`` without raising.
         """
+        from .endpoint import require_query_pairs
+
+        require_query_pairs(queries)  # QA-D8H-002
         if len(queries) <= 1:
             # Small batch — sequential is faster (no thread overhead).
             return [

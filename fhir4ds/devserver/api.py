@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import logging
 import os
 import queue
 import re
@@ -41,6 +42,8 @@ from .cells import (
 )
 from .kernel import KernelManager
 from .watcher import Watcher, WorkspaceEvent
+
+_log = logging.getLogger(__name__)
 
 
 def _envelope(ok: bool = True, **payload: Any) -> dict[str, Any]:
@@ -2355,8 +2358,9 @@ class _Handler(BaseHTTPRequestHandler):
                 pr = _parse_cql(main.text, include_ast=True)
                 if pr.ok and getattr(pr, "ast", None) is not None:
                     payload["ast"] = pr.ast
-            except Exception:
-                pass
+            except Exception as exc:  # best-effort AST attach (AMUX-152 #35)
+                _log.warning("include_ast attachment failed: %s: %s",
+                             type(exc).__name__, exc)
         self._write_json(200, payload)
 
     def _route_evaluate(self, body: dict[str, Any]) -> None:
@@ -2548,8 +2552,9 @@ class _Handler(BaseHTTPRequestHandler):
                 datasets=datasets,
                 patient_count=patient_count,
             )
-        except Exception:
-            pass
+        except Exception as exc:  # best-effort expected-dataset cache (AMUX-152 #35)
+            _log.warning("expected-dataset refresh failed: %s: %s",
+                         type(exc).__name__, exc)
 
     def _expected_root(self) -> Path:
         """Expected-store root: the workspace's MeasureReport/ dir.
@@ -4157,8 +4162,9 @@ class _Handler(BaseHTTPRequestHandler):
                         }
                         for b in split_boxes(str(msg.get("text") or ""))
                     ]
-                except Exception:
-                    pass
+                except Exception as exc:  # best-effort box split (AMUX-152 #35)
+                    _log.warning("notebook box-split failed: %s: %s",
+                                 type(exc).__name__, exc)
                 sync_reply[0] = result
 
         def reader() -> None:

@@ -1,0 +1,68 @@
+{
+  "name": "piqi_health_assessment",
+  "status": "draft",
+  "resource": "Observation",
+  "select": [
+    {
+      "column": [
+        {
+          "name": "element_id",
+          "path": "id",
+          "type": "id"
+        },
+        {
+          "name": "patient_id",
+          "path": "subject.reference.replace('urn:uuid:', '').split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "assessment_text",
+          "path": "code.text",
+          "type": "string"
+        },
+        {
+          "name": "assessment_codings",
+          "path": "code.coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "resultValue_text",
+          "path": "iif(value.ofType(Quantity).exists(), value.ofType(Quantity).value.toString(), iif(value.ofType(CodeableConcept).exists(), value.ofType(CodeableConcept).text, iif(value.ofType(string).exists(), value.ofType(string), iif(value.ofType(boolean).exists(), value.ofType(boolean).toString(), ''))))",
+          "type": "string"
+        },
+        {
+          "name": "resultValue_type",
+          "path": "iif(value.ofType(Quantity).exists(), 'NM', iif(value.ofType(CodeableConcept).exists(), 'CE', iif(value.ofType(string).exists(), 'ST', iif(value.ofType(boolean).exists(), 'ST', ''))))",
+          "type": "string"
+        },
+        {
+          "name": "resultValue_hasType",
+          "path": "((value.ofType(Quantity) | value.ofType(CodeableConcept) | value.ofType(string) | value.ofType(boolean) | value.ofType(integer) | value.ofType(Range) | value.ofType(Ratio) | value.ofType(SampledData) | value.ofType(time) | value.ofType(dateTime) | value.ofType(Period))).exists()",
+          "type": "boolean"
+        },
+        {
+          "name": "resultValue_codings",
+          "path": "value.ofType(CodeableConcept).coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "resultUnit_text",
+          "path": "value.ofType(Quantity).unit",
+          "type": "string"
+        },
+        {
+          "name": "performedDatetime",
+          "path": "effective.ofType(dateTime).toString()",
+          "type": "string"
+        }
+      ]
+    }
+  ],
+  "where": [
+    {
+      "path": "category.where(coding.code = 'social-history').exists()"
+    }
+  ]
+}

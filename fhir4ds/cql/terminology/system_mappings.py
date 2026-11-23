@@ -28,6 +28,7 @@ SOURCE_MNEMONIC_TO_URL: dict[str, str] = {
     "LNC": "http://loinc.org",
     "LOINC": "http://loinc.org",
     "ICD10CM": "http://hl7.org/fhir/sid/icd-10-cm",
+    "ICD10PCS": "http://hl7.org/fhir/sid/icd-10-pcs",
     "ICD10": "http://hl7.org/fhir/sid/icd-10",
     "ICD9CM": "http://hl7.org/fhir/sid/icd-9-cm",
     "ICD9": "http://hl7.org/fhir/sid/icd-9-cm",
@@ -77,3 +78,71 @@ def category_to_system_param(category: str) -> str | None:
         return None
     urls = [SOURCE_MNEMONIC_TO_URL[m] for m in mnemonics if m in SOURCE_MNEMONIC_TO_URL]
     return ",".join(urls) if urls else None
+
+
+#: Canonical URLs of STANDARD terminology systems (FHIR4-24).
+#:
+#: A CodeableConcept coded in one of these systems is terminologically
+#: asserted and is NOT a candidate for auto-coding. Derived from the
+#: existing system knowledge — keep in sync with:
+#:   * every value of :data:`SOURCE_MNEMONIC_TO_URL` above
+#:     (SNOMED, RxNorm, LOINC, ICD-9/10/10-CM/9-CM, CPT, CVX, ATC,
+#:     HCPCS, NDC, MEASURE);
+#:   * every canonical URL in
+#:     ``fhir4ds/cql/duckdb/udf/system_resolver.py::SystemResolver._OID_TO_URL``
+#:     (adds the HL7 terminology systems: administrative-gender,
+#:     v3-ActCode, observation-category, condition-clinical,
+#:     condition-ver-status);
+#:   * UCUM (``http://unitsofmeasure.org``), the FHIR units system.
+#:
+#: Unknown systems default to NON-standard (see
+#: :func:`is_standard_code_system`). ICD counts as standard
+#: conservatively: cross-standard translation (e.g. ICD→SNOMED) is
+#: explicitly out of scope for the AutoCoder.
+STANDARD_CODE_SYSTEM_URLS: frozenset[str] = frozenset({
+    # SOURCE_MNEMONIC_TO_URL values
+    "http://snomed.info/sct",
+    "http://www.nlm.nih.gov/research/umls/rxnorm",
+    "http://loinc.org",
+    "http://hl7.org/fhir/sid/icd-10-cm",
+    "http://hl7.org/fhir/sid/icd-10-pcs",
+    "http://hl7.org/fhir/sid/icd-10",
+    "http://hl7.org/fhir/sid/icd-9-cm",
+    "http://www.ama-assn.org/go/cpt",
+    "http://hl7.org/fhir/sid/cvx",
+    "http://www.whocc.no/atc",
+    "https://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets",
+    "http://hl7.org/fhir/sid/ndc",
+    "http://hl7.org/fhir/measure",
+    # SystemResolver canonical URLs (beyond the mnemonic overlap)
+    "http://terminology.hl7.org/CodeSystem/HCPCS",
+    "http://hl7.org/fhir/administrative-gender",
+    "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+    "http://terminology.hl7.org/CodeSystem/observation-category",
+    "http://terminology.hl7.org/CodeSystem/condition-clinical",
+    "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+    # UCUM
+    "http://unitsofmeasure.org",
+})
+
+
+def is_standard_code_system(system: object) -> bool:
+    """True iff ``system`` identifies a STANDARD terminology system.
+
+    Membership is judged after :meth:`SystemResolver.normalize` (lazy,
+    stdlib-only module) so OID spellings (``urn:oid:2.16.840.1.113883.6.96``)
+    and SNOMED module/version URLs
+    (``http://snomed.info/sct/731000124108``) count as their standard
+    base system. Unknown, empty, or non-string systems default to
+    NON-standard.
+    """
+    if not isinstance(system, str) or not system:
+        return False
+    if system in STANDARD_CODE_SYSTEM_URLS:
+        return True
+    try:
+        from ..duckdb.udf.system_resolver import SystemResolver  # noqa: PLC0415 — lazy, stdlib-only
+    except Exception:  # pragma: no cover - defensive: resolver module missing
+        return False
+    normalized = SystemResolver.normalize(system)
+    return isinstance(normalized, str) and normalized in STANDARD_CODE_SYSTEM_URLS

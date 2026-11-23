@@ -1,0 +1,34 @@
+{
+  "resourceType": "Library",
+  "id": "piqi-sam-allergy-substance-ispopulated",
+  "url": "https://fhir4ds.org/piqi/Library/piqi-sam-allergy-substance-ispopulated",
+  "name": "PIQI_SAM_AllergySubstanceIspopulated",
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "system": "http://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
+    ]
+  },
+  "relatedArtifact": [
+    {
+      "type": "depends-on",
+      "label": "view_piqi_allergy",
+      "resource": "https://fhir4ds.org/piqi/ViewDefinition/piqi_allergy"
+    }
+  ],
+  "parameter": [],
+  "content": [
+    {
+      "contentType": "application/sql;dialect=duckdb",
+      "data": "U0VMRUNUIHYucGF0aWVudF9pZCBBUyBwYXRpZW50X2lkLCB2LmVsZW1lbnRfaWQgQVMgZWxlbWVudF9pZCwKICAnQWxsZXJneScgQVMgZGF0YV9jbGFzcywgJ3N1YnN0YW5jZScgQVMgZW50aXR5LCAnQXR0cl9Jc1BvcHVsYXRlZCcgQVMgc2FtX21uZW1vbmljLAogIENBU0UgV0hFTiBDT0FMRVNDRShUUklNKENBU1Qodi5zdWJzdGFuY2VfdGV4dCBBUyBWQVJDSEFSKSksICcnKSA8PiAnJyBUSEVOICdwYXNzJyBFTFNFICdmYWlsJyBFTkQgQVMgcmVzdWx0LAogIENBU0UgV0hFTiBDT0FMRVNDRShUUklNKENBU1Qodi5zdWJzdGFuY2VfdGV4dCBBUyBWQVJDSEFSKSksICcnKSA8PiAnJyBUSEVOICdzdWJzdGFuY2UgaXMgcG9wdWxhdGVkJyBFTFNFICdzdWJzdGFuY2UgaXMgbm90IHBvcHVsYXRlZCcgRU5EIEFTIGRldGFpbApGUk9NICJ2aWV3X3BpcWlfYWxsZXJneSIgdgpPUkRFUiBCWSB2LnBhdGllbnRfaWQsIHYuZWxlbWVudF9pZA=="
+    }
+  ]
+}

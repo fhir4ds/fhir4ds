@@ -2581,4 +2581,15 @@ class TypeInfo:
         # FHIR resources represented as dicts: detect via resourceType key
         if isinstance(value, abc.Mapping) and 'resourceType' in value:
             return TypeInfo(namespace=TypeInfo.FHIR, name=value['resourceType'])
+        # Non-resource MAPPING values (e.g. unnest-re-serialized FHIR complex
+        # elements) use value-shape structural inference in the FHIR
+        # namespace — FP-04 SKEPTIC doctrine: unknown objects report
+        # FHIR.object, matching the native structuralFHIRComplexType branch
+        # (evaluator.cpp: "nm = structural ? structural : \"object\""). The
+        # System namespace capitalizes its names ('object' -> 'Object'),
+        # which diverged from the native engine whenever the Python fallback
+        # served the query (forced fallback, or DuckDB rejecting a
+        # version-mismatched extension binary).
+        if isinstance(value, abc.Mapping):
+            return TypeInfo.create_by_value_in_namespace(TypeInfo.FHIR, value)
         return TypeInfo.create_by_value_in_namespace(TypeInfo.System, value)

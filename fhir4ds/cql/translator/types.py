@@ -9,7 +9,7 @@ types for tracking translation state.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field, fields, is_dataclass
+from dataclasses import dataclass, field, fields, is_dataclass, replace
 from typing import Any, Dict, List, Optional, Union
 
 from .column_generation import (
@@ -1857,7 +1857,7 @@ class SQLFragment:
             for join in node.joins:
                 if (
                     isinstance(join, SQLJoin)
-                    and join.join_type == "CROSS JOIN LATERAL"
+                    and join.join_type in ("CROSS JOIN LATERAL", "LEFT JOIN LATERAL")
                     and isinstance(join.table, SQLSelect)
                     and not self._lateral_join_scope_safe(join, visible)
                 ):
@@ -1869,6 +1869,19 @@ class SQLFragment:
                     if cols and isinstance(cols[0], SQLAlias):
                         orig_expr = cols[0].expr
                     if orig_expr is not None and lat_alias:
+                        # Direct-hoist laterals (FHIR4-15 rewrite) project an
+                        # expression over the derived table's OWN internal
+                        # alias (e.g. ``sub.value``); restoring that inline
+                        # would dangle. Only unwrap when the projection is
+                        # self-contained (references no internal alias).
+                        internal, refs = self._lateral_internal_and_referenced(
+                            join.table
+                        )
+                        if refs & internal:
+                            # Cannot restore inline; keep the lateral (desktop
+                            # DuckDB binds it via the scope chain).
+                            kept_joins.append(join)
+                            continue
                         node.columns = [
                             self._restore_lateral_ref(c, lat_alias, orig_expr)
                             for c in (node.columns or [])
@@ -1886,11 +1899,45 @@ class SQLFragment:
                 getattr(node, field_name, None), frozenset(visible)
             )
 
+    @staticmethod
+    def _lateral_internal_and_referenced(table) -> tuple:
+        """Return (internal aliases, referenced aliases) for a lateral table."""
+        internal = set()
+        referenced = set()
+        stack = [table]
+        seen = set()
+        while stack:
+            cur = stack.pop()
+            if cur is None or id(cur) in seen:
+                continue
+            seen.add(id(cur))
+            if isinstance(cur, SQLAlias):
+                internal.add(cur.alias)
+            elif isinstance(cur, SQLSelect) and cur.from_clause is not None:
+                fr = cur.from_clause
+                if isinstance(fr, SQLAlias):
+                    internal.add(fr.alias)
+                elif isinstance(fr, SQLIdentifier):
+                    internal.add(fr.name)
+            elif isinstance(cur, SQLQualifiedIdentifier) and cur.parts:
+                referenced.add(cur.parts[0])
+            if isinstance(cur, (list, tuple)):
+                stack.extend(cur)
+                continue
+            for field_name in getattr(cur, "__dataclass_fields__", {}):
+                stack.append(getattr(cur, field_name, None))
+        return internal, referenced
+
     def _lateral_join_scope_safe(self, join: "SQLJoin", visible: set) -> bool:
         """A lateral may reference only its attach scope's visible aliases
         (or aliases it defines internally). Nested-subquery references to
-        visible aliases are allowed (DuckDB supports nested correlation to
-        the lateral's own scope chain)."""
+        visible aliases are allowed on DESKTOP DuckDB (it supports nested
+        correlation through the lateral's scope chain), but duckdb-wasm's
+        binder does NOT: a subquery nested inside the lateral's derived
+        table fails with ``Referenced table 'sub' not found!`` (FHIR4-15 /
+        CMS159). Any SQLSubquery/SQLExists anywhere in the derived table
+        therefore makes the lateral scope-UNSAFE so the unwrap pass
+        restores the portable inline form."""
         internal = set()
         referenced = []
         stack = [join.table]
@@ -1900,6 +1947,10 @@ class SQLFragment:
             if cur is None or id(cur) in seen:
                 continue
             seen.add(id(cur))
+            if isinstance(cur, (SQLSubquery, SQLExists)):
+                # Portability guard (duckdb-wasm binder): nested subqueries
+                # inside a lateral derived table are not portable.
+                return False
             if isinstance(cur, SQLAlias):
                 internal.add(cur.alias)
             elif isinstance(cur, SQLSelect) and cur.from_clause is not None:
@@ -2040,6 +2091,7 @@ class SQLFragment:
         # 2) For each repeated expression, create a lateral derived table.
         lateral_joins = []
         alias_map = {}  # sql_str -> SQLQualifiedIdentifier
+        direct_tables = {}  # rebuilt-table SQL -> alias (shared hoists)
         for sql_str, (node, count) in sorted(
             candidates.items(),
             key=lambda item: -(len(item[0]) * item[1][1]),
@@ -2047,12 +2099,53 @@ class SQLFragment:
             if count < min_occ:
                 continue
             alias_name = f"_lat{len(lateral_joins)}"
-            value_name = "value"
-            alias_map[sql_str] = SQLQualifiedIdentifier(parts=[alias_name, value_name])
+            # Perf-preserving portability rewrite (FHIR4-15): when the
+            # candidate carries a correlated scalar subquery (directly, or
+            # as the first argument of a fhirpath/fhirpath_text extraction),
+            # hoist the SUBQUERY ITSELF as the lateral table. The derived
+            # table then correlates DIRECTLY to the outer alias
+            # (``sub.patient_id = _pt.patient_id`` lives in its WHERE) —
+            # the duckdb-wasm-legal pattern — instead of nesting the
+            # subquery inside the lateral's projection, which duckdb-wasm's
+            # binder rejects. Use sites are rewritten onto the hoisted
+            # value (e.g. fhirpath_text(_latN.value, '...')).
+            table, replacement = self._direct_lateral_shape(node, alias_name)
+            if table is not None:
+                # LEFT JOIN (not CROSS): the direct-hoist derived table
+                # returns ZERO rows when no CTE row matches the patient,
+                # and a CROSS JOIN would then drop the patient row. The
+                # old wrap shape always produced exactly one row (scalar
+                # subquery), so semantics require a row-preserving LEFT
+                # JOIN ... ON TRUE.
+                table_sql = table.to_sql()
+                shared_alias = direct_tables.get(table_sql)
+                if shared_alias is None:
+                    direct_tables[table_sql] = alias_name
+                    lateral_joins.append(
+                        SQLJoin(
+                            join_type="LEFT JOIN LATERAL",
+                            table=table,
+                            alias=alias_name,
+                            on_condition=SQLRaw(raw_sql="TRUE"),
+                        )
+                    )
+                else:
+                    # Two candidates hoisting the SAME subquery (e.g.
+                    # fhirpath_text(<subq>, 'a') and fhirpath_text(<subq>,
+                    # 'b')) share one lateral: the subquery still executes
+                    # exactly once per patient.
+                    _, replacement = self._direct_lateral_shape(
+                        node, shared_alias
+                    )
+                alias_map[sql_str] = replacement
+                continue
+            table = SQLSelect(columns=[SQLAlias(expr=node, alias="value")])
+            replacement = SQLQualifiedIdentifier(parts=[alias_name, "value"])
+            alias_map[sql_str] = replacement
             lateral_joins.append(
                 SQLJoin(
                     join_type="CROSS JOIN LATERAL",
-                    table=SQLSelect(columns=[SQLAlias(expr=node, alias=value_name)]),
+                    table=table,
                     alias=alias_name,
                 )
             )
@@ -2240,6 +2333,62 @@ class SQLFragment:
                 continue
             return False
         return True
+
+    @staticmethod
+    def _direct_lateral_shape(node: Any, alias_name: str):
+        """Build the duckdb-wasm-portable lateral shape for subquery-bearing
+        candidates (FHIR4-15). Returns ``(table, replacement)``:
+
+        - ``table``: a single-column ``SELECT ... AS value`` lateral derived
+          table built from the candidate's correlated scalar subquery, with
+          the correlation (``WHERE sub.patient_id = _pt.patient_id``) living
+          in the derived table's WHERE — direct correlation to the outer
+          alias, which duckdb-wasm's binder accepts.
+        - ``replacement``: the expression use sites are rewritten to
+          (``_latN.value``, or the extraction applied to ``_latN.value``).
+
+        Returns ``(None, None)`` when the rewrite shape cannot be built
+        (candidate is not a scalar subquery, a single-column SQLSelect, or
+        exactly ``fhirpath*(<scalar subquery>, ...)``); the caller then
+        falls back to the inline-projection lateral, and the scope-safety
+        guard unwraps it if non-portable.
+        """
+        ref = SQLQualifiedIdentifier(parts=[alias_name, "value"])
+
+        def rebuild(inner: SQLSelect):
+            if len(inner.columns) != 1:
+                return None
+            col = inner.columns[0]
+            expr = col.expr if isinstance(col, SQLAlias) else col
+            return replace(
+                inner,
+                columns=[SQLAlias(expr=expr, alias="value")],
+                joins=list(inner.joins or []),
+            )
+
+        if isinstance(node, SQLSubquery) and isinstance(node.query, SQLSelect):
+            table = rebuild(node.query)
+            if table is not None:
+                return table, ref
+            return None, None
+
+        if (
+            isinstance(node, SQLFunctionCall)
+            and node.name
+            and node.name.lower() in {"fhirpath", "fhirpath_text"}
+            and node.args
+            and isinstance(node.args[0], SQLSubquery)
+            and isinstance(node.args[0].query, SQLSelect)
+        ):
+            table = rebuild(node.args[0].query)
+            if table is not None:
+                return table, SQLFunctionCall(
+                    name=node.name,
+                    args=[ref] + list(node.args[1:]),
+                    distinct=node.distinct,
+                    order_by=node.order_by,
+                )
+        return None, None
 
     @staticmethod
     def _is_lateral_scalar_candidate(node: Any) -> bool:

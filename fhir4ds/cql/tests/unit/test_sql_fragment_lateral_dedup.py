@@ -56,7 +56,9 @@ def test_deduplicate_lateral_aliases_keeps_projection_stable():
 
     cte_select = fragment.ctes[0].query
     assert len(cte_select.columns) == 2
-    assert "CROSS JOIN LATERAL" in sql
+    # FHIR4-15: subquery candidates hoist the subquery itself as a
+    # LEFT JOIN LATERAL table (row-preserving, duckdb-wasm-portable).
+    assert "LEFT JOIN LATERAL" in sql
     assert sql.count("Anesthesia Procedure List") == 8
     assert "_lat0.value IS NOT NULL AND _lat0.value IS NOT NULL" in sql
 
@@ -114,7 +116,7 @@ def test_deduplicate_lateral_aliases_recurses_inside_exists():
 
     cte_select = fragment.ctes[0].query
     assert len(cte_select.columns) == 2
-    assert "EXISTS (SELECT 1 FROM Observation obs CROSS JOIN LATERAL" in sql
+    assert "EXISTS (SELECT 1 FROM Observation obs LEFT JOIN LATERAL" in sql
     assert sql.count("Mechanical Ventilation") == 8
     assert "_lat0.value IS NOT NULL AND _lat0.value IS NOT NULL" in sql
 
@@ -156,7 +158,7 @@ def test_deduplicate_lateral_aliases_rewrites_projection_expressions():
 
     cte_select = fragment.ctes[0].query
     assert len(cte_select.columns) == 2
-    assert "FROM Encounter enc CROSS JOIN LATERAL" in sql
+    assert "FROM Encounter enc LEFT JOIN LATERAL" in sql
     assert sql.count("Carbon Dioxide Partial Pressure") == 8
     assert "_lat0.value = _lat0.value AS same_observation" in sql
 

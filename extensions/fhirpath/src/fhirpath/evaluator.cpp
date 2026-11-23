@@ -12,6 +12,7 @@ using namespace duckdb_yyjson; // NOLINT
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cerrno>
 #include <cstring>
 #include <ctime>
 #include <functional>
@@ -5427,80 +5428,23 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 		chain_defined_vars_ = saved_chain;
 		return result;
 	}
+	if (name == "repeatAll") {
+		if (node.children.size() != 1) {
+			throw FHIRPathSpecError("repeatAll() takes exactly 1 projection argument");
+		}
+		auto saved_vars = defined_variables_;
+		auto saved_chain = chain_defined_vars_;
+		chain_defined_vars_.clear();
+		auto result = fn_repeat_all(*node.children[0], input, doc);
+		defined_variables_ = saved_vars;
+		chain_defined_vars_ = saved_chain;
+		return result;
+	}
 
 	// Single-argument functions
 	if (!node.children.empty()) {
 		if (name == "all") {
 			return fn_all(*node.children[0], input, doc);
-		}
-		if (name == "repeatAll") {
-			if (node.children.size() > 1) {
-				throw FHIRPathSpecError("repeatAll() takes exactly 1 argument");
-			}
-			FPCollection result;
-			FPCollection work = input;
-			// Track unique values to detect termination
-			std::vector<std::string> unique_seen;
-			// Track type tags for seed inclusion
-			bool input_all_numeric_temporal = true;
-			bool produced_all_numeric_temporal = true;
-			bool has_produced = false;
-			for (const auto &item : input) {
-				std::string key = toString(item);
-				if (std::find(unique_seen.begin(), unique_seen.end(), key) == unique_seen.end()) {
-					unique_seen.push_back(key);
-				}
-				auto t = effectiveType(item);
-				if (t != FPValue::Type::Integer && t != FPValue::Type::Decimal &&
-				    t != FPValue::Type::Date && t != FPValue::Type::DateTime &&
-				    t != FPValue::Type::Time && t != FPValue::Type::Quantity) {
-					input_all_numeric_temporal = false;
-				}
-			}
-			size_t iterations = 0;
-			while (!work.empty()) {
-				FPCollection next;
-				FPCollection batch;
-				bool has_new_unique = false;
-				for (const auto &item : work) {
-					FPCollection single_col = {item};
-					auto projected = eval(*node.children[0], single_col, doc);
-					for (const auto &p : projected) {
-						batch.push_back(p);
-						next.push_back(p);
-						has_produced = true;
-						if (produced_all_numeric_temporal) {
-							auto pt = effectiveType(p);
-							if (pt != FPValue::Type::Integer && pt != FPValue::Type::Decimal &&
-							    pt != FPValue::Type::Date && pt != FPValue::Type::DateTime &&
-							    pt != FPValue::Type::Time && pt != FPValue::Type::Quantity) {
-								produced_all_numeric_temporal = false;
-							}
-						}
-						std::string key = toString(p);
-						if (std::find(unique_seen.begin(), unique_seen.end(), key) == unique_seen.end()) {
-							unique_seen.push_back(key);
-							has_new_unique = true;
-						}
-					}
-				}
-				if (!has_new_unique) break;
-				result.insert(result.end(), batch.begin(), batch.end());
-				work = next;
-				if (++iterations > 1000 || result.size() > 10000) {
-					throw FHIRPathSpecError("repeatAll() infinite loop detected");
-				}
-			}
-			// Include seeds only for numeric/temporal sequences
-			if (input_all_numeric_temporal && produced_all_numeric_temporal && has_produced) {
-				FPCollection final_result;
-				for (const auto &item : input) {
-					final_result.push_back(item);
-				}
-				final_result.insert(final_result.end(), result.begin(), result.end());
-				return final_result;
-			}
-			return result;
 		}
 		if (name == "trace") {
 			return fn_trace(input);
@@ -8521,6 +8465,48 @@ FPCollection Evaluator::fn_repeat(const ASTNode &projection, const FPCollection 
 	return result;
 }
 
+FPCollection Evaluator::fn_repeat_all(const ASTNode &projection, const FPCollection &input, yyjson_doc *doc) {
+	// repeatAll (CQL 2.0 Appendix I: Repeat(X, element, true)): identical
+	// fixpoint iteration to repeat(), but the RESULT keeps every projection
+	// output (duplicates preserved); only the work queue is gated on
+	// fpValuesEqual-newness, which guarantees termination.
+	FPCollection result;
+	FPCollection seen;
+	FPCollection work = input;
+
+	size_t iterations = 0;
+	while (!work.empty()) {
+		FPCollection next;
+		for (const auto &item : work) {
+			FPCollection single_col = {item};
+			auto saved_chain = chain_defined_vars_;
+			chain_defined_vars_.clear();
+			auto projected = eval(projection, single_col, doc);
+			chain_defined_vars_ = saved_chain;
+			for (const auto &p : projected) {
+				result.push_back(p);
+				bool is_seen = false;
+				for (const auto &s : seen) {
+					if (fpValuesEqual(s, p)) {
+						is_seen = true;
+						break;
+					}
+				}
+				if (!is_seen) {
+					seen.push_back(p);
+					next.push_back(p);
+				}
+			}
+		}
+		work = next;
+		if (++iterations > 1000 || result.size() > 10000) {
+			throw FHIRPathSpecError("repeatAll() infinite loop detected");
+		}
+	}
+
+	return result;
+}
+
 FPCollection Evaluator::fn_distinct(const FPCollection &input) {
 	// FHIRPath §5.1.2: Uses FHIRPath = operator for comparison
 	FPCollection result;
@@ -10304,6 +10290,32 @@ FPCollection Evaluator::evalBinaryOp(const ASTNode &node, const FPCollection &in
 		if (op == "/" || op == "div" || op == "mod" || !(l_is_int_type && r_is_int_type)) {
 			std::string exact_text;
 			if (tryDecimalArithmeticText(lv, rv, op, exact_text)) {
+				if ((op == "div" || op == "mod") && l_is_int_type && r_is_int_type) {
+					// v0.0.26 Domain 1 HISTORIAN (QA-D1H-001): 6.6.5/6.6.6
+					// truncated division/remainder over Integer operands
+					// returns Integer (spec signatures div(Integer,Integer)
+					// : Integer / mod(Integer,Integer) : Integer; FP-18
+					// SKEPTIC doctrine: exact int64 div/mod must return
+					// FromInteger so 64-bit quotients never render
+					// scientific notation). Routing these through
+					// FromDecimal here lost the Integer result TYPE: bare
+					// `7 div 2` still displayed '3' via source_text, but
+					// composed arithmetic rendered '(7 div 2) * 3' as
+					// '9.0' and type().name said Decimal. int64 truncated-
+					// division overflow (LLONG_MIN div -1) stays empty,
+					// mirroring the Python fallback's explicit guard.
+					errno = 0;
+					char *end = nullptr;
+					long long q = std::strtoll(exact_text.c_str(), &end, 10);
+					if (errno == ERANGE) {
+						return {};
+					}
+					if (end && *end == '\0' && end != exact_text.c_str()) {
+						return {FPValue::FromInteger(q)};
+					}
+					// Unexpected non-integer text: fall through to the
+					// Decimal transport below.
+				}
 				FPValue v = FPValue::FromDecimal(strtod(exact_text.c_str(), nullptr));
 				v.source_text = exact_text;
 				return {v};

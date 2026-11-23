@@ -1,0 +1,34 @@
+{
+  "resourceType": "Library",
+  "id": "piqi-sam-immunization-administrationdate-ispopulated",
+  "url": "https://fhir4ds.org/piqi/Library/piqi-sam-immunization-administrationdate-ispopulated",
+  "name": "PIQI_SAM_ImmunizationAdministrationdateIspopulated",
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "system": "http://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
+    ]
+  },
+  "relatedArtifact": [
+    {
+      "type": "depends-on",
+      "label": "view_piqi_immunization",
+      "resource": "https://fhir4ds.org/piqi/ViewDefinition/piqi_immunization"
+    }
+  ],
+  "parameter": [],
+  "content": [
+    {
+      "contentType": "application/sql;dialect=duckdb",
+      "data": "U0VMRUNUIHYucGF0aWVudF9pZCBBUyBwYXRpZW50X2lkLCB2LmVsZW1lbnRfaWQgQVMgZWxlbWVudF9pZCwKICAnSW1tdW5pemF0aW9uJyBBUyBkYXRhX2NsYXNzLCAnYWRtaW5pc3RyYXRpb25EYXRlJyBBUyBlbnRpdHksICdBdHRyX0lzUG9wdWxhdGVkJyBBUyBzYW1fbW5lbW9uaWMsCiAgQ0FTRSBXSEVOIENPQUxFU0NFKFRSSU0oQ0FTVCh2LmFkbWluaXN0cmF0aW9uRGF0ZSBBUyBWQVJDSEFSKSksICcnKSA8PiAnJyBUSEVOICdwYXNzJyBFTFNFICdmYWlsJyBFTkQgQVMgcmVzdWx0LAogIENBU0UgV0hFTiBDT0FMRVNDRShUUklNKENBU1Qodi5hZG1pbmlzdHJhdGlvbkRhdGUgQVMgVkFSQ0hBUikpLCAnJykgPD4gJycgVEhFTiAnYWRtaW5pc3RyYXRpb25EYXRlIGlzIHBvcHVsYXRlZCcgRUxTRSAnYWRtaW5pc3RyYXRpb25EYXRlIGlzIG5vdCBwb3B1bGF0ZWQnIEVORCBBUyBkZXRhaWwKRlJPTSAidmlld19waXFpX2ltbXVuaXphdGlvbiIgdgpPUkRFUiBCWSB2LnBhdGllbnRfaWQsIHYuZWxlbWVudF9pZA=="
+    }
+  ]
+}

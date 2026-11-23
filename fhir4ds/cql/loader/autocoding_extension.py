@@ -7,7 +7,9 @@ auto-coded Codings by this URL.
 
 Reference: FDD §3d, copied verbatim from master plan §2.
 
-Extension shape (six sub-extensions, all always present — INV-5):
+Extension shape (v2, FHIR4-24 — eight sub-extensions; the last two are
+optional and emitted only when the query text came from the coding[]
+rather than ``code.text``):
 
     {
         "url": "https://fhir4ds.com/fhir/StructureDefinition/autocoding",
@@ -17,9 +19,18 @@ Extension shape (six sub-extensions, all always present — INV-5):
             {"url": "search-mode",     "valueCode":    "hybrid"},
             {"url": "score",           "valueDecimal": 0.87},
             {"url": "match-grade",     "valueCode":    "certain"},
-            {"url": "index-version",   "valueString":  "2026AA-bm25-v3"}
+            {"url": "index-version",   "valueString":  "2026AA-bm25-v3"},
+            {"url": "query-source",    "valueCode":    "code"},        # optional
+            {"url": "query-system",    "valueString":  "mimic-medication-name"}  # optional
         ]
     }
+
+``query-source`` records which precedence leg produced the query text
+(``text`` | ``display`` | ``code``); ``query-system`` records the
+NON-standard system URI that justified legs 2/3 (absent for the
+``text`` leg and for code-less display entries). v1 rows (six fields,
+no query provenance) still parse — the new fields read back as
+``None``.
 
 Zero-dependency guarantee: stdlib only (``math``, ``typing``).
 """
@@ -63,6 +74,11 @@ URL_SEARCH_MODE = "search-mode"
 URL_SCORE = "score"
 URL_MATCH_GRADE = "match-grade"
 URL_INDEX_VERSION = "index-version"
+URL_QUERY_SOURCE = "query-source"
+URL_QUERY_SYSTEM = "query-system"
+
+#: Accepted ``query-source`` values (FHIR4-24 precedence legs).
+VALID_QUERY_SOURCES = frozenset({"text", "display", "code"})
 
 
 def build_autocoding_extension(
@@ -73,6 +89,8 @@ def build_autocoding_extension(
     score: float,
     match_grade: str,
     index_version: Optional[str],
+    query_source: Optional[str] = None,
+    query_system: Optional[str] = None,
 ) -> dict:
     """Build the autocoding extension object.
 
@@ -97,14 +115,21 @@ def build_autocoding_extension(
             ``None`` is normalized to the literal string ``"unknown"``
             so the field always has a value (Phase 5 staleness sweeps
             rely on its presence).
+        query_source: FHIR4-24 provenance — which precedence leg
+            produced the query text (``text``/``display``/``code``).
+            ``None`` (default) omits the sub-extension (v1 shape).
+        query_system: FHIR4-24 provenance — the NON-standard system
+            URI that justified the display/code legs. ``None`` (default)
+            omits the sub-extension.
 
     Returns:
-        The FHIR R4 extension dict (URL + six sub-extensions in
-        fixed field order — deterministic for byte-stable serialization).
+        The FHIR R4 extension dict (URL + sub-extensions in fixed
+        field order — deterministic for byte-stable serialization).
 
     Raises:
         TypeError: If ``score`` cannot be coerced to a float.
-        ValueError: If ``score`` is non-finite (NaN/inf/-inf).
+        ValueError: If ``score`` is non-finite (NaN/inf/-inf), or
+            ``query_source`` is not one of ``text``/``display``/``code``.
     """
     # Coerce score through float() so callers may pass a Decimal/int.
     # This is the boundary where JSON-unsafe values are caught — the
@@ -117,21 +142,32 @@ def build_autocoding_extension(
             f"got {score!r} (NaN/Infinity are not JSON-serializable "
             f"with allow_nan=False)."
         )
+    if query_source is not None and query_source not in VALID_QUERY_SOURCES:
+        raise ValueError(
+            f"autocoding extension query_source must be one of "
+            f"{sorted(VALID_QUERY_SOURCES)} or None, got {query_source!r}."
+        )
 
     # Normalize None index_version to literal "unknown" so the field is
     # always present downstream (Phase 5 staleness sweep depends on it).
     index_version_value = index_version if index_version is not None else "unknown"
 
+    sub_extensions: list[dict] = [
+        {"url": URL_ENGINE,         "valueString":  engine},
+        {"url": URL_ENGINE_VERSION, "valueString":  engine_version},
+        {"url": URL_SEARCH_MODE,    "valueCode":    search_mode},
+        {"url": URL_SCORE,          "valueDecimal": score_float},
+        {"url": URL_MATCH_GRADE,    "valueCode":    match_grade},
+        {"url": URL_INDEX_VERSION,  "valueString":  index_version_value},
+    ]
+    if query_source is not None:
+        sub_extensions.append({"url": URL_QUERY_SOURCE, "valueCode": query_source})
+    if query_system is not None:
+        sub_extensions.append({"url": URL_QUERY_SYSTEM, "valueString": query_system})
+
     return {
         "url": AUTOCODING_EXTENSION_URL,
-        "extension": [
-            {"url": URL_ENGINE,         "valueString":  engine},
-            {"url": URL_ENGINE_VERSION, "valueString":  engine_version},
-            {"url": URL_SEARCH_MODE,    "valueCode":    search_mode},
-            {"url": URL_SCORE,          "valueDecimal": score_float},
-            {"url": URL_MATCH_GRADE,    "valueCode":    match_grade},
-            {"url": URL_INDEX_VERSION,  "valueString":  index_version_value},
-        ],
+        "extension": sub_extensions,
     }
 
 
@@ -139,10 +175,10 @@ def parse_autocoding_extension(coding: dict) -> Optional[dict]:
     """Inverse of :func:`build_autocoding_extension`.
 
     Walks the Coding's ``extension[]`` looking for the autocoding
-    extension. If found, returns the six sub-extension fields keyed by
+    extension. If found, returns the sub-extension fields keyed by
     their URL suffix (``engine``, ``engine_version``, ``search_mode``,
-    ``score``, ``match_grade``, ``index_version``). If absent, returns
-    ``None``.
+    ``score``, ``match_grade``, ``index_version``, ``query_source``,
+    ``query_system``). If absent, returns ``None``.
 
     Missing sub-extension fields are returned as ``None`` rather than
     raising — this is the right behavior for forward compatibility
@@ -178,8 +214,8 @@ def parse_autocoding_extension(coding: dict) -> Optional[dict]:
         return None
 
     # Sub-extension value types and their corresponding parse keys.
-    # valueString → engine, engine_version, index_version.
-    # valueCode   → search_mode, match_grade.
+    # valueString → engine, engine_version, index_version, query_system.
+    # valueCode   → search_mode, match_grade, query_source.
     # valueDecimal → score.
     expected = {
         URL_ENGINE:         ("valueString",  "engine"),
@@ -188,6 +224,8 @@ def parse_autocoding_extension(coding: dict) -> Optional[dict]:
         URL_SCORE:          ("valueDecimal", "score"),
         URL_MATCH_GRADE:    ("valueCode",    "match_grade"),
         URL_INDEX_VERSION:  ("valueString",  "index_version"),
+        URL_QUERY_SOURCE:   ("valueCode",    "query_source"),
+        URL_QUERY_SYSTEM:   ("valueString",  "query_system"),
     }
 
     parsed: dict[str, object] = {key: None for _, (_, key) in expected.items()}

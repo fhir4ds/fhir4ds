@@ -104,6 +104,7 @@ from ..functions.filter import (
     where,
     select,
     repeat,
+    repeat_all,
     # Subsetting functions
     first,
     last,
@@ -212,6 +213,7 @@ __all__ = [
     "where",
     "select",
     "repeat",
+    "repeat_all",
     # Subsetting functions
     "first",
     "last",

@@ -19,6 +19,12 @@ class CQLHTTPServer(ThreadingHTTPServer):
 
 def create_http_server(config: CQLServerConfig | None = None) -> CQLHTTPServer:
     """Create a local HTTP server for runner ``$cql`` requests."""
+    if config is not None and not isinstance(config, CQLServerConfig):
+        raise TypeError(
+            "Expected a CQLServerConfig (or None) for 'config', got "
+            f"{type(config).__name__}. Build one with "
+            "fhir4ds.CQLServerConfig(host=..., port=...) instead."
+        )
     config = config or CQLServerConfig()
 
     class Handler(_CQLRequestHandler):

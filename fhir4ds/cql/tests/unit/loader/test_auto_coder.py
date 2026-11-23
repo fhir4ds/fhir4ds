@@ -242,9 +242,13 @@ def test_inv5_all_six_extension_fields_present(duckdb_con, endpoint):
         ext = coding["extension"][0]
         assert ext["url"] == AUTOCODING_EXTENSION_URL
         sub_urls = {s["url"] for s in ext["extension"]}
+        # FHIR4-24: the text leg adds the query-source provenance
+        # sub-extension (query-system only appears for coding-derived
+        # legs over a non-standard system).
         assert sub_urls == {
             "engine", "engine-version", "search-mode",
             "score", "match-grade", "index-version",
+            "query-source",
         }
         # Value types per FDD §3d
         by_url = {s["url"]: s for s in ext["extension"]}

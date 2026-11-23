@@ -1,0 +1,9 @@
+{
+  "resourceType": "Bundle",
+  "id": "tiny-bundle",
+  "type": "collection",
+  "entry": [
+    {"resource": {"resourceType": "Patient", "id": "pat-delta", "gender": "female", "birthDate": "1980-07-09", "name": [{"use": "official", "family": "Delgado", "given": ["Sofia"]}], "identifier": [{"type": {"coding": [{"code": "MR"}]}, "system": "urn:oid:1.2.3.4.5", "value": "100236"}]}},
+    {"resource": {"resourceType": "Observation", "id": "obs-delta-1", "status": "final", "code": {"coding": [{"system": "http://loinc.org", "code": "29463-7", "display": "Body weight"}]}, "subject": {"reference": "Patient/pat-delta"}, "effectiveDateTime": "2022-03-03T08:00:00Z", "valueQuantity": {"value": 64.5, "unit": "kg"}}}
+  ]
+}

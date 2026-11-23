@@ -1,0 +1,58 @@
+---
+title: "Strip the Codes, Grade the Recovery: A Ground-Truth Benchmark for Clinical Auto-Coding"
+description: "How accurate is auto-coding when you actually know the right answer? We removed 1,643 codes from real ICU data, let the auto-coder reconstruct them from text, and scored every recovery against the originals — including a counterfactual ceiling and a three-way retrieval ablation."
+authors: joel
+tags: [fhir, data-quality, autocoding, mimic]
+date: 2026-11-20T18:00:00Z
+slug: /autocoding-ground-truth-benchmark
+---
+
+Auto-coding demos are easy: point a terminology engine at some text, show the SNOMED concept it found, nod. The hard question is the one buyers actually ask — *how often is it right?* — and almost nobody can answer it, because answering it requires knowing the right answer, which requires data where the codes already exist. Which is exactly the data that doesn't need auto-coding.
+
+This post is about a way out of that loop, and the numbers it produced on real hospital data.
+
+{/* truncate */}
+
+## The trick: strip what you already have
+
+MIMIC-IV-FHIR is real Beth Israel ICU data converted to FHIR — genuinely coded, genuinely messy. Because it *has* codes, it can serve as its own answer key:
+
+1. **Strip**: remove the codings from 1,643 coded resources (669 conditions, 494 procedures, 480 laboratory observations), preserving the display text as `code.text` — manufacturing, in reverse, the legacy situation every EHR migration faces.
+2. **Score before**: run a coding-centric PIQI rubric over the stripped corpus.
+3. **Auto-code**: let the auto-coder reconstruct codes from the text alone.
+4. **Score after**: re-run the identical rubric.
+5. **Grade**: every generated coding is compared against the coding *we removed*. We know the right answer because we took it.
+
+And one more arm that makes the whole experiment interpretable — the **ceiling**: the stripped corpus with the original codings quietly re-attached. That scores what *perfect* auto-coding would achieve, so the recovery numbers have a denominator that means something.
+
+## The results
+
+| Leg | PIQI index (coding-centric rubric) |
+| --- | --- |
+| Before (stripped) | 38.5 |
+| After auto-coding | 40.7 |
+| Ceiling (originals re-attached) | 41.7 |
+
+The recall-oriented configuration wrote 3,366 codings across 1,216 of the 1,643 stripped elements (74% coverage) and recovered **2,188 of the 3,083 fail items — 71% of the coding gap, with zero regressions**: nothing that passed before regressed, plausibility checks included. The strict default wrote only 28 codings — all `certain`-grade — recovering exactly 28 items with zero new failures. Conservative by design, exactly as the contract says.
+
+**The headline accuracy number.** The stripped originals split into two populations. On the subset whose originals were standard SNOMED codes (224 procedures), the auto-coder recovered the **exact original (system, code) pair for 224 of 224 — 100% top-1 exact recovery**. On the MIMIC-local dictionary subset (ICD-9/10 diagnoses, local lab ids), exact match is impossible by construction — no engine can reproduce a hospital's private dictionary — and instead it returns standard equivalents. Spot-checks: "Anemia in chronic kidney disease" (local ICD-9) → SNOMED 707323002 *Anemia in chronic kidney disease*; "Portal vein thrombosis" → SNOMED 17920008 *Portal vein thrombosis*. Original text preserved, provenance on every coding.
+
+## Does the retrieval mode matter?
+
+The terminology engine (medterm4ds) supports three search modes. We ablated all three on the identical strip-and-gold slice:
+
+| mode | PIQI after | elements re-coded | top-1 exact recovery |
+| --- | --- | --- | --- |
+| lexical only | 40.24 | 48% | 11.2% |
+| semantic only | 40.80 | 78% | 2.4% |
+| **hybrid** | 40.76 | 75% | **13.6%** |
+
+The trade is clean. Pure semantic search maximizes coverage — it finds a plausible standard concept for almost everything — but its exact-code recovery collapses: embeddings rank paraphrases highly, and "a reasonable concept" is not "the right code." Pure lexical search is the opposite: strong on exact matches (the surface-form tiebreak anchors verbatim text to its code) but finds codes for only half the corpus. **Hybrid delivers semantic-grade coverage with lexical-grade exactness** — the best top-1 exact recovery of the three at near-best coverage — which is why it is the engine's default and ours.
+
+## What this establishes — and what it doesn't
+
+What it establishes: on real clinical text, with a genuine answer key, the auto-coder recovers most of what coding can recover, gets standard codes exactly right where they exist, translates local dictionaries into credible standard equivalents, and never regresses anything that was already passing. Every claim there is a measured number, not a demo.
+
+What it doesn't: this is one corpus, one engine version, one rubric. The methodology — strip, recover, grade against the removed originals, ceiling-arm the denominator — is the contribution we'd most like to see others copy. It turns any coded corpus into an auto-coding benchmark, and it is fully scripted: `fhir4ds.realism.piqi_autocoding` runs the whole experiment against any FHIR NDJSON or bundle corpus, deterministically, seed-invariant, with every artifact preserved.
+
+The companion post covers the framework that scored all of this — [PIQI implemented as FHIR resources, measured on the same ICU data](/blog/realism-benchmark-mimic/).

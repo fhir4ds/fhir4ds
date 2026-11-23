@@ -118,6 +118,30 @@ def _pyproject_text() -> str:
     return (REPO_ROOT / "pyproject.toml").read_text()
 
 
+def test_mcp_extra_is_bounded_below_v2():
+    """[mcp] must stay bounded to the mcp 1.x line (QA-D10H-001, 2026-11-22).
+
+    mcp 2.0 (PyPI, late 2026) renamed ``mcp.server.fastmcp.FastMCP`` to
+    ``mcp.server.mcpserver.MCPServer``; an unbounded ``mcp>=1.2`` extra
+    resolved to mcp 2.3.0 on a clean venv, where ``fhir4ds-mcp`` died at
+    startup with the (typed but fatal) ImportError from ``_require_mcp``.
+    The server implementation targets the 1.x SDK; until it is ported,
+    the extra must carry an explicit ``,<2`` upper bound — the same
+    bounded-minor doctrine the medterm4ds extras follow.
+    """
+    import re
+
+    text = _pyproject_text()
+    match = re.search(r"mcp\s*=\s*\[\s*\"mcp>=([\d.]+)(?:,<(\d+))?", text)
+    assert match, "[mcp] extra declaration not found in pyproject.toml"
+    upper = match.group(2)
+    assert upper == "2", (
+        "[mcp] extra must be bounded 'mcp>=1.2,<2': mcp 2.x renames "
+        "FastMCP (mcp.server.fastmcp) to MCPServer and breaks the "
+        "fhir4ds-mcp entry point at startup"
+    )
+
+
 def test_duckdb2_default_on_modern_python():
     """v0.0.25 (Joel ruling 2026-11-18): DuckDB 2.0 is the DEFAULT on
     Python >= 3.11; Python 3.10 keeps the 1.5.x line (2.x wheels are

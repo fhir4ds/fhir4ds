@@ -10,7 +10,7 @@
  */
 import { test, expect, type Page } from "@playwright/test";
 
-const WHEEL = "fhir4ds_v2-0.0.24-py3-none-any.whl";
+const WHEEL = "fhir4ds_v2-0.0.25-py3-none-any.whl";
 
 async function coldCache(page: Page) {
   const cdp = await page.context().newCDPSession(page);
@@ -74,7 +74,7 @@ test("C3: version badge matches the served wheel and the worker report", async (
   await page.waitForFunction(() => (window as any).__cleanroomBooted === true, null, { timeout: 120_000 });
   const badge = page.locator(".version-badge");
   await expect(badge).toBeVisible();
-  await expect(badge).toContainText("0.0.24");
+  await expect(badge).toContainText("0.0.25");
   // the actual wheel asset served by this build
   const head = await page.request.head(`/${WHEEL}`);
   expect(head.ok()).toBe(true);

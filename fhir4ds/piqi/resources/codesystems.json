@@ -1,0 +1,232 @@
+{
+  "codeSystems": [
+    {
+      "mnemonic": "ADMINGENDER",
+      "name": "Administrative Gender",
+      "identifier": "http://hl7.org/fhir/administrative-gender",
+      "aliases": [
+        "ADMINGENDER",
+        "http://hl7.org/fhir/administrative-gender"
+      ],
+      "terminologyServerStatus": "active"
+    },
+    {
+      "mnemonic": "ATC",
+      "name": "Anatomical Therapeutic Chemical (ATC)",
+      "identifier": "http://www.whocc.no/atc",
+      "aliases": [
+        "ATC",
+        "http://www.whocc.no/atc"
+      ],
+      "terminologyServerStatus": "active"
+    },
+    {
+      "mnemonic": "CONDCLINICAL",
+      "name": "Condition Clinical Status Codes",
+      "identifier": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+      "aliases": [
+        "CONDCLINICAL",
+        "http://terminology.hl7.org/CodeSystem/condition-clinical"
+      ],
+      "terminologyServerStatus": "active"
+    },
+    {
+      "mnemonic": "CONDVERSTATUS",
+      "name": "Condition Verification Status Codes",
+      "identifier": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+      "aliases": [
+        "CONDVERSTATUS",
+        "http://terminology.hl7.org/CodeSystem/condition-ver-status"
+      ],
+      "terminologyServerStatus": "active"
+    },
+    {
+      "mnemonic": "CPT",
+      "name": "Current Procedural Terminology",
+      "identifier": "http://www.ama-assn.org/go/cpt",
+      "aliases": [
+        "CPT",
+        "http://www.ama-assn.org/go/cpt"
+      ],
+      "terminologyServerStatus": "active"
+    },
+    {
+      "mnemonic": "CVX",
+      "name": "Vaccine Administered Code Set (CVX)",
+      "identifier": "http://hl7.org/fhir/sid/cvx",
+      "aliases": [
+        "CVX",
+        "http://hl7.org/fhir/sid/cvx"
+      ],
+      "terminologyServerStatus": "active"
+    },
+    {
+      "mnemonic": "HCPCS",
+      "name": "Healthcare Common Procedure Coding System (HCPCS)",
+      "identifier": "https://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets",
+      "aliases": [
+        "HCPCS",
+        "https://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets"
+      ],
+      "terminologyServerStatus": "active"
+    },
+    {
+      "mnemonic": "HCPCS2",
+      "name": "Healthcare Common Procedure Coding System (HCPCS)",
+      "identifier": "http://terminology.hl7.org/CodeSystem/HCPCS",
+      "aliases": [
+        "HCPCS2",
+        "http://terminology.hl7.org/CodeSystem/HCPCS"
+      ],
+      "terminologyServerStatus": "active"
+    },
+    {
+      "mnemonic": "ICD10",
+      "name": "International Classification of Diseases, Tenth Revision",
+      "identifier": "http://hl7.org/fhir/sid/icd-10",
+      "aliases": [
+        "ICD10",
+        "http://hl7.org/fhir/sid/icd-10"
+      ],
+      "terminologyServerStatus": "active"
+    },
+    {
+      "mnemonic": "ICD10CM",
+      "name": "International Classification of Diseases, Tenth Revision, Clinical Modification",
+      "identifier": "http://hl7.org/fhir/sid/icd-10-cm",
+      "aliases": [
+        "2.16.840.1.113883.6.90",
+        "I10",
+        "ICD-10-CM",
+        "ICD10CM",
+        "http://hl7.org/fhir/sid/icd-10-cm",
+        "urn:oid:2.16.840.1.113883.6.90"
+      ],
+      "terminologyServerStatus": "active"
+    },
+    {
+      "mnemonic": "ICD10PCS",
+      "name": "International Classification of Diseases, Tenth Revision, Procedure Coding System",
+      "identifier": "http://hl7.org/fhir/sid/icd-10-pcs",
+      "aliases": [
+        "2.16.840.1.113883.6.4",
+        "ICD-10-PCS",
+        "ICD10PCS",
+        "http://hl7.org/fhir/sid/icd-10-pcs",
+        "urn:oid:2.16.840.1.113883.6.4"
+      ],
+      "terminologyServerStatus": "active"
+    },
+    {
+      "mnemonic": "ICD9CM",
+      "name": "International Classification of Diseases, Ninth Revision, Clinical Modification",
+      "identifier": "http://hl7.org/fhir/sid/icd-9-cm",
+      "aliases": [
+        "2.16.840.1.113883.6.103",
+        "I9",
+        "ICD-9-CM",
+        "ICD9",
+        "ICD9CM",
+        "http://hl7.org/fhir/sid/icd-9-cm",
+        "urn:oid:2.16.840.1.113883.6.103"
+      ],
+      "terminologyServerStatus": "deprecated"
+    },
+    {
+      "mnemonic": "LOINC",
+      "name": "Logical Observation Identifiers Names and Codes",
+      "identifier": "http://loinc.org",
+      "aliases": [
+        "2.16.840.1.113883.6.1",
+        "LN",
+        "LNC",
+        "LOINC",
+        "LOINC Code",
+        "http://loinc.org",
+        "urn:oid:2.16.840.1.113883.6.1"
+      ],
+      "terminologyServerStatus": "active"
+    },
+    {
+      "mnemonic": "MEASURE",
+      "name": "FHIR Measure",
+      "identifier": "http://hl7.org/fhir/measure",
+      "aliases": [
+        "MEASURE",
+        "http://hl7.org/fhir/measure"
+      ],
+      "terminologyServerStatus": "active"
+    },
+    {
+      "mnemonic": "NDC",
+      "name": "National Drug Codes (NDC)",
+      "identifier": "http://hl7.org/fhir/sid/ndc",
+      "aliases": [
+        "NDC",
+        "http://hl7.org/fhir/sid/ndc"
+      ],
+      "terminologyServerStatus": "active"
+    },
+    {
+      "mnemonic": "OBSCATEGORY",
+      "name": "Observation Category",
+      "identifier": "http://terminology.hl7.org/CodeSystem/observation-category",
+      "aliases": [
+        "OBSCATEGORY",
+        "http://terminology.hl7.org/CodeSystem/observation-category"
+      ],
+      "terminologyServerStatus": "active"
+    },
+    {
+      "mnemonic": "RXNORM",
+      "name": "RxNorm",
+      "identifier": "http://www.nlm.nih.gov/research/umls/rxnorm",
+      "aliases": [
+        "2.16.840.1.113883.6.88",
+        "RXNORM",
+        "RxNorm",
+        "http://www.nlm.nih.gov/research/umls/rxnorm",
+        "urn:oid:2.16.840.1.113883.6.88"
+      ],
+      "terminologyServerStatus": "active"
+    },
+    {
+      "mnemonic": "SNOMEDCT",
+      "name": "SNOMED Clinical Terms",
+      "identifier": "http://snomed.info/sct",
+      "aliases": [
+        "2.16.840.1.113883.6.96",
+        "SCT",
+        "SNOMED",
+        "SNOMED CT",
+        "SNOMEDCT",
+        "SNOMEDCT_US",
+        "http://snomed.info/sct",
+        "sct",
+        "urn:oid:2.16.840.1.113883.6.96"
+      ],
+      "terminologyServerStatus": "active"
+    },
+    {
+      "mnemonic": "UCUM",
+      "name": "Unified Code for Units of Measure (UCUM)",
+      "identifier": "http://unitsofmeasure.org",
+      "aliases": [
+        "UCUM",
+        "http://unitsofmeasure.org",
+        "ucum"
+      ],
+      "terminologyServerStatus": "active"
+    },
+    {
+      "mnemonic": "V3ACTCODE",
+      "name": "v3 Act Code",
+      "identifier": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+      "aliases": [
+        "V3ACTCODE",
+        "http://terminology.hl7.org/CodeSystem/v3-ActCode"
+      ],
+      "terminologyServerStatus": "active"
+    }
+  ]
+}

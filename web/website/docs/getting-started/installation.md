@@ -21,17 +21,26 @@ pip install fhir4ds-v2
 ```
 
 ### Optional Dependencies
-For advanced measure evaluation and clinical reasoning, install the `measures` extra:
+
+| Extra | Purpose |
+|-------|---------|
+| `[measures]` | pandas — `evaluate_measure` result DataFrames |
+| `[hapi]` | HAPI PostgreSQL materialization worker (psycopg) |
+| `[mongo]` | Mongo change-stream materialization worker (pymongo) |
+| `[serve]` | `fhir4ds serve` HTTP surface (fastapi + uvicorn) |
+| `[hf]` | Hub-backed publish store for the serve layer (huggingface-hub) |
+| `[terminology]` | Terminology service integration (httpx + medterm4ds) |
+| `[ner]` | Clinical notes NER cascade (medterm4ds[extraction]) |
+| `[mcp]` | `fhir4ds-mcp` stdio server for agentic interfaces (MCP SDK 1.x) |
 
 ```bash
-pip install "fhir4ds-v2[measures]"
-```
-
-For DQM materialization workers:
-
-```bash
-pip install "fhir4ds-v2[hapi]"   # HAPI PostgreSQL worker
-pip install "fhir4ds-v2[mongo]"  # Mongo change-stream worker
+pip install "fhir4ds-v2[measures]"       # measure evaluation
+pip install "fhir4ds-v2[serve]"          # FHIR R4 / SQL-on-FHIR HTTP API
+pip install "fhir4ds-v2[hapi]"           # HAPI PostgreSQL worker
+pip install "fhir4ds-v2[mongo]"          # Mongo change-stream worker
+pip install "fhir4ds-v2[terminology]"    # terminology service integration
+pip install "fhir4ds-v2[ner]"            # clinical notes NER pipeline
+pip install "fhir4ds-v2[mcp]"            # MCP stdio server
 ```
 
 ### DuckDB 2.0 (default on Python 3.11+)

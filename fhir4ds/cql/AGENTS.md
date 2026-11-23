@@ -317,6 +317,27 @@
 
 ## Known Fragile Areas
 
+- **Lateral-dedup portability (FHIR4-15 / CQL20-F, 2026-11-19)**: the
+  lateral-dedup pass (`translator/types.py::_dedup_select`) must NEVER nest
+  a correlated scalar subquery inside a `CROSS JOIN LATERAL` projection —
+  duckdb-wasm's binder rejects it (`Referenced table 'sub' not found!`;
+  CMS159 in the fhir4px wasm demo) though desktop DuckDB binds fine.
+  Subquery-bearing candidates (bare `SQLSubquery`, or
+  `fhirpath/fhirpath_text(<scalar subquery>, ...)`) are hoisted via
+  `_direct_lateral_shape` as `LEFT JOIN LATERAL (SELECT <expr> AS value
+  FROM <cte> AS sub WHERE sub.patient_id = <outer>.patient_id LIMIT 1)
+  AS _latN ON TRUE` — the LEFT JOIN is LOAD-BEARING: the direct derived
+  table returns zero rows on no-match and a CROSS JOIN drops the patient
+  row entirely (the first CROSS implementation regressed 6 qi-core
+  measures to 8-94% accuracy; LEFT restored 47/47). Identical rebuilt
+  tables are shared so the subquery executes once per patient. Backstop:
+  `_lateral_join_scope_safe` flags any lateral whose derived table
+  contains a nested `SQLSubquery`/`SQLExists` as unsafe →
+  `_unwrap_scope_unsafe_laterals` restores the inline form; the unwrap
+  never restores a projection referencing the lateral's internal alias.
+  Regression:
+  `fhir4ds/cql/tests/integration/test_cql20_f_lateral_portability.py`.
+
 - `fhir4ds/cql/duckdb/macros/clinical.py` (`_RESOLVE_MACRO_SQL`) and
   `fhir4ds/cql/loader/fhir_loader.py` (`_register_resolve_macro`): the
   resolve() macro body MUST NOT use `TRIM(BOTH '<char>' FROM x)` — the CQL

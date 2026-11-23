@@ -21,6 +21,7 @@ try:
     from fastapi import FastAPI, Request
     from fastapi.exceptions import RequestValidationError
     from fastapi.responses import JSONResponse
+    from starlette.exceptions import HTTPException
 except ImportError as exc:  # actionable: name the missing extra, not the module
     raise RuntimeError(
         "fhir4ds.serve requires the optional serve extra: "
@@ -64,7 +65,33 @@ def create_app(
     """
     from fhir4ds import __version__ as engine_version
 
+    if config is not None and not isinstance(config, ServeConfig):
+        # QA-D8H-003 (INV-8): a str/dict config leaked a raw
+        # AttributeError ('str' object has no attribute 'database') far
+        # from the call site.
+        raise TypeError(
+            "config must be a ServeConfig or None, got "
+            f"{type(config).__name__}"
+        )
     settings = config or ServeConfig()
+    if connection is not None:
+        # QA-D13S-001 (INV-8, QA-D8H-003/QA-D11E-001 sibling): a str/int
+        # connection leaked a raw AttributeError ('execute') deep inside
+        # ensure_schema; a closed one leaked a bare ConnectionException.
+        import duckdb as _duckdb_mod
+
+        if not isinstance(connection, _duckdb_mod.DuckDBPyConnection):
+            raise TypeError(
+                "connection must be a DuckDB connection "
+                f"(see fhir4ds.connection.create_connection), got "
+                f"{type(connection).__name__}"
+            )
+        try:
+            connection.execute("SELECT 1").fetchone()
+        except _duckdb_mod.ConnectionException:
+            raise _duckdb_mod.ConnectionException(
+                "Cannot start fhir4ds serve: DuckDB connection is closed"
+            ) from None
     if connection is None:
         connection = _connect(settings)
 
@@ -181,6 +208,12 @@ def _configure_writes(context: ServeContext, settings: ServeConfig) -> Any:
         _, _, context.rehydrate_skipped_parts = rehydrate(
             context.connection, publish_store, context.store
         )
+        # QA-D13H-003: rehydration may have restored published rows whose
+        # ``_seq`` is ahead of meta/state.json (a crash between the part
+        # write and the state write). The writer must continue from the
+        # log's actual maximum, or the next write collides with a restored
+        # version and a later boot silently drops it.
+        context.writer.advance_to(versioning.next_seq(context.connection))
         _adopt_keys(context, publish_store)
     except Exception as exc:  # noqa: BLE001 - the surface stays up, loudly
         logger.exception("dataset rehydration failed; serving from a fresh log")
@@ -281,6 +314,25 @@ def _install_error_handlers(app: FastAPI) -> None:
             ],
         }
         return JSONResponse(status_code=400, content=outcome, media_type=FHIR_JSON)
+
+    @app.exception_handler(HTTPException)
+    def handle_http_exception(request: Request, exc: HTTPException) -> JSONResponse:
+        """QA-D13E-001: framework HTTPExceptions must be OperationOutcomes too.
+
+        FastAPI converts body-READ failures that are not JSONDecodeError
+        (invalid UTF-8, a deep-nesting RecursionError) into
+        ``HTTPException(400, "There was an error parsing the body")``, which
+        its default handler renders as a bare ``{"detail": ...}`` — the one
+        error shape this surface must never emit.
+        """
+        detail = exc.detail if isinstance(exc.detail, str) else "Invalid request"
+        outcome = {
+            "resourceType": "OperationOutcome",
+            "issue": [Issue(code="structure", diagnostics=detail).to_dict()],
+        }
+        return JSONResponse(
+            status_code=exc.status_code, content=outcome, media_type=FHIR_JSON
+        )
 
     @app.exception_handler(Exception)
     def handle_unexpected(request: Request, exc: Exception) -> JSONResponse:

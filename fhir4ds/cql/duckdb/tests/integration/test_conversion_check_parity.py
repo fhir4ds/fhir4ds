@@ -455,7 +455,11 @@ define ObsSum: Sum([Observation] O where ConvertsToInteger((O.value as FHIR.stri
             row = con.execute(sql).fetchone()
             assert row[1] == ["1980-01-01"], row
             assert row[2] == ["male"], row
-            assert row[3] == ["final", "final"], row
+            # Plain `return` (no `all`) eliminates duplicate results at the
+            # definition root (root-scoped return-distinct doctrine, CMS136
+            # 2026-11-11): two Observations both projecting 'final' yield a
+            # single element. d3-SKEPTIC v0.0.26 carry-in adjudication.
+            assert row[3] == ["final"], row
             assert sorted(row[4]) == ["42", "high"], row
             assert row[5] == 1 and row[6] == 42, row
         finally:

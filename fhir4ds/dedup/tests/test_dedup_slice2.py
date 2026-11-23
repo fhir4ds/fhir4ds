@@ -290,6 +290,10 @@ class TestCodeSetIntersection:
             normalize_codes(reverse.resource)
 
     def test_empty_code_sets_never_union(self):
+        # AMUX-145 (Q2 default: yes): coding-less records with IDENTICAL
+        # conservative text + full corroboration merge through the TEXT
+        # tier; canonical empty sets still never union CANONICALLY —
+        # `off` mode restores the pre-feature singletons.
         uncoded = {"resourceType": "Observation", "id": "u1", "status":
                    "final", "subject": {"reference": "Patient/p1"},
                    "code": {"text": "uncoded"},
@@ -300,8 +304,10 @@ class TestCodeSetIntersection:
                                      "code": "mg/dL"}}
         twin = dict(uncoded, id="u2")
         result = dedup_pass([uncoded, twin])
-        assert result.clusters == []
-        assert _rids(result.emitted) == ["u1", "u2"]
+        assert _cluster_rids(result) == [["u1", "u2"]]
+        off = dedup_pass([uncoded, twin], code_fallback="off")
+        assert off.clusters == []
+        assert _rids(off.emitted) == ["u1", "u2"]
 
     def test_empty_set_does_not_bridge_two_coded_records(self):
         # a~b share code X; an uncoded row in the same bucket must not

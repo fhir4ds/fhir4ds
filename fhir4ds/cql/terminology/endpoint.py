@@ -117,3 +117,49 @@ class TerminologyEndpoint(Protocol):
             Parallel list of result lists (one per input query).
         """
         ...
+
+
+# ----------------------------------------------------------------------
+# Shared argument-type guards (QA-D8H-002, INV-8).
+#
+# Protocol methods must reject wrong-type arguments with a TypeError at
+# the boundary — BEFORE the circuit breaker check. Without these, the
+# HTTP adapter performed a live network call with ``url=None``, and the
+# in-process adapter swallowed medterm4ds's own TypeError and returned
+# ``[]`` (silently empty membership — the worst failure mode).
+# Implementations should call these as the first statement of the
+# public method body.
+# ----------------------------------------------------------------------
+def require_str_arg(value: object, name: str) -> None:
+    """Raise ``TypeError`` when ``value`` is not a non-optional ``str``."""
+    if not isinstance(value, str):
+        raise TypeError(f"{name} must be a str, got {type(value).__name__}")
+
+
+def require_query_pairs(queries: object) -> None:
+    """Raise ``TypeError`` unless ``queries`` is a list of (str, str) pairs."""
+    if not isinstance(queries, list) or not all(
+        isinstance(q, tuple)
+        and len(q) == 2
+        and isinstance(q[0], str)
+        and isinstance(q[1], str)
+        for q in queries
+    ):
+        raise TypeError(
+            "queries must be a list of (query, category) str tuples, got "
+            f"{type(queries).__name__}"
+        )
+
+
+def require_dict_arg(value: object, name: str) -> None:
+    """Raise ``TypeError`` when ``value`` is not a ``dict``.
+
+    QA-D8E-001 (D8 EXPLORER, INV-8): ``expand_intensional`` missed the
+    QA-D8H-002 guard family — the HTTP adapter POSTed wrong-typed bodies
+    on a live network call, and the in-process adapter's degrade path
+    crashed with a raw ``AttributeError`` from inside its own except
+    handler (``value_set.get(...)``) after swallowing the upstream
+    ``TypeError`` as ``[]``.
+    """
+    if not isinstance(value, dict):
+        raise TypeError(f"{name} must be a dict, got {type(value).__name__}")

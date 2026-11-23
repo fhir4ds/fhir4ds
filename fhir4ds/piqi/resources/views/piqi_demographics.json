@@ -1,0 +1,108 @@
+{
+  "name": "piqi_demographics",
+  "status": "draft",
+  "resource": "Patient",
+  "select": [
+    {
+      "column": [
+        {
+          "name": "element_id",
+          "path": "id",
+          "type": "id"
+        },
+        {
+          "name": "patient_id",
+          "path": "id",
+          "type": "id"
+        },
+        {
+          "name": "birthDate",
+          "path": "birthDate.toString()",
+          "type": "string"
+        },
+        {
+          "name": "deathDate",
+          "path": "extension.where(url='https://fhir4ds.org/piqi/StructureDefinition/deathDate').first().value.ofType(string)",
+          "type": "string"
+        },
+        {
+          "name": "birthSex_text",
+          "path": "extension.where(url='https://fhir4ds.org/piqi/StructureDefinition/birthSex').first().value.ofType(CodeableConcept).text",
+          "type": "string"
+        },
+        {
+          "name": "birthSex_codings",
+          "path": "extension.where(url='https://fhir4ds.org/piqi/StructureDefinition/birthSex').first().value.ofType(CodeableConcept).coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "deceased_text",
+          "path": "extension.where(url='https://fhir4ds.org/piqi/StructureDefinition/deceased').first().value.ofType(CodeableConcept).text",
+          "type": "string"
+        },
+        {
+          "name": "deceased_codings",
+          "path": "extension.where(url='https://fhir4ds.org/piqi/StructureDefinition/deceased').first().value.ofType(CodeableConcept).coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "ethnicity_text",
+          "path": "extension.where(url='https://fhir4ds.org/piqi/StructureDefinition/ethnicity').first().value.ofType(CodeableConcept).text",
+          "type": "string"
+        },
+        {
+          "name": "ethnicity_codings",
+          "path": "extension.where(url='https://fhir4ds.org/piqi/StructureDefinition/ethnicity').first().value.ofType(CodeableConcept).coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "genderIdentity_text",
+          "path": "extension.where(url='https://fhir4ds.org/piqi/StructureDefinition/genderIdentity').first().value.ofType(CodeableConcept).text",
+          "type": "string"
+        },
+        {
+          "name": "genderIdentity_codings",
+          "path": "extension.where(url='https://fhir4ds.org/piqi/StructureDefinition/genderIdentity').first().value.ofType(CodeableConcept).coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "primaryLanguage_text",
+          "path": "extension.where(url='https://fhir4ds.org/piqi/StructureDefinition/primaryLanguage').first().value.ofType(CodeableConcept).text",
+          "type": "string"
+        },
+        {
+          "name": "primaryLanguage_codings",
+          "path": "extension.where(url='https://fhir4ds.org/piqi/StructureDefinition/primaryLanguage').first().value.ofType(CodeableConcept).coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "maritalStatus_text",
+          "path": "extension.where(url='https://fhir4ds.org/piqi/StructureDefinition/maritalStatus').first().value.ofType(CodeableConcept).text",
+          "type": "string"
+        },
+        {
+          "name": "maritalStatus_codings",
+          "path": "extension.where(url='https://fhir4ds.org/piqi/StructureDefinition/maritalStatus').first().value.ofType(CodeableConcept).coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "race_text",
+          "path": "extension.where(url='https://fhir4ds.org/piqi/StructureDefinition/race').first().value.ofType(CodeableConcept).text",
+          "type": "string"
+        },
+        {
+          "name": "race_codings",
+          "path": "extension.where(url='https://fhir4ds.org/piqi/StructureDefinition/race').first().value.ofType(CodeableConcept).coding",
+          "type": "Coding",
+          "collection": true
+        }
+      ]
+    }
+  ]
+}

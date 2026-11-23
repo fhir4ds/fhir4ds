@@ -540,7 +540,7 @@ class TestPublicSurface:
     def test_import_package_clean(self):
         import fhir4ds  # noqa: F401
         import fhir4ds.dedup
-        assert fhir4ds.dedup.__version__ == "0.0.24"
+        assert fhir4ds.dedup.__version__ == "0.0.25"
 
     def test_normalized_date_is_frozen(self):
         result = normalize_temporal(_obs("effectiveDateTime", "2024-03-05"))

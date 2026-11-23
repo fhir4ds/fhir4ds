@@ -20,6 +20,8 @@ resource parsed by dqm.parser.MeasureParser (pure Python).
 
 from __future__ import annotations
 
+import logging
+
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -199,6 +201,7 @@ def dependency_closure(
     """
     from fhir4ds.cql import parse_cql as engine_parse
 
+    logger = logging.getLogger(__name__)
     by_name = {lib.name: lib for lib in libraries}
     ordered: list[LibraryText] = []
     seen: set[str] = set()
@@ -211,7 +214,14 @@ def dependency_closure(
         ordered.append(lib)
         try:
             ast = engine_parse(lib.text)
-        except Exception:
+        except Exception as exc:  # best-effort include walk (AMUX-152 #30):
+            # an unparsable library simply contributes no include edges —
+            # named best-effort + logged, never silently swallowed.
+            logger.warning(
+                "measure include walk: CQL parse of library %r failed (%s: %s); "
+                "treating it as having no includes",
+                lib.name, type(exc).__name__, exc,
+            )
             return
         for inc in getattr(ast, "includes", []) or []:
             target = getattr(inc, "path", None) or getattr(inc, "alias", None)

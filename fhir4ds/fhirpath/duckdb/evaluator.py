@@ -253,7 +253,7 @@ def _has_out_of_range_integer_literal(expression: str) -> bool:
 
         value = int(text[start:i])
         minus_pos = start - 1
-        while minus_pos >= 0 and text[minus_pos].isspace():
+        while minus_pos >= 0 and (text[minus_pos].isspace() or text[minus_pos] in "()"):
             minus_pos -= 1
         unary_min = (
             minus_pos >= 0
@@ -300,7 +300,7 @@ def _has_out_of_range_long_literal(expression: str) -> bool:
 
         value = int(text[start : i - 1])
         minus_pos = start - 1
-        while minus_pos >= 0 and text[minus_pos].isspace():
+        while minus_pos >= 0 and (text[minus_pos].isspace() or text[minus_pos] in "()"):
             minus_pos -= 1
         unary_min = (
             minus_pos >= 0

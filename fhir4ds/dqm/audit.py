@@ -2,7 +2,18 @@
 
 from __future__ import annotations
 
+import re
+
 from .types import AuditOrStrategy, AuditPersona, PopulationMap  # noqa: F401
+
+# QA-D9S-003 (v0.0.26 D9 SKEPTIC): the QA-021 count-attribution twin aggregates
+# all winning resource ids into ONE comma-joined VARCHAR so its scalar subquery
+# stays single-row ("Type/id,Type/id,..."). FHIR ids cannot contain commas, so
+# the split back into individual findings is unambiguous.
+_MULTI_TARGET_RE = re.compile(
+    r"^[A-Za-z][A-Za-z0-9_]*/[A-Za-z0-9\-.]+"
+    r"(?:,[A-Za-z][A-Za-z0-9_]*/[A-Za-z0-9\-.]+)+$"
+)
 
 
 class AuditEngine:
@@ -72,14 +83,21 @@ class AuditEngine:
                     "findings": []
                 }
 
-            # Avoid duplicate targets within the same finding group
+            # Avoid duplicate targets within the same finding group.
+            # QA-D9S-003: a comma-joined multi-resource target (count
+            # attribution over N winning resources) expands into one
+            # finding per cited resource so every target is individually
+            # resolvable downstream (narratives, exports).
             target = item.get("target")
             val = item.get("value")
-            finding = {"target": target}
-            if val is not None:
-                finding["value"] = val
-
-            if finding not in compacted[group_key]["findings"]:
-                compacted[group_key]["findings"].append(finding)
+            if isinstance(target, str) and _MULTI_TARGET_RE.match(target):
+                findings = [{"target": part} for part in target.split(",")]
+            else:
+                findings = [{"target": target}]
+            for finding in findings:
+                if val is not None:
+                    finding["value"] = val
+                if finding not in compacted[group_key]["findings"]:
+                    compacted[group_key]["findings"].append(finding)
 
         return list(compacted.values())

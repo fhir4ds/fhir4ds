@@ -1,0 +1,83 @@
+---
+title: "The Engine That Grades Its Own Homework: PIQI as FHIR Resources, Measured on Real ICU Data"
+description: "Everyone asserts data quality. We implemented the PIQI framework as plain FHIR resources — every check a ViewDefinition composed with a SQLQuery — then pointed it at MIMIC-IV, ran a before/after auto-coding experiment with real ground truth, and let the scorecard grade the results."
+authors: joel
+tags: [fhir, piqi, data-quality, mimic]
+date: 2026-11-20T12:00:00Z
+slug: /realism-benchmark-mimic
+---
+
+Every healthcare data vendor asserts data quality. Almost nobody *measures* it — against a defined framework, on their own data, with numbers you can check. Assertions are marketing; a scorecard is a receipt.
+
+This post is about a data-quality engine that grades its own homework. It implements the Patient Information Quality Improvement Framework — **PIQI**, pronounced "picky" — not as code but as FHIR resources, so every quality check is an inspectable, forkable artifact. Then, to prove it measures something real, we pointed it at MIMIC-IV-FHIR: a baseline scorecard on genuine ICU data, one honest intervention (auto-coding), and a re-score against ground truth we manufactured by removing codes we already had.
+
+{/* truncate */}
+
+## PIQI in one section
+
+PIQI comes from the PIQI Alliance (Charles Harp's framework guides, v1.1/v1.2), and its core move is to make "data quality" decomposable instead of vibes. Four **quality dimensions**, each with sub-classifications: **accuracy** (is the value right?), **conformity** (does it obey the rules of its type and structure?), **availability** (is it there at all — populated, complete?), and **plausibility** (is it believable — a 3,000 mmHg blood pressure is well-formed and populated and wrong).
+
+The unit of measurement is the **SAM** — a Simple Assessment Module: a pass/fail check bound to a data attribute. `Attr_IsPopulated` on a lab value, `Concept_HasCode` on a coded concept, `Attr_IsNumeric` on something that must parse as a number. Each SAM declares its scoring effect, an optional weight, and an optional *criticality* flag.
+
+Here is the dimension taxonomy with a sample of the SAMs we ship against each sub-classification:
+
+| Dimension | What it asks | Sub-classifications (with sample SAMs) |
+| --- | --- | --- |
+| **Availability** | Is the data there at all? | • **Unpopulated** — `Attr_IsPopulated`<br/>• **Incomplete** — `Concept_IsComplete`, `Concept_HasDisplay`<br/>• **Missing** — `ObservationValue_HasType`<br/>• **Duplication** — `Class_HasDuplicates` |
+| **Accuracy** | Is the value right for its type? | • **InvalidValue** — `Attr_IsNumeric`, `Attr_IsDecimal`, `Attr_IsTimestamp`, `Attr_MatchesRegex`, `Attr_InList`<br/>• **InvalidFormat** — `Attr_IsValidDate` |
+| **Conformity** | Does a coded concept obey its type system? | • **InvalidMember** — `Concept_HasCode`, `Concept_HasCodeSystem`, `Concept_HasRecognizedCodeSystem` |
+| **Plausibility** | Is the value believable? | • **TemporallyImplausible** — `Attr_IsFutureDate`, `Attr_IsPastDate`<br/>• **ClinicallyImplausible** — `LabResult_ValueIsPlausible`, `LabResult_UnitIsPlausible`, `Condition_SexPlausible` |
+
+(A full inventory of the 33 implemented SAMs — including the terminology-dependent ones like code-system membership and display-consistency — ships with the library; the four not yet implemented are documented with reasons in the project's completeness matrix.)
+
+A **rubric** is an ordered, weighted set of SAMs scoped to data classes (conditions, medications, lab results, demographics…). Run a rubric over a payload and you get a **scorecard**: the **PIQI Index** (0–100, passed items over scorable items), a weighted variant when the rubric weights SAMs, a **critical failure count** for SAMs flagged critical, and a **Data Class Frequency** breakdown so you can see *which* classes dragged the score. One thing the framework deliberately does not give you is interpretive bands — there is no universal "75 is good." A score means what its rubric makes it mean; comparison is rubric-relative. That's a feature: it forces you to say what you care about.
+
+## The implementation: PIQI as FHIR resources
+
+Here is the part we think is genuinely new. Most quality frameworks live in code — a Python package, a rules engine, a vendor product. Ours lives in **data**:
+
+- **Every SAM is a ViewDefinition** (SQL-on-FHIR v2) that defines the extraction shape — *which* elements of which resources constitute the population under assessment — **composed with a SQLQuery Library** (the analytics-layer profile) that carries the pass/fail predicate.
+- **Rubrics are SQLQuery Libraries** whose `relatedArtifact` dependencies point at the SAM queries they weigh and order.
+- Execution runs through the standard fhir4ds SQL-on-FHIR analytics layer — **zero custom runtime**. If you can run a ViewDefinition, you can run a PIQI scorecard. Scoring is deterministic, and every result carries provenance: which SAM fired, on which elements, with what evidence — an audit trail, not a verdict from a black box.
+
+We implemented 33 of the 37 guide-defined SAMs, which per the guides is a complete implementation with documented exclusions (the remaining four are builder-trivial-unbound or RESTful-surface checks). Because the whole thing is resources, anyone can inspect a rubric, re-weight it for their own priorities, and fork it — the framework's rubric-relativity made mechanical.
+
+Two integrations matter in practice. Every verdict feeds a **curation queue**: near-misses and vocabulary-unmatched resources get routed for human review instead of silently bucketed. And the scorecard is *attributive* — it doesn't just say "38," it says which SAMs failed on which classes, which is what makes it an engineering instrument rather than a grade.
+
+## The self-measuring engine, demonstrated on MIMIC
+
+To show the engine measuring something real, we ran it against MIMIC-IV-FHIR — the Beth Israel ICU dataset converted to FHIR R4, 100 patients, roughly 900K resources of genuinely messy clinical content — through our deterministic, seeded realism harness (`fhir4ds.realism`). No synthetic corpus here: real UCUM oddities, real local code dictionaries, real missingness.
+
+### The honest baseline
+
+The scorecard on a 12-patient slice (86,224 resources, 98,202 scored items) read **38.5** on the broad default rubric — and **23.2** on the coding-centric rubric. Low numbers, but read the attribution before judging: the deductions are dominated by *genuinely absent* lab values and units (`Attr_IsPopulated` failing on 74,667 items), the real-world incompleteness synthetic corpora never model. The scorecard isn't wrong; the data is incomplete, and the scorecard correctly attributes the problem. That's the difference between a measurement and an insult.
+
+A second self-measurement from the same corpus: deduplication over the full export found **46,469 duplicate clusters** — all real repeated clinical events, none injected — with **zero cross-patient clusters**, the hard safety invariant.
+
+### One intervention, measured honestly: auto-coding
+
+Then we changed one thing and re-ran the identical scorecard. The intervention: the medterm4ds auto-coder, which augments text-only `CodeableConcepts` with standard terminology codes (skipping concepts already coded in standard terminologies).
+
+**The medication story is the cleanest.** MIMIC ships medications as name-codes — the coding's `code` literally is the drug name ("Ondansetron") under a private system, no display, no standard vocabulary. Measured on the coding columns: zero of 2,429 medication requests recognized, displayed, or complete before. After auto-coding, **360 carry RxNorm codings** — recognition, display, and completeness moving together, local drug names becoming addressable standard terminology. The auto-coder is conservative by contract: it refuses when it isn't confident, and every generated coding carries machine-readable provenance (engine, version, search mode, score, match grade, `userSelected=false`).
+
+**A procedure, worked through.** The clearest single illustration of the auto-coder behaving exactly as designed: a MIMIC procedure coded `4311 — "Percutaneous [endoscopic] gastrostomy [PEG]"` under a wrapper system — classic bracketed ICD-9 billing shorthand. The environment alias already recognizes it as ICD; the auto-coder then appends SNOMED `235159007 — Percutaneous endoscopic gastrostomy`, along with a second candidate (`312341002`, the *permanent* PEG variant) at a lower grade. The original ICD coding is untouched. Every appended coding carries `userSelected=false` and full provenance — engine version, search mode, score, match grade, and which text it searched on. A billing-coded legacy procedure becomes a clinically-coded one without losing anything, and a terminologist reviewing the two candidates has everything needed to confirm or dismiss in seconds. That is the contract working: augment, never overwrite; suggest, never assert.
+
+What auto-coding can and cannot recover falls into a clean three-tier taxonomy:
+
+| tier | population (n) | recognized before → after |
+| --- | --- | --- |
+| already standard | procedures with SNOMED originals (224 of 494) | recognized as-shipped; auto-coding adds nothing |
+| alias-recovered | conditions and procedures under MIMIC's wrapped ICD systems (669 + 121) | 0 → 669 conditions (100%); procedures 224 → 345 via environment aliases |
+| translation-required | medications as local name-codes (2,429) | 0 → 0 without help; auto-coding moves 360 to RxNorm |
+
+The conditions tier has its own lesson. MIMIC's ICD-9/10 codes sit under wrapper URIs, so they initially scored as unrecognized — fixed not by code but by an *environment alias*, a declarative table mapping wrapper URIs to their standard ICD counterparts, consulted after the standard-registry spellings. With aliases registered, every ICD condition is recognized before auto-coding touches anything; what auto-coding adds there is portability (SNOMED equivalents any consumer trusts) and clinical semantics, not a recognition delta.¹
+
+**The text-gate finding.** PIQI *as scored* shows no movement in that production arm — and that is itself a result. The packaged Concept assessments are gated on `code.text` being populated, and MIMIC ships none. The scorecard told us exactly *where* the problem lives: value in the coding columns, silence in the scored column. (The scorecard also caught us: an earlier run under-counted recognized procedures because ICD-10-PCS was missing from the standard code-system registry. The engine grading its own homework includes grading ours.)
+
+(How accurate is the auto-coder when you *do* know the right answer? We ran a companion experiment — strip the codes, reconstruct them from text, score against the removed originals — with clean results worth their own post.)
+
+## Ship it
+
+The whole loop ships in fhir4ds: PIQI rubrics as resources, the realism harness (`fhir4ds.realism`) and the PIQI auto-coding benchmark (`fhir4ds.realism.piqi_autocoding`) — deterministic, repeatable, corpus-agnostic. Point them at your own exports. The interesting bugs are the ones your test data doesn't contain, and the scorecard will tell you exactly where they live.
+
+¹ The alias table ships as data in the PIQI code-system registry; a different environment registers its own wrappers without code changes, and recognition through an alias is distinguishable from a standard spelling in the verdict's provenance.

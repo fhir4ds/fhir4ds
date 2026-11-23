@@ -99,6 +99,12 @@ class HapiMaterializationConfig:
     hapi_schema: HapiPostgresSchema = field(default_factory=HapiPostgresSchema)
     retention: HapiRetentionPolicy = field(default_factory=HapiRetentionPolicy)
 
+    def __post_init__(self) -> None:
+        # AMUX-152 #28: programmatic construction must not reach
+        # ``LISTEN {channel}`` with an unvalidated channel — run the same
+        # validation the config-loader path applies.
+        _validate_notification_channel(self.notification_channel)
+
     @property
     def hapi_source_connection_string(self) -> str:
         return self.hapi_connection_string or self.postgres_connection_string

@@ -156,8 +156,14 @@ define TupleStringEquivalentCase: Tuple { x: 'ABC' } ~ Tuple { x: 'abc' }
         "DateTimeBetweenImprecise": None,
         "DecimalEquivalentLeastPrecision": True,
         "DecimalNotEquivalentLeastPrecision": False,
-        "DecimalEquivalentHalfUnitBoundary": True,
-        "DecimalEquivalentTrailingZeroPrecision": True,
+        # Official fixtures CqlComparisonOperatorsTest.xml
+        # EquivFloat1Float1WithPrecision / ...AndZ pin BOTH `1.5 ~ 1.55`
+        # and `1.50 ~ 1.55` as **false**: rounding the more precise
+        # operand to the least precision (half-up) gives 1.6 != 1.5.
+        # Fixtures outrank the least-precision-tolerance prose reading
+        # (d3-SKEPTIC v0.0.26 carry-in adjudication).
+        "DecimalEquivalentHalfUnitBoundary": False,
+        "DecimalEquivalentTrailingZeroPrecision": False,
         "QuantityDecimalEquivalentLeastPrecision": True,
         "QuantityDecimalNotEquivalentLeastPrecision": True,
         "CalendarDefiniteDurationEqual": None,
@@ -773,6 +779,37 @@ define QuantityEqualIncompatibleUnchanged: 1 'm' = 1 'g'
             sql = "SELECT " + translated[name].to_sql()
             assert cpp.execute(sql).fetchone() == (expected_value,), name
             assert py.execute(sql).fetchone() == (expected_value,), name
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_duration_quantity_compare_exact_rational_parity() -> None:
+    """Duration-quantity comparisons must be exact, not context-rounded.
+
+    The day-conversion tables store values as 28-digit-context Decimals, so
+    Decimal arithmetic made 1 'h' and 60 'min' differ by 1 ulp: equality
+    returned False and even ``1 'h' > 60 'min'`` returned True on the Python
+    fallback. Fraction arithmetic with limit_denominator recovery keeps the
+    comparison exact. Found during the v0.0.26 focused review gate run.
+    """
+    expressions = [
+        "SELECT quantityCompare('{\"value\":1,\"code\":\"h\"}', '{\"value\":60,\"code\":\"min\"}', '==')",
+        "SELECT quantityCompare('{\"value\":1,\"code\":\"h\"}', '{\"value\":30,\"code\":\"min\"}', '>')",
+        "SELECT quantityCompare('{\"value\":1,\"code\":\"h\"}', '{\"value\":90,\"code\":\"min\"}', '<')",
+        "SELECT quantityCompare('{\"value\":1,\"code\":\"s\"}', '{\"value\":1000,\"code\":\"ms\"}', '==')",
+        "SELECT quantityCompare('{\"value\":1,\"code\":\"min\"}', '{\"value\":60,\"code\":\"s\"}', '==')",
+        "SELECT quantityCompare('{\"value\":1,\"code\":\"day\"}', '{\"value\":24,\"code\":\"h\"}', '==')",
+        "SELECT quantityCompare('{\"value\":1,\"code\":\"week\"}', '{\"value\":7,\"code\":\"d\"}', '==')",
+        "SELECT quantityCompare('{\"value\":1,\"code\":\"year\"}', '{\"value\":12,\"code\":\"month\"}', '==')",
+    ]
+    expected = [(True,), (True,), (True,), (True,), (True,), (True,), (True,), (True,)]
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for sql, want in zip(expressions, expected):
+            assert py.execute(sql).fetchone() == want, f"python: {sql}"
+            assert cpp.execute(sql).fetchone() == want, f"cpp: {sql}"
     finally:
         py.close()
         cpp.close()

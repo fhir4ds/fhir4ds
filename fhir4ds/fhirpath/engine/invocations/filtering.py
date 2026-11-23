@@ -86,36 +86,100 @@ def repeat_macro(ctx, data, expr):
         return []
 
     res = []
-    items = data
-
-    next = None
-    lres = None
 
     missing = object()
     old_index = ctx.get("$index", missing)
     saved_vars = dict(ctx.get("vars", {}))
     old_chain = ctx.get("_chain_defined_vars", missing)
 
+    # v0.0.26 Domain 1 SKEPTIC: mirror the native fn_repeat termination
+    # guard (1000 work batches / 10000 results). A value-growing projection
+    # ($this + 1) never converges; without this guard the Python engine
+    # loops forever, hanging the fallback fhirpath / fhirpath_is_valid UDFs
+    # (which run on a DuckDB worker thread where SIGALRM cannot fire),
+    # while native throws FHIRPathSpecError("repeat() infinite loop
+    # detected"). Processing by frontier round preserves the previous
+    # FIFO-queue result order exactly.
+    work = list(data)
+    iterations = 0
     try:
-        while len(items) != 0:
-            next = items[0]
-            items = items[1:]
-            ctx["vars"] = dict(saved_vars)
-            if old_chain is not missing:
-                ctx["_chain_defined_vars"] = set(old_chain)
-            lres = []
-            for l in expr(next):
-                if not _contains_equal(ctx, res, l) and not _contains_equal(ctx, lres, l):
-                    lres.append(l)
-            if len(lres) > 0:
-                res = res + lres
-                items = items + lres
+        while len(work) != 0:
+            next_work = []
+            for nxt in work:
+                ctx["vars"] = dict(saved_vars)
+                if old_chain is not missing:
+                    ctx["_chain_defined_vars"] = set(old_chain)
+                lres = []
+                for l in expr(nxt):
+                    if not _contains_equal(ctx, res, l) and not _contains_equal(ctx, lres, l):
+                        lres.append(l)
+                if len(lres) > 0:
+                    res = res + lres
+                    next_work = next_work + lres
+            work = next_work
+            iterations += 1
+            if iterations > 1000 or len(res) > 10000:
+                raise FHIRPathError("repeat() infinite loop detected")
     finally:
         ctx["vars"] = saved_vars
         if old_chain is missing:
             ctx.pop("_chain_defined_vars", None)
         else:
             ctx["_chain_defined_vars"] = old_chain
+        if old_index is missing:
+            ctx.pop("$index", None)
+        else:
+            ctx["$index"] = old_index
+
+    return res
+
+
+def repeat_all_macro(ctx, data, expr):
+    """FHIRPath repeatAll (CQL 2.0 Appendix I: Repeat(X, element, true)).
+
+    Same fixpoint iteration as repeat(), but the RESULT includes ALL
+    projection outputs (duplicates preserved) — only the work queue is
+    gated on `=`-equality newness, which is what guarantees termination.
+    """
+    if not isinstance(data, list):
+        return []
+
+    res = []
+    seen = []
+
+    missing = object()
+    old_index = ctx.get("$index", missing)
+    saved_vars = dict(ctx.get("vars", {}))
+    old_chain = ctx.get("_chain_defined_vars", missing)
+
+    # v0.0.26 Domain 1 SKEPTIC: same guard as repeat_macro, mirroring
+    # native fn_repeat_all ("repeatAll() infinite loop detected").
+    work = list(data)
+    iterations = 0
+    try:
+        while len(work) != 0:
+            next_work = []
+            for nxt in work:
+                ctx["vars"] = dict(saved_vars)
+                if old_chain is not missing:
+                    ctx["_chain_defined_vars"] = set(old_chain)
+                lres = list(expr(nxt))
+                if len(lres) > 0:
+                    res = res + lres
+                    for l in lres:
+                        if not _contains_equal(ctx, seen, l):
+                            seen.append(l)
+                            next_work.append(l)
+            work = next_work
+            iterations += 1
+            if iterations > 1000 or len(res) > 10000:
+                raise FHIRPathError("repeatAll() infinite loop detected")
+    finally:
+        ctx["vars"] = saved_vars
+        if old_chain is not missing:
+            ctx["_chain_defined_vars"] = old_chain
+        else:
+            ctx.pop("_chain_defined_vars", None)
         if old_index is missing:
             ctx.pop("$index", None)
         else:

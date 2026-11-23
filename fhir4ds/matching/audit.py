@@ -18,6 +18,7 @@ import json
 import duckdb
 
 from .engine import MatchResult
+from ._conn import require_open_connection
 
 __all__ = [
     "MATCH_AUDIT_DDL",
@@ -43,6 +44,7 @@ CREATE TABLE IF NOT EXISTS match_audit (
 
 
 def create_audit_tables(conn: duckdb.DuckDBPyConnection) -> None:
+    require_open_connection(conn, "create match audit tables")
     conn.execute(MATCH_AUDIT_SEQUENCE_DDL)
     conn.execute(MATCH_AUDIT_DDL)
 
@@ -50,9 +52,17 @@ def create_audit_tables(conn: duckdb.DuckDBPyConnection) -> None:
 def _evidence_payload(match_result: MatchResult) -> dict:
     if match_result.outcome == "ambiguous":
         return {"candidates": sorted(match_result.matched_ids)}
-    if match_result.outcome == "no_match":
-        return {"evaluatedRules": list(match_result.evaluated_rules)}
-    return dict(match_result.evidence)
+    payload = (
+        {"evaluatedRules": list(match_result.evaluated_rules)}
+        if match_result.outcome == "no_match"
+        else dict(match_result.evidence)
+    )
+    # CR-002: the approval-threshold enforcement decision (rule, Ps,
+    # threshold, corroboration required/satisfied) rides the audit
+    # evidence. Patient results never carry it.
+    if match_result.threshold_enforcement is not None:
+        payload["thresholdEnforcement"] = match_result.threshold_enforcement
+    return payload
 
 
 def record_match_audit(

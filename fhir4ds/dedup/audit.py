@@ -40,6 +40,9 @@ CREATE TABLE IF NOT EXISTS dedup_audit (
 
 
 def create_dedup_audit_table(conn: duckdb.DuckDBPyConnection) -> None:
+    from ._conn import require_open_connection
+
+    require_open_connection(conn, "create dedup audit table")
     conn.execute(DEDUP_AUDIT_DDL)
 
 
@@ -83,7 +86,15 @@ def record_dedup_audit(
 def load_dedup_audit(conn: duckdb.DuckDBPyConnection,
                      run_id: str) -> list[dict]:
     """Audit rows for one run, ordered deterministically
-    (dedup_id, survivor_rid)."""
+    (dedup_id, survivor_rid).
+
+    Returns ``[]`` when the run recorded no decisions — the tables are
+    created lazily by the first write, so the loader ensures existence
+    first (same create-first precedent as :func:`delete_linkage`)."""
+    from ._conn import require_open_connection
+
+    require_open_connection(conn, "load dedup audit")
+    create_dedup_audit_table(conn)
     rows = conn.execute(
         "SELECT run_id, dedup_id, category, member_count, survivor_rid, "
         "rule, rule_json, cluster_evidence FROM dedup_audit "

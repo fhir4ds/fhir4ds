@@ -242,6 +242,51 @@ class TestV2BundleSuffixStaging:
         assert second.read_bytes() == b"payload-2-longer"
         assert first != second  # different content keys → different slots
 
+    def test_staged_load_path_repairs_same_size_corruption(self, tmp_path):
+        """D10-EXPLORER (v0.0.26): the staged-copy validity check must be
+        content-based, not size-based. A same-size corruption of the staged
+        file previously passed the size check, was loaded by DuckDB (which
+        only validates the ELF/trailer structure), and served corrupted
+        native code with NO warning and no re-stage."""
+        from fhir4ds.fhirpath.duckdb.extension import _staged_load_path
+
+        bundle = tmp_path / "fhirpath.duckdb2_extension"
+        payload = bytes(range(256)) * 64  # 16 KiB
+        bundle.write_bytes(payload)
+        staged = _staged_load_path(bundle)
+        assert staged.read_bytes() == payload
+        corrupt = bytearray(staged.read_bytes())
+        corrupt[len(corrupt) // 2] ^= 0xFF  # same size, different content
+        staged.write_bytes(bytes(corrupt))
+        repaired = _staged_load_path(bundle)
+        assert repaired == staged
+        assert repaired.read_bytes() == payload  # re-staged from the bundle
+
+    def test_staged_load_path_publishes_atomically(self, tmp_path, monkeypatch):
+        """D10-EXPLORER (v0.0.26): the staged copy must be published via
+        write-temp + atomic rename so a CONCURRENT register() in another
+        process can never LOAD a half-written binary (observed live: parallel
+        cold start hit "not a DuckDB extension / at least 512 bytes" and
+        silently lost the native engine)."""
+        import os
+
+        from fhir4ds.fhirpath.duckdb import extension as fp_ext
+
+        bundle = tmp_path / "fhirpath.duckdb2_extension"
+        bundle.write_bytes(b"payload-atomic" * 1024)
+
+        renames: list[str] = []
+        real_replace = os.replace
+
+        def _spy(src, dst):
+            renames.append(os.path.basename(str(src)))
+            return real_replace(src, dst)
+
+        monkeypatch.setattr(fp_ext.os, "replace", _spy)
+        staged = fp_ext._staged_load_path(bundle)
+        assert staged.read_bytes() == b"payload-atomic" * 1024
+        assert renames, "staged copy must be published via atomic os.replace"
+
     def test_v2_bundle_filename_selector(self):
         from fhir4ds.fhirpath.duckdb.extension import _bundled_extension_filename
 

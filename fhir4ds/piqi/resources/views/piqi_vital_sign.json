@@ -1,0 +1,108 @@
+{
+  "name": "piqi_vital_sign",
+  "status": "draft",
+  "resource": "Observation",
+  "select": [
+    {
+      "column": [
+        {
+          "name": "element_id",
+          "path": "id",
+          "type": "id"
+        },
+        {
+          "name": "patient_id",
+          "path": "subject.reference.replace('urn:uuid:', '').split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "vitalSign_text",
+          "path": "code.text",
+          "type": "string"
+        },
+        {
+          "name": "vitalSign_codings",
+          "path": "code.coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "resultValue_text",
+          "path": "iif(component.exists(), iif((component.where(code.coding.code = '8480-5').first().value.ofType(Quantity).value).exists() and (component.where(code.coding.code = '8462-4').first().value.ofType(Quantity).value).exists(), (component.where(code.coding.code = '8480-5').first().value.ofType(Quantity).value).toString() & '/' & (component.where(code.coding.code = '8462-4').first().value.ofType(Quantity).value).toString(), ''), iif(value.ofType(Quantity).exists(), value.ofType(Quantity).value.toString(), iif(value.ofType(string).exists(), value.ofType(string), iif(value.ofType(boolean).exists(), value.ofType(boolean).toString(), ''))))",
+          "type": "string"
+        },
+        {
+          "name": "resultValue_type",
+          "path": "iif(component.exists(), 'SN', '')",
+          "type": "string"
+        },
+        {
+          "name": "resultValue_hasType",
+          "path": "(component | (value.ofType(Quantity) | value.ofType(CodeableConcept) | value.ofType(string) | value.ofType(boolean) | value.ofType(integer) | value.ofType(Range) | value.ofType(Ratio) | value.ofType(SampledData) | value.ofType(time) | value.ofType(dateTime) | value.ofType(Period))).exists()",
+          "type": "boolean"
+        },
+        {
+          "name": "resultValue_number",
+          "path": "iif(component.exists(), component.where(code.coding.code = '8480-5').first().value.ofType(Quantity).value, value.ofType(Quantity).value)",
+          "type": "decimal"
+        },
+        {
+          "name": "resultValue_number2",
+          "path": "component.where(code.coding.code = '8462-4').first().value.ofType(Quantity).value",
+          "type": "decimal"
+        },
+        {
+          "name": "resultUnit_text",
+          "path": "iif(component.exists(), component.first().value.ofType(Quantity).unit, value.ofType(Quantity).unit)",
+          "type": "string"
+        },
+        {
+          "name": "interpretation_text",
+          "path": "interpretation.first().text",
+          "type": "string"
+        },
+        {
+          "name": "interpretation_codings",
+          "path": "interpretation.first().coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "referenceRange_text",
+          "path": "referenceRange.first().text",
+          "type": "string"
+        },
+        {
+          "name": "referenceRange_low_value",
+          "path": "referenceRange.first().low.value",
+          "type": "decimal"
+        },
+        {
+          "name": "referenceRange_high_value",
+          "path": "referenceRange.first().high.value",
+          "type": "decimal"
+        },
+        {
+          "name": "resultStatus_text",
+          "path": "iif(status = 'final', 'F', status)",
+          "type": "string"
+        },
+        {
+          "name": "performingSite_text",
+          "path": "performer.first().display",
+          "type": "string"
+        },
+        {
+          "name": "performedDateTime",
+          "path": "effective.ofType(dateTime).toString()",
+          "type": "string"
+        }
+      ]
+    }
+  ],
+  "where": [
+    {
+      "path": "category.where(coding.code = 'vital-signs').exists()"
+    }
+  ]
+}

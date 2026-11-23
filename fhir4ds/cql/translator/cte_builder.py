@@ -6,6 +6,7 @@ This module creates retrieve CTEs with precomputed columns.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from typing import Dict, List, Optional, Set, Tuple, TYPE_CHECKING
 
@@ -261,6 +262,68 @@ def _resolve_profile_registry(context) -> "ProfileRegistry":
     return get_default_profile_registry()
 
 
+# ---------------------------------------------------------------------------
+# CQL 2.0 multi-filter retrieve (FHIR-31397) encoding
+#
+# Additional comma-separated retrieve filters are carried on the retrieve
+# valueset string (the same carrier doctrine as the '~' equivalent-terminology
+# marker) so retrieve keys, CTE grouping, and the provisional-name resolver
+# distinguish filtered retrieves without changing the 3-tuple key shape.
+#
+# Encoding:  "<base-valueset>|@<prop>|@<kind>|@<target>" (repeated), where
+# kind is one of: 'in' (exact ValueSet membership), '~in' (equivalent
+# membership), 'code' (exact direct-code), '~code' (equivalent direct-code).
+# ---------------------------------------------------------------------------
+
+_MF_MARKER = "|@"
+
+
+def encode_retrieve_filter(prop: str, kind: str, target: str) -> str:
+    """Encode one additional retrieve filter onto the valueset string."""
+    return f"{_MF_MARKER}{prop}{_MF_MARKER}{kind}{_MF_MARKER}{target}"
+
+
+def decode_retrieve_filters(valueset: Optional[str]) -> tuple:
+    """Split a (possibly filter-encoded) valueset string.
+
+    Returns (base_valueset, [(prop, kind, target), ...]).
+    """
+    if not valueset or _MF_MARKER not in valueset:
+        return valueset, []
+    base, _, rest = valueset.partition(_MF_MARKER)
+    filters = []
+    # Each filter is three _MF_MARKER-separated fields; filters concatenate.
+    parts = rest.split(_MF_MARKER)
+    while len(parts) >= 3:
+        prop, kind, target = parts[0], parts[1], parts[2]
+        parts = parts[3:]
+        filters.append((prop, kind, target))
+    if parts:
+        # Malformed trailing fragment — treat as part of the base to stay
+        # row-resilient (defensive; the translator only writes well-formed
+        # encodings).
+        base = base + _MF_MARKER + _MF_MARKER.join(parts)
+    return base, filters
+
+
+def _multi_filter_label(filters: list) -> str:
+    """Distinguishing CTE-name suffix for a multi-filter retrieve.
+
+    Property names ALONE are not distinguishing: two retrieves over the
+    same type+valueset whose additional filters share a property but differ
+    in comparator or target (`clinicalStatus in "A"` vs
+    `clinicalStatus in "B"`) must not collide onto one CTE (AMUX-152 #8).
+    Each filter therefore carries a stable, seed-free ``sha1`` (first 8 hex
+    chars) of the canonical ``f"{kind}|{target}"`` string — same filters
+    always produce the same label within and across runs/processes.
+    """
+    parts = []
+    for prop, kind, target in filters:
+        digest = hashlib.sha1(f"{kind}|{target}".encode("utf-8")).hexdigest()[:8]
+        parts.append(f"{prop}#{digest}")
+    return f"[{', '.join(parts)}]"
+
+
 def build_retrieve_cte(
     resource_type: str,
     valueset: Optional[str],
@@ -300,6 +363,20 @@ def build_retrieve_cte(
     Returns:
         Tuple of (cte_name, cte_ast, column_info_map)
     """
+    # CQL 2.0 equivalent-terminology retrieves (FHIR-31392/31675:
+    # `[X: code ~in "VS"]`, `[X: path ~contains "Code"]`) arrive with a
+    # leading '~' marker on the valueset string so retrieve keys and CTE
+    # names distinguish them from the exact-match (1.5 `in`) retrieve on
+    # the same terminology. Strip it here and select equivalence-based
+    # membership semantics.
+    equivalent_terminology = bool(valueset) and valueset.startswith("~")
+    if equivalent_terminology:
+        valueset = valueset[1:]
+    # CQL 2.0 multi-filter retrieves (FHIR-31397): additional
+    # comma-separated filters arrive encoded on the valueset string; decode
+    # them here so name derivation and terminology filtering see the base
+    # valueset and the filters become ANDed WHERE predicates.
+    valueset, additional_filters = decode_retrieve_filters(valueset)
     # (debug removed)
     # Normalize profile_urls: merge single profile_url into the list
     all_profile_urls: List[str] = []
@@ -373,6 +450,14 @@ def build_retrieve_cte(
         profile_suffix = _get_distinguishing_profile_suffix(all_profile_urls, profile_registry=_profile_registry)
         if profile_suffix:
             cte_name = f"{cte_name} ({profile_suffix})"
+    if equivalent_terminology:
+        # Distinct CTE name so an exact-match retrieve on the same
+        # terminology does not collide with the equivalence variant.
+        cte_name = f"{cte_name} (equiv)"
+    if additional_filters:
+        # Distinct CTE name so retrieves that differ only in additional
+        # filters (FHIR-31397) do not collide.
+        cte_name = f"{cte_name} {_multi_filter_label(additional_filters)}"
 
     logger.debug(f"  Generated CTE name: {cte_name}")
 
@@ -543,7 +628,20 @@ def build_retrieve_cte(
             effective_code_property = code_property or _TERMINOLOGY_PROPERTY_DEFAULTS.get(resource_type, "code")
             escaped_system = escape_fhirpath_string_literal(system_url)
             escaped_code = escape_fhirpath_string_literal(code_val)
-            fhirpath_expr = f"{effective_code_property}.coding.where(system='{escaped_system}' and code='{escaped_code}').exists()"
+            if equivalent_terminology:
+                # CQL 2.0 retrieve `~contains` comparator (FHIR-31392): the
+                # element at the code path equivalently-contains the declared
+                # code — Code `~` semantics. FHIRPath `~` is String
+                # equivalence (case-insensitive, whitespace-normalized) in
+                # both the native and fallback FHIRPath engines (FP-13
+                # doctrine), matching CQL Code equivalence on the
+                # code/system elements.
+                fhirpath_expr = (
+                    f"{effective_code_property}.coding.where(system ~ '{escaped_system}' "
+                    f"and code ~ '{escaped_code}').exists()"
+                )
+            else:
+                fhirpath_expr = f"{effective_code_property}.coding.where(system='{escaped_system}' and code='{escaped_code}').exists()"
             where_conditions.append(
                 SQLFunctionCall(
                     name="fhirpath_bool",
@@ -557,8 +655,12 @@ def build_retrieve_cte(
             # Use resource-type-specific code property path
             from ..translator.patterns.retrieve import _TERMINOLOGY_PROPERTY_DEFAULTS, _MEDICATION_REFERENCE_ALTERNATIVES
             effective_code_property = code_property or _TERMINOLOGY_PROPERTY_DEFAULTS.get(resource_type, "code")
+            # CQL 2.0 retrieve `~in` comparator (FHIR-31675): equivalent-based
+            # ValueSet membership on the code path (Code `~` semantics) vs
+            # the exact-match in_valueset surface of the 1.5 `in` retrieve.
+            membership_udf = "cql_equivalent_in_valueset" if equivalent_terminology else "in_valueset"
             primary_check = SQLFunctionCall(
-                name="in_valueset",
+                name=membership_udf,
                 args=[
                     SQLQualifiedIdentifier(parts=["r", "resource"]),
                     SQLLiteral(effective_code_property),
@@ -622,7 +724,7 @@ def build_retrieve_cte(
                                     )
                                 ),
                                 right=SQLFunctionCall(
-                                    name="in_valueset",
+                                    name=membership_udf,
                                     args=[
                                         SQLQualifiedIdentifier(parts=["m", "resource"]),
                                         SQLLiteral(target_code),
@@ -642,6 +744,57 @@ def build_retrieve_cte(
                 )
             else:
                 where_conditions.append(primary_check)
+
+    # CQL 2.0 multi-filter retrieves (FHIR-31397): additional
+    # comma-separated filters are ANDed into the retrieve predicate.
+    for _mf_prop, _mf_kind, _mf_target in additional_filters:
+        if _mf_kind == "in":
+            where_conditions.append(
+                SQLFunctionCall(
+                    name="in_valueset",
+                    args=[
+                        SQLQualifiedIdentifier(parts=["r", "resource"]),
+                        SQLLiteral(_mf_prop),
+                        SQLLiteral(_mf_target),
+                    ],
+                )
+            )
+        elif _mf_kind == "~in":
+            where_conditions.append(
+                SQLFunctionCall(
+                    name="cql_equivalent_in_valueset",
+                    args=[
+                        SQLQualifiedIdentifier(parts=["r", "resource"]),
+                        SQLLiteral(_mf_prop),
+                        SQLLiteral(_mf_target),
+                    ],
+                )
+            )
+        else:
+            # Direct-code kinds ('code' exact / '~code' equivalent): mirror
+            # the primary urn:cql:code surface — a coding.where membership
+            # test on the filter's property path.
+            if not _mf_target.startswith("urn:cql:code:"):
+                raise TranslationError(
+                    f"Retrieve additional filter on '{_mf_prop}' requires a "
+                    f"declared code or value set reference; got '{_mf_target}'."
+                )
+            _mf_system, _, _mf_code = _mf_target[len("urn:cql:code:"):].partition("|")
+            _eq = "~" if _mf_kind == "~code" else "="
+            _mf_expr = (
+                f"{_mf_prop}.coding.where(system {_eq} "
+                f"'{escape_fhirpath_string_literal(_mf_system)}' and code {_eq} "
+                f"'{escape_fhirpath_string_literal(_mf_code)}').exists()"
+            )
+            where_conditions.append(
+                SQLFunctionCall(
+                    name="fhirpath_bool",
+                    args=[
+                        SQLQualifiedIdentifier(parts=["r", "resource"]),
+                        SQLLiteral(_mf_expr),
+                    ],
+                )
+            )
 
     # Add negation filter for negation profiles (e.g., MedicationNotRequested)
     _registry = _resolve_profile_registry(context)

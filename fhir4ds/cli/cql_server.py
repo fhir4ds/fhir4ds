@@ -25,6 +25,11 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
 
 
 def run(args: argparse.Namespace) -> int:
+    if not 0 <= args.port <= 65535:
+        print(
+            f"ERROR: --port must be 0-65535, got {args.port}", file=sys.stderr
+        )
+        return 2
     try:
         serve(
             CQLServerConfig(

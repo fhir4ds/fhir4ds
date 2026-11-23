@@ -102,6 +102,32 @@ The report flags a measure only when both thresholds are exceeded:
 The default workflow is non-blocking. Use `--fail-on-regression` only after the
 baseline and hosted runner variability are stable enough for a hard gate.
 
+## Baseline refresh (2026-11-23, v0.0.26)
+
+`baselines/dqm_2025.json` was refreshed from the v0.0.26 release tree (dev @
+`f53ba6a5fcc`), DECLARED native 1.5.6 engine (`allow_unsigned_extensions` +
+`fhir4ds.register()` — banner `fhirpath_cpp/cql_cpp: true`), 47/47 measures at
+100% accuracy, suite total 79.0 s.
+
+vs the previous baseline (v0.0.18, 2026-10-24, 85.0 s) the suite got FASTER
+overall (0.93x), but two measures grew through intentional correctness-surface
+changes to the generated SQL (same class as the 0.0.8 Domain 7 refresh):
+
+- **CMS0334**: 14.5 s -> 21.9 s total; SQL 226 KB -> 767 KB; `sql_execution_ms`
+  2.6 s -> 15.1 s (5.8x, the only tool-flagged metric). Cause: the 0.0.20-0.0.26
+  correctness campaigns changed the SQL shape — strict-profile `meta.profile`
+  membership conjuncts (v0.0.25 campaign), negation-profile alternate-URL
+  exclusion, sub-day `during` precision UDF routing (QA-D4H-001), offset-bearing
+  interval parameter bounds (QA-D4E-001), and count-union star rewrites
+  (QA-D3E-001/QA-D4S-001). Translation and SQL generation both got FASTER
+  (0.62x / 0.54x) over the same period. Accuracy unchanged at 100%.
+- **CMS1218**: 3.9 s -> 5.6 s total (`sql_execution_ms` 0.5 s -> 1.9 s, flagged);
+  same correctness-surface class.
+
+The drift record (current-vs-v0.0.18-baseline comparison) was preserved at
+`benchmarks/output/dqm-performance-report-vs-v0018-baseline.{json,md}` before
+the refresh (gitignored; regenerate by comparing against git history).
+
 ## OMOP v5.5 mapping timings
 
 `omop_v55_synthea_2026.json` / `.md` — the real-data baseline (25-patient

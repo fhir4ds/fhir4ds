@@ -30,6 +30,7 @@ from typing import Any, Optional
 import duckdb
 
 from .engine import MatchResult
+from ._conn import require_open_connection
 
 __all__ = [
     "MATCHING_EXTENSION_URL",
@@ -54,30 +55,68 @@ CREATE TABLE IF NOT EXISTS linkage (
 """
 
 
-def canonical_pair_key(new_patient_id: str, existing_patient_id: str) -> str:
-    """``Patient/<a>|Patient/<b>`` with the two references sorted."""
-    a, b = sorted((f"Patient/{new_patient_id}", f"Patient/{existing_patient_id}"))
+def canonical_pair_key(new_patient_id: str, existing_patient_id: str,
+                       entity_type: str = "Patient") -> str:
+    """``<Type>/<a>|<Type>/<b>`` with the two references sorted."""
+    a, b = sorted((f"{entity_type}/{new_patient_id}",
+                   f"{entity_type}/{existing_patient_id}"))
     return f"{a}|{b}"
 
 
+_ANNOTATION_KEYS = ("band=", "model=")
+
+
 def _canonical_evidence(evidence: dict[str, str]) -> dict[str, str]:
-    """Direction-independent evidence: sort both sides of fuzzy ``x~y`` pairs."""
+    """Direction-independent evidence: sort both sides of fuzzy ``x~y`` pairs.
+
+    EMBED-mode evidence carries pair-level ``|``-annotations after the name
+    pair (``a~b|band=mid|model=...``); the annotations are split off BEFORE
+    sorting the two name sides and re-appended, so the canonical form never
+    depends on which side was the query patient (determinism doctrine) and
+    the annotations stay a pair-level suffix rather than migrating onto one
+    name token.
+
+    Annotation split peels known ``key=value`` tokens from the RIGHT instead
+    of partitioning on the first ``|``: extractor-normalized values never
+    contain ``|``/``~`` (``norm_text`` strips both), but the public
+    ``match_fields`` field-map surface accepts arbitrary strings, and a
+    value carrying ``|`` must not crash the canonicalization or migrate a
+    name token into the annotation zone (QA-D14E-001).
+    """
     canon: dict[str, str] = {}
     for field_name, value in evidence.items():
         if isinstance(value, str) and "~" in value:
-            left, right = value.split("~", 1)
-            value = "~".join(sorted((left, right)))
+            parts = value.split("|")
+            annotations: list[str] = []
+            while len(parts) > 1 and parts[-1].startswith(_ANNOTATION_KEYS):
+                annotations.insert(0, parts.pop())
+            name_part = "|".join(parts)
+            if "~" in name_part:
+                # A value containing '~' itself makes the pair split point
+                # ambiguous; try every split and keep the lexicographically
+                # smallest canonical form so both query directions agree.
+                candidates = []
+                for idx in range(len(name_part)):
+                    if name_part[idx] == "~":
+                        left, right = name_part[:idx], name_part[idx + 1:]
+                        candidates.append("~".join(sorted((left, right))))
+                if candidates:
+                    value = min(candidates)
+                    if annotations:
+                        value = "|".join([value, *annotations])
         canon[field_name] = value
     return canon
 
 
 def build_linkage_resource(
-    match_result: MatchResult, new_patient_id: str, existing_patient_id: str
+    match_result: MatchResult, new_patient_id: str, existing_patient_id: str,
+    entity_type: str = "Patient",
 ) -> dict[str, Any]:
     """Build the deterministic Linkage resource for one matched pair."""
     if not match_result.rule_id:
         raise ValueError("MatchResult must carry a rule_id to build a Linkage")
-    refs = sorted((f"Patient/{new_patient_id}", f"Patient/{existing_patient_id}"))
+    refs = sorted((f"{entity_type}/{new_patient_id}",
+                   f"{entity_type}/{existing_patient_id}"))
     return {
         "resourceType": "Linkage",
         "active": True,
@@ -111,6 +150,7 @@ def build_linkage_resource(
 
 
 def create_linkage_tables(conn: duckdb.DuckDBPyConnection) -> None:
+    require_open_connection(conn, "create linkage tables")
     conn.execute(LINKAGE_DDL)
 
 
@@ -119,6 +159,7 @@ def upsert_linkage(
     match_result: MatchResult,
     new_patient_id: str,
     existing_patient_id: str,
+    entity_type: str = "Patient",
 ) -> dict[str, Any]:
     """Insert or update the Linkage row for one matched pair.
 
@@ -128,9 +169,12 @@ def upsert_linkage(
     rule firing with new evidence/match_type/confidence after a corpus
     change) overwrites, keeping decision history in the audit table.
     """
+    require_open_connection(conn, "upsert linkage")
     create_linkage_tables(conn)
-    linkage_id = canonical_pair_key(new_patient_id, existing_patient_id)
-    resource = build_linkage_resource(match_result, new_patient_id, existing_patient_id)
+    linkage_id = canonical_pair_key(new_patient_id, existing_patient_id,
+                                    entity_type)
+    resource = build_linkage_resource(match_result, new_patient_id,
+                                      existing_patient_id, entity_type)
     existing_rule: Optional[str] = None
     row = conn.execute(
         "SELECT rule_id FROM linkage WHERE linkage_id = ?", [linkage_id]
@@ -169,6 +213,7 @@ def upsert_linkage(
 
 def load_linkage_resources(conn: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:
     """All stored Linkage resources, ordered by canonical pair key."""
+    require_open_connection(conn, "load linkage resources")
     rows = conn.execute(
         "SELECT resource FROM linkage ORDER BY linkage_id"
     ).fetchall()

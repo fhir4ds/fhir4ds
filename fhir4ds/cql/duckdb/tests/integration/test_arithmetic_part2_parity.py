@@ -144,8 +144,12 @@ using FHIR version '4.0.1'
 context Patient
 define InvalidBoundary: {expression}
 """
-        with pytest.raises(ValueError):
-            translate_cql(cql)
+        # Superseded behavior (2.0-era translator): static temporal boundary
+        # underflow/overflow now FOLDS to SQL NULL at translation instead of
+        # raising; the official conformance suite (2029/2037 gate) accepts
+        # this. Pinned here so the fold cannot silently change again.
+        translated = translate_cql(cql)
+        assert translated["InvalidBoundary"].to_sql().strip().upper() == "NULL"
 
 
 def test_cql_arithmetic_part2_duckdb_surface_matches_cpp_registration() -> None:
@@ -266,11 +270,14 @@ def test_cql_arithmetic_part2_duckdb_surface_matches_cpp_registration() -> None:
             10.0,
             "mg",
         )
+        # Corpus-pinned (TruncatedDivide10By5DQuantity): quantity div cancels
+        # units -> dimensionless '1' (both engines agree); only mod preserves
+        # the left operand unit.
         assert_quantity(
             "SELECT quantityTruncatedDivide('{\"value\":10,\"code\":\"mg\"}', "
             "'{\"value\":3,\"code\":\"g\"}')",
             0.0,
-            "mg",
+            "1",
         )
         assert_quantity(
             "SELECT quantityModulo('{\"value\":10,\"code\":\"g\"}', "
@@ -282,7 +289,7 @@ def test_cql_arithmetic_part2_duckdb_surface_matches_cpp_registration() -> None:
             "SELECT quantityTruncatedDivide('{\"value\":10,\"code\":\"g\"}', "
             "'{\"value\":3000,\"code\":\"mg\"}')",
             3.0,
-            "g",
+            "1",
         )
     finally:
         py.close()
@@ -346,21 +353,24 @@ define SuccDecimalQuantity: successor of 1.0 'cm'
     expected = {
         "PredIntegerQuantity": (Decimal("0"), "cm"),
         "SuccIntegerQuantity": (Decimal("2"), "cm"),
-        "PredDecimalQuantity": (Decimal("0.99999999"), "cm"),
-        "SuccDecimalQuantity": (Decimal("1.00000001"), "cm"),
+        "PredDecimalQuantity": (Decimal("0.9"), "cm"),
+        "SuccDecimalQuantity": (Decimal("1.1"), "cm"),
     }
 
     def quantity_tuple(payload: str) -> tuple[Decimal, str]:
         parsed = json.loads(payload)
         return Decimal(str(parsed["value"])), parsed["code"]
 
+    # Decimal-authored quantities step by 10^-fractional-scale of the authored
+    # text (cql-tests 2.0 PredecessorOf1DPrecision / PredecessorOf1QCMPrecision:
+    # predecessor of 1.0 is 0.9, superseding the older flat 1e-8 step).
     direct_cases = {
         "SELECT predecessorOf('{\"value\":\"5\",\"code\":\"mg\"}')": None,
         "SELECT successorOf('{\"value\":\"5\",\"code\":\"mg\"}')": None,
         "SELECT predecessorOf('{\"value\":1,\"code\":\"cm\"}')": (Decimal("0"), "cm"),
         "SELECT successorOf('{\"value\":1,\"code\":\"cm\"}')": (Decimal("2"), "cm"),
-        "SELECT predecessorOf('{\"value\":1.0,\"code\":\"cm\"}')": (Decimal("0.99999999"), "cm"),
-        "SELECT successorOf('{\"value\":1.0,\"code\":\"cm\"}')": (Decimal("1.00000001"), "cm"),
+        "SELECT predecessorOf('{\"value\":1.0,\"code\":\"cm\"}')": (Decimal("0.9"), "cm"),
+        "SELECT successorOf('{\"value\":1.0,\"code\":\"cm\"}')": (Decimal("1.1"), "cm"),
     }
 
     py = _python_only_connection()
@@ -399,9 +409,9 @@ define SingletonQuantitySucc: successor of singleton from { 1.0 'cm' }
         "MaxQuantity": (Decimal("99999999999999999999.99999999"), "1"),
         "MinQuantity": (Decimal("-99999999999999999999.99999999"), "1"),
         "QueryQuantityPred": (Decimal("0"), "cm"),
-        "QueryQuantitySucc": (Decimal("1.00000001"), "cm"),
+        "QueryQuantitySucc": (Decimal("1.1"), "cm"),
         "SingletonQuantityPred": (Decimal("0"), "cm"),
-        "SingletonQuantitySucc": (Decimal("1.00000001"), "cm"),
+        "SingletonQuantitySucc": (Decimal("1.1"), "cm"),
     }
 
     py = _python_only_connection()
@@ -424,7 +434,13 @@ using FHIR version '4.0.1'
 context Patient
 define Invalid: {expression}
 """
-        with pytest.raises(ValueError):
+        # CQL-11 EXPLORER doctrine: unsupported maximum/minimum types raise
+        # a typed TranslationError instead of lowering to SQL NULL.
+        import pytest as _pytest
+
+        from fhir4ds.cql.errors import TranslationError as _TE
+
+        with _pytest.raises(_TE, match="not defined for type"):
             translate_cql(cql)
 
     with no_python_connection() as con:
@@ -1043,3 +1059,63 @@ def test_parse_expression_rejects_trailing_tokens_cql11_explorer2() -> None:
             parse_expression(bad)
     for good in ("successor of @T05:30", "1 + 2", "Round(1.5, 0)", "Coalesce(null, 5)"):
         parse_expression(good)
+
+
+def test_cql_quantity_negate_round_extreme_magnitude_exact_serialization_rev26() -> None:
+    """REV-26-001 (v0.0.26 focused review): quantityNegate/roundQuantity must
+    not serialize through str(float(...)).
+
+    CQL-10 doctrine: exact-Decimal end-to-end, never a float round-trip.
+    ``str(float(Decimal('12345678901234567.5')))`` emits scientific text
+    ('1.2345678901234568e+16'), which is both precision-lossy and the known
+    DuckDB VARCHAR->DECIMAL cast hazard. The native engine emits exact text
+    ('12345678901234568.0'); the Python fallback must match.
+    """
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        cases = [
+            # (sql, expected exact value text)
+            (
+                "SELECT quantityNegate('{\"value\":12345678901234567.5,\"code\":\"mg\"}')",
+                '"value":-12345678901234567.5',
+            ),
+            (
+                "SELECT quantityNegate('{\"value\":123456789012345678901234567890.5,\"code\":\"mg\"}')",
+                '"value":-123456789012345678901234567890.5',
+            ),
+            (
+                "SELECT roundQuantity('{\"value\":12345678901234567.5,\"code\":\"mg\"}')",
+                '"value":12345678901234568.0',
+            ),
+            (
+                "SELECT roundQuantity('{\"value\":12345678901234567.4,\"code\":\"mg\"}')",
+                '"value":12345678901234567.0',
+            ),
+            (
+                "SELECT roundQuantity('{\"value\":-0.5,\"code\":\"mg\"}')",
+                '"value":-1.0',
+            ),
+            (
+                "SELECT RoundQuantityTo('{\"value\":1.005,\"code\":\"mg\"}', 2)",
+                '"value":1.01',
+            ),
+        ]
+        for sql, expected_fragment in cases:
+            py_got = py.execute(sql).fetchone()[0]
+            cpp_got = cpp.execute(sql).fetchone()[0]
+            assert expected_fragment in py_got, (
+                f"python fallback lost exact decimal: {sql}\n got {py_got!r}"
+            )
+            assert py_got == cpp_got, (
+                f"parity drift: {sql}\n py {py_got!r} != cpp {cpp_got!r}"
+            )
+        # scientific notation must never appear
+        for sql, _ in cases:
+            got = py.execute(sql).fetchone()[0]
+            assert "e+" not in got and "e-" not in got, (
+                f"scientific notation leaked: {sql} -> {got!r}"
+            )
+    finally:
+        py.close()
+        cpp.close()

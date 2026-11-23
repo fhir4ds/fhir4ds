@@ -14,6 +14,7 @@ offset exists — Z-suffixed instants and naive-bound span derivation), §9
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
@@ -23,8 +24,12 @@ __all__ = [
     "Signature",
     "NormalizedDate",
     "DEFAULT_TZ",
+    "MIN_INSTANT",
+    "MAX_INSTANT",
     "normalize_temporal",
     "secondary_timestamp",
+    "period_overlap",
+    "overlap_fraction",
 ]
 
 
@@ -74,6 +79,20 @@ _TEMPORAL_FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("onsetPeriod", "period"),
     ),
     "Immunization": (("occurrenceDateTime", "datetime"),),
+    # AMUX-150 chunk A coded-type extension (FEATURE_NON_CODED_DEDUP §2.1).
+    # MedicationRequest.authoredOn is the EVENT anchor;
+    # dispenseRequest.validityPeriod is deliberately NOT the primary field
+    # (validity windows span refills).
+    "MedicationRequest": (("authoredOn", "datetime"),),
+    "MedicationDispense": (("whenHandedOver", "datetime"),),
+    "MedicationAdministration": (
+        ("effectiveDateTime", "datetime"),
+        ("effectivePeriod", "period"),
+    ),
+    "DiagnosticReport": (
+        ("effectiveDateTime", "datetime"),
+        ("effectivePeriod", "period"),
+    ),
 }
 
 # Secondary scalar timestamps (cross-field checks arrive in a later slice).
@@ -414,3 +433,102 @@ def secondary_timestamp(resource: dict, *,
     signature, dt, prefix = classified
     local_date = _local_date_for(signature, dt, prefix, tz)
     return _build(signature, local_date, dt, tz)
+
+
+# ---------------------------------------------------------------------------
+# AMUX-150 chunk C — the period_overlap primitive (FDD §4.2)
+# ---------------------------------------------------------------------------
+
+#: Open-bound sentinels (same uniform ms format as :func:`_format_instant`,
+#: so lexicographic comparison == chronological comparison).
+MIN_INSTANT = "0001-01-01T00:00:00.000Z"
+MAX_INSTANT = "9999-12-31T23:59:59.999Z"
+
+_GAP_RE = re.compile(r"^(\d+(?:\.\d+)?)(s|m|h|d)$")
+_GAP_UNITS = {"s": 1.0, "m": 60.0, "h": 3600.0, "d": 86400.0}
+
+
+def _parse_gap_seconds(max_gap: str) -> float:
+    """Parse a ``<n><s|m|h|d>`` gap specification to seconds."""
+    if not isinstance(max_gap, str):
+        raise ValueError(f"max_gap must be a string like '15m', got {max_gap!r}")
+    match = _GAP_RE.fullmatch(max_gap.strip())
+    if match is None:
+        raise ValueError(f"malformed max_gap {max_gap!r} (expected e.g. '0s', '15m')")
+    return float(match.group(1)) * _GAP_UNITS[match.group(2)]
+
+
+def _effective_bounds(nd: NormalizedDate) -> Optional[tuple[str, str]]:
+    """Effective (start, end) UTC bounds with open-end sentinel extension.
+
+    None when the value is not a usable period: both bounds missing, or a
+    YEAR/MONTH signature (span too coarse to arbitrate encounter
+    overlap).
+    """
+    if nd is None:
+        return None
+    if nd.signature in (Signature.YEAR, Signature.MONTH):
+        return None
+    if nd.start_utc is None and nd.end_utc is None:
+        return None
+    if nd.start_utc is not None and nd.end_utc is not None \
+            and nd.start_utc > nd.end_utc:
+        return None  # malformed span
+    return (nd.start_utc or MIN_INSTANT, nd.end_utc or MAX_INSTANT)
+
+
+def _instant_seconds(text: str) -> float:
+    return datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
+
+
+def period_overlap(a: Optional[NormalizedDate],
+                   b: Optional[NormalizedDate],
+                   *, max_gap: str = "0s") -> str:
+    """Classify the relationship of two period-shaped values.
+
+    Returns ``"overlap" | "adjacent" | "disjoint" | "unknown"``:
+
+    - ``overlap``: the spans intersect;
+    - ``adjacent``: disjoint with a gap <= ``max_gap`` (HEDIS
+      continuous-enrollment doctrine: adjacent coverage collapses);
+    - ``unknown``: either side lacks a usable period (never unions);
+    - ``disjoint``: everything else.
+
+    Open ends extend to the type sentinels (:data:`MIN_INSTANT` /
+    :data:`MAX_INSTANT`).
+    """
+    bounds_a = _effective_bounds(a)
+    bounds_b = _effective_bounds(b)
+    if bounds_a is None or bounds_b is None:
+        return "unknown"
+    (a_start, a_end), (b_start, b_end) = bounds_a, bounds_b
+    if a_start <= b_end and b_start <= a_end:
+        return "overlap"
+    # gap between the later start and the earlier end (they do not overlap)
+    gap = _instant_seconds(max(a_start, b_start)) - _instant_seconds(
+        min(a_end, b_end))
+    return "adjacent" if gap <= _parse_gap_seconds(max_gap) else "disjoint"
+
+
+def overlap_fraction(a: Optional[NormalizedDate],
+                     b: Optional[NormalizedDate]) -> Optional[float]:
+    """Containment-style overlap fraction:
+    ``overlap_seconds / min(a_span, b_span)`` (FDD §4.2).
+
+    None when the relationship is unknown; 0.0 when disjoint/adjacent.
+    """
+    relationship = period_overlap(a, b)
+    if relationship == "unknown":
+        return None
+    if relationship != "overlap":
+        return 0.0
+    bounds_a = _effective_bounds(a)
+    bounds_b = _effective_bounds(b)
+    (a_start, a_end), (b_start, b_end) = bounds_a, bounds_b
+    span_a = max(_instant_seconds(a_end) - _instant_seconds(a_start), 1e-9)
+    span_b = max(_instant_seconds(b_end) - _instant_seconds(b_start), 1e-9)
+    overlap = _instant_seconds(min(a_end, b_end)) - _instant_seconds(
+        max(a_start, b_start))
+    if overlap <= 0:
+        return 0.0
+    return min(overlap / min(span_a, span_b), 1.0)

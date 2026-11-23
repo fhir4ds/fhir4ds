@@ -1,0 +1,39 @@
+{
+  "resourceType": "Library",
+  "id": "piqi-sam-demographics-maritalstatus-hascodesystem",
+  "url": "https://fhir4ds.org/piqi/Library/piqi-sam-demographics-maritalstatus-hascodesystem",
+  "name": "PIQI_SAM_DemographicsMaritalstatusHascodesystem",
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "system": "http://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
+    ]
+  },
+  "relatedArtifact": [
+    {
+      "type": "depends-on",
+      "label": "view_piqi_demographics",
+      "resource": "https://fhir4ds.org/piqi/ViewDefinition/piqi_demographics"
+    },
+    {
+      "type": "depends-on",
+      "label": "prereq_demographics_maritalstatus_ispopulated",
+      "resource": "https://fhir4ds.org/piqi/Library/piqi-sam-demographics-maritalstatus-ispopulated"
+    }
+  ],
+  "parameter": [],
+  "content": [
+    {
+      "contentType": "application/sql;dialect=duckdb",
+      "data": "U0VMRUNUIHYucGF0aWVudF9pZCBBUyBwYXRpZW50X2lkLCB2LmVsZW1lbnRfaWQgQVMgZWxlbWVudF9pZCwKICAnRGVtb2dyYXBoaWNzJyBBUyBkYXRhX2NsYXNzLCAnbWFyaXRhbFN0YXR1cycgQVMgZW50aXR5LCAnQ29uY2VwdF9IYXNDb2RlU3lzdGVtJyBBUyBzYW1fbW5lbW9uaWMsCiAgQ0FTRSBXSEVOIGxlbihsaXN0X2ZpbHRlcihDT0FMRVNDRSh2Lm1hcml0YWxTdGF0dXNfY29kaW5ncywgW10pLCBjIC0+IENPQUxFU0NFKGpzb25fZXh0cmFjdF9zdHJpbmcoYywgJyQuc3lzdGVtJyksICcnKSA8PiAnJykpID4gMCBUSEVOICdwYXNzJyBFTFNFICdmYWlsJyBFTkQgQVMgcmVzdWx0LAogIENBU0UgV0hFTiBsZW4obGlzdF9maWx0ZXIoQ09BTEVTQ0Uodi5tYXJpdGFsU3RhdHVzX2NvZGluZ3MsIFtdKSwgYyAtPiBDT0FMRVNDRShqc29uX2V4dHJhY3Rfc3RyaW5nKGMsICckLnN5c3RlbScpLCAnJykgPD4gJycpKSA+IDAgVEhFTiAnbWFyaXRhbFN0YXR1cyBoYXMgYXQgbGVhc3Qgb25lIGNvZGluZyB3aXRoIHN5c3RlbScgRUxTRSAnbWFyaXRhbFN0YXR1cyBoYXMgbm8gY29kaW5nIHdpdGggc3lzdGVtJyBFTkQgQVMgZGV0YWlsCkZST00gInZpZXdfcGlxaV9kZW1vZ3JhcGhpY3MiIHYKSk9JTiAicHJlcmVxX2RlbW9ncmFwaGljc19tYXJpdGFsc3RhdHVzX2lzcG9wdWxhdGVkIiBwIE9OIHAucGF0aWVudF9pZCA9IHYucGF0aWVudF9pZCBBTkQgcC5lbGVtZW50X2lkID0gdi5lbGVtZW50X2lkIEFORCBwLnJlc3VsdCA9ICdwYXNzJwpPUkRFUiBCWSB2LnBhdGllbnRfaWQsIHYuZWxlbWVudF9pZA=="
+    }
+  ]
+}

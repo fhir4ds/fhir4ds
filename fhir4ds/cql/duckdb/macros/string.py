@@ -78,7 +78,8 @@ def registerStringMacros(con: "duckdb.DuckDBPyConnection") -> None:
     # use a sentinel outside CQL Integer range for the optional length.
     con.execute(
         "CREATE OR REPLACE MACRO Substring(s, start, len := -2147483649) AS "
-        "CASE WHEN s IS NULL OR start IS NULL OR start < 0 OR start > system.length(s) THEN NULL "
+        "CASE WHEN s IS NULL OR start IS NULL OR start < 0 OR "
+        "(start >= system.length(s) AND NOT (start = 0 AND system.length(s) = 0)) THEN NULL "
         "WHEN len = -2147483649 THEN system.substring(s, start + 1) "
         "WHEN len IS NULL OR len < 0 THEN NULL "
         "ELSE system.substring(s, start + 1, len) END"

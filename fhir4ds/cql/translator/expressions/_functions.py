@@ -1900,14 +1900,14 @@ class FunctionsMixin:
             self._validate_static_string_operand(arg_nodes[0], "Indexer")
         elif bare_lower == "message":
             self._validate_message_signature_args(arg_nodes)
-        elif bare_lower in {"skip", "take"} and len(arg_nodes) >= 2:
+        elif bare_lower in {"skip", "take", "head", "tail"} and len(arg_nodes) >= 2:
             count_type = self._infer_static_cql_type_for_logical_operand(arg_nodes[1])
             normalized_count_type = (count_type or "Any").split(".")[-1]
             if normalized_count_type not in {"Any", "Integer"}:
                 raise TranslationError(
                     f"CQL {name} count argument must be Integer; got {count_type}"
                 )
-        if bare_lower in {"first", "last", "length", "tail", "skip", "take", "singletonfrom", "slice"} and arg_nodes:
+        if bare_lower in {"first", "last", "length", "tail", "skip", "take", "head", "singletonfrom", "slice"} and arg_nodes:
             # CQL-19 SKEPTIC QA-002: for a stored-list define reference
             # (`define G: Patient.name.given; Tail(G)`), inline the SOURCE
             # AST only when the alias is NOT itself a stored-list CTE —
@@ -1993,7 +1993,7 @@ class FunctionsMixin:
         if name.lower() in {"istrue", "isfalse"} and len(arg_nodes) == 1:
             args = [self.translate(arg_nodes[0], usage=ExprUsage.SCALAR, boolean_context=True)]
         elif (
-            bare_lower in {"tail", "skip", "take", "length", "singletonfrom"}
+            bare_lower in {"tail", "skip", "take", "head", "length", "singletonfrom"}
             and arg_nodes
             and (
                 self._is_list_typed_ast(arg_nodes[0])
@@ -2029,7 +2029,7 @@ class FunctionsMixin:
             else:
                 args = [_coerce_query_rows_to_list(self.translate(arg_nodes[0], usage=ExprUsage.LIST))]
             args.extend(self.translate(arg, usage=ExprUsage.SCALAR) for arg in arg_nodes[1:])
-        elif bare_lower in {"first", "last", "length", "tail", "skip", "take", "singletonfrom", "slice"} and arg_nodes and self._is_list_typed_ast(arg_nodes[0]):
+        elif bare_lower in {"first", "last", "length", "tail", "skip", "take", "head", "singletonfrom", "slice"} and arg_nodes and self._is_list_typed_ast(arg_nodes[0]):
             # CQL-19 SKEPTIC QA-002: a stored-list define reference already
             # translates (SCALAR) to the whole element list held in its CTE
             # value column — do NOT rows-coerce it (LIST(value) nests the
@@ -2059,7 +2059,7 @@ class FunctionsMixin:
         # promote to the list-valued fhirpath projection. No-op for every
         # non-fhirpath_text operand.
         if (
-            bare_lower in {"first", "last", "length", "tail", "skip", "take", "singletonfrom"}
+            bare_lower in {"first", "last", "length", "tail", "skip", "take", "head", "singletonfrom"}
             and args
         ):
             from ...translator.expressions._utils import _promote_fhirpath_text_list
@@ -2118,7 +2118,18 @@ class FunctionsMixin:
 
         # Step 2a: CQL Round — half-up semantics via custom macros
         # 1-arg → Round(x), 2-arg → RoundTo(x, precision)
-        if name == "Round":
+        # CQL 2.0 Quantity overloads (FHIR-51030): Round(2.54 'cm') → 3 'cm'
+        # — round the value, preserve the unit verbatim.
+        if name == "Round" and args and func.arguments:
+            _is_qty = (
+                func.arguments
+                and self._is_cql_quantity_expr(func.arguments[0])
+            ) or _is_quantity_expression(args[0])
+            if _is_qty:
+                if len(args) == 1:
+                    return SQLFunctionCall(name="RoundQuantity", args=args)
+                if len(args) == 2:
+                    return SQLFunctionCall(name="RoundQuantityTo", args=args)
             if args:
                 number_arg = self._fhirpath_number_projection(args[0])
                 if number_arg is not None:
@@ -2378,6 +2389,27 @@ class FunctionsMixin:
         # and promoted by the list-family handling above.
         if bare_lower == "slice" and 1 <= len(args) <= 3:
             return SQLFunctionCall(name="Slice", args=args)
+
+        # CQL 2.0 Tail with count (FHIR-40612): last-n elements — lower to
+        # the TailN macro (the zero-arg Tail macro keeps its 1.5 "all but
+        # first" semantics and 1-arg arity). Head(list, n) already passes
+        # through to the 2-arg Head macro registered in macros/list.py.
+        if bare_lower == "tail" and len(args) == 2:
+            return SQLFunctionCall(name="TailN", args=args)
+
+        # CQL 2.0 Comparable(Quantity, Quantity) (FHIR-55384): both
+        # operands must arrive as Quantity JSON — apply the implicit
+        # Integer/Long/Decimal -> Quantity('1') conversion (Table 9-E)
+        # to non-quantity-shaped operands.
+        if bare_lower == "comparable" and len(args) == 2:
+            from ..expressions._operators import _quantity_operand_for_arithmetic
+            args = [
+                _quantity_operand_for_arithmetic(
+                    arg, _is_quantity_expression(arg)
+                )
+                for arg in args
+            ]
+            return SQLFunctionCall(name="Comparable", args=args)
 
         # Step 3: Check registry for simple renames and parameterized translations
         strategy = function_registry.get(name, arity)
@@ -3086,20 +3118,112 @@ class FunctionsMixin:
                 # Patient-correlate the leaf BEFORE coercion: the rows
                 # select spans ALL patients; without the correlation every
                 # patient counts every row (QI-Core gate over-count on
-                # CMS74/CMS149/CMS506).
+                # CMS74/CMS149/CMS506). SKIP patient-independent leaves —
+                # a list-literal source lowers to a derived unnest table
+                # `(SELECT unnest([...]) AS I) AS _list` with NO FROM and
+                # no patient_id column; correlating it appends
+                # `_list.patient_id = _pt.patient_id` and binder-fails
+                # (d3-SKEPTIC v0.0.26: Count((from {null as Integer} I
+                # return I))).
                 _ls_inner = (
                     _leaf_sql.query if isinstance(_leaf_sql, SQLSubquery)
                     and isinstance(_leaf_sql.query, SQLSelect) else _leaf_sql
                 )
-                if isinstance(_ls_inner, SQLSelect) and isinstance(
-                    _ls_inner.from_clause, SQLAlias
-                ) and _ls_inner.from_clause.alias:
+                _leaf_from = (
+                    _ls_inner.from_clause
+                    if isinstance(_ls_inner, SQLSelect) else None
+                )
+                _leaf_from_expr = (
+                    _leaf_from.expr if isinstance(_leaf_from, SQLAlias) else None
+                )
+                _leaf_row_scoped = isinstance(
+                    _leaf_from_expr, (SQLIdentifier, SQLQualifiedIdentifier)
+                ) or isinstance(_leaf_from_expr, RetrievePlaceholder) or (
+                    # QA-D3H-003: a parenthesized UNION as the FROM source
+                    # (`((SELECT patient_id, resource FROM ...) UNION ...)
+                    # AS VE`) is row-scoped too — its branches project
+                    # patient_id. Excluding it skipped the per-leaf patient
+                    # correlation and made every patient count every row
+                    # (QI-Core CMS149 IPP over-inclusion; the same leak
+                    # class this correlation exists to prevent on
+                    # CMS74/CMS149/CMS506).
+                    isinstance(_leaf_from_expr, SQLUnion)
+                ) or (
+                    isinstance(_leaf_from_expr, (SQLSubquery, SQLSelect))
+                    and (
+                        _leaf_from_expr.from_clause is not None
+                        if isinstance(_leaf_from_expr, SQLSelect)
+                        else _leaf_from_expr.query.from_clause is not None
+                    )
+                )
+                if (
+                    _leaf_row_scoped
+                    and isinstance(_ls_inner, SQLSelect)
+                    and isinstance(_ls_inner.from_clause, SQLAlias)
+                    and _ls_inner.from_clause.alias
+                ):
                     from ._query import _patient_correlated_where
                     _ls_inner.where = _patient_correlated_where(
                         _ls_inner.where,
                         _ls_inner.from_clause.alias,
                         "_pt",
                     )
+                # QA-D3E-001: a query-over-CTE leaf projects
+                # `SELECT * FROM "CTE" AS X`; the rows-to-list coercion
+                # cannot alias a star (every expanded column would get the
+                # alias and the element list would silently hold
+                # patient_id values — UNION dedup then undercounts).
+                # Rewrite the star to the CTE's element column first,
+                # using definition metadata for the schema.
+                if (
+                    isinstance(_ls_inner, SQLSelect)
+                    and _ls_inner.columns
+                    and isinstance(_ls_inner.columns[0], SQLIdentifier)
+                    and _ls_inner.columns[0].name == "*"
+                    and isinstance(_ls_inner.from_clause, SQLAlias)
+                    and isinstance(
+                        _ls_inner.from_clause.expr,
+                        (SQLIdentifier, RetrievePlaceholder),
+                    )
+                ):
+                    _cte_meta = None
+                    if isinstance(_ls_inner.from_clause.expr, SQLIdentifier):
+                        _cte_meta = self.context.definition_meta.get(
+                            _ls_inner.from_clause.expr.name
+                        )
+                    if _cte_meta is not None:
+                        _elem_col = (
+                            "resource"
+                            if getattr(_cte_meta, "has_resource", False)
+                            else "value"
+                        )
+                        _ls_inner.columns = [SQLQualifiedIdentifier(
+                            parts=[_ls_inner.from_clause.alias, _elem_col]
+                        )]
+                    else:
+                        # QA-D4S-001: a plain retrieve-with-where leaf
+                        # (`[Procedure: "VS"] P where P.performed during ...`)
+                        # lowers to `SELECT * FROM <retrieve CTE> AS P` —
+                        # the retrieve CTE is NOT in definition_meta, so the
+                        # rewrite above skipped it and the rows-to-list
+                        # coercion no-ops on the star (QA-D3E-001 doctrine),
+                        # making the whole count-unnest union fall through
+                        # to the generic path (BinderException "Subquery
+                        # returns N columns"). Retrieve CTEs always project
+                        # (patient_id, resource); rewrite the star to the
+                        # qualified resource column. Only for leaves whose
+                        # FROM is the retrieve itself (placeholder) or whose
+                        # AST source is a Retrieve — arbitrary identifier
+                        # FROMs keep the prior skip.
+                        _leaf_src_expr = getattr(
+                            getattr(_leaf, "source", None), "expression", None
+                        )
+                        if isinstance(_ls_inner.from_clause.expr, RetrievePlaceholder) or (
+                            isinstance(_leaf_src_expr, _UnionRetrieve)
+                        ):
+                            _ls_inner.columns = [SQLQualifiedIdentifier(
+                                parts=[_ls_inner.from_clause.alias, "resource"]
+                            )]
                 _coerced = _cql_rows(_leaf_sql)
                 if _coerced is not _leaf_sql:
                     _leaf_sql = _coerced
@@ -3889,13 +4013,22 @@ class FunctionsMixin:
             else:
                 substr = SQLFunctionCall(name="system.substring", args=[args[0], start_index])
             invalid_start = SQLBinaryOp(left=args[1], operator="<", right=SQLLiteral(value=0))
-            # CQL 1.5 §17.16: only start > Length is null; start ==
-            # Length yields the empty string (Substring('', 0) -> '',
-            # fixture-pinned; supersedes the older >= boundary).
+            # Official fixtures CqlStringOperatorsTest.xml: SubstringAB2
+            # pins Substring('ab', 2) -> null (start == length of a
+            # NON-EMPTY string is past the end); SubstringEmptyAnd0 pins
+            # Substring('', 0) -> ''. d3-SKEPTIC v0.0.26: the delta's
+            # "start == Length yields empty string" reading generalized the
+            # empty-string fixture to all strings.
+            _len_call = SQLFunctionCall(name="system.length", args=[args[0]])
+            # NOT(start=0 AND length=0) == (start != 0 OR length != 0)
             past_end = SQLBinaryOp(
-                left=args[1],
-                operator=">",
-                right=SQLFunctionCall(name="system.length", args=[args[0]]),
+                operator="AND",
+                left=SQLBinaryOp(left=args[1], operator=">=", right=_len_call),
+                right=SQLBinaryOp(
+                    operator="OR",
+                    left=SQLBinaryOp(left=args[1], operator="!=", right=SQLLiteral(value=0)),
+                    right=SQLBinaryOp(left=_len_call, operator="!=", right=SQLLiteral(value=0)),
+                ),
             )
             condition = SQLBinaryOp(operator="OR", left=invalid_start, right=past_end)
             if len(args) >= 3:
@@ -4583,7 +4716,7 @@ class FunctionsMixin:
                         result.result_type = "Quantity"
                         return result
                     return SQLLiteral(value=val)
-                raise ValueError(f"The Maximum operator is not defined for type {raw_type_name}")
+                raise TranslationError(f"The Maximum operator is not defined for type {raw_type_name}")
         return SQLNull()
 
     def _translate_minimum_pre(self, func: FunctionRef, translator) -> Optional[SQLExpression]:
@@ -4643,7 +4776,7 @@ class FunctionsMixin:
                         result.result_type = "Quantity"
                         return result
                     return SQLLiteral(value=val)
-                raise ValueError(f"The Minimum operator is not defined for type {raw_type_name}")
+                raise TranslationError(f"The Minimum operator is not defined for type {raw_type_name}")
         return SQLNull()
 
     def _translate_flatten_pre(self, func, translator) -> "Optional[SQLExpression]":

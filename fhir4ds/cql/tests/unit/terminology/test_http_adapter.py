@@ -215,9 +215,13 @@ def test_expand_refused_by_backend_raises_actionable_typed_error():
     assert "Provide a ValueSet body" in message       # server diagnostics carried through
     assert "fhir_vs" in message and "medterm4ds" in message  # names the cause
     assert "expand_intensional" in message           # names a remedy
-    # The failure still counts against the circuit breaker.
+    # QA-D12H-002 (v0.0.26 D12 HISTORIAN): capability refusals are
+    # deterministic and must NOT count toward the circuit breaker — the
+    # in-process doctrine (QA-D12S-001) applies here too. The former
+    # `failures >= 1` expectation predates that doctrine and, if honored,
+    # let five refusals trip the breaker into silent [] short-circuiting.
     failures, _ = adapter._breaker_snapshot()
-    assert failures >= 1
+    assert failures == 0
 
 
 def test_expand_normalizes_snomed_module_url():
@@ -704,3 +708,141 @@ def test_expand_skips_blank_code_grouping_nodes_in_hierarchy():
     with patch.object(adapter, "_client", return_value=_MockClient(_MockResponse(payload), [])):
         refs = adapter.expand("http://ex.org/VS/grouped")
     assert [r.code for r in refs] == ["real-code"]
+
+
+# ----------------------------------------------------------------------
+# D12 HISTORIAN (v0.0.26, QA-D12H-001/002) — intensional capability parity
+# + breaker semantics for capability refusals.
+# ----------------------------------------------------------------------
+
+
+def test_expand_intensional_refused_by_backend_raises_capability_error():
+    """A 400/422 on POST $expand must escalate to TerminologyCapabilityError.
+
+    The sidecar maps medterm4ds's intensional-expansion ValueErrors
+    (QC-252 unresolvable compose system, QC-246 null code) to HTTP 400,
+    and the in-process adapter raises TerminologyCapabilityError for the
+    identical refusals (QA-D12S-001). The HTTP surface must match —
+    otherwise HTTP callers see a raw httpx.HTTPStatusError and the
+    failure counts toward the circuit breaker.
+    """
+    payload = {
+        "resourceType": "OperationOutcome",
+        "issue": [{"diagnostics": "unresolvable compose system"}],
+    }
+    response = _MockResponse(payload, status_code=400)
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir")
+    with patch.object(adapter, "_client", return_value=_MockClient(response, [])):
+        with pytest.raises(TerminologyCapabilityError) as excinfo:
+            adapter.expand_intensional({
+                "resourceType": "ValueSet",
+                "compose": {"include": [
+                    {"system": "http://example.nowhere",
+                     "concept": [{"code": "x"}]}]},
+            })
+    message = str(excinfo.value)
+    assert "HTTP 400" in message
+    assert "unresolvable compose system" in message  # server diagnostics
+    assert "medterm4ds" in message or "compose" in message
+
+
+def test_expand_capability_refusal_does_not_poison_breaker():
+    """Capability refusals are deterministic — they must not trip the breaker.
+
+    The in-process adapter's QA-D12S-001 doctrine: "Capability refusals
+    are not faults: they do NOT count toward the circuit breaker." The
+    HTTP adapter must match. If 5 refusals trip the breaker, the breaker
+    short-circuits subsequent calls to [] — converting the loud
+    TerminologyCapabilityError back into the silent empty-membership
+    degradation the AMUX-115 ruling exists to prevent.
+    """
+    payload = {
+        "resourceType": "OperationOutcome",
+        "issue": [{"diagnostics": "unsupported url form"}],
+    }
+    response = _MockResponse(payload, status_code=400)
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir")
+    with patch.object(adapter, "_client", return_value=_MockClient(response, [])):
+        for _ in range(6):  # past breaker_threshold=5
+            with pytest.raises(TerminologyCapabilityError):
+                adapter.expand("http://example.org/ValueSet/Foo")
+    failures, _ = adapter._breaker_snapshot()
+    assert failures == 0, (
+        "capability refusals must not count toward the circuit breaker "
+        f"(got {failures} consecutive failures)"
+    )
+
+
+def test_expand_intensional_capability_refusal_does_not_poison_breaker():
+    """Same doctrine on the intensional surface."""
+    payload = {
+        "resourceType": "OperationOutcome",
+        "issue": [{"diagnostics": "unresolvable compose system"}],
+    }
+    response = _MockResponse(payload, status_code=400)
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir")
+    with patch.object(adapter, "_client", return_value=_MockClient(response, [])):
+        for _ in range(6):
+            with pytest.raises(TerminologyCapabilityError):
+                adapter.expand_intensional({"compose": {"include": []}})
+    failures, _ = adapter._breaker_snapshot()
+    assert failures == 0
+
+
+def test_expand_transient_failure_still_counts_toward_breaker():
+    """Transient 5xx failures keep counting (the breaker still protects)."""
+    response = _MockResponse({}, status_code=500)
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir")
+    with patch.object(adapter, "_client", return_value=_MockClient(response, [])):
+        with pytest.raises(RuntimeError):
+            adapter.expand("http://example.org/ValueSet/Foo")
+    failures, _ = adapter._breaker_snapshot()
+    assert failures == 1
+
+
+# ----------------------------------------------------------------------
+# QA-D12E-001 (v0.0.26 Domain 12 EXPLORER): hostile non-string `system`
+# values in an otherwise-valid 200 response must not poison the whole
+# expansion/search. `SystemResolver.normalize` raises TypeError on
+# non-str input, so ONE malformed contains/entry used to crash the
+# entire call (losing every valid code and counting a phantom breaker
+# failure). FHIR `system` is `uri` (string) — non-string entries are
+# malformed and must be SKIPPED, exactly like missing/None systems.
+# ----------------------------------------------------------------------
+
+
+def test_qa_d12e001_expand_skips_non_string_system_entries():
+    """A hostile contains[] entry with a non-string system (int, list)
+    is skipped; valid siblings survive and the breaker stays at 0."""
+    payload = _expand_payload([
+        {"system": "http://snomed.info/sct", "code": "73211009"},
+        {"system": 42, "code": "bad-int"},
+        {"system": ["http://x"], "code": "bad-list"},
+        {"system": True, "code": "bad-bool"},
+    ])
+    response = _MockResponse(payload)
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir")
+    with patch.object(adapter, "_client", return_value=_MockClient(response, [])):
+        refs = adapter.expand("http://example.org/ValueSet/Foo")
+    assert refs == [CodeRef(
+        system="http://snomed.info/sct", code="73211009", display=None
+    )]
+    failures, _ = adapter._breaker_snapshot()
+    assert failures == 0
+
+
+def test_qa_d12e001_search_skips_non_string_system_entries():
+    """Same doctrine on the $search path: one hostile entry resource
+    with a non-string system cannot crash the whole query."""
+    payload = _search_bundle([
+        {"system": 42, "code": "bad"},
+        {"system": {"nested": True}, "code": "bad-dict"},
+        {"system": "http://loinc.org", "code": "718-7", "display": "Hgb"},
+    ])
+    response = _MockResponse(payload)
+    adapter = HTTPTerminologyEndpoint("http://localhost:8001/fhir")
+    with patch.object(adapter, "_client", return_value=_MockClient(response, [])):
+        results = adapter.search_text("hemoglobin", "lab")
+    assert [r.code for r in results] == ["718-7"]
+    failures, _ = adapter._breaker_snapshot()
+    assert failures == 0

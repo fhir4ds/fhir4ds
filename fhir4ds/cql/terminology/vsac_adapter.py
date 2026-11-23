@@ -142,7 +142,15 @@ class VCACTerminologyEndpoint:
             if not isinstance(include, dict):
                 continue
             if include.get("filter") or include.get("valueSet"):
-                raise TerminologyEndpointError(
+                # QA-D12H-004 (v0.0.26 D12 HISTORIAN): this is a permanent
+                # form-refusal by THIS backend (server-side resolution of
+                # arbitrary intensional compose is not available), i.e. the
+                # capability class per the AMUX-115 split — the HTTP and
+                # in-process adapters raise TerminologyCapabilityError for
+                # the same refusal family. TerminologyCapabilityError
+                # subclasses TerminologyEndpointError, so existing
+                # base-class handlers keep working.
+                raise TerminologyCapabilityError(
                     "VSAC adapter cannot resolve intensional compose "
                     "(filter/valueSet references require server-side "
                     "expansion); pass the value set canonical URL to "

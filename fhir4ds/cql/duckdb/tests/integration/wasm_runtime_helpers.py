@@ -28,6 +28,52 @@ def repo_root() -> Path:
     raise RuntimeError("Could not locate repository root")
 
 
+def bundled_extension_paths() -> list[Path]:
+    """ABI-aware paths to the PACKAGED extension bundles (repo checkouts and
+    wheels both ship these). Prefers the slot matching the running duckdb
+    version so no-Python tests exercise the same binary real deployments
+    load, instead of a stale build-tree artifact."""
+    root = repo_root()
+    version = duckdb.__version__
+
+    def suffix() -> str:
+        if version.startswith("2."):
+            return ".duckdb2_extension"
+        if version.startswith("1.5.6"):
+            return ".duckdb156_extension"
+        return ".duckdb_extension"  # 1.5.5 and other 1.5.x
+
+    sfx = suffix()
+    paths = [
+        root / "fhir4ds" / "fhirpath" / "duckdb" / "extensions" / f"fhirpath{sfx}",
+        root / "fhir4ds" / "cql" / "duckdb" / "extensions" / f"cql{sfx}",
+    ]
+    missing = [p.name for p in paths if not p.exists()]
+    if missing:
+        raise FileNotFoundError(
+            f"Bundled C++ extension slot(s) for duckdb {version} not found: {missing}"
+        )
+    return paths
+
+
+def load_cql_bundled_extension() -> str:
+    """Return a LOADable path for the ABI-matched bundled cql extension.
+
+    DuckDB only LOADs files whose name ends in ``.duckdb_extension``, so
+    ABI-suffixed slots (``*.duckdb156_extension``, ``*.duckdb2_extension``)
+    are copied to a temp file with the canonical name first.
+    """
+    src = bundled_extension_paths()[1]
+    if src.name.endswith(".duckdb_extension"):
+        return str(src)
+    # DuckDB derives the entrypoint from the filename, so the copy must keep
+    # the canonical basename `cql.duckdb_extension`.
+    tmpdir = tempfile.mkdtemp(prefix="cql_bundled_")
+    dst = Path(tmpdir) / "cql.duckdb_extension"
+    shutil.copy2(src, dst)
+    return str(dst)
+
+
 def extension_paths() -> list[Path]:
     root = repo_root()
     return [

@@ -1,0 +1,39 @@
+{
+  "resourceType": "Library",
+  "id": "piqi-sam-condition-onsetdate-isvaliddate",
+  "url": "https://fhir4ds.org/piqi/Library/piqi-sam-condition-onsetdate-isvaliddate",
+  "name": "PIQI_SAM_ConditionOnsetdateIsvaliddate",
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "system": "http://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
+    ]
+  },
+  "relatedArtifact": [
+    {
+      "type": "depends-on",
+      "label": "view_piqi_condition",
+      "resource": "https://fhir4ds.org/piqi/ViewDefinition/piqi_condition"
+    },
+    {
+      "type": "depends-on",
+      "label": "prereq_condition_onsetdate_ispopulated",
+      "resource": "https://fhir4ds.org/piqi/Library/piqi-sam-condition-onsetdate-ispopulated"
+    }
+  ],
+  "parameter": [],
+  "content": [
+    {
+      "contentType": "application/sql;dialect=duckdb",
+      "data": "U0VMRUNUIHYucGF0aWVudF9pZCBBUyBwYXRpZW50X2lkLCB2LmVsZW1lbnRfaWQgQVMgZWxlbWVudF9pZCwKICAnQ29uZGl0aW9uJyBBUyBkYXRhX2NsYXNzLCAnb25zZXREYXRlJyBBUyBlbnRpdHksICdBdHRyX0lzVmFsaWREYXRlJyBBUyBzYW1fbW5lbW9uaWMsCiAgQ0FTRSBXSEVOIFRSWV9DQVNUKENPQUxFU0NFKENBU1Qodi5vbnNldERhdGUgQVMgVkFSQ0hBUiksICcnKSBBUyBEQVRFKSBJUyBOT1QgTlVMTCBBTkQgcmVnZXhwX21hdGNoZXMoQ09BTEVTQ0UoQ0FTVCh2Lm9uc2V0RGF0ZSBBUyBWQVJDSEFSKSwgJycpLCAnXlswLTldezR9LVswLTldezJ9LVswLTldezJ9JCcpIFRIRU4gJ3Bhc3MnIEVMU0UgJ2ZhaWwnIEVORCBBUyByZXN1bHQsCiAgQ0FTRSBXSEVOIFRSWV9DQVNUKENPQUxFU0NFKENBU1Qodi5vbnNldERhdGUgQVMgVkFSQ0hBUiksICcnKSBBUyBEQVRFKSBJUyBOT1QgTlVMTCBBTkQgcmVnZXhwX21hdGNoZXMoQ09BTEVTQ0UoQ0FTVCh2Lm9uc2V0RGF0ZSBBUyBWQVJDSEFSKSwgJycpLCAnXlswLTldezR9LVswLTldezJ9LVswLTldezJ9JCcpIFRIRU4gJ29uc2V0RGF0ZSBpcyBhIHZhbGlkIGRhdGUnIEVMU0UgJ29uc2V0RGF0ZSBpcyBub3QgYSB2YWxpZCBkYXRlJyBFTkQgQVMgZGV0YWlsCkZST00gInZpZXdfcGlxaV9jb25kaXRpb24iIHYKSk9JTiAicHJlcmVxX2NvbmRpdGlvbl9vbnNldGRhdGVfaXNwb3B1bGF0ZWQiIHAgT04gcC5wYXRpZW50X2lkID0gdi5wYXRpZW50X2lkIEFORCBwLmVsZW1lbnRfaWQgPSB2LmVsZW1lbnRfaWQgQU5EIHAucmVzdWx0ID0gJ3Bhc3MnCk9SREVSIEJZIHYucGF0aWVudF9pZCwgdi5lbGVtZW50X2lk"
+    }
+  ]
+}

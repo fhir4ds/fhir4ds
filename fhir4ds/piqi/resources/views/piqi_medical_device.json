@@ -1,0 +1,47 @@
+{
+  "name": "piqi_medical_device",
+  "status": "draft",
+  "resource": "Device",
+  "select": [
+    {
+      "column": [
+        {
+          "name": "element_id",
+          "path": "id",
+          "type": "id"
+        },
+        {
+          "name": "patient_id",
+          "path": "patient.reference.replace('urn:uuid:', '').split('/').last()",
+          "type": "string"
+        },
+        {
+          "name": "deviceType_text",
+          "path": "type.text",
+          "type": "string"
+        },
+        {
+          "name": "deviceType_codings",
+          "path": "type.coding",
+          "type": "Coding",
+          "collection": true
+        },
+        {
+          "name": "deviceID_text",
+          "path": "udiCarrier.first().deviceIdentifier.toString()",
+          "type": "string"
+        },
+        {
+          "name": "implantationDate",
+          "path": "extension.where(url='https://fhir4ds.org/piqi/StructureDefinition/implantationDate').first().value.ofType(string)",
+          "type": "string"
+        },
+        {
+          "name": "deviceStatus_text",
+          "path": "status",
+          "type": "code"
+        }
+      ]
+    }
+  ]
+}

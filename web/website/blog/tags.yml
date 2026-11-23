@@ -12,7 +12,15 @@ performance:
   label: Performance
 data-quality:
   label: Data Quality
+piqi:
+  label: PIQI
 patient-matching:
   label: Patient Matching
 deduplication:
   label: Deduplication
+mimic:
+  label: MIMIC
+benchmarking:
+  label: Benchmarking
+autocoding:
+  label: Auto-Coding

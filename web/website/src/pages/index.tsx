@@ -8,7 +8,7 @@ import Layout from '@theme/Layout';
 import Heading from '@theme/Heading';
 import styles from './index.module.css';
 
-const PRODUCT_VERSION = '0.0.25';
+const PRODUCT_VERSION = '0.0.26';
 // Per-patient figures: DuckDB 2.0.0 (recommended), cqframework 2025 QI-Core test bundles.
 const SQL_EXECUTION_MEDIAN_ALL_MEASURES = '~6.9ms';
 const SQL_EXECUTION_MEDIAN_SHARED_MEASURES = '~6.9ms';

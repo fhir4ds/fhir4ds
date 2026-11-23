@@ -1,0 +1,49 @@
+{
+  "resourceType": "Library",
+  "id": "piqi-sam-medication-medication-ispopulated",
+  "url": "https://fhir4ds.org/piqi/Library/piqi-sam-medication-medication-ispopulated",
+  "name": "PIQI_SAM_MedicationMedicationIspopulated",
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "system": "http://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
+    ]
+  },
+  "relatedArtifact": [
+    {
+      "type": "depends-on",
+      "label": "view_piqi_medication_request",
+      "resource": "https://fhir4ds.org/piqi/ViewDefinition/piqi_medication_request"
+    },
+    {
+      "type": "depends-on",
+      "label": "view_piqi_medication_statement",
+      "resource": "https://fhir4ds.org/piqi/ViewDefinition/piqi_medication_statement"
+    },
+    {
+      "type": "depends-on",
+      "label": "view_piqi_medication_dispense",
+      "resource": "https://fhir4ds.org/piqi/ViewDefinition/piqi_medication_dispense"
+    },
+    {
+      "type": "depends-on",
+      "label": "view_piqi_medication_administration",
+      "resource": "https://fhir4ds.org/piqi/ViewDefinition/piqi_medication_administration"
+    }
+  ],
+  "parameter": [],
+  "content": [
+    {
+      "contentType": "application/sql;dialect=duckdb",
+      "data": "U0VMRUNUIHYucGF0aWVudF9pZCBBUyBwYXRpZW50X2lkLCB2LmVsZW1lbnRfaWQgQVMgZWxlbWVudF9pZCwKICAnTWVkaWNhdGlvbicgQVMgZGF0YV9jbGFzcywgJ21lZGljYXRpb24nIEFTIGVudGl0eSwgJ0F0dHJfSXNQb3B1bGF0ZWQnIEFTIHNhbV9tbmVtb25pYywKICBDQVNFIFdIRU4gQ09BTEVTQ0UoVFJJTShDQVNUKHYubWVkaWNhdGlvbl90ZXh0IEFTIFZBUkNIQVIpKSwgJycpIDw+ICcnIFRIRU4gJ3Bhc3MnIEVMU0UgJ2ZhaWwnIEVORCBBUyByZXN1bHQsCiAgQ0FTRSBXSEVOIENPQUxFU0NFKFRSSU0oQ0FTVCh2Lm1lZGljYXRpb25fdGV4dCBBUyBWQVJDSEFSKSksICcnKSA8PiAnJyBUSEVOICdtZWRpY2F0aW9uIGlzIHBvcHVsYXRlZCcgRUxTRSAnbWVkaWNhdGlvbiBpcyBub3QgcG9wdWxhdGVkJyBFTkQgQVMgZGV0YWlsCkZST00gKFNFTEVDVCBlbGVtZW50X2lkLCBwYXRpZW50X2lkLCBtZWRpY2F0aW9uX3RleHQsIG1lZGljYXRpb25fY29kaW5ncywgc3RhcnREYXRlLCBlbmREYXRlLCBkb3NlQW1vdW50LCBkb3NlQW1vdW50VW5pdF90ZXh0LCBkb3NlUm91dGVfdGV4dCwgZG9zZVJvdXRlX2NvZGluZ3MsIGRvc2VRdWFudGl0eSwgZG9zZVF1YW50aXR5VW5pdCwgaW5zdHJ1Y3Rpb25zLCBpbmRpY2F0aW9uX3RleHQsIGluZGljYXRpb25fY29kaW5ncywgZmlsbFN0YXR1c190ZXh0IEZST00gInZpZXdfcGlxaV9tZWRpY2F0aW9uX3JlcXVlc3QiIFVOSU9OIEFMTCBTRUxFQ1QgZWxlbWVudF9pZCwgcGF0aWVudF9pZCwgbWVkaWNhdGlvbl90ZXh0LCBtZWRpY2F0aW9uX2NvZGluZ3MsIHN0YXJ0RGF0ZSwgZW5kRGF0ZSwgZG9zZUFtb3VudCwgZG9zZUFtb3VudFVuaXRfdGV4dCwgZG9zZVJvdXRlX3RleHQsIGRvc2VSb3V0ZV9jb2RpbmdzLCBkb3NlUXVhbnRpdHksIGRvc2VRdWFudGl0eVVuaXQsIGluc3RydWN0aW9ucywgaW5kaWNhdGlvbl90ZXh0LCBpbmRpY2F0aW9uX2NvZGluZ3MsIGZpbGxTdGF0dXNfdGV4dCBGUk9NICJ2aWV3X3BpcWlfbWVkaWNhdGlvbl9zdGF0ZW1lbnQiIFVOSU9OIEFMTCBTRUxFQ1QgZWxlbWVudF9pZCwgcGF0aWVudF9pZCwgbWVkaWNhdGlvbl90ZXh0LCBtZWRpY2F0aW9uX2NvZGluZ3MsIHN0YXJ0RGF0ZSwgZW5kRGF0ZSwgZG9zZUFtb3VudCwgZG9zZUFtb3VudFVuaXRfdGV4dCwgZG9zZVJvdXRlX3RleHQsIGRvc2VSb3V0ZV9jb2RpbmdzLCBkb3NlUXVhbnRpdHksIGRvc2VRdWFudGl0eVVuaXQsIGluc3RydWN0aW9ucywgaW5kaWNhdGlvbl90ZXh0LCBpbmRpY2F0aW9uX2NvZGluZ3MsIGZpbGxTdGF0dXNfdGV4dCBGUk9NICJ2aWV3X3BpcWlfbWVkaWNhdGlvbl9kaXNwZW5zZSIgVU5JT04gQUxMIFNFTEVDVCBlbGVtZW50X2lkLCBwYXRpZW50X2lkLCBtZWRpY2F0aW9uX3RleHQsIG1lZGljYXRpb25fY29kaW5ncywgc3RhcnREYXRlLCBlbmREYXRlLCBkb3NlQW1vdW50LCBkb3NlQW1vdW50VW5pdF90ZXh0LCBkb3NlUm91dGVfdGV4dCwgZG9zZVJvdXRlX2NvZGluZ3MsIGRvc2VRdWFudGl0eSwgZG9zZVF1YW50aXR5VW5pdCwgaW5zdHJ1Y3Rpb25zLCBpbmRpY2F0aW9uX3RleHQsIGluZGljYXRpb25fY29kaW5ncywgZmlsbFN0YXR1c190ZXh0IEZST00gInZpZXdfcGlxaV9tZWRpY2F0aW9uX2FkbWluaXN0cmF0aW9uIikgdgpPUkRFUiBCWSB2LnBhdGllbnRfaWQsIHYuZWxlbWVudF9pZA=="
+    }
+  ]
+}

@@ -58,6 +58,7 @@ from ..parser.ast_nodes import (
     NamedTypeSpecifier,
     ParameterDefinition,
     Property,
+    QualifiedIdentifier,
     Query,
     QuerySource,
     Retrieve,
@@ -204,6 +205,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         closure_loaded: bool = False,
         terminology_endpoint: Optional[Any] = None,
         strict_profiles: bool = True,
+        _inherited_comparison_precision: Optional[tuple] = None,
     ) -> None:
         """
         Initialize the translator.
@@ -236,6 +238,12 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 conjunct is omitted and the retrieve matches the base resource
                 type instead — use it for data that does not populate
                 ``meta.profile``. The negation-profile exclusion is unaffected.
+            _inherited_comparison_precision: Internal — CQL 2.0
+                #DefaultComparisonPrecision (FHIR-41326) propagation.
+                ``(effective_precision, parents_own_clause)`` passed to an
+                INCLUDED library's translator by the includer, or None.
+                Consumed in _setup_context together with the library's own
+                directive; never set by external callers.
         """
         from .model_config import ModelConfig, DEFAULT_MODEL_CONFIG
         self._model_config = model_config or DEFAULT_MODEL_CONFIG
@@ -248,6 +256,10 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
 
         self._connection = connection
         self._strict_profiles = strict_profiles
+        # CQL 2.0 #DefaultComparisonPrecision propagation (CQL20-D).
+        self._inherited_comparison_precision = _inherited_comparison_precision
+        # (precision, clause) this library's OWN directive declares, or None.
+        self._own_comparison_directive: Optional[tuple] = None
         self._use_fhirpath_udfs = use_fhirpath_udfs
         self._library_loader = library_loader
         # Shared cache across all translator instances in the recursion.
@@ -446,6 +458,11 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
 
         # Process includes
         self._process_includes(library, self._context)
+
+        # CQL 2.0 @constraint evaluation (FHIR-48682): after parameters and
+        # includes are processed so constraint expressions see the same
+        # parameter bindings as the library body.
+        self._evaluate_parameter_constraints(library)
 
         # Build dynamic component code registry (Tier 7: E2)
         # Extract component codes from library and included libraries
@@ -799,6 +816,12 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                     self._context.set_parameter_binding(param_name, param_value)
 
         self._process_includes(library, self._context)
+
+        # CQL 2.0 @constraint evaluation (FHIR-48682) — runtime parameters
+        # are bound above, so constraints on bound/default parameters are
+        # enforced here (compile time for static defaults, evaluation-
+        # request time for supplied values).
+        self._evaluate_parameter_constraints(library)
 
         # Validate that all declared parameters have bindings
         for param in library.parameters:
@@ -1825,10 +1848,16 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
 
             columns.append(SQLAlias(expr=expr, alias=output_col))
 
-        # Build LEFT JOINs only for defines that need them (scalars and unknowns)
+        # Build LEFT JOINs only for defines that need them (scalars and unknowns).
+        # QA-D9S-002: dedup — output_definition_names may list the same definition
+        # twice (e.g. Initial Population and Denominator both referencing the same
+        # boolean define); one JOIN per definition, or DuckDB raises
+        # "Ambiguous reference to table X (duplicate alias X)".
         joins = []
+        seen_join_defs: set = set()
         for def_name in output_definition_names:
-            if def_name in join_def_names:
+            if def_name in join_def_names and def_name not in seen_join_defs:
+                seen_join_defs.add(def_name)
                 joins.append(SQLJoin(
                     join_type="LEFT",
                     table=SQLIdentifier(name=def_name, quoted=True),
@@ -1855,8 +1884,17 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         evidence is unavailable.  Instead, collect evidence from the retrieve CTEs
         that the definition transitively depends on.  Each evidence fragment is a
         SQL expression that produces a list of evidence structs.
+
+        QA-D9S-001: when a boolean definition in the dependency chain carries
+        ``population_evidence_filters`` for a retrieve CTE (extracted from its
+        correlated EXISTS WHERE), those filters are re-applied to the evidence
+        subquery so evidence cites only resources satisfying the criteria.
+        Filters are gathered transitively through the definition chain; a CTE
+        with filters from more than one definition is left unfiltered
+        (ambiguous which arm's rows are the causal evidence).
         """
         from ..translator.context import RowShape
+        from ..translator.ast_utils import replace_qualified_alias
 
         meta = self._context.definition_meta.get(def_name)
         if meta is None:
@@ -1868,6 +1906,12 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             # Walk output definition → included definitions transitively
             self._resolve_transitive_resource_ctes(def_name, src_ctes, set())
 
+        # QA-D9S-001: the definition's meta carries per-CTE evidence filters
+        # merged transitively at translate time (context.definitions is cleared
+        # before population-SQL generation, so the chain cannot be walked here).
+        eff_filters: dict = dict(getattr(meta, 'population_evidence_filters', {}) or {})
+        eff_filters = {k: v for k, v in eff_filters.items() if k in src_ctes}
+
         retrieve_cte_names = getattr(self._context, '_audit_retrieve_cte_names', set())
         definition_cte_names = getattr(self._context, '_audit_definition_cte_names', set())
         all_audit_cte_names = retrieve_cte_names | definition_cte_names
@@ -1877,6 +1921,26 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             if cte_name in all_audit_cte_names:
                 # CTE has _audit_item: correlated subquery to collect evidence
                 quoted = f'"{cte_name}"'
+                flt = eff_filters.get(cte_name)
+                if flt:
+                    _alias, _conds = flt
+                    if _conds:
+                        # QA-D9S-001: re-apply the definition's EXISTS row
+                        # filters so evidence cites only criteria-satisfying
+                        # resources.
+                        ev_alias = f"__ev_{len(parts)}"
+                        cond_sql = " AND ".join(
+                            f"({replace_qualified_alias(c, _alias, ev_alias).to_sql()})"
+                            for c in _conds
+                        )
+                        parts.append(
+                            f"COALESCE((SELECT LIST({ev_alias}._audit_item) "
+                            f"FROM {quoted} AS {ev_alias} "
+                            f"WHERE {ev_alias}.patient_id = _pt.patient_id "
+                            f"AND {ev_alias}._audit_item IS NOT NULL "
+                            f"AND {cond_sql}), [])"
+                        )
+                        continue
                 parts.append(
                     f"COALESCE((SELECT LIST({quoted}._audit_item) "
                     f"FROM {quoted} WHERE {quoted}.patient_id = _pt.patient_id "
@@ -2253,12 +2317,79 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             # Detect Quantity fields in Tuple return clauses so downstream
             # property accesses on this definition can be identified as Quantity.
             meta.quantity_fields = self._detect_quantity_fields(definition.expression)
+            # QA-D9H-001: record referenced definition names from the CQL AST
+            # (see DefinitionMeta.referenced_definitions).
+            try:
+                from ..parser.ast_nodes import Identifier as _AstIdentifier
+                _refs: set = set()
+                # QA-D9E-001 (v0.0.26 D9 EXPLORER): query-source aliases are
+                # Identifier nodes too — a define named like a query alias
+                # would otherwise be recorded as "referenced" and its
+                # evidence filters/sources merged into THIS definition
+                # (wrong attribution). Collect bound alias names first and
+                # exclude them; over-exclusion only degrades evidence
+                # conservatively.
+                _bound_aliases: set = set()
+
+                def _collect_aliases(node):
+                    for cls_name in ("QuerySource", "AliasedQuerySource"):
+                        if type(node).__name__ == cls_name:
+                            alias = getattr(node, "alias", None)
+                            if alias:
+                                _bound_aliases.add(alias)
+                    for f in getattr(node, "__dataclass_fields__", {}):
+                        child = getattr(node, f, None)
+                        if isinstance(child, (list, tuple)):
+                            for c in child:
+                                if c is not None:
+                                    _collect_aliases(c)
+                        elif child is not None:
+                            _collect_aliases(child)
+
+                def _walk_ast(node):
+                    if isinstance(node, _AstIdentifier):
+                        _refs.add(node.name)
+                    for f in getattr(node, "__dataclass_fields__", {}):
+                        child = getattr(node, f, None)
+                        if isinstance(child, (list, tuple)):
+                            for c in child:
+                                if c is not None:
+                                    _walk_ast(c)
+                        elif child is not None:
+                            _walk_ast(child)
+
+                _collect_aliases(definition.expression)
+                _walk_ast(definition.expression)
+                meta.referenced_definitions = sorted(
+                    r for r in _refs
+                    if r in self._context.definition_meta
+                    and r not in _bound_aliases
+                )
+            except Exception:  # noqa: BLE001 — metadata is best-effort
+                meta.referenced_definitions = []
             self._context.definition_meta[definition.name] = meta
 
             # In audit mode, preserve the _audit_target from First/Last so that
             # downstream comparisons referencing this CTE can populate `target`.
-            if self._context.audit_mode and hasattr(result, '_audit_target'):
-                meta.audit_target_expr = result._audit_target
+            # QA-D9H-001 (v0.0.26 D9 HISTORIAN): when the define's own SQL can
+            # SYNTHESIZE a target twin (QA-021 count-unnest shape, Case 1/2
+            # resource selects) but carries no explicit _audit_target, store
+            # the synthesized twin — otherwise a population criterion
+            # referencing the define BY ALIAS (`"NumCount" >= 1`) sees only
+            # `(SELECT sub.value FROM "NumCount")`, whose FROM CTE is the
+            # scalar count itself, and evidence loses resource attribution
+            # entirely (target=null) even though the identical inline count
+            # comparison names the winning resources.
+            if self._context.audit_mode:
+                stored_target = getattr(result, "_audit_target", None)
+                if stored_target is None:
+                    from .expressions._operators import _extract_audit_target
+                    try:
+                        stored_target = _extract_audit_target(result, self._context)
+                    except Exception:  # noqa: BLE001 — synthesis is best-effort
+                        stored_target = None
+                if stored_target is not None:
+                    meta.audit_target_expr = stored_target
 
             # Build final SQL with any accumulated CTEs
             if self._context.get_ctes():
@@ -2601,6 +2732,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         valueset = None
         code_property = None
         valueset_name = None
+        equivalent_terminology = False
 
         if terminology:
             if isinstance(terminology, str):
@@ -2611,20 +2743,49 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 )
                 valueset = f"urn:cql:code:{cs_url}|{terminology.code}"
             else:
+                equivalent_terminology = False
                 if isinstance(terminology, Identifier):
                     valueset_name = terminology.name
                 elif (
                     isinstance(terminology, BinaryExpression)
-                    and terminology.operator in ("in", "~", "=")
+                    and terminology.operator in ("in", "~", "=", "~in", "~contains")
                 ):
+                    # CQL 2.0 (FHIR-31392/31675): `~in` = equivalent ValueSet
+                    # membership on the path; `~contains` = the element at
+                    # the path equivalently-contains the declared code.
+                    equivalent_terminology = terminology.operator in ("~in", "~contains")
                     left = terminology.left
                     if isinstance(left, Identifier):
                         code_property = left.name
                     right = terminology.right
-                    if isinstance(right, Identifier):
-                        valueset_name = right.name
+                    if terminology.operator == "~contains":
+                        right_name = (
+                            right.name
+                            if isinstance(right, Identifier)
+                            else (
+                                right.parts[-1]
+                                if isinstance(right, QualifiedIdentifier) and right.parts
+                                else None
+                            )
+                        )
+                        code_info = self._context.codes.get(right_name) if right_name else None
+                        if code_info is None:
+                            from ..errors import TranslationError as _TE
+                            raise _TE(
+                                f"Retrieve '~contains' comparator requires a declared "
+                                f"code reference on the right side; got {right!r}."
+                            )
+                        cs_name = code_info.get("codesystem", "")
+                        cs_url = self._context.codesystems.get(cs_name, cs_name)
+                        valueset = (
+                            f"urn:cql:code:{cs_url}|{code_info.get('code', '')}"
+                        )
+                        valueset_name = None
                     else:
-                        valueset_name = str(right)
+                        if isinstance(right, Identifier):
+                            valueset_name = right.name
+                        else:
+                            valueset_name = str(right)
                     # QA-019 (iter 3, 2026-09-28): `[Obs: "8480-6" in "LOINC"]`
                     # with a declared CODESYSTEM must resolve to direct-code
                     # membership (`urn:cql:code:<cs_url>|<code>`), not the
@@ -2679,6 +2840,30 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                     "http://cts.nlm.nih.gov/fhir/ValueSet/",
                 )
                 valueset = f"{default_prefix}{valueset}"
+
+        if equivalent_terminology and valueset:
+            # '~' marker distinguishes the equivalence CTE from the
+            # exact-match retrieve on the same terminology (stripped in
+            # build_retrieve_cte).
+            valueset = f"~{valueset}"
+
+        # CQL 2.0 multi-filter retrieves (FHIR-31397): encode the
+        # additional filters onto the valueset key EXACTLY like the
+        # retrieve translation (_query.py) does, so build_retrieve_cte
+        # derives the same filtered CTE name — without this the
+        # promotion pre-scan keys the function against the UNFILTERED
+        # CTE and the promotion falls back to inline expansion
+        # (AMUX-152 #7).
+        for mf in getattr(node, "additional_filters", None) or []:
+            from ..translator.expressions._query import (
+                resolve_additional_retrieve_filter,
+            )
+            from ..translator.cte_builder import encode_retrieve_filter
+
+            kind, target = resolve_additional_retrieve_filter(mf, self._context)
+            valueset = (valueset or "") + encode_retrieve_filter(
+                mf.property, kind, target
+            )
 
         cte_name, _cte_ast, _columns = build_retrieve_cte(
             resource_type=resource_type,
@@ -3486,6 +3671,68 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             return resource_type
         return None
 
+    def _register_model_definitions(self, library: Library) -> None:
+        """Register CQL 2.0 model-definition statements (trial-use) into the
+        translation context.
+
+        ``define type`` declarations register as named tuple-shaped class
+        types (element name -> CQL type string) consultable by the type
+        operators (``is``/``as``), parameter/operand typing, and property
+        access. ``define context X of type T with key {...}`` registers the
+        context for a following ``context X`` statement. ``define
+        implicit|explicit conversion`` declarations are recorded for
+        conversion-site consultation.
+
+        Deferrals (documented in the chunk report): choice-type element
+        composition, FHIR-base-type inheritance with resource shapes, and
+        automatic implicit-conversion insertion are not implemented —
+        registration covers the tuple-shaped use cases the spec's own
+        examples exercise.
+        """
+        from .parser_shims import type_specifier_to_cql_string
+
+        for stmt in getattr(library, "statements", []) or []:
+            stmt_type = type(stmt).__name__
+            if stmt_type == "TypeDefinition":
+                self._context.declared_types[stmt.name] = {
+                    "elements": [
+                        (el.name, type_specifier_to_cql_string(el.type_specifier))
+                        for el in stmt.elements
+                    ],
+                    "base": (
+                        getattr(stmt.base_type, "name", None)
+                        if stmt.base_type is not None else None
+                    ),
+                    "label": stmt.label,
+                    "identifier": stmt.identifier,
+                    "retrievable": stmt.retrievable,
+                    "primary_code_path": stmt.primary_code_path,
+                    "relationships": [
+                        {
+                            "context": rel.context,
+                            "key_elements": list(rel.key_elements),
+                        }
+                        for rel in stmt.context_relationships
+                    ],
+                    "access_level": stmt.access_level,
+                }
+            elif stmt_type == "ContextInfoDefinition":
+                self._context.declared_contexts[stmt.name] = {
+                    "context_type": (
+                        getattr(stmt.context_type, "name", None)
+                        if stmt.context_type is not None else None
+                    ),
+                    "key_elements": list(stmt.key_elements),
+                }
+            elif stmt_type == "ConversionDefinition":
+                self._context.declared_conversions.append({
+                    "implicit": stmt.implicit_,
+                    "from": type_specifier_to_cql_string(stmt.from_type),
+                    "to": type_specifier_to_cql_string(stmt.to_type),
+                    "function": stmt.function_name,
+                    "access_level": stmt.access_level,
+                })
+
     def _setup_context(self, library: Library) -> None:
         """
         Initialize translation context from library declarations.
@@ -3498,6 +3745,37 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         # builder reads it to decide whether a profile-qualified retrieve
         # requires the canonical in `meta.profile`.
         self._context.strict_profiles = getattr(self, "_strict_profiles", True)
+
+        # CQL 2.0 model definitions (trial-use, chunk CQL20-E): register
+        # `define type` / `define context ... of type ...` /
+        # `define implicit|explicit conversion` declarations into the
+        # context so retrieves/properties/type-operators can consult them.
+        self._register_model_definitions(library)
+
+        # CQL 2.0 #DefaultComparisonPrecision (FHIR-41326): resolve this
+        # library's effective default from its own directive plus what the
+        # includer propagated. Precision-less temporal comparisons in this
+        # library lower at this precision (CQL20-D).
+        from .directives import (
+            parse_comparison_precision_directive,
+            resolve_effective_comparison_precision,
+        )
+
+        own_directive = parse_comparison_precision_directive(
+            getattr(library, "directives", None) or []
+        )
+        effective_prec, own_clause = resolve_effective_comparison_precision(
+            own_directive, self._inherited_comparison_precision
+        )
+        self._context.default_comparison_precision = effective_prec
+        # (prec, clause) the includes of THIS library receive: its own
+        # declaration when present (one-level clause semantics), else the
+        # inherited pair only if the parent's clause explicitly reached
+        # this library — which resolve_* already folded; propagate (prec,
+        # own_clause).
+        self._own_comparison_directive = (
+            (effective_prec, own_clause) if effective_prec is not None else None
+        )
 
         # Set up code systems before value sets so ValueSet codesystems
         # overrides can be resolved into structured CodeSystem references.
@@ -3543,6 +3821,15 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         # Set context from library
         if library.context:
             self._context.set_context_type(library.context.name)
+            # CQL 2.0 `define context X of type T with key { ... }` (CQL20-E,
+            # trial-use): when the library's context statement names a
+            # declared context, bind its type/key metadata so downstream
+            # surfaces (retrieve context correlation) can consult it.
+            declared = self._context.declared_contexts.get(library.context.name)
+            if declared is not None:
+                self._context.active_context_info = {
+                    "name": library.context.name, **declared,
+                }
 
     def _build_component_code_registry(self, library: Library) -> None:
         """Build dynamic component code to column mapping from library codes.
@@ -3618,6 +3905,136 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 # No special-case for "Measurement Period" — set_parameter_binding is sufficient
             elif has_default and param.name not in context._parameter_bindings:
                 context.set_parameter_binding(param.name, param.default)
+
+    def _evaluate_parameter_constraints(self, library: Library) -> None:
+        """Evaluate CQL 2.0 ``@constraint``-tagged defines (FHIR-48682).
+
+        A constraint define is an expression required to be true (or null
+        — null counts as satisfied per the spec's SQL/XQuery convention)
+        whenever any expression of the library is evaluated.
+
+        Timing: constraints whose parameters are all statically known
+        (CQL default values or concrete runtime bindings — the
+        evaluate_measure case, where bindings are set before translation)
+        are evaluated HERE, at translation time, on ``self._connection``.
+        Constraints that still depend on unbound parameters (e.g. the
+        ``(None, None)`` interval placeholders of a raw
+        ``translate_library`` call without runtime parameters) cannot be
+        evaluated at translate time and are skipped with a debug log —
+        their evaluation belongs to the evaluation request.
+
+        Severity handling: ``error`` → typed TranslationError carrying the
+        ``@message`` text; ``warning`` → WARNING log only.
+        """
+        constraints = getattr(library, "parameter_constraints", None) or []
+        if not constraints:
+            return
+
+        statements_by_name = {
+            stmt.name: stmt
+            for stmt in library.statements
+            if isinstance(stmt, Definition) and not isinstance(stmt, FunctionDefinition)
+        }
+        connection = getattr(self._context, "_connection", None) or self._connection
+
+        for constraint in constraints:
+            name = constraint.definition_name
+            stmt = statements_by_name.get(name)
+            if stmt is None:
+                raise TranslationError(
+                    f"@constraint tag references define '{name}', which is "
+                    f"not a top-level expression definition of library "
+                    f"'{library.identifier}' [CQL 2.0, FHIR-48682]"
+                )
+            if connection is None:
+                _logger.debug(
+                    "Parameter constraint '%s' on library '%s' skipped: no "
+                    "connection available for translate-time evaluation",
+                    name,
+                    library.identifier,
+                )
+                continue
+
+            from .types import SQLParameterRef
+
+            def _has_param_refs(node) -> bool:
+                if node is None:
+                    return False
+                if isinstance(node, SQLParameterRef):
+                    return True
+                if isinstance(node, (list, tuple)):
+                    return any(_has_param_refs(c) for c in node)
+                if not hasattr(node, "__dataclass_fields__"):
+                    return False
+                return any(
+                    _has_param_refs(getattr(node, f, None))
+                    for f in node.__dataclass_fields__
+                )
+
+            try:
+                sql_expr = self.translate_expression(stmt.expression, self._context)
+            except TranslationError:
+                raise
+            except Exception as exc:  # pragma: no cover - defensive
+                raise TranslationError(
+                    f"Failed to translate parameter constraint '{name}': {exc}"
+                ) from exc
+
+            sql_text = sql_expr.to_sql()
+            # Template placeholders for unbound interval parameters look
+            # like {mp_start}/{<param>_start}; JSON literals inside string
+            # SQL values also contain braces, so match the placeholder
+            # shape specifically.
+            import re as _re
+
+            _placeholder = _re.search(r"\{[A-Za-z_][A-Za-z0-9_]*\}", sql_text)
+            if (
+                _has_param_refs(sql_expr)
+                or "getvariable" in sql_text
+                or _placeholder is not None
+            ):
+                _logger.debug(
+                    "Parameter constraint '%s' on library '%s' deferred to "
+                    "evaluation-request time (depends on unbound parameters)",
+                    name,
+                    library.identifier,
+                )
+                continue
+
+            from ..translator.types import SQLRaw  # noqa: F401  (shape guard)
+
+            query = f"SELECT ({sql_text})"
+            try:
+                rows = connection.execute(query).fetchall()
+            except Exception as exc:
+                raise TranslationError(
+                    f"Failed to evaluate parameter constraint '{name}': {exc}"
+                ) from exc
+            if not rows:
+                continue
+            value = rows[0][0]
+            # null (SQL NULL) counts as SATISFIED per the spec convention.
+            if value is False:
+                message = constraint.message or f"Parameter constraint '{name}' violated"
+                if constraint.severity == "error":
+                    raise TranslationError(
+                        f"Parameter constraint '{name}' violated: {message} "
+                        f"[CQL 2.0, FHIR-48682]"
+                    )
+                _logger.warning(
+                    "Parameter constraint '%s' violated (warning severity): %s",
+                    name,
+                    message,
+                )
+            elif value is None or value is True:
+                continue
+            else:
+                _logger.debug(
+                    "Parameter constraint '%s' evaluated to non-boolean %r; "
+                    "treated as satisfied (null convention)",
+                    name,
+                    value,
+                )
 
     def _parameter_type_name(self, type_spec: Any) -> str:
         """Return canonical CQL text for a parameter type specifier."""

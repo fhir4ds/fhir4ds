@@ -28,6 +28,19 @@ from .corpus import (
     match_corpus,
 )
 from .engine import MatchResult, match_patient
+from .entity_extractors import (
+    extract_location_fields,
+    extract_organization_fields,
+    extract_practitioner_fields,
+)
+from .entity_rules import (
+    LOCATION_APPROVAL_THRESHOLD,
+    LOCATION_RULES,
+    ORGANIZATION_APPROVAL_THRESHOLD,
+    ORGANIZATION_RULES,
+    PRACTITIONER_APPROVAL_THRESHOLD,
+    PRACTITIONER_RULES,
+)
 from .ingest import IngestReport, maybe_match_on_ingest, match_on_ingest
 from .linkage import (
     MATCHING_EXTENSION_URL,
@@ -55,14 +68,27 @@ from .normalizers import (
 )
 from .rules import (
     APPROVAL_THRESHOLD,
+    BAND_EDGES,
+    BAND_U_VALUES,
     CATEGORY1_RULES,
+    EMBED,
     FIELD_U_PROBS,
     MatchRule,
+    embedding_rules,
     p_collision,
+    patient_rules_with_embedding,
 )
-from .store import create_matching_tables, exact_candidates, index_patient
+from . import name_embedding
+from .name_embedding import name_distance_band  # noqa: F401 (re-export)
+from .related_person import RelatedPersonReport, match_related_persons
+from .store import (
+    create_matching_tables,
+    exact_candidates,
+    index_entity,
+    index_patient,
+)
 
-__version__ = "0.0.25"
+__version__ = "0.0.26"
 
 __all__ = [
     "register_matching_macros",
@@ -74,12 +100,21 @@ __all__ = [
     "FIELD_U_PROBS",
     "APPROVAL_THRESHOLD",
     "p_collision",
+    # FHIR4-20: embedding match rules
+    "EMBED",
+    "BAND_U_VALUES",
+    "BAND_EDGES",
+    "embedding_rules",
+    "patient_rules_with_embedding",
+    "name_embedding",
+    "name_distance_band",
     "damerau_le1",
     "name_fuzzy_match",
     "dob_fuzzy_matches",
     "FUZZY_NAME_MIN_LEN",
     "create_matching_tables",
     "index_patient",
+    "index_entity",
     "exact_candidates",
     "extract_patient_fields",
     "nickname_set",
@@ -106,6 +141,18 @@ __all__ = [
     "individual_context_patients",
     "find_contradictions",
     "individual_patients_view",
+    # AMUX-150 chunk B: identity strategies
+    "extract_practitioner_fields",
+    "extract_organization_fields",
+    "extract_location_fields",
+    "PRACTITIONER_RULES",
+    "ORGANIZATION_RULES",
+    "LOCATION_RULES",
+    "PRACTITIONER_APPROVAL_THRESHOLD",
+    "ORGANIZATION_APPROVAL_THRESHOLD",
+    "LOCATION_APPROVAL_THRESHOLD",
+    "RelatedPersonReport",
+    "match_related_persons",
     "__version__",
 ]
 
@@ -120,6 +167,9 @@ CREATE OR REPLACE MACRO matching_norm_text(x) AS
 
 def register_matching_macros(conn: duckdb.DuckDBPyConnection) -> None:
     """Register the matching helper SQL macros on a DuckDB connection."""
+    from ._conn import require_open_connection
+
+    require_open_connection(conn, "register matching macros")
     conn.execute(_NORM_TEXT_MACRO)
 
 

@@ -1,0 +1,39 @@
+{
+  "resourceType": "Library",
+  "id": "piqi-sam-condition-sexplausible",
+  "url": "https://fhir4ds.org/piqi/Library/piqi-sam-condition-sexplausible",
+  "name": "PIQI_SAM_ConditionSexplausible",
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "system": "http://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
+    ]
+  },
+  "relatedArtifact": [
+    {
+      "type": "depends-on",
+      "label": "view_piqi_condition",
+      "resource": "https://fhir4ds.org/piqi/ViewDefinition/piqi_condition"
+    },
+    {
+      "type": "depends-on",
+      "label": "view_piqi_demographics",
+      "resource": "https://fhir4ds.org/piqi/ViewDefinition/piqi_demographics"
+    }
+  ],
+  "parameter": [],
+  "content": [
+    {
+      "contentType": "application/sql;dialect=duckdb",
+      "data": "U0VMRUNUIHYucGF0aWVudF9pZCBBUyBwYXRpZW50X2lkLCB2LmVsZW1lbnRfaWQgQVMgZWxlbWVudF9pZCwKICAnQ29uZGl0aW9uJyBBUyBkYXRhX2NsYXNzLCAnQ29uZGl0aW9uJyBBUyBlbnRpdHksICdDb25kaXRpb25fU2V4UGxhdXNpYmxlJyBBUyBzYW1fbW5lbW9uaWMsCiAgQ0FTRSBXSEVOIE5PVCBFWElTVFMgKFNFTEVDVCAxIEZST00gInZpZXdfcGlxaV9kZW1vZ3JhcGhpY3MiIGQgV0hFUkUgZC5wYXRpZW50X2lkID0gdi5wYXRpZW50X2lkIEFORCBkLmJpcnRoU2V4X3RleHQgPSAnTScgQU5EIGxlbihsaXN0X2ZpbHRlcihDT0FMRVNDRSh2LmNvbmRpdGlvbl9jb2RpbmdzLCBbXSksIGMgLT4ganNvbl9leHRyYWN0X3N0cmluZyhjLCAnJC5jb2RlJykgPSAnNzczODYwMDYnKSkgPiAwKSBUSEVOICdwYXNzJyBFTFNFICdmYWlsJyBFTkQgQVMgcmVzdWx0LAogIENBU0UgV0hFTiBOT1QgRVhJU1RTIChTRUxFQ1QgMSBGUk9NICJ2aWV3X3BpcWlfZGVtb2dyYXBoaWNzIiBkIFdIRVJFIGQucGF0aWVudF9pZCA9IHYucGF0aWVudF9pZCBBTkQgZC5iaXJ0aFNleF90ZXh0ID0gJ00nIEFORCBsZW4obGlzdF9maWx0ZXIoQ09BTEVTQ0Uodi5jb25kaXRpb25fY29kaW5ncywgW10pLCBjIC0+IGpzb25fZXh0cmFjdF9zdHJpbmcoYywgJyQuY29kZScpID0gJzc3Mzg2MDA2JykpID4gMCkgVEhFTiAnY29uZGl0aW9uIGlzIHBsYXVzaWJsZSBmb3IgcGF0aWVudCBiaXJ0aCBzZXgnIEVMU0UgJ2NvbmRpdGlvbiBpcyBpbXBsYXVzaWJsZSBmb3IgcGF0aWVudCBiaXJ0aCBzZXgnIEVORCBBUyBkZXRhaWwgLS0gcGxhY2Vob2xkZXIgY29udGVudCAoNzczODYwMDYgdnMgYmlydGggc2V4IE0pCkZST00gInZpZXdfcGlxaV9jb25kaXRpb24iIHYKT1JERVIgQlkgdi5wYXRpZW50X2lkLCB2LmVsZW1lbnRfaWQ="
+    }
+  ]
+}

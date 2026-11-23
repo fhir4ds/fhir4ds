@@ -575,6 +575,30 @@ def registerListMacros(con: "duckdb.DuckDBPyConnection") -> None:
     )
 
     # ============================================
+    # CQL 2.0 Head/Tail with count (FHIR-40612) — pandas/R-style
+    # first-n / last-n selection.
+    #   Head(lst, n): first n elements; n > length -> whole list
+    #   TailN(lst, n): LAST n elements; n > length -> whole list
+    # Null list -> null; null/non-positive n -> empty list (Take doctrine).
+    # ============================================
+    con.execute(
+        "CREATE OR REPLACE MACRO Head(lst, n) AS "
+        "CASE WHEN lst IS NULL THEN NULL "
+        f"WHEN n IS NOT NULL AND typeof(n) NOT IN ({integer_count_types}) "
+        "THEN error('CQL Head count must be Integer') "
+        "WHEN n IS NULL OR n <= 0 THEN lst[1:0] "
+        "ELSE lst[1:least(n, system.array_length(lst))] END"
+    )
+    con.execute(
+        "CREATE OR REPLACE MACRO TailN(lst, n) AS "
+        "CASE WHEN lst IS NULL THEN NULL "
+        f"WHEN n IS NOT NULL AND typeof(n) NOT IN ({integer_count_types}) "
+        "THEN error('CQL Tail count must be Integer') "
+        "WHEN n IS NULL OR n <= 0 THEN lst[1:0] "
+        "ELSE lst[(system.array_length(lst) - least(n, system.array_length(lst)) + 1):] END"
+    )
+
+    # ============================================
     # IndexOf - Find position of element in list (CQL §20.12)
     # Returns 0-based index, or -1 if not found
     # CQL: if either argument is null, result is null

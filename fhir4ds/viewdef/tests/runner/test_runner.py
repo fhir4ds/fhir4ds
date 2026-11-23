@@ -93,13 +93,16 @@ class TestPrimitives:
 
     def test_materialize_views(self, con, family_dir):
         created = materialize_views(con, family_dir, ["person-view"], "resources", schema="fam")
-        assert created == {"person-view": 'fam."person"'}
+        # AMUX-152 #27: schema is quoted now ('"fam"' ≡ fam in DuckDB)
+        assert created == {"person-view": '"fam"."person"'}
         rows = con.execute('SELECT count(*) FROM fam."person"').fetchone()[0]
         assert rows == 2
 
     def test_compose_union(self, con, family_dir):
+        # AMUX-152 #27: compose_union takes BARE child names (quoted inside)
         children = materialize_views(con, family_dir, ["obs-view", "imm-view"], "resources", schema="fam")
-        name = compose_union(con, [children[s] for s in children], "events", schema="fam")
+        stems = ["obs-view", "imm-view"]
+        name = compose_union(con, [s.replace("-view", "").replace("-", "_") for s in stems], "events", schema="fam")
         n = con.execute(f"SELECT count(*) FROM {name}").fetchone()[0]
         assert n == 2
 
@@ -273,3 +276,305 @@ class TestPureTextRendering:
         plan = build_composition_plan(family_dir / "manifest.json")
         with _pytest.raises(ValueError, match="missing columns"):
             render_composition_ddl(plan, {}, sql_by_view={})
+
+
+class TestQuotingRoundTripAmux152:
+    """AMUX-152 #27: identifiers needing quoting (mixed case, spaces,
+    reserved words) round-trip through the runner primitives."""
+
+    def test_materialize_views_quoting_needing_identifiers(self, con, family_dir):
+        created = materialize_views(
+            con, family_dir, ["person-view"], "resources",
+            schema="My Schema", table_name="order",
+        )
+        assert created == {"person-view": '"My Schema"."order"'}
+        rows = con.execute('SELECT count(*) FROM "My Schema"."order"').fetchone()[0]
+        assert rows == 2
+
+    def test_compose_union_quoting_needing_identifiers(self, con, family_dir):
+        # distinct quoting-needing names per child (table_name is shared
+        # across stems, so materialize one at a time)
+        materialize_views(con, family_dir, ["obs-view"], "resources",
+                          schema="My Schema", table_name="select all")
+        materialize_views(con, family_dir, ["imm-view"], "resources",
+                          schema="My Schema", table_name="group by")
+        ref = compose_union(con, ["select all", "group by"], "full join", schema="My Schema")
+        assert ref == '"My Schema"."full join"'
+        n = con.execute(f"SELECT count(*) FROM {ref}").fetchone()[0]
+        assert n == 2
+
+    def test_projection_sql_quotes_columns_and_coerces_defaults(self):
+        from fhir4ds.viewdef.runner import _projection_sql
+        sql = _projection_sql(
+            "SELECT 1 AS \"order\", NULL AS \"visit id\"",
+            ["order", "visit id"],
+            hash_keys=["order"],
+            defaults={"visit id": 0},
+        )
+        assert '"order"' in sql and '"visit id"' in sql
+        # hash/TRY_CAST reference the QUOTED column names
+        assert 'hash("order")' in sql
+        assert 'TRY_CAST("visit id" AS BIGINT), 0)' in sql
+
+    def test_run_composition_quoting_needing_schema(self, con, family_dir):
+        # rewrite the manifest with a quoting-needing view_schema
+        m = json.loads((family_dir / "manifest.json").read_text())
+        m["view_schema"] = "OMOP Schema"
+        (family_dir / "manifest.json").write_text(json.dumps(m))
+        created = run_composition(con, family_dir / "manifest.json", "resources")
+        ref = created["events"]
+        assert ref == '"OMOP Schema"."events"'
+        n = con.execute(f"SELECT count(*) FROM {ref}").fetchone()[0]
+        assert n == 2
+
+    def test_render_pipeline_parity_quoting_needing_schema(self, con, family_dir):
+        """D5-SKEPTIC v0.0.26: the text-render pipeline (render_view_sqls +
+        render_composition_ddl — the browser worker's path) must produce the
+        same rowsets as run_composition under a quoting-needing schema."""
+        from fhir4ds.viewdef.runner import (
+            build_composition_plan, render_view_sqls, render_composition_ddl,
+        )
+        m = json.loads((family_dir / "manifest.json").read_text())
+        m["view_schema"] = "OMOP Schema"
+        (family_dir / "manifest.json").write_text(json.dumps(m))
+
+        con_exec = fhir4ds.create_connection()
+        con_exec.execute("CREATE TABLE resources (resource JSON)")
+        from .test_runner import SRC as _SRC
+        for r in _SRC:
+            con_exec.execute("INSERT INTO resources VALUES (?)", [json.dumps(r)])
+        run_composition(con_exec, family_dir / "manifest.json", "resources")
+
+        plan = build_composition_plan(family_dir / "manifest.json")
+        con_ren = fhir4ds.create_connection()
+        con_ren.execute("CREATE TABLE resources (resource JSON)")
+        for r in _SRC:
+            con_ren.execute("INSERT INTO resources VALUES (?)", [json.dumps(r)])
+        con_ren.execute(f'CREATE SCHEMA IF NOT EXISTS "{plan["schema"]}"')
+        views = render_view_sqls(plan, family_dir, "resources")
+        columns, sqls = {}, {}
+        for v in views:
+            con_ren.execute(f'CREATE OR REPLACE VIEW {v["table_sql"]} AS\n{v["sql"]}')
+            columns[v["name"]] = [
+                c[0] for c in con_ren.execute(
+                    f'SELECT * FROM {v["table_sql"]} LIMIT 0').description
+            ]
+            sqls[v["name"]] = v["sql"]
+        for stmt in render_composition_ddl(plan, columns, sql_by_view=sqls):
+            con_ren.execute(stmt)
+
+        for table in ("person", "events"):
+            a = sorted(map(str, con_exec.execute(
+                f'SELECT * FROM "OMOP Schema"."{table}"').fetchall()))
+            b = sorted(map(str, con_ren.execute(
+                f'SELECT * FROM "OMOP Schema"."{table}"').fetchall()))
+            assert a == b and a, f"{table}: exec={a} render={b}"
+
+
+class TestEvolV0026D5Historian:
+    """D5-HISTORIAN v0.0.26 walkthrough findings.
+
+    QA-D5H-001: manifests of nameless ViewDefinitions (name is 0..1 per the
+    published StructureDefinition) crashed build_composition_plan with a raw
+    KeyError, and duplicate VD names crashed the same way — the planner keyed
+    identity by vd.name with no presence/uniqueness handling.
+
+    QA-D5H-002: the text-render pipeline (render_view_sqls pass 1 +
+    render_composition_ddl pass 2 — the browser worker's path) emitted
+    SQLQuery CREATEs in pass 1, BEFORE union tables exist (pass 2), so a
+    SQLQuery reading a union-family table Catalog-errored on the render path
+    while the exec path (run_composition) ordered it correctly.
+    """
+
+    def test_nameless_vds_compose_and_duplicate_names_are_typed(self, con, tmp_path):
+        from fhir4ds.viewdef.runner import build_composition_plan, run_composition
+
+        d = tmp_path / "nameless"
+        d.mkdir()
+        vd = {"resource": "Patient",
+              "select": [{"column": [{"name": "pid", "path": "id"}]}]}
+        for stem in ("a-view", "b-view"):
+            (d / f"{stem}.json").write_text(json.dumps(vd))
+        (d / "manifest.json").write_text(json.dumps(
+            {"views": {"a-view": "a", "b-view": "b"}}))
+
+        # Two nameless VDs must compose (was: KeyError 'a-view').
+        created = run_composition(con, d / "manifest.json", "resources")
+        rows_a = con.execute('SELECT pid FROM "omop"."a" ORDER BY pid').fetchall()
+        rows_b = con.execute('SELECT pid FROM "omop"."b" ORDER BY pid').fetchall()
+        assert rows_a == rows_b == [("p1",), ("p2",)]
+        assert created["a"] == '"omop"."a"'
+
+        # Duplicate DECLARED names are a typed ambiguity error (was KeyError).
+        named = {"resource": "Patient", "name": "Dup",
+                 "select": [{"column": [{"name": "pid", "path": "id"}]}]}
+        (d / "a-view.json").write_text(json.dumps(named))
+        (d / "b-view.json").write_text(json.dumps(named))
+        with pytest.raises(ValueError, match="Duplicate ViewDefinition name 'Dup'"):
+            build_composition_plan(d / "manifest.json")
+
+    def test_render_pipeline_sqlquery_over_union_parity(self, tmp_path):
+        """A SQLQuery that reads a union-family table must compose on the
+        text-render pipeline exactly like run_composition (was: render pass 1
+        created the SQLQuery before the union table existed -> Catalog Error)."""
+        import base64
+        from fhir4ds.viewdef.runner import (
+            build_composition_plan, run_composition,
+            render_view_sqls, render_composition_ddl,
+        )
+
+        d = tmp_path / "unionquery"
+        d.mkdir()
+        (d / "arm-view.json").write_text(json.dumps({
+            "name": "Arm", "resource": "Patient",
+            "select": [{"column": [{"name": "pid", "path": "id"}]}],
+        }))
+        (d / "sqlqueries").mkdir()
+        (d / "sqlqueries" / "final.json").write_text(json.dumps({
+            "resourceType": "Library",
+            "content": [{"contentType": "application/sql",
+                         "data": base64.b64encode(b"SELECT pid FROM omop.fam").decode()}],
+        }))
+        (d / "manifest.json").write_text(json.dumps({
+            "views": {"arm-view": "arm"},
+            "unions": {"fam": ["arm-view"]},
+            "sql_queries": {"final": "final"},
+        }))
+
+        def fresh():
+            c = fhir4ds.create_connection()
+            c.execute("CREATE TABLE resources (resource JSON)")
+            for r in SRC:
+                c.execute("INSERT INTO resources VALUES (?)", [json.dumps(r)])
+            return c
+
+        con_exec = fresh()
+        run_composition(con_exec, d / "manifest.json", "resources")
+        expected = con_exec.execute('SELECT pid FROM omop."final" ORDER BY pid').fetchall()
+        assert expected == [("p1",), ("p2",)]
+
+        plan = build_composition_plan(d / "manifest.json")
+        con_ren = fresh()
+        con_ren.execute('CREATE SCHEMA IF NOT EXISTS "omop"')
+        columns, sqls = {}, {}
+        for v in render_view_sqls(plan, d, "resources"):
+            con_ren.execute(f'CREATE OR REPLACE VIEW {v["table_sql"]} AS\n{v["sql"]}')
+            columns[v["name"]] = [
+                c[0] for c in con_ren.execute(
+                    f'SELECT * FROM {v["table_sql"]} LIMIT 0').description]
+            sqls[v["name"]] = v["sql"]
+        # union children must be introspectable for the union step
+        for step in plan["steps"]:
+            if step["type"] == "union":
+                for child in step["children"]:
+                    columns.setdefault(child, columns.get("arm"))
+        for stmt in render_composition_ddl(plan, columns, sql_by_view=sqls):
+            con_ren.execute(stmt)
+        got = con_ren.execute('SELECT pid FROM omop."final" ORDER BY pid').fetchall()
+        assert got == expected, f"render={got} exec={expected}"
+
+
+class TestEvolV0026D5Explorer:
+    """D5-EXPLORER v0.0.26 fuzz findings.
+
+    QA-D5E-001 (MEDIUM): the composition planner normalized distinct manifest
+    stems / union / SQLQuery tables onto ONE output table with no uniqueness
+    check, so run_composition silently last-wins (CREATE OR REPLACE shadows
+    an earlier step) and a SQLQuery colliding with a VD view created a
+    self-referential view (raw DuckDB BinderException "infinite recursion
+    detected" at select time). build_composition_plan now rejects any two
+    steps that would write the same output table with a typed ValueError.
+    """
+
+    def _vd(self, src_literal):
+        return {
+            "resource": "Patient",
+            "select": [{"column": [
+                {"name": "id", "path": "id"},
+                {"name": "src", "path": f"'{src_literal}'"},
+            ]}],
+        }
+
+    def test_stem_normalization_collision_is_typed_error(self, tmp_path):
+        import pytest
+        from fhir4ds.viewdef.runner import build_composition_plan
+        d = tmp_path / "collide"
+        d.mkdir()
+        (d / "a-b-view.json").write_text(json.dumps(self._vd("hyphen")))
+        (d / "a.b-view.json").write_text(json.dumps(self._vd("dot")))
+        (d / "manifest.json").write_text(json.dumps(
+            {"views": {"a-b-view": "", "a.b-view": ""}}))
+        with pytest.raises(ValueError, match="a_b"):
+            build_composition_plan(d / "manifest.json")
+
+    def test_union_table_vs_single_stem_collision_is_typed_error(self, tmp_path):
+        import pytest
+        from fhir4ds.viewdef.runner import build_composition_plan
+        d = tmp_path / "ucoll"
+        d.mkdir()
+        (d / "fam-a-view.json").write_text(json.dumps(self._vd("arm")))
+        (d / "fam-b-view.json").write_text(json.dumps(self._vd("arm")))
+        (d / "fam-view.json").write_text(json.dumps(self._vd("single")))
+        (d / "manifest.json").write_text(json.dumps({
+            "views": {"fam-a-view": "", "fam-b-view": "", "fam-view": ""},
+            "unions": {"fam": ["fam-a-view", "fam-b-view"]},
+        }))
+        # previously the 'single' step silently OVERWROTE the union table
+        with pytest.raises(ValueError, match="fam"):
+            build_composition_plan(d / "manifest.json")
+
+    def test_sqlquery_table_vs_view_collision_is_typed_error(self, tmp_path):
+        import base64
+        import pytest
+        from fhir4ds.viewdef.runner import build_composition_plan
+        d = tmp_path / "sqcoll"
+        d.mkdir()
+        (d / "person-view.json").write_text(json.dumps({
+            "resource": "Patient",
+            "select": [{"column": [{"name": "id", "path": "id"}]}],
+        }))
+        (d / "sqlqueries").mkdir()
+        (d / "sqlqueries" / "dup.json").write_text(json.dumps({
+            "resourceType": "Library",
+            "content": [{"contentType": "application/sql",
+                         "data": base64.b64encode(
+                             b"SELECT id FROM omop.person").decode()}],
+        }))
+        (d / "manifest.json").write_text(json.dumps({
+            "views": {"person-view": ""},
+            "sql_queries": {"person": "dup"},
+        }))
+        # previously created a self-referential view (BinderException at select)
+        with pytest.raises(ValueError, match="person"):
+            build_composition_plan(d / "manifest.json")
+
+    def test_distinct_output_tables_still_compose(self, tmp_path):
+        """Control: non-colliding stems (incl. unicode + quoting-needing
+        schema + unions + sqlquery) still plan and execute end-to-end."""
+        import base64
+        import fhir4ds
+        from fhir4ds.viewdef.runner import run_composition
+        d = tmp_path / "ok"
+        d.mkdir()
+        (d / "persön-view.json").write_text(json.dumps(self._vd("u")))
+        (d / "we-ird-view.json").write_text(json.dumps(self._vd("q")))
+        (d / "sqlqueries").mkdir()
+        (d / "sqlqueries" / "reader.json").write_text(json.dumps({
+            "resourceType": "Library",
+            "content": [{"contentType": "application/sql",
+                         "data": base64.b64encode(
+                             b'SELECT id FROM "My Schema"."uni table"').decode()}],
+        }))
+        (d / "manifest.json").write_text(json.dumps({
+            "views": {"persön-view": "", "we-ird-view": ""},
+            "view_schema": "My Schema",
+            "unions": {"uni table": ["persön-view", "we-ird-view"]},
+            "sql_queries": {"reader": "reader"},
+        }))
+        con = fhir4ds.create_connection()
+        con.execute("CREATE TABLE resources (resource JSON)")
+        for r in SRC:
+            con.execute("INSERT INTO resources VALUES (?)", [json.dumps(r)])
+        run_composition(con, d / "manifest.json", "resources")
+        n = con.execute('SELECT count(*) FROM "My Schema"."reader"').fetchone()[0]
+        assert n == 4  # 2 arms x 2 patients

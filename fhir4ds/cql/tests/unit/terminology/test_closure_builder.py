@@ -513,3 +513,42 @@ def test_invalid_on_expand_error(con):
     endpoint = _StubEndpoint()
     with pytest.raises(ValueError, match="on_expand_error"):
         build_closure_table(lib, endpoint, con, on_expand_error="bogus")
+
+
+# ---------------------------------------------------------------------------
+# QA-D12E-003 (v0.0.26 Domain 12 EXPLORER): hostile descendant refs
+# (None / empty system or code) must be SKIPPED, and the row-insert must
+# stay inside the per-seed fault tolerance. A single hostile descendant
+# used to crash the whole build with a raw DuckDB ConstraintException
+# (NOT NULL violation) that bypassed the on_expand_error policy.
+# ---------------------------------------------------------------------------
+
+
+def test_qa_d12e003_hostile_descendants_skipped(con):
+    lib = _make_library(
+        """
+        library Hostile version '1'
+        using FHIR version '4.0.1'
+        codesystem "SNOMED-CT": 'http://snomed.info/sct'
+        code "Seed": '195967001' from "SNOMED-CT"
+        define D: Descendents("Seed")
+        """
+    )
+    endpoint = _StubEndpoint(
+        snomed_expansions={
+            "195967001": [
+                CodeRef(system=None, code="nosys", display=None),
+                CodeRef(system="http://snomed.info/sct", code="", display=None),
+                CodeRef(system="http://snomed.info/sct", code="dup", display=None),
+                CodeRef(system="http://snomed.info/sct", code="dup", display=None),
+                CodeRef(system="http://snomed.info/sct", code="ok", display=None),
+            ]
+        }
+    )
+    report = build_closure_table(lib, endpoint, con)
+    rows = con.execute(
+        "SELECT descendant_code FROM terminology_closure ORDER BY 1"
+    ).fetchall()
+    assert [r[0] for r in rows] == ["195967001", "dup", "ok"]
+    assert report.rows_loaded == 3
+    assert report.errors == []

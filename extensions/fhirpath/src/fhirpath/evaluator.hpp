@@ -172,6 +172,7 @@ private:
 	FPCollection fn_extension(const FPCollection &input, const FPCollection &url);
 	FPCollection fn_select(const ASTNode &projection, const FPCollection &input, yyjson_doc *doc);
 	FPCollection fn_repeat(const ASTNode &projection, const FPCollection &input, yyjson_doc *doc);
+	FPCollection fn_repeat_all(const ASTNode &projection, const FPCollection &input, yyjson_doc *doc);
 	FPCollection fn_distinct(const FPCollection &input);
 	FPCollection fn_trace(const FPCollection &input);
 	FPCollection fn_aggregate(const ASTNode &node, const FPCollection &input, yyjson_doc *doc,

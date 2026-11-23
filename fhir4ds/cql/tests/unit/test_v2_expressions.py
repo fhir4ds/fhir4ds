@@ -2235,10 +2235,33 @@ class TestDuringOperatorNullHandling:
         assert result.name == "intervalContains"
 
     def test_during_hour_of_uses_boundary_comparisons(self, translator: ExpressionTranslator):
-        """Test 'during hour of' uses boundary-aware AND comparisons (Gap 11)."""
+        """QA-D4H-001: sub-day 'during hour of' over a recognized interval
+        routes to the tz-normalizing intervalIncludedInPrecise (CQL 1.5
+        mandates offset normalization at hour-or-finer precision)."""
         result = translator.translate(
             BinaryExpression(
                 operator="during hour of",
+                left=DateTimeLiteral(value="2024-06-15T10:30:00"),
+                right=Interval(
+                    low=DateTimeLiteral(value="2024-06-15T08:00:00"),
+                    high=DateTimeLiteral(value="2024-06-15T18:00:00"),
+                    low_closed=True,
+                    high_closed=True,
+                ),
+            )
+        )
+
+        assert isinstance(result, SQLFunctionCall)
+        assert result.name == "intervalContainsPrecise"
+        assert result.args[-1] == SQLLiteral(value="hour")
+
+    def test_during_day_of_keeps_boundary_decomposition(self, translator: ExpressionTranslator):
+        """Day-and-coarser precision keeps the optimized boundary-aware AND
+        decomposition (pinned CQL-14 doctrine: raw components at day
+        precision; timezone normalization applies only hour-or-finer)."""
+        result = translator.translate(
+            BinaryExpression(
+                operator="during day of",
                 left=DateTimeLiteral(value="2024-06-15T10:30:00"),
                 right=Interval(
                     low=DateTimeLiteral(value="2024-06-15T08:00:00"),

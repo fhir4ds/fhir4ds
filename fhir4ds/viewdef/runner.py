@@ -44,9 +44,15 @@ from typing import Dict, List, Optional, Sequence
 
 from .parser import parse_view_definition
 from .generator import SQLGenerator
+from .utils import quote_sql_identifier as _q
 
 _HASH_MASK = "9223372036854775807"
 _SQLQUERY_DIR = "sqlqueries"
+
+
+def _qualified(schema: str, name: str) -> str:
+    """Quoted ``<schema>.<name>`` reference (AMUX-152 #27 doctrine)."""
+    return f"{_q(schema)}.{_q(name)}"
 
 
 def _library_sql(path: Path) -> str:
@@ -139,13 +145,14 @@ def materialize_views(
     Each stem's generated SQL becomes ``<schema>.<table_name or stem>``
     (stems normalized: '-'/'.json' -> '_'). Views are CREATE OR REPLACE.
     """
-    con.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    con.execute(f"CREATE SCHEMA IF NOT EXISTS {_q(schema)}")
     created: Dict[str, str] = {}
     for stem in stems:
         sql = generate_view_sql(vd_dir / f"{stem}.json", source_table, view_schema=schema)
         name = (table_name or stem).replace("-view", "").replace("-", "_").replace(".", "_")
-        con.execute(f'CREATE OR REPLACE VIEW {schema}."{name}" AS\n{sql}')
-        created[stem] = f'{schema}."{name}"'
+        ref = _qualified(schema, name)
+        con.execute(f"CREATE OR REPLACE VIEW {ref} AS\n{sql}")
+        created[stem] = ref
     return created
 
 
@@ -155,10 +162,17 @@ def compose_union(
     target: str,
     schema: str = "omop",
 ) -> str:
-    """Create the table-level UNION ALL view over materialized children."""
-    union_sql = "\nUNION ALL\n".join(f"SELECT * FROM {t}" for t in child_tables)
-    con.execute(f'CREATE OR REPLACE VIEW {schema}."{target}" AS\n{union_sql}')
-    return f'{schema}."{target}"'
+    """Create the table-level UNION ALL view over materialized children.
+
+    ``child_tables`` are BARE view names materialized in ``schema``
+    (AMUX-152 #27: names are quoted here, never interpolated raw; pass
+    names, not pre-quoted references).
+    """
+    refs = [_qualified(schema, c) for c in child_tables]
+    union_sql = "\nUNION ALL\n".join(f"SELECT * FROM {t}" for t in refs)
+    ref = _qualified(schema, target)
+    con.execute(f"CREATE OR REPLACE VIEW {ref} AS\n{union_sql}")
+    return ref
 
 
 def _result_columns(con, sql: str) -> List[str]:
@@ -176,14 +190,18 @@ def _projection_sql(
     defaults = defaults or {}
     exprs = []
     for col in columns:
+        ref = _q(col)
         if col in hash_keys:
-            exprs.append(f"CAST(hash({col}) & {_HASH_MASK} AS BIGINT) AS {col}")
+            exprs.append(f"CAST(hash({ref}) & {_HASH_MASK} AS BIGINT) AS {ref}")
         elif col in defaults:
+            # AMUX-152 #27: defaults are literal ints — coerce, never
+            # interpolate caller text raw.
             exprs.append(
-                f"CAST(COALESCE(TRY_CAST({col} AS BIGINT), {defaults[col]}) AS BIGINT) AS {col}"
+                f"CAST(COALESCE(TRY_CAST({ref} AS BIGINT), "
+                f"{int(defaults[col])}) AS BIGINT) AS {ref}"
             )
         else:
-            exprs.append(col)
+            exprs.append(ref)
     return f"SELECT {', '.join(exprs)} FROM (\n{select_sql}\n)"
 
 
@@ -234,7 +252,17 @@ def resolve_materialization_order(
     vd_names: Dict[str, str] = {}
     for stem in stems:
         vd = parse_view_definition(json.loads((vd_dir / f"{stem}.json").read_text()))
-        vd_names[vd.name] = stem
+        # VD name is 0..1 per the published StructureDefinition: a nameless
+        # VD identifies by its stem (it cannot be a join.target by name);
+        # duplicate DECLARED names are an ambiguous join resolution.
+        key = vd.name or stem
+        if vd.name is not None and vd.name in vd_names:
+            raise ValueError(
+                f"Duplicate ViewDefinition name {vd.name!r} (from "
+                f"{vd_names[vd.name]!r} and {stem!r}); join.view targets "
+                "resolve by ViewDefinition name and must be unambiguous"
+            )
+        vd_names[key] = stem
     deps = infer_view_dependencies(vd_dir, stems)
 
     # Topological sort (Kahn); edges: target-stem -> consumer-stem.
@@ -323,7 +351,7 @@ def build_composition_plan(manifest_path: Path) -> dict:
             "type": "view",
             "role": role,
             "name": name,
-            "table_sql": f'{schema}."{name}"',
+            "table_sql": _qualified(schema, name),
             "stem": stem,
             "projection": projection,
         }
@@ -354,7 +382,7 @@ def build_composition_plan(manifest_path: Path) -> dict:
             "type": "union",
             "role": "union",
             "table": table,
-            "table_sql": f'{schema}."{table}"',
+            "table_sql": _qualified(schema, table),
             "children": children,
             "projection": projections.get(table) or None,
         })
@@ -385,14 +413,39 @@ def build_composition_plan(manifest_path: Path) -> dict:
             sql_entries, vd_dir / _SQLQUERY_DIR, schema, materialized
         )
         for table in ordered_sql:
+            stem = sql_entries[table]
             steps.append({
                 "type": "sqlquery",
                 "role": "table",
                 "table": table,
-                "table_sql": f'{schema}."{table}"',
-                "stem": sql_entries[table],
+                "table_sql": _qualified(schema, table),
+                "stem": stem,
+                # Embed the decoded SQL so downstream renderers (which have
+                # no vd_dir) can emit the CREATE in pipeline order.
+                "sql": _library_sql(vd_dir / _SQLQUERY_DIR / f"{stem}.json"),
                 "projection": projections.get(table) or None,
             })
+
+    # 6. Output-table uniqueness (QA-D5E-001, v0.0.26 D5 EXPLORER): the
+    # stem/table-name normalizations above can map DISTINCT manifest keys
+    # onto one output table (e.g. stems 'a-b-view' vs 'a.b-view' both ->
+    # 'a_b'; a single stem 'fam-view' vs union table 'fam'; a SQLQuery
+    # table vs a view). Without this check run_composition silently
+    # last-wins (CREATE OR REPLACE shadows an earlier step) or builds a
+    # self-referential view for the SQLQuery case.
+    seen_tables: Dict[str, str] = {}
+    for step in steps:
+        owner = step.get("stem") or step.get("table")
+        kind = step["type"]
+        prior = seen_tables.get(step["table_sql"])
+        if prior is not None:
+            raise ValueError(
+                f"Composition steps {prior!r} and {owner!r} both write output "
+                f"table {step['table_sql']}; manifest stems/unions/"
+                "sql_queries must normalize to unique output table names"
+                f" ({kind} step)"
+            )
+        seen_tables[step["table_sql"]] = owner
 
     return {"schema": schema, "steps": steps}
 
@@ -403,20 +456,15 @@ def render_view_sqls(plan: dict, vd_dir: Path, source_table: str) -> List[dict]:
     Returns [{"name", "table_sql", "stem", "sql"}] — the caller is expected
     to execute each as a plain CREATE OR REPLACE VIEW (introspection-ready),
     then call ``render_composition_ddl`` for the remaining composed steps.
+
+    SQLQuery steps are NOT included: their CREATE statements depend on
+    union/projection tables that only exist after ``render_composition_ddl``
+    output has been executed, so they are emitted by that function (at the
+    end, in dependency order) instead.
     """
     schema = plan["schema"]
     out = []
     for step in plan["steps"]:
-        if step["type"] == "sqlquery":
-            out.append({
-                "name": step["table"],
-                "table_sql": step["table_sql"],
-                "stem": step["stem"],
-                "sql": _library_sql(
-                    Path(vd_dir) / _SQLQUERY_DIR / f'{step["stem"]}.json'
-                ),
-            })
-            continue
         if step["type"] != "view":
             continue
         sql = generate_view_sql(Path(vd_dir) / f'{step["stem"]}.json', source_table, view_schema=schema)
@@ -445,6 +493,7 @@ def render_composition_ddl(
     """
     schema = plan["schema"]
     stmts: List[str] = []
+    sqlquery_stmts: List[str] = []
     for step in plan["steps"]:
         if step["type"] == "view":
             proj = step.get("projection")
@@ -477,9 +526,21 @@ def render_composition_ddl(
                     f"SQLQuery table {step['table']!r} also declares a "
                     "projection; shape it inside the SQLQuery body instead"
                 )
-            continue  # already created by the plain-view pass
+            # Emitted AFTER unions/projections: a SQLQuery may read a
+            # union-family or projected table that only exists once the
+            # statements above have been executed (exec-path parity).
+            sql = step.get("sql")
+            if sql is None:
+                raise ValueError(
+                    f"missing SQL for SQLQuery table {step['table']!r}; "
+                    "build the plan with build_composition_plan"
+                )
+            sqlquery_stmts.append(
+                f'CREATE OR REPLACE VIEW {step["table_sql"]} AS\n{sql}'
+            )
+            continue
         # union step
-        children = [f'{schema}."{c}"' for c in step["children"]]
+        children = [_qualified(schema, c) for c in step["children"]]
         first_cols = columns_by_view.get(step["children"][0])
         if first_cols is None:
             raise ValueError(f"missing columns for union child {step['children'][0]!r}")
@@ -493,7 +554,7 @@ def render_composition_ddl(
                 defaults=proj.get("defaults"),
             )
         stmts.append(f'CREATE OR REPLACE VIEW {step["table_sql"]} AS\n{union_select}')
-    return stmts
+    return stmts + sqlquery_stmts
 
 
 def run_composition(con, manifest_path: Path, source_table: str) -> Dict[str, str]:
@@ -515,16 +576,15 @@ def run_composition(con, manifest_path: Path, source_table: str) -> Dict[str, st
     created: Dict[str, str] = {}
     join_targets: Dict[str, str] = {}
 
-    con.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    con.execute(f"CREATE SCHEMA IF NOT EXISTS {_q(schema)}")
     for step in plan["steps"]:
         if step["type"] == "sqlquery":
-            sql = _library_sql(vd_dir / _SQLQUERY_DIR / f'{step["stem"]}.json')
             if step.get("projection"):
                 raise ValueError(
                     f"SQLQuery table {step['table']!r} also declares a projection; "
                     "shape it inside the SQLQuery body instead"
                 )
-            con.execute(f'CREATE OR REPLACE VIEW {step["table_sql"]} AS\n{sql}')
+            con.execute(f'CREATE OR REPLACE VIEW {step["table_sql"]} AS\n{step["sql"]}')
             created[step["table"]] = step["table_sql"]
             continue
 
@@ -548,7 +608,7 @@ def run_composition(con, manifest_path: Path, source_table: str) -> Dict[str, st
             continue
 
         # union step
-        child_tables = [f'{schema}."{c}"' for c in step["children"]]
+        child_tables = [_qualified(schema, c) for c in step["children"]]
         first_cols = _result_columns(con, f"SELECT * FROM {child_tables[0]}")
         for t in child_tables[1:]:
             cols = _result_columns(con, f"SELECT * FROM {t}")

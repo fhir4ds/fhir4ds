@@ -981,22 +981,18 @@ class IntervalMixin:
                 b_start, b_end, low_closed, high_closed = interval_parts
                 is_dt = getattr(self.context.lookup_symbol(name), "cql_type", None)
                 is_dt = bool(is_dt and "DateTime" in str(is_dt))
-                cast_type = "TIMESTAMP" if is_dt else "DATE"
-                start = SQLCast(
-                    expression=self._interval_parameter_bound_sql(
-                        b_start,
-                        is_datetime=is_dt,
-                        is_high=False,
-                    ),
-                    target_type=cast_type,
+                # QA-D4E-001: offset-bearing datetime bounds flow verbatim
+                # (naive TIMESTAMP casts strip the offset); naive texts keep
+                # the TIMESTAMP normalization cast.
+                start = self._interval_parameter_bound_expr(
+                    b_start,
+                    is_datetime=is_dt,
+                    is_high=False,
                 )
-                end = SQLCast(
-                    expression=self._interval_parameter_bound_sql(
-                        b_end,
-                        is_datetime=is_dt,
-                        is_high=True,
-                    ),
-                    target_type=cast_type,
+                end = self._interval_parameter_bound_expr(
+                    b_end,
+                    is_datetime=is_dt,
+                    is_high=True,
                 )
                 return (start, end, low_closed, high_closed)
             # For intervalFromBounds SQL nodes, extract directly

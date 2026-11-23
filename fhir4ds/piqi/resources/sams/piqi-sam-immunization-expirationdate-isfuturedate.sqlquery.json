@@ -1,0 +1,39 @@
+{
+  "resourceType": "Library",
+  "id": "piqi-sam-immunization-expirationdate-isfuturedate",
+  "url": "https://fhir4ds.org/piqi/Library/piqi-sam-immunization-expirationdate-isfuturedate",
+  "name": "PIQI_SAM_ImmunizationExpirationdateIsfuturedate",
+  "status": "active",
+  "type": {
+    "coding": [
+      {
+        "system": "http://sql-on-fhir.org/ig/CodeSystem/LibraryTypesCodes",
+        "code": "sql-query"
+      }
+    ]
+  },
+  "meta": {
+    "profile": [
+      "https://sql-on-fhir.org/ig/StructureDefinition/SQLQuery"
+    ]
+  },
+  "relatedArtifact": [
+    {
+      "type": "depends-on",
+      "label": "view_piqi_immunization",
+      "resource": "https://fhir4ds.org/piqi/ViewDefinition/piqi_immunization"
+    },
+    {
+      "type": "depends-on",
+      "label": "prereq_immunization_expirationdate_ispopulated",
+      "resource": "https://fhir4ds.org/piqi/Library/piqi-sam-immunization-expirationdate-ispopulated"
+    }
+  ],
+  "parameter": [],
+  "content": [
+    {
+      "contentType": "application/sql;dialect=duckdb",
+      "data": "U0VMRUNUIHYucGF0aWVudF9pZCBBUyBwYXRpZW50X2lkLCB2LmVsZW1lbnRfaWQgQVMgZWxlbWVudF9pZCwKICAnSW1tdW5pemF0aW9uJyBBUyBkYXRhX2NsYXNzLCAnZXhwaXJhdGlvbkRhdGUnIEFTIGVudGl0eSwgJ0F0dHJfSXNGdXR1cmVEYXRlJyBBUyBzYW1fbW5lbW9uaWMsCiAgQ0FTRSBXSEVOIFRSWV9DQVNUKENPQUxFU0NFKENBU1Qodi5leHBpcmF0aW9uRGF0ZSBBUyBWQVJDSEFSKSwgJycpIEFTIERBVEUpID4gQ1VSUkVOVF9EQVRFIFRIRU4gJ3Bhc3MnIEVMU0UgJ2ZhaWwnIEVORCBBUyByZXN1bHQsCiAgQ0FTRSBXSEVOIFRSWV9DQVNUKENPQUxFU0NFKENBU1Qodi5leHBpcmF0aW9uRGF0ZSBBUyBWQVJDSEFSKSwgJycpIEFTIERBVEUpID4gQ1VSUkVOVF9EQVRFIFRIRU4gJ2V4cGlyYXRpb25EYXRlIGlzIGEgZnV0dXJlIGRhdGUnIEVMU0UgJ2V4cGlyYXRpb25EYXRlIGlzIG5vdCBhIGZ1dHVyZSBkYXRlJyBFTkQgQVMgZGV0YWlsCkZST00gInZpZXdfcGlxaV9pbW11bml6YXRpb24iIHYKSk9JTiAicHJlcmVxX2ltbXVuaXphdGlvbl9leHBpcmF0aW9uZGF0ZV9pc3BvcHVsYXRlZCIgcCBPTiBwLnBhdGllbnRfaWQgPSB2LnBhdGllbnRfaWQgQU5EIHAuZWxlbWVudF9pZCA9IHYuZWxlbWVudF9pZCBBTkQgcC5yZXN1bHQgPSAncGFzcycKT1JERVIgQlkgdi5wYXRpZW50X2lkLCB2LmVsZW1lbnRfaWQ="
+    }
+  ]
+}

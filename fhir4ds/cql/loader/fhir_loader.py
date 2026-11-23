@@ -983,15 +983,9 @@ class FHIRDataLoader:
         valuesets: List[Any],
         table_name: str = "valueset_codes"
     ) -> int:
-        if not isinstance(table_name, str) or not table_name.isidentifier():
-            raise ValueError(
-                f"table_name must be a valid SQL identifier, got {table_name!r}"
-            )
-        quoted_table_name = quote_identifier(table_name)
-        """
-        Load ValueSet codes into a table for fhirpath_in_valueset UDF.
+        """Load ValueSet codes into a table for fhirpath_in_valueset UDF.
 
-        Creates a table with columns:
+        Creates a table (default ``valueset_codes``) with columns:
         - valueset_url VARCHAR
         - system VARCHAR
         - code VARCHAR
@@ -1000,15 +994,29 @@ class FHIRDataLoader:
         This table is queried by the fhirpath_in_valueset UDF to check
         if a code is in a valueset without making API calls.
 
+        Loading is ADDITIVE: re-loading appends rows; duplicate rows are
+        inert (membership is a set). A ValueSet whose expansion/compose
+        yields ZERO codes loads as an empty entry with a WARNING
+        ("membership checks against it will always be false").
+
         Args:
             valuesets: List of ResolvedValueSet objects from DependencyResolver,
                       or list of dicts with 'url' and 'codes' keys.
-                      Each code should have 'system', 'code', and optionally 'display'.
-            table_name: Name of the table to create/populate
+                      Each code should have 'system', 'code', and optionally
+                      'display' (when present, display must be a string).
+                      Extraction failures are re-raised as ``ValueError``
+                      naming ``valuesets[i] (url=...)``.
+            table_name: Name of the table to create/populate. Must be a
+                      valid SQL identifier (default ``"valueset_codes"``).
 
         Returns:
-            Total number of codes loaded
+            Total number of codes loaded.
         """
+        if not isinstance(table_name, str) or not table_name.isidentifier():
+            raise ValueError(
+                f"table_name must be a valid SQL identifier, got {table_name!r}"
+            )
+        quoted_table_name = quote_identifier(table_name)
         if valuesets is None:
             raise TypeError("valuesets must be a list, got None")
         if not isinstance(valuesets, list):
@@ -1029,6 +1037,10 @@ class FHIRDataLoader:
         systems = []
         code_values = []
         displays = []
+        # Every loaded ValueSet URL, including ones with zero codes, so the
+        # cache refresh can register loaded-but-empty ValueSets (membership
+        # False) instead of leaving them conflated with unloaded (NULL).
+        loaded_urls: List[str] = []
         for index, vs in enumerate(valuesets):
             if vs is None:
                 raise TypeError(f"valuesets[{index}] must be a ValueSet object or dict, got None")
@@ -1066,6 +1078,7 @@ class FHIRDataLoader:
                 raise ValueError(f"valuesets[{index}] must include a non-empty string 'url'")
             if not isinstance(codes, list):
                 raise TypeError(f"valuesets[{index}].codes must be a list, got {type(codes).__name__}")
+            loaded_urls.append(vs_url)
 
             if not codes:
                 _logger.warning(
@@ -1152,8 +1165,9 @@ class FHIRDataLoader:
 
         # Scope the cache refresh to the ValueSets just written; a full-table
         # re-read per call made incremental loading quadratic in ValueSet count.
+        # loaded_urls (not valueset_urls) so empty ValueSets are included.
         self._refresh_in_valueset_udf(
-            table_name, urls=sorted(set(valueset_urls)) or None
+            table_name, urls=sorted(set(loaded_urls)) or None
         )
         return total_codes
 
@@ -1290,6 +1304,11 @@ class FHIRDataLoader:
         else:
             for url in scoped_urls:
                 self._valueset_udf_cache.pop(url, None)
+            # Loaded-but-empty ValueSets keep a key with zero entries so the
+            # UDFs answer False (loaded, definitively not a member) instead
+            # of NULL (unknown/unloaded) — same contract as the native cache.
+            for url in scoped_urls:
+                self._valueset_udf_cache.setdefault(url, set())
         for vs_url, system, code in rows:
             norm_sys = SystemResolver.normalize(system) if system else ""
             self._valueset_udf_cache.setdefault(vs_url, set()).add((norm_sys, code or ""))
@@ -1301,6 +1320,14 @@ class FHIRDataLoader:
             if self.con not in _VALUESET_UDF_REGISTERED_CONNECTIONS:
                 udf_func = createValuesetMembershipUdf(self._valueset_udf_cache)
                 self.con.create_function("_in_valueset_python", udf_func, null_handling="special")
+                from fhir4ds.cql.duckdb.udf.valueset import (
+                    createEquivalentValuesetMembershipUdf,
+                )
+                self.con.create_function(
+                    "_cql_equivalent_in_valueset_python",
+                    createEquivalentValuesetMembershipUdf(self._valueset_udf_cache),
+                    null_handling="special",
+                )
                 with _CACHE_LOCK:
                     _VALUESET_UDF_REGISTERED_CONNECTIONS.add(self.con)
             self.con.execute(
@@ -1310,6 +1337,16 @@ class FHIRDataLoader:
             self.con.execute(
                 "CREATE OR REPLACE MACRO fhirpath_in_valueset(res, path, vs_url) AS "
                 "_in_valueset_python(res, path, vs_url)"
+            )
+            # CQL 2.0 EquivalentIn/EquivalentContains (ValueSet) membership:
+            # same live cache, Code `~` equivalence matching (FHIR-31675/33247).
+            self.con.execute(
+                "CREATE OR REPLACE MACRO cql_equivalent_in_valueset(res, path, vs_url) AS "
+                "_cql_equivalent_in_valueset_python(res, path, vs_url)"
+            )
+            self.con.execute(
+                "CREATE OR REPLACE MACRO fhirpath_equivalent_in_valueset(res, path, vs_url) AS "
+                "_cql_equivalent_in_valueset_python(res, path, vs_url)"
             )
         except (duckdb.CatalogException, duckdb.InvalidInputException) if duckdb else () as e:
             _logger.warning("Failed to refresh valueset UDF macros: %s", e)
@@ -1381,6 +1418,19 @@ class FHIRDataLoader:
                         f"SELECT cql_valueset_cache_add(valueset_url, system, code) "
                         f"FROM {quoted_table_name} "
                         f"WHERE valueset_url IN ({placeholders})",
+                        chunk,
+                    ).fetchall()
+                    # Loaded-but-empty ValueSets: mark the url as present in
+                    # the native cache with zero entries (NULL code is the
+                    # marker) so membership answers False (loaded, not a
+                    # member) instead of NULL (unknown) — mirrors the Python
+                    # cache's empty-set key.
+                    self.con.execute(
+                        f"SELECT cql_valueset_cache_add(u.url, NULL, NULL) "
+                        f"FROM (SELECT unnest([{placeholders}]) AS url) u "
+                        f"WHERE NOT EXISTS ("
+                        f"SELECT 1 FROM {quoted_table_name} t "
+                        f"WHERE t.valueset_url = u.url)",
                         chunk,
                     ).fetchall()
             # Remove stale Python macros from prior refreshes so SQL resolves to

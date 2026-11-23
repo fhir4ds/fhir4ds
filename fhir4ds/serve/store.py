@@ -23,6 +23,7 @@ dependencies while already holding it, so an internal lock would deadlock.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import time
 import uuid
@@ -34,6 +35,8 @@ from urllib.parse import urlsplit
 from fhir4ds.operations.capabilities.viewdefinition_run import normalize_view_definition
 
 from .errors import bad_request
+
+logger = logging.getLogger(__name__)
 
 #: FHIR ``id`` lexical space (Id: ``[A-Za-z0-9\\-\\.]{1,64}``).
 ID_PATTERN = re.compile(r"^[A-Za-z0-9\-.]{1,64}$")
@@ -342,6 +345,15 @@ class TreeStore:
         for row in rows:
             if "_seq" not in row:
                 raise ValueError("publish rows require a writer-assigned _seq")
+            # QA-D13H-002: append must be idempotent per ``_seq``. A flush can
+            # fail AFTER this append (upload, staging, commit) while the rows
+            # stay in this buffer; the flush loop then re-buffers the same
+            # rows for retry, and a naive second append would publish every
+            # row twice. ``_seq`` is the writer-assigned identity of a row, so
+            # an already-buffered sequence is by definition the same row.
+            seq = int(row["_seq"])
+            if any(int(existing["_seq"]) == seq for existing in self._buffer):
+                continue
             self._buffer.append(dict(row))
 
     def commit(self) -> str:
@@ -360,7 +372,25 @@ class TreeStore:
         return str(self._read_state().get("revision", ""))
 
     def current_seq(self) -> int:
-        return int(self._read_state().get("seq", 0))
+        """The persisted monotonic sequence.
+
+        QA-D13E-003: a tampered/corrupt state file whose ``seq`` is not an
+        integer must degrade to 0 (with a warning), never raise — this value
+        feeds ``create_app``'s writer construction, and a raise here takes
+        the whole surface down at boot. The post-rehydration
+        ``advance_to(next_seq)`` floor (QA-D13H-003) keeps ``_seq``
+        collision-free when the state file under-reports.
+        """
+        value = self._read_state().get("seq", 0)
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            logger.warning(
+                "publish state %s carries a non-integer seq %r; treating as 0",
+                STATE_PATH,
+                value,
+            )
+            return 0
 
     def stage_file(self, relative_path: str, text: str) -> None:
         self._write_text(relative_path, text)

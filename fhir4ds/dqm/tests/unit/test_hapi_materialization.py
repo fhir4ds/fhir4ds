@@ -1089,3 +1089,23 @@ measures: []
             "reset_attempts": False,
         }
     ]
+
+
+class TestNotificationChannelValidatedAtConstructionAmux152:
+    """AMUX-152 #28: programmatic HapiMaterializationConfig construction
+    validates notification_channel (``LISTEN {channel}`` safety), matching
+    the config-loader path."""
+
+    def test_rejected_channel_raises_dqm_config_error(self):
+        with pytest.raises(DQMConfigError, match="notification_channel"):
+            HapiMaterializationConfig(
+                postgres_connection_string="postgresql://x",
+                notification_channel="bad channel; DROP TABLE x",
+            )
+
+    def test_default_and_valid_channels_construct(self):
+        HapiMaterializationConfig(postgres_connection_string="postgresql://x")
+        HapiMaterializationConfig(
+            postgres_connection_string="postgresql://x",
+            notification_channel="fhir4ds_notify_2",
+        )

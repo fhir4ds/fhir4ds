@@ -230,6 +230,14 @@ class ListsMixin:
                     _carries_pid = False
                     if isinstance(_src, (SQLIdentifier,)) and _src.quoted:
                         _carries_pid = True
+                    elif isinstance(_src, RetrievePlaceholder):
+                        # Phase-1 translation: the retrieve is still a
+                        # placeholder; it resolves to a patient-keyed
+                        # retrieve CTE which carries patient_id. Skipping
+                        # the correlation here leaked rows across patients
+                        # for Count/First/... over `{ [Resource: VS] ... }`
+                        # braced-query selectors (d3-SKEPTIC v0.0.26).
+                        _carries_pid = True
                     elif isinstance(_src, SQLSubquery) and isinstance(_src.query, SQLSelect):
                         for _c in _src.query.columns or []:
                             _cname = (
@@ -3192,8 +3200,15 @@ class ListsMixin:
             source = self._strip_aggregates_for_exists(source)
             return SQLExists(subquery=SQLSubquery(query=source))
 
-        # For SQLUnion, wrap in EXISTS
-        if isinstance(source, SQLUnion):
+        # For SQLUnion (and INTERSECT/EXCEPT — QA-D4E-002), wrap in EXISTS.
+        # A bare set-op source previously fell through to the scalar
+        # ``source IS NOT NULL`` default; after the later setop->correlated-
+        # EXISTS rewrite that produced the tautology
+        # ``EXISTS (...) IS NOT NULL`` (TRUE for every patient, including
+        # those with zero matching rows — silent wrong population results).
+        # Wrapping here lets the correlation pass emit the plain correlated
+        # EXISTS, identical to the union path.
+        if isinstance(source, (SQLUnion, SQLIntersect, SQLExcept)):
             # EXISTS (SELECT ... UNION ALL SELECT ...)
             return SQLExists(subquery=SQLSubquery(query=source))
 

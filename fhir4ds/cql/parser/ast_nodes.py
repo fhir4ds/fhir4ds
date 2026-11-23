@@ -10,7 +10,7 @@ Reference: https://cql.hl7.org/05-libraries.html
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 
 # ==============================================================================
@@ -60,6 +60,33 @@ class TypeSpecifier(ASTNode):
 
 
 @dataclass
+class Directive(ASTNode):
+    """
+    Represents a CQL 2.0 library directive (trial-use, FHIR-41326 family).
+
+    Directives appear at the very beginning of a library, before the
+    ``library`` declaration::
+
+        #AllowFluent
+        #DefaultComparisonPrecision: 'minutes'
+        #DefaultComparisonPrecision: minutes default included libraries
+
+    Attributes:
+        name: The directive identifier (without the leading ``#``).
+        value: The directive value with the optional inclusion-behavior
+            suffix removed (``minutes`` for both ``'minutes'`` and
+            ``minutes check included libraries``), or None for a bare
+            ``#Name`` directive. Quoted values are unquoted.
+        inclusion_behavior: The optional ``default|override|check included
+            libraries`` clause, or None when absent.
+    """
+
+    name: str
+    value: Optional[str] = None
+    inclusion_behavior: Optional[str] = None
+
+
+@dataclass
 class Library(ASTNode):
     """
     Represents a CQL library definition.
@@ -75,6 +102,8 @@ class Library(ASTNode):
     Attributes:
         identifier: The library name/identifier.
         version: The library version string.
+        directives: CQL 2.0 ``#`` directives preceding the library
+            declaration (trial-use).
         using: List of using definitions (data model references).
         includes: List of include definitions (library references).
         codesystems: List of code system definitions.
@@ -88,6 +117,7 @@ class Library(ASTNode):
 
     identifier: str
     version: Optional[str] = None
+    directives: List[Directive] = field(default_factory=list)
     using: List[UsingDefinition] = field(default_factory=list)
     includes: List[IncludeDefinition] = field(default_factory=list)
     codesystems: List[CodeSystemDefinition] = field(default_factory=list)
@@ -99,6 +129,11 @@ class Library(ASTNode):
     statements: List[Union[Definition, FunctionDefinition]] = field(
         default_factory=list
     )
+    # CQL 2.0 @constraint tag sets (FHIR-48682, trial-use), attached by
+    # parse_cql from block comments (the lexer skips comments). Stored as
+    # plain dataclass values from ..parser.annotations; typed as Any to
+    # avoid an import cycle at module load.
+    parameter_constraints: List[Any] = field(default_factory=list)
 
 
 @dataclass
@@ -109,13 +144,23 @@ class UsingDefinition(ASTNode):
     Example:
         using FHIR version '4.0.1'
 
+    CQL 2.0 (FHIR-31019/FHIR-48762) also allows qualified model names and a
+    ``called`` clause:
+
+        using hl7.fhir.us.core.USCore version '7.0.0' called USC
+
     Attributes:
-        model: The data model name (e.g., 'FHIR', 'QDM').
+        model: The data model name (e.g., 'FHIR', 'QDM',
+            'hl7.fhir.us.core.USCore').
         version: The model version string.
+        alias: The local alias for the model (CQL 2.0 ``called`` clause).
+            When absent, the unqualified model name (last dotted segment) is
+            the local identifier per the 2.0 Developer's Guide.
     """
 
     model: str
     version: Optional[str] = None
+    alias: Optional[str] = None
 
 
 @dataclass
@@ -126,15 +171,25 @@ class IncludeDefinition(ASTNode):
     Example:
         include FHIRHelpers version '4.0.1' called FHIRHelpers
 
+    CQL 2.0 (FHIR-33126, trial-use) adds a ``bind`` clause supplying
+    values for parameters in the included library::
+
+        include ColorectalCancerElements called CCE
+          bind { AsOf: end of "Measurement Period" }
+
     Attributes:
         path: The library path/identifier.
         version: The library version string.
         alias: The local alias for the included library.
+        bindings: Optional map of included-library parameter name to the
+            bind expression (evaluated in the INCLUDING library's
+            context). None when no ``bind`` clause is present.
     """
 
     path: str
     version: Optional[str] = None
     alias: Optional[str] = None
+    bindings: Optional[Dict[str, Expression]] = None
 
 
 @dataclass
@@ -150,6 +205,114 @@ class ContextDefinition(ASTNode):
     """
 
     name: str
+
+
+@dataclass
+class TypeElement(ASTNode):
+    """
+    One element of a CQL 2.0 ``define type`` class type declaration.
+
+    Example (inside ``define type Person extends System.Any { ... }``):
+        name System.String
+
+    Attributes:
+        name: The element name.
+        type_specifier: The element's type specifier.
+    """
+
+    name: str
+    type_specifier: "TypeSpecifier"
+
+
+@dataclass
+class ContextRelationship(ASTNode):
+    """
+    The ``related to <Context> by { keys }`` clause of a CQL 2.0
+    ``define type`` statement (trial-use).
+
+    Attributes:
+        context: The target context name.
+        key_elements: The key element paths establishing the relationship.
+    """
+
+    context: str
+    key_elements: list = field(default_factory=list)
+
+
+@dataclass
+class TypeDefinition(ASTNode):
+    """
+    A CQL 2.0 named class type declaration (FHIR-34014 / FHIR-48760,
+    trial-use): ``define [public|private] type X [extends Base] { elements }``
+    followed by optional model-info metadata clauses and ``related to``
+    context relationships.
+
+    Example:
+        define public type Person extends System.Any {
+          name System.String,
+          dob System.Date
+        }
+
+    Attributes:
+        name: The declared type name.
+        base_type: Optional supertype named type specifier.
+        elements: The declared type elements.
+        access_level: 'public' (default) or 'private'.
+        label: Optional ``label`` model-info clause.
+        identifier: Optional ``identifier`` model-info clause.
+        retrievable: Whether the type may be the target of a retrieve.
+        primary_code_path: Optional ``primary code path`` clause.
+        context_relationships: ``related to`` clauses.
+    """
+
+    name: str
+    base_type: Optional["NamedTypeSpecifier"] = None
+    elements: List[TypeElement] = field(default_factory=list)
+    access_level: str = "public"
+    label: Optional[str] = None
+    identifier: Optional[str] = None
+    retrievable: bool = False
+    primary_code_path: Optional[str] = None
+    context_relationships: List[ContextRelationship] = field(default_factory=list)
+
+
+@dataclass
+class ContextInfoDefinition(ASTNode):
+    """
+    A CQL 2.0 context model declaration (trial-use):
+    ``define context Patient of type FHIR.Patient with key { id }``.
+
+    Attributes:
+        name: The context name (usable in a following ``context`` statement).
+        context_type: The named type representing the context.
+        key_elements: The key element paths forming the context's unique key.
+    """
+
+    name: str
+    context_type: Optional["NamedTypeSpecifier"] = None
+    key_elements: list = field(default_factory=list)
+
+
+@dataclass
+class ConversionDefinition(ASTNode):
+    """
+    A CQL 2.0 conversion declaration (trial-use):
+    ``define implicit conversion from A to B using Func``.
+
+    Attributes:
+        implicit_: Whether the conversion is implicit (else explicit).
+        from_type: The source type specifier.
+        to_type: The target type specifier.
+        function_name: The (possibly qualified) conversion function name.
+        access_level: 'public' (default) or 'private'.
+    """
+
+    from_type: "TypeSpecifier"
+    to_type: "TypeSpecifier"
+    function_name: str
+    implicit_: bool = True
+    access_level: str = "public"
+
 
 
 @dataclass
@@ -663,6 +826,32 @@ class QuerySource(ASTNode):
 
 
 @dataclass
+class RetrieveFilter(ASTNode):
+    """
+    Represents one additional comma-separated filter in a multi-filter
+    retrieve (CQL 2.0, FHIR-31397).
+
+    Example (inside ``[Condition: code in "VS", clinicalStatus in "Active"]``):
+        property: 'clinicalStatus'
+        comparator: 'in'
+        terminology: Identifier('Active')
+
+    Attributes:
+        property: The property path the filter applies to (required for
+            additional filters; the primary filter may default to the type's
+            primary code path).
+        comparator: One of 'in', '~in', '=', '~', 'contains', '~contains'
+            (the retrieve codeComparator set).
+        terminology: The terminology operand (value set / code reference /
+            code selector expression).
+    """
+
+    property: str
+    comparator: str
+    terminology: Expression
+
+
+@dataclass
 class Retrieve(Expression):
     """
     Represents a retrieve expression for accessing clinical data.
@@ -676,18 +865,24 @@ class Retrieve(Expression):
         [Condition: "Diabetes"]      -- Conditions with specific code
         [Observation: "LOINC|1234"]  -- Observations with LOINC code
         [Condition -> subject]       -- Related context retrieve via subject property
+        [Condition: code in "VS", clinicalStatus in "Active"]
+                                     -- CQL 2.0 multi-filter retrieve (FHIR-31397)
 
     Attributes:
         type: The resource/data type name.
         terminology: Optional terminology filter (value set, code, etc.).
         terminology_property: Property to match terminology against (e.g., 'code').
         navigation_path: Optional property path for related context retrieve (-> syntax).
+        additional_filters: CQL 2.0 comma-separated additional filters
+            (FHIR-31397); each carries an explicit property path and
+            comparator. All filters are ANDed into the retrieve predicate.
     """
 
     type: str
     terminology: Optional[Expression] = None
     terminology_property: Optional[str] = None
     navigation_path: Optional[str] = None
+    additional_filters: List[RetrieveFilter] = field(default_factory=list)
     # Model qualifier from authored CQL ([USQualityCore.MedicationRequest] →
     # "USQualityCore"). Preserved so the translator can resolve PROFILED
     # retrieves through the named-profile registry (e.g. the US Quality Core
@@ -1374,6 +1569,7 @@ __all__ = [
     "Query",
     "QuerySource",
     "Retrieve",
+    "RetrieveFilter",
     "WithClause",
     "LetClause",
     "SortClause",

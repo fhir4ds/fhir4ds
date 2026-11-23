@@ -4899,6 +4899,165 @@ static void InValuesetFunc(DataChunk &args, ExpressionState &state, Vector &resu
 	}
 }
 
+// ---------------------------------------------------------------------------
+// CQL 2.0 EquivalentIn / EquivalentContains (ValueSet) — FHIR-31675/33247.
+// Code `~` equivalence: code and system elements compare case-insensitively
+// with whitespace normalization (ASCII-lower approximation of casefold;
+// clinical codes and system URLs are ASCII). Cache entries are
+// "system|code" strings (or bare "code"); matching scans and compares
+// normalized forms, mirroring the Python
+// createEquivalentValuesetMembershipUdf surface.
+// ---------------------------------------------------------------------------
+
+static std::string EquivalentKey(const std::string &value) {
+	std::string out;
+	out.reserve(value.size());
+	bool pending_space = false;
+	for (char ch : value) {
+		if (std::isspace(static_cast<unsigned char>(ch))) {
+			if (!out.empty()) {
+				pending_space = true;
+			}
+			continue;
+		}
+		if (pending_space) {
+			out.push_back(' ');
+			pending_space = false;
+		}
+		out.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+	}
+	return out;
+}
+
+// Equivalent membership of (code, system) in the cache for valueset_url.
+// Returns 1 on a definitive match, 0 on no match, -1 when the String
+// overload is ambiguous (code present under multiple distinct systems).
+static int EquivalentCacheMatch(const std::string &code, const std::string &system,
+                                const std::string &valueset_url) {
+	auto it = g_valueset_cache.find(valueset_url);
+	if (it == g_valueset_cache.end()) {
+		return 0;
+	}
+	const std::string code_key = EquivalentKey(code);
+	const std::string system_key = EquivalentKey(system);
+	std::unordered_set<std::string> matched_system_keys;
+	for (const auto &entry : it->second) {
+		size_t sep = entry.rfind('|');
+		const std::string entry_system =
+		    (sep == std::string::npos) ? std::string() : entry.substr(0, sep);
+		const std::string entry_code =
+		    (sep == std::string::npos) ? entry : entry.substr(sep + 1);
+		if (EquivalentKey(entry_code) != code_key) {
+			continue;
+		}
+		if (entry_system.empty()) {
+			// Code-only cache entries match any source system (mirrors the
+			// Python ("", code_key) fallback).
+			return 1;
+		}
+		if (!system.empty()) {
+			if (EquivalentKey(entry_system) == system_key) {
+				return 1;
+			}
+		} else {
+			matched_system_keys.insert(EquivalentKey(entry_system));
+		}
+	}
+	if (system.empty()) {
+		if (matched_system_keys.size() == 1) {
+			return 1;
+		}
+		if (matched_system_keys.size() > 1) {
+			return -1;
+		}
+	}
+	return 0;
+}
+
+// cql_equivalent_in_valueset(resource VARCHAR, path VARCHAR, valueset_url
+// VARCHAR) -> BOOLEAN. Same 3VL contract as in_valueset (NULL on null
+// input / unloaded valueset / String-overload ambiguity); only the code
+// and system matching semantics differ (Code `~` equivalence).
+static void EquivalentInValuesetFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat res_data, path_data, url_data;
+	args.data[0].ToUnifiedFormat(count, res_data);
+	args.data[1].ToUnifiedFormat(count, path_data);
+	args.data[2].ToUnifiedFormat(count, url_data);
+
+	auto resources = UnifiedVectorFormat::GetData<string_t>(res_data);
+	auto paths = UnifiedVectorFormat::GetData<string_t>(path_data);
+	auto urls = UnifiedVectorFormat::GetData<string_t>(url_data);
+
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = fhir4ds_compat::data<bool>(result);
+	auto &result_mask = fhir4ds_compat::validity(result);
+
+	std::shared_lock<std::shared_mutex> cache_read_lock(g_valueset_cache_mutex);
+
+	for (idx_t i = 0; i < count; i++) {
+		auto r_idx = res_data.sel->get_index(i);
+		auto p_idx = path_data.sel->get_index(i);
+		auto u_idx = url_data.sel->get_index(i);
+
+		if (!res_data.validity.RowIsValid(r_idx) || !path_data.validity.RowIsValid(p_idx) ||
+		    !url_data.validity.RowIsValid(u_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+
+		auto resource_str = resources[r_idx].GetString();
+		auto path_str = paths[p_idx].GetString();
+		auto url_str = urls[u_idx].GetString();
+
+		if (g_valueset_cache.find(url_str) == g_valueset_cache.end()) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+
+		auto extraction = cql::extract_codes_with_not_done_valueset(resource_str, path_str, url_str);
+		const auto &codes = extraction.codes;
+		if (codes.empty()) {
+			if (extraction.has_not_done_valueset) {
+				result_data[i] = true;
+			} else {
+				result_data[i] = false;
+			}
+			continue;
+		}
+		bool found = false;
+		bool ambiguous = false;
+		for (const auto &code : codes) {
+			int match = EquivalentCacheMatch(code.code, code.system, url_str);
+			if (match == 1) {
+				found = true;
+				break;
+			}
+			if (match < 0) {
+				ambiguous = true;
+			}
+			auto norm_system = cql::normalize_system(code.system);
+			if (norm_system != code.system) {
+				int norm_match = EquivalentCacheMatch(code.code, norm_system, url_str);
+				if (norm_match == 1) {
+					found = true;
+					break;
+				}
+				if (norm_match < 0) {
+					ambiguous = true;
+				}
+			}
+		}
+		if (found) {
+			result_data[i] = true;
+		} else if (ambiguous) {
+			result_mask.SetInvalid(i);
+		} else {
+			result_data[i] = false;
+		}
+	}
+}
+
 static void ValuesetCacheClearFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	std::unique_lock<std::shared_mutex> lock(g_valueset_cache_mutex);
 	g_valueset_cache.clear();
@@ -5464,11 +5623,21 @@ static void ValuesetCacheAddFunc(DataChunk &args, ExpressionState &state, Vector
 	for (idx_t i = 0; i < count; i++) {
 		auto u_idx = url_data.sel->get_index(i);
 		auto c_idx = code_data.sel->get_index(i);
-		if (!url_data.validity.RowIsValid(u_idx) || !code_data.validity.RowIsValid(c_idx)) {
+		if (!url_data.validity.RowIsValid(u_idx)) {
 			result_mask.SetInvalid(i);
 			continue;
 		}
 		std::string url = urls[u_idx].GetString();
+		// NULL code with a valid url is the loaded-but-empty marker: the
+		// ValueSet is loaded with zero codes, so membership questions must
+		// answer False (definitively not a member) instead of NULL
+		// (unknown/unloaded). Mirrors the Python UDF's cache contract where
+		// a key with an empty set means "loaded, empty".
+		if (!code_data.validity.RowIsValid(c_idx)) {
+			g_valueset_cache[url];
+			result_data[i] = true;
+			continue;
+		}
 		std::string code = codes[c_idx].GetString();
 		std::string system;
 		auto s_idx = system_data.sel->get_index(i);
@@ -7619,6 +7788,45 @@ static void SuccessorOfBigIntFunc(DataChunk &args, ExpressionState &state, Vecto
 	}
 }
 
+// Recover the authored decimal scale of a DOUBLE operand the same way the
+// Python authority does (udf/math.py _step_value): Decimal(str(x)). Python's
+// str() renders the shortest round-trip form and ALWAYS keeps one fractional
+// digit for integral floats ("2.0"), so an integral double has scale 1
+// (step 0.1) and a non-integral one uses its natural digit count. The flat
+// 1e-8 step only applies when the authored scale is 0 (CQL 2.0
+// PredecessorOf1DPrecision pins predecessor of 1.0 -> 0.9).
+static int64_t python_double_decimal_scale(double v) {
+	if (std::isnan(v) || std::isinf(v)) return -1;
+	char buf[64];
+	for (int prec = 1; prec <= 17; prec++) {
+		std::snprintf(buf, sizeof(buf), "%.*g", prec, v);
+		if (std::strtod(buf, nullptr) == v) break;
+	}
+	std::string text(buf);
+	size_t e_pos = text.find_first_of("eE");
+	int64_t mantissa_scale = 0;
+	if (e_pos != std::string::npos) {
+		// Scientific form (Python Decimal('1e-05') has exponent -5):
+		// scale = mantissa fractional digits - exponent.
+		int64_t exponent = std::strtoll(text.c_str() + e_pos + 1, nullptr, 10);
+		size_t dot_pos = text.find('.');
+		int64_t frac = (dot_pos == std::string::npos || dot_pos > e_pos)
+		                   ? 0
+		                   : static_cast<int64_t>(e_pos - dot_pos - 1);
+		mantissa_scale = frac - exponent;
+	} else {
+		size_t dot_pos = text.find('.');
+		mantissa_scale = (dot_pos == std::string::npos)
+		                     ? 0
+		                     : static_cast<int64_t>(text.size() - dot_pos - 1);
+	}
+	if (mantissa_scale <= 0) {
+		// Python str() of an integral double is "2.0" — Decimal scale 1.
+		return 1;
+	}
+	return mantissa_scale;
+}
+
 static void PredecessorOfDoubleFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data;
@@ -7630,7 +7838,12 @@ static void PredecessorOfDoubleFunc(DataChunk &args, ExpressionState &state, Vec
 	for (idx_t i = 0; i < count; i++) {
 		auto ai = a_data.sel->get_index(i);
 		if (!a_data.validity.RowIsValid(ai)) { result_mask.SetInvalid(i); continue; }
-		result_data[i] = a_vals[ai] - 1e-8;
+		double v = a_vals[ai];
+		if (v <= -1e20) { result_mask.SetInvalid(i); continue; }
+		int64_t scale = python_double_decimal_scale(v);
+		if (scale < 0) { result_mask.SetInvalid(i); continue; }
+		double step = scale > 0 ? std::pow(10.0, -static_cast<double>(scale)) : 1e-8;
+		result_data[i] = v - step;
 	}
 }
 
@@ -7645,7 +7858,12 @@ static void SuccessorOfDoubleFunc(DataChunk &args, ExpressionState &state, Vecto
 	for (idx_t i = 0; i < count; i++) {
 		auto ai = a_data.sel->get_index(i);
 		if (!a_data.validity.RowIsValid(ai)) { result_mask.SetInvalid(i); continue; }
-		result_data[i] = a_vals[ai] + 1e-8;
+		double v = a_vals[ai];
+		if (v >= 1e20) { result_mask.SetInvalid(i); continue; }
+		int64_t scale = python_double_decimal_scale(v);
+		if (scale < 0) { result_mask.SetInvalid(i); continue; }
+		double step = scale > 0 ? std::pow(10.0, -static_cast<double>(scale)) : 1e-8;
+		result_data[i] = v + step;
 	}
 }
 
@@ -7963,6 +8181,75 @@ DEFINE_TWO_STR_STR_UDF(QuantityDivideFunc, {
 	if (!res) { result_mask.SetInvalid(i); continue; }
 	result_data[i] = StringVector::AddString(result, *res);
 })
+
+// CQL 2.0 Round(Quantity) — value rounds, unit preserved.
+DEFINE_ONE_STR_STR_UDF(RoundQuantityFunc, {
+	auto res = cql::quantity_round(a_str, 0);
+	if (!res) { result_mask.SetInvalid(i); continue; }
+	result_data[i] = StringVector::AddString(result, *res);
+})
+
+// CQL 2.0 Round(Quantity, precision).
+static void RoundQuantityToFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data, b_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
+	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
+	auto b_vals = UnifiedVectorFormat::GetData<int64_t>(b_data);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = fhir4ds_compat::data<string_t>(result);
+	auto &result_mask = fhir4ds_compat::validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		auto a_idx = a_data.sel->get_index(i);
+		auto b_idx = b_data.sel->get_index(i);
+		// CQL 2.0 §Round / CQL-11 doctrine: null precision is precision 0.
+		// A null quantity argument still yields null; a null precision does
+		// NOT (matches the Python authority roundQuantity(q, None)).
+		if (!a_data.validity.RowIsValid(a_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		int64_t precision = 0;
+		if (b_data.validity.RowIsValid(b_idx)) {
+			precision = b_vals[b_idx];
+		}
+		auto res = cql::quantity_round(a_vals[a_idx].GetString(), precision);
+		if (!res) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		result_data[i] = StringVector::AddString(result, *res);
+	}
+}
+
+// CQL 2.0 Comparable(Quantity, Quantity) — unit commensurability.
+static void QuantityComparableFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data, b_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
+	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
+	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = fhir4ds_compat::data<bool>(result);
+	auto &result_mask = fhir4ds_compat::validity(result);
+	for (idx_t i = 0; i < count; i++) {
+		auto a_idx = a_data.sel->get_index(i);
+		auto b_idx = b_data.sel->get_index(i);
+		if (!a_data.validity.RowIsValid(a_idx) || !b_data.validity.RowIsValid(b_idx)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		auto res = cql::quantity_comparable(a_vals[a_idx].GetString(),
+		                                    b_vals[b_idx].GetString());
+		if (!res) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		result_data[i] = *res;
+	}
+}
 
 DEFINE_ONE_STR_STR_UDF(QuantityNegateFunc, {
 	auto res = cql::quantity_negate(a_str);
@@ -9619,6 +9906,15 @@ static void LoadInternal(ExtensionLoader &loader) {
 	RegisterSpecialScalar(loader, "fhirpath_in_valueset",
 	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                      LogicalType::BOOLEAN, InValuesetFunc);
+	// CQL 2.0 EquivalentIn/EquivalentContains (ValueSet) membership
+	// (FHIR-31675/33247): Code `~` equivalence matching over the same
+	// valueset cache; the 1.5 `in` keeps the exact-match surface.
+	RegisterSpecialScalar(loader, "cql_equivalent_in_valueset",
+	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, EquivalentInValuesetFunc);
+	RegisterSpecialScalar(loader, "fhirpath_equivalent_in_valueset",
+	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, EquivalentInValuesetFunc);
 	RegisterSpecialScalar(loader, "cql_valueset_cache_clear", {}, LogicalType::BOOLEAN, ValuesetCacheClearFunc);
 	RegisterSpecialScalar(loader, "cql_valueset_cache_add",
 	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR},
@@ -9808,6 +10104,13 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                      LogicalType::VARCHAR, QuantityMultiplyFunc);
 	RegisterSpecialScalar(loader, "quantityDivide", {LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                      LogicalType::VARCHAR, QuantityDivideFunc);
+	// CQL 2.0 (CQL20-A): Round(Quantity) overloads + Comparable.
+	RegisterSpecialScalar(loader, "RoundQuantity", {LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, RoundQuantityFunc);
+	RegisterSpecialScalar(loader, "RoundQuantityTo", {LogicalType::VARCHAR, LogicalType::BIGINT},
+	                      LogicalType::VARCHAR, RoundQuantityToFunc);
+	RegisterSpecialScalar(loader, "Comparable", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, QuantityComparableFunc);
 	RegisterSpecialScalar(loader, "quantityNegate", {LogicalType::VARCHAR},
 	                      LogicalType::VARCHAR, QuantityNegateFunc);
 	RegisterSpecialScalar(loader, "quantityAbs", {LogicalType::VARCHAR},

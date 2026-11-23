@@ -315,8 +315,11 @@ def test_cql_browser_interval_and_boundary_udfs_run_without_python_fallback(cpp_
             "SELECT quantityTruncatedDivide('{\"value\":10,\"code\":\"mg\"}', '{\"value\":3,\"code\":\"g\"}')"
         ).fetchone()[0]
     )
+    # Corpus-pinned (TruncatedDivide10By5DQuantity): quantity div cancels
+    # units -> dimensionless '1' on BOTH engines; only mod preserves the
+    # left operand unit (see test_arithmetic_part2_parity.py).
     assert q_div_mg["value"] == 0.0
-    assert q_div_mg["code"] == "mg"
+    assert q_div_mg["code"] == "1"
     q_mod_g = json.loads(
         cpp_only_con.execute(
             "SELECT quantityModulo('{\"value\":10,\"code\":\"g\"}', '{\"value\":3000,\"code\":\"mg\"}')"
@@ -330,7 +333,7 @@ def test_cql_browser_interval_and_boundary_udfs_run_without_python_fallback(cpp_
         ).fetchone()[0]
     )
     assert q_div_g["value"] == 3.0
-    assert q_div_g["code"] == "g"
+    assert q_div_g["code"] == "1"
     assert cpp_only_con.execute(
         "SELECT dateAddQuantity('2026-01-01T', '{\"value\":6,\"unit\":\"month\"}')"
     ).fetchone()[0] == "2026-07-01T"
@@ -462,3 +465,57 @@ def test_cql_valueset_cache_runs_without_python_fallback(cpp_only_con) -> None:
         "SELECT in_valueset(?, 'code', ?)",
         [resource, valueset_url],
     ).fetchone()[0] is True
+
+
+def test_cql_valueset_cache_loaded_empty_marker_amux152(cpp_only_con) -> None:
+    """AMUX-152 finding #11: a NULL code with a valid url is the
+    loaded-but-empty marker — membership must answer False (loaded,
+    definitively not a member), while a url absent from the cache answers
+    NULL (unknown / not loaded)."""
+    empty_url = "http://example.org/fhir/ValueSet/empty"
+    unloaded_url = "http://example.org/fhir/ValueSet/unloaded"
+    resource = json.dumps({
+        "resourceType": "Observation",
+        "code": {"coding": [{"system": "http://loinc.org", "code": "1234-5"}]},
+    })
+    assert cpp_only_con.execute("SELECT cql_valueset_cache_clear()").fetchone()[0] is True
+    assert cpp_only_con.execute(
+        "SELECT cql_valueset_cache_add(?, NULL, NULL)",
+        [empty_url],
+    ).fetchone()[0] is True
+    # Marker contributes zero entries to the size but registers the url.
+    assert cpp_only_con.execute("SELECT cql_valueset_cache_size()").fetchone()[0] == 0
+    assert cpp_only_con.execute(
+        "SELECT in_valueset(?, 'code', ?)", [resource, empty_url],
+    ).fetchone()[0] is False
+    assert cpp_only_con.execute(
+        "SELECT cql_equivalent_in_valueset(?, 'code', ?)", [resource, empty_url],
+    ).fetchone()[0] is False
+    assert cpp_only_con.execute(
+        "SELECT in_valueset(?, 'code', ?)", [resource, unloaded_url],
+    ).fetchone()[0] is None
+    assert cpp_only_con.execute(
+        "SELECT cql_equivalent_in_valueset(?, 'code', ?)", [resource, unloaded_url],
+    ).fetchone()[0] is None
+
+
+def test_cql_round_quantity_null_precision_defaults_zero_amux152(cpp_only_con) -> None:
+    """AMUX-152 finding #4 (WASM surface): native RoundQuantityTo treats a
+    NULL precision as precision 0 (CQL-11 doctrine), matching the Python
+    authority, and rounds exact decimal midpoint ties exactly."""
+    q = json.dumps({
+        "value": 2.675, "unit": "mg", "code": "mg",
+        "system": "http://unitsofmeasure.org",
+    })
+    null_prec = cpp_only_con.execute(
+        "SELECT RoundQuantityTo(?, NULL)", [q]
+    ).fetchone()[0]
+    zero_prec = cpp_only_con.execute(
+        "SELECT RoundQuantityTo(?, 0)", [q]
+    ).fetchone()[0]
+    assert null_prec is not None
+    assert json.loads(null_prec)["value"] == json.loads(zero_prec)["value"] == 3.0
+    tie = cpp_only_con.execute(
+        "SELECT RoundQuantityTo(?, 2)", [q]
+    ).fetchone()[0]
+    assert json.loads(tie)["value"] == 2.68
