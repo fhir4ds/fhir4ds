@@ -62,17 +62,19 @@ result.stats            # per-rule counts, singleton/near-miss stats
 
 Dedup compares authored-precision date signatures: `1966-05` vs `1966-05-18` are *uncertain-equal* (one side is coarser), not unequal. Naive authored-local components are used for partition dates (no timezone inference), UTC instants only where the authored value determines them, and every resource type has a documented primary timestamp (`effectiveDateTime` / `performedDateTime` / `onsetDateTime` / …) plus secondary fallbacks. Temporal windows differ by category: labs collapse at the exact instant, vitals get an extended window (the same manually-keyed BP within minutes is a duplicate), and value partition keys canonicalize UCUM units (`mg` vs `g`) through the engine's quantity conversion surface.
 
-## 3. The three-tier code cascade
+## 3. The tiered code cascade
 
-When two resources in the same patient/temporal/value bucket carry *disjoint* code sets, dedup resolution cascades:
+When two resources in the same patient/temporal/value bucket carry *disjoint* code sets, dedup coalesces every resource onto **one match key** through a three-tier cascade (AMUX-145 design; see `fhir4ds/dedup/concept_index.py`):
 
-| Tier | Rule | Provenance |
-|---|---|---|
-| **1 — canonical** | Code sets intersect through (canonical system, code). | `canonical` |
-| **2 — lexical** | Conservative normalized display-text sets intersect (casefold, NFKC, punctuation, UCUM unit aliases) **and** patient + temporal signature + normalized value all agree. | `lexical` |
-| **3 — stop** | Everything else lands in the curation queue for human/terminology review. Proposals may only *add* queue entries. | — |
+| Priority | Tier | Rule | Merge provenance |
+|---|---|---|---|
+| **1** | **Canonical** | Literal `(system, code)` set intersection. Intersecting code sets never fall through to lower tiers. | `canonical` |
+| **2** | **Hybrid search** | The resource's display text is resolved against the bundled concept index (LOINC, SNOMED, RxNorm, CVX — built deterministically from the expanded ValueSet fixtures) using hybrid retrieval = **BM25 + character-trigram fuzzy**, no model artifact. A *confident* resolution (top-1 score at or above the threshold AND a clear margin over the runner-up) assigns the resolved canonical concept to the resource's key — so a LOINC/SNOMED twin pair merges through ordinary partitioning. Unconfident resolution falls through. | `hybrid` (+ index version, score, and margin in the audit trail) |
+| **3** | **Text (last)** | Still-unresolved resources key on the conservative normalized display text (casefold, NFKC, punctuation, UCUM unit aliases — no stemming, no synonyms: "Hemoglobin" must never bucket with "Hemoglobin A1c"). Resolved concepts **outrank** display equality: equal text with different confident canonical keys never merges. | `text` |
 
-Tier 2 is deliberately conservative — no word-order normalization, no stemming, no synonyms: "Hemoglobin" must never bucket with "Hemoglobin A1c". Control it with `code_fallback="on" | "audit_only" | "off"`:
+Medication resources whose concept arrives by **reference resolution** (a `medicationReference` dereferenced to a `Medication.code`) participate through the hybrid tier; `code_fallback="off"` restricts matching to the canonical tier only while still counting reference-resolved records.
+
+Anything the cascade cannot decide lands in the deterministic curation queue (§6) for human/terminology review — proposals may only *add* queue entries. Control the fallback tiers with `code_fallback="on" | "audit_only" | "off"`:
 
 ```python
 result = run_dedup(resources, run_id="dedup-002", code_fallback="audit_only")
@@ -91,7 +93,42 @@ result.stats   # clusters, refused edges, merges
 
 **Single-encounter semantics (CR-003):** a merge edge whose admission would place a vetoed pair inside one cluster is refused (edges admitted in sorted order — deterministic) and audit-recorded as a `encounter_edge_refused` curation entry. Direct vetoes and veto-free clusters are unaffected.
 
-## 5. Survivorship
+## 5. Non-coded identity resources (Practitioner, Organization, Location)
+
+Encounters and coded clinical resources are not the whole corpus: **Practitioner**, **Organization**, and **Location** have no code to put in an event key — their duplicates are resolved through the *matching engine* with per-entity rule sets (`fhir4ds/matching/entity_rules.py`, AMUX-150), not through `run_dedup`'s code cascade:
+
+```python
+import duckdb
+from fhir4ds.matching import (
+    index_entity, match_corpus,
+    extract_practitioner_fields,
+    PRACTITIONER_RULES,
+)
+
+con = duckdb.connect()
+prac = {"resourceType": "Practitioner", "id": "prac-1",
+        "identifier": [{"system": "http://hl7.org/fhir/sid/us-npi",
+                        "value": "1234567890"}],
+        "name": [{"family": "Chalmers", "given": ["Peter"]}]}
+
+index_entity(con, "Practitioner", prac,
+             extract_practitioner_fields(prac))   # shared field-value index
+# ... index every practitioner, then one corpus pass:
+report = match_corpus(con, "run-prac-001",
+                      rules=PRACTITIONER_RULES,
+                      entity_type="Practitioner")
+report.counts   # audited matches -> one FHIR Linkage per matched pair
+```
+
+Three design rules distinguish entity matching from patient matching:
+
+- **Thresholds are ENFORCED (CR-002).** Each rule set carries an approval budget — practitioners and organizations **1e-8**, locations **1e-6** (identity resources tolerate a higher collision budget than patient EMPI merges). The engine refuses a candidate whose rule P(collision) exceeds the budget *unless* exactly-agreeing corroborating fields bring the combined evidence (rule P × field u-probabilities) back under it. Patient matching stays un-enforced and byte-identical.
+- **Name-only NEVER links an entity.** A surname is shared across one facility's practitioners and every city has an "Imaging Center" — every rule anchors on at least one hard identifier (NPI, phone, address, email, geo coordinates).
+- **Hard anchors fire alone when unique.** Practitioner rule P1 is NPI-only (NPIs are issued-unique, P ≈ 1e-9); organization/locations anchor on phone/address/geo combinations with fuzzy-agreement and sibling guards.
+
+The O5 organization rule (shared chain-pharmacy phone pools) ships **disabled** — enable only if measurement on real corpora shows recall loss.
+
+## 6. Survivorship
 
 Each cluster materializes one survivor: the richest signature (fuller code sets, values, timestamps win, deterministically ranked), with field-level **merge** filling gaps from alternates. Survivor and alternates are recorded in a dedup Linkage (extension `TEMPORAL_DEDUP_EXTENSION_URL`) with the window rule that merged them:
 
@@ -103,7 +140,7 @@ merged = merge_resources(cluster, survivor)  # field-level merged resource
 dedup_id = survivor_dedup_id(cluster)     # stable cluster identity
 ```
 
-## 6. The curation queue
+## 7. The curation queue
 
 Everything dedup cannot decide is written to a deterministic JSONL queue — cross-bucket near-miss pairs, tier-3 unresolved codes, refused encounter edges — sorted, `sort_keys=True`, no wall-clock:
 
@@ -121,7 +158,7 @@ result = run_dedup(resources, run_id="dedup-004",
                   output_dir="/tmp/dedup", dedup_proposer=my_proposer)
 ```
 
-## 7. Audit surface
+## 8. Audit surface
 
 Every cluster decision is written to the `dedup_audit` table (idempotent upserts; re-running the same corpus is a no-op):
 
@@ -134,7 +171,7 @@ rows = load_dedup_audit(conn, run_id="dedup-001")
 
 Pass `include_singletons_in_audit=True` to also record one row per non-duplicate resource.
 
-## 8. Where to go next
+## 9. Where to go next
 
 - [Patient Matching](/docs/user-guide/matching/patient-matching/) — the identity layer that groups records into individuals before resource dedup runs.
 - [Dedup API Reference](/docs/api-reference/dedup/) — normalizers, partition/escalate primitives, and the full runner surface.
