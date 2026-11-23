@@ -11,6 +11,88 @@ entry follows the same format: **highlights**, **breaking changes** (always
 listed, even when there are none), topic sections, **conformance** (where
 recorded), **known issues**, and **upgrade** notes.
 
+## Version 0.0.26
+*November 2026*
+
+### Highlights
+
+- **CQL 2.0 translation campaign.** The translator now accepts the CQL 2.0
+  grammar surface: new directives and parameter/code-system declaration
+  clauses, `Head(list, n)` / `Tail(list, n)` / `Slice` list operators
+  (correctly typed as stored lists through alias consumers), and the
+  `repeatAll()` FHIRPath projection. The WASM translate-execute gate is
+  fully green for the first time, and native DOUBLE-overload
+  predecessor/successor now implement the CQL 2.0 precision-based decimal
+  step on every engine.
+- **PIQI data-quality framework** (`fhir4ds.piqi`). The published PIQI
+  standard — HDQT taxonomy, SAM checks, weighted rubrics, PIQI-Index
+  scorecards — implemented on ViewDefinition + SQLQuery: 10 data-class
+  views, 64 SAM instances with prerequisite chains, a packaged sample
+  rubric, parameterized SAMs (regex / allowed-list) bound through prepared
+  statements, and terminology SAMs that resolve against the local ValueSet
+  cache or a terminology endpoint and return an explicit
+  *could not assess* when neither is available. See the new
+  [PIQI guide](/docs/user-guide/quality/piqi).
+- **Realism harness** (`fhir4ds.realism`). Deterministic corpus generation
+  for testing identity pipelines at scale: realisticized synthetic
+  populations, seeded corruption profiles (name typos, transliterations,
+  DOB shifts, duplicate injection) and a MIMIC-IV demo fetch script — the
+  same machinery that calibrated the matching benchmarks.
+- **Name-embedding matching rules adopted.** A purpose-trained char-level
+  name embedding (~85k params, pure-NumPy inference, hash-pinned artifact)
+  closes the transliteration gap the fuzzy comparators cannot see
+  (Mohammed → Muhummad, DL ≥ 2): on a transliteration-heavy held-out set,
+  **recall rises 0.05 → 0.71** while the ONC real-corpus gate holds
+  **precision at 1.0000 with zero new false positives** (recall
+  0.9380 → 0.9394). Rules are additive and degrade to exact Category-1
+  behavior when the artifact is absent. See the new
+  [Patient Matching guide](/docs/user-guide/matching/patient-matching).
+- **Matching & deduplication hardened**: enforced approval thresholds with
+  independent-field corroboration for identity entities (CR-002),
+  veto-constrained single-encounter merging (CR-003), the three-tier
+  code-fallback cascade with a deterministic curation queue, duplicate-id
+  corpus collapse, and falsy-master cross-patient merge guards. See the new
+  [Resource Dedup guide](/docs/user-guide/matching/resource-dedup).
+- **~75 QA fixes across the stack** from the 15-domain × 3-personality
+  evolution campaign (1 CRITICAL: an exponential scan in
+  `fhirpath_is_valid` that could hang DuckDB on ≥20-operator arithmetic
+  chains; 12 HIGH including silent wrong-True measure populations, corpus
+  cross-patient count leaks, and an ingest crash class; ~45 MEDIUM), plus
+  exact-decimal serialization parity (py + native) and a 1-ulp
+  duration-quantity compare fix from the focused code review.
+- **All six native extension bundles** (fhirpath + cql × DuckDB 1.5.5 /
+  1.5.6 / 2.0.0) rebuilt where C++ changed and stamp-verified; DuckDB 2.0
+  remains the default on Python ≥ 3.11 installs.
+
+### Breaking changes
+
+- None at the public API level. New packages (`fhir4ds.piqi`,
+  `fhir4ds.realism`) and the matching embedding rules are additive; the
+  embedding rules are on by default and can be pinned off per call with
+  `match_patient(..., use_embedding=False)`.
+
+### Conformance
+
+ViewDefinition 144/144 · FHIRPath 1038/1038 · CQL 2029/2037 · DQM QI-Core
+2025 **47/47 PERFECT** · DQM US-Core 2025 **73/73 PERFECT** · OMOP 38/38 —
+**3369/3377** overall (the 8 CQL gaps are the documented upstream fixture
+ceiling).
+
+### Known issues
+
+- **medterm4ds publish sequencing**: the `[terminology]` and `[ner]` extras
+  pin `medterm4ds>=0.0.14,<0.0.15`, which is not yet on PyPI at release
+  time — those extras become installable the moment medterm4ds 0.0.14
+  publishes (planned immediately after this release). Core
+  `pip install fhir4ds-v2` is unaffected.
+- The upstream FHIRPath fixture exclusions documented under 0.0.24 remain.
+
+### Upgrade
+
+`pip install fhir4ds-v2==0.0.26`. Python ≥ 3.11 installs continue to get
+DuckDB 2.0.x by default; Python 3.10 keeps the 1.5.x line, and
+`[duckdb1]` / `[duckdb2]` remain the explicit pins.
+
 ## Version 0.0.25
 *November 2026*
 

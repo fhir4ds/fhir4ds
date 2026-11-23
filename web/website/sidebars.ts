@@ -71,9 +71,18 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'category',
+          label: 'Identity & Matching',
+          items: [
+            'user-guide/matching/patient-matching',
+            'user-guide/matching/resource-dedup',
+          ],
+        },
+        {
+          type: 'category',
           label: 'Quality & Reporting',
           items: [
             'user-guide/quality/dqm',
+            'user-guide/quality/piqi',
           ],
         },
         {
@@ -152,6 +161,21 @@ const sidebars: SidebarsConfig = {
               type: 'doc',
               id: 'api-reference/dqm/dqm',
               label: 'dqm',
+            },
+            {
+              type: 'doc',
+              id: 'api-reference/matching/matching',
+              label: 'matching',
+            },
+            {
+              type: 'doc',
+              id: 'api-reference/dedup/dedup',
+              label: 'dedup',
+            },
+            {
+              type: 'doc',
+              id: 'api-reference/piqi/piqi',
+              label: 'piqi',
             },
             {
               type: 'category',
