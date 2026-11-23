@@ -82,11 +82,13 @@ Anything the cascade cannot decide lands in the deterministic curation queue (§
 result = run_dedup(resources, run_id="dedup-002", code_fallback="audit_only")
 ```
 
-## 4. The Encounter strategy
+## 4. Resources without codes
 
-Encounters and the identity resources of §5 are the resource types with **no code to put in an event key** — they get their own strategies, chosen by what *can* be compared: Encounters by time, identity resources by identifiers.
+Encounters, Practitioners, Organizations and Locations have **no code to put in an event key** — each gets a strategy chosen by what the resource *does* uniquely have: encounters on time, identity resources on identifiers. Both strategies feed the same survivorship, curation and audit machinery as the coded pass.
 
-Encounters are deduplicated by **temporal overlap**, not codes — one visit split into overlapping segments. As with patient matching, a patient-membership map from [patient matching](/docs/user-guide/matching/patient-matching/) can be supplied so cross-patient encounters can never merge.
+### Encounters — matched by time
+
+Encounters are deduplicated by **temporal overlap** — one visit split into overlapping segments. As with patient matching, a patient-membership map from [patient matching](/docs/user-guide/matching/patient-matching/) can be supplied so cross-patient encounters can never merge.
 
 Overlap alone merges (≥80% shared period, or a ≤15-minute handoff gap on the same day); beyond the temporal core, the scorer adds **identity-style corroboration from the encounter's own references** — a shared practitioner participant, the same organization (`serviceProvider`), or a shared location each add evidence (references compared by their trailing id, the same convention used throughout matching):
 
@@ -106,9 +108,9 @@ result = run_encounter_dedup(encounters, run_id="enc-001")
 result.stats   # clusters, refused edges, merges
 ```
 
-## 5. Non-coded identity resources (Practitioner, Organization, Location)
+### Practitioners, organizations, locations — matched by identifiers
 
-Encounters and coded clinical resources are not the whole corpus: **Practitioner**, **Organization**, and **Location** have no code to put in an event key — their duplicates are resolved through the *matching engine* with per-entity rule sets (`fhir4ds/matching/entity_rules.py`, AMUX-150), not through `run_dedup`'s code cascade:
+**Practitioner**, **Organization**, and **Location** duplicates are resolved through the *matching engine* with per-entity rule sets (`fhir4ds/matching/entity_rules.py`), not through `run_dedup`'s code cascade:
 
 ```python
 import duckdb
@@ -141,7 +143,7 @@ Three design rules distinguish entity matching from patient matching:
 
 The O5 organization rule (shared chain-pharmacy phone pools) ships **disabled** — enable only if measurement on real corpora shows recall loss.
 
-## 6. Survivorship
+## 5. Survivorship
 
 Each cluster materializes one survivor: the richest signature (fuller code sets, values, timestamps win, deterministically ranked), with field-level **merge** filling gaps from alternates. Survivor and alternates are recorded in a dedup Linkage (extension `TEMPORAL_DEDUP_EXTENSION_URL`) with the window rule that merged them:
 
@@ -153,7 +155,7 @@ merged = merge_resources(cluster, survivor)  # field-level merged resource
 dedup_id = survivor_dedup_id(cluster)     # stable cluster identity
 ```
 
-## 7. The curation queue
+## 6. The curation queue
 
 Everything dedup cannot decide is written to a deterministic JSONL queue — cross-bucket near-miss pairs, tier-3 unresolved codes, refused encounter edges — sorted, `sort_keys=True`, no wall-clock:
 
@@ -171,7 +173,7 @@ result = run_dedup(resources, run_id="dedup-004",
                   output_dir="/tmp/dedup", dedup_proposer=my_proposer)
 ```
 
-## 8. Audit surface
+## 7. Audit surface
 
 Every cluster decision is written to the `dedup_audit` table (idempotent upserts; re-running the same corpus is a no-op):
 
@@ -184,7 +186,7 @@ rows = load_dedup_audit(conn, run_id="dedup-001")
 
 Pass `include_singletons_in_audit=True` to also record one row per non-duplicate resource.
 
-## 9. Where to go next
+## 8. Where to go next
 
 - [Patient Matching](/docs/user-guide/matching/patient-matching/) — the identity layer that groups records into individuals before resource dedup runs.
 - [Dedup API Reference](/docs/api-reference/dedup/) — normalizers, partition/escalate primitives, and the full runner surface.
