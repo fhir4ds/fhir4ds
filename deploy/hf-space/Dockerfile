@@ -29,8 +29,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # duckdb pinned to a single ABI so the bundled C++ extension load is
-# deterministic. v0.0.26 defaults py3.11 to duckdb 2.0.x (capped <2.0.1 — — the Space image
-# is python:3.11-slim, so pin 2.0.0 (the .duckdb2_extension bundle ships
+# deterministic. v0.0.26 defaults py3.11 to duckdb 2.0.x (capped <2.0.1);
+# the image is python:3.11-slim, so pin 2.0.0 (the .duckdb2_extension bundle ships
 # in the wheel and loads automatically).
 ARG DUCKDB_VERSION=2.0.0
 RUN python -m pip install --no-cache-dir \
