@@ -21,6 +21,10 @@ Optional<int64_t> cql_precision(const std::string &value);
 // CQL §18.12: TimezoneOffset — extract timezone offset in decimal hours
 Optional<double> cql_timezone_offset(const std::string &value);
 
+// CQL #datetime-2: the assumed timezone offset (in minutes) of the
+// evaluation request timestamp (Now() — system-local UTC offset).
+int evaluation_request_offset_minutes();
+
 // CQL §22.25: Predecessor — value one step less than input
 Optional<std::string> predecessor_of(const std::string &value);
 

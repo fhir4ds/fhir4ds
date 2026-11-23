@@ -1678,6 +1678,23 @@ def _is_time_only_text(value: str) -> bool:
     return body.startswith('T') or (len(body) < 10 and ':' in body and '-' not in body)
 
 
+def _evaluation_request_offset_minutes() -> int:
+    """CQL #datetime-2: the timezone offset of the evaluation request timestamp.
+
+    The engine's evaluation-request timestamp is Now() — DuckDB
+    CURRENT_TIMESTAMP, whose session TimeZone defaults to the system local
+    timezone. Derive the assumed offset from the same source (system-local
+    UTC offset at evaluation time) so an offset-less DateTime assumes the
+    same offset Now() carries.
+    """
+    from datetime import datetime
+
+    utcoffset = datetime.now().astimezone().utcoffset()
+    if utcoffset is None:  # pragma: no cover - astimezone() is always aware
+        return 0
+    return int(utcoffset.total_seconds() // 60)
+
+
 def _should_normalize_timezone_for_compare(a_str: str, b_str: str, precision_idx: int) -> bool:
     """CQL timezone normalization applies to DateTime hour-or-finer comparisons only."""
     if precision_idx < _HOUR_PRECISION_INDEX:
@@ -1853,13 +1870,24 @@ def _format_at_precision(comps: dict, precision: str) -> str:
     return result
 
 
-def _normalize_to_utc(comps: dict) -> dict:
+def _normalize_to_utc(comps: dict, assumed_offset_minutes: int | None = None) -> dict:
     """Normalize datetime components to UTC using timezone offset.
 
     CQL §22.1: Timezone-aware datetimes are compared by normalizing to UTC.
-    If no timezone is present, the components are returned unchanged.
+    If no timezone is present, the components are returned unchanged —
+    UNLESS ``assumed_offset_minutes`` is supplied: CQL #datetime-2 says an
+    offset-less DateTime assumes the timezone offset of the evaluation
+    request timestamp, so comparison callers that already decided to
+    normalize (hour-or-finer precision, at least one peer with an explicit
+    offset) pass that offset here.
     """
     tz = comps.get('tz', '')
+    if not tz and assumed_offset_minutes is not None:
+        sign = '-' if assumed_offset_minutes < 0 else '+'
+        magnitude = abs(assumed_offset_minutes)
+        tz = f"{sign}{magnitude // 60:02d}:{magnitude % 60:02d}"
+        comps = dict(comps)
+        comps['tz'] = tz
     if not tz or tz == 'Z':
         result = dict(comps)
         result['tz'] = ''
@@ -1946,8 +1974,9 @@ def _compare_at_min_precision(
     # CQL DateTime comparison normalizes timezone offsets only for hour-or-finer
     # precision. Time values compare their specified components directly.
     if _should_normalize_timezone_for_compare(a_str, b_str, min_idx):
-        a_comps = _normalize_to_utc(a_comps)
-        b_comps = _normalize_to_utc(b_comps)
+        _assumed = _evaluation_request_offset_minutes()
+        a_comps = _normalize_to_utc(a_comps, _assumed)
+        b_comps = _normalize_to_utc(b_comps, _assumed)
 
     for i, field in enumerate(_PRECISION_ORDER[:min_idx + 1]):
         a_val = a_comps[field]
@@ -1980,8 +2009,9 @@ def _compare_at_min_precision(
             new_max = _PRECISION_INDEX[_infer_precision(promoted)]
             compare_to = min(new_max, b_idx)
             if _should_normalize_timezone_for_compare(promoted, b_str, compare_to):
-                a_comps2 = _normalize_to_utc(a_comps2)
-                b_comps2 = _normalize_to_utc(b_comps2)
+                _assumed = _evaluation_request_offset_minutes()
+                a_comps2 = _normalize_to_utc(a_comps2, _assumed)
+                b_comps2 = _normalize_to_utc(b_comps2, _assumed)
             for field in _PRECISION_ORDER[:compare_to + 1]:
                 av = a_comps2[field]
                 bv = b_comps2[field]
@@ -1998,8 +2028,9 @@ def _compare_at_min_precision(
             new_max = _PRECISION_INDEX[_infer_precision(promoted)]
             compare_to = min(a_idx, new_max)
             if _should_normalize_timezone_for_compare(a_str, promoted, compare_to):
-                a_comps2 = _normalize_to_utc(a_comps2)
-                b_comps2 = _normalize_to_utc(b_comps2)
+                _assumed = _evaluation_request_offset_minutes()
+                a_comps2 = _normalize_to_utc(a_comps2, _assumed)
+                b_comps2 = _normalize_to_utc(b_comps2, _assumed)
             for field in _PRECISION_ORDER[:compare_to + 1]:
                 av = a_comps2[field]
                 bv = b_comps2[field]
@@ -2212,8 +2243,9 @@ def _compare_at_specified_precision(a_str: str, b_str: str, precision: str) -> t
     # CQL Reference v1.5.3: timezone offsets are normalized for DateTime
     # comparisons only at hour/minute/second/millisecond precision.
     if _should_normalize_timezone_for_compare(a_str, b_str, target_idx):
-        a_comps = _normalize_to_utc(a_comps)
-        b_comps = _normalize_to_utc(b_comps)
+        _assumed = _evaluation_request_offset_minutes()
+        a_comps = _normalize_to_utc(a_comps, _assumed)
+        b_comps = _normalize_to_utc(b_comps, _assumed)
 
     # If either operand is coarser than the target precision, uncertain
     if a_idx < target_idx or b_idx < target_idx:

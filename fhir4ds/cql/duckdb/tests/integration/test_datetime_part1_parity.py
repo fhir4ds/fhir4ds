@@ -345,12 +345,16 @@ define TimeZoneOffsetFromMinusZero: timezoneoffset from @2024-05-15T10:30:45.500
 define TimeZoneOffsetNoOffset: timezoneoffset from @2024-05-15T10:30:45.500
 """
     translated = translate_cql(cql)
+    # AMUX-165 (CQL #datetime-2, cql-tests #88): an offset-less DateTime
+    # assumes the evaluation-request offset — no longer None.
+    from fhir4ds.cql.duckdb.udf.datetime import _evaluation_request_offset_minutes
+
     expected = {
         "TimeZoneOffsetFromZ": 0.0,
         "TimeZoneOffsetFromZNoMs": 0.0,
         "TimeZoneOffsetFromPlusZero": 0.0,
         "TimeZoneOffsetFromMinusZero": 0.0,
-        "TimeZoneOffsetNoOffset": None,
+        "TimeZoneOffsetNoOffset": _evaluation_request_offset_minutes() / 60.0,
     }
     py = _python_only_connection()
     cpp = _cpp_connection()
@@ -684,6 +688,67 @@ define TimeHourStillWorks: Time(12)
             norm = lambda v: None if v is None else str(v).strip().lower()  # noqa: E731
             assert norm(py_row) == expected_value, f"Python mismatch for {name}: {py_row!r} != {expected_value!r}"
             assert norm(cpp_row) == expected_value, f"C++ mismatch for {name}: {cpp_row!r} != {expected_value!r}"
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_evaluation_request_offset_assumed_for_offsetless_datetime_amux165() -> None:
+    """AMUX-165 / cql-tests #88 + #185: CQL #datetime-2 — "If no timezone
+    offset is specified, the timezone offset of the evaluation request
+    timestamp is assumed."
+
+    The engine's evaluation-request timestamp is Now() (DuckDB
+    CURRENT_TIMESTAMP, session/system-local timezone). An offset-less
+    DateTime therefore answers the evaluation-request offset for
+    ``timezoneoffset from``, compares at hour-or-finer precision as if it
+    carried that offset (when the peer operand has an explicit offset), and
+    serializes through ToString with the offset appended.
+    """
+    cql = """library Amux165EvalRequestOffset version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define LiteralOffsetIsNotNull: (timezoneoffset from @2012-04-01T00:00) is not null
+define LiteralOffsetEqualsNowOffset: (timezoneoffset from @2012-04-01T00:00) = (timezoneoffset from Now())
+define ConstructorOffsetEqualsNowOffset: (timezoneoffset from DateTime(2012, 4, 1, 0, 0)) = (timezoneoffset from Now())
+define LiteralEqualsExplicitEvaluationOffset: @2012-04-01T00:00:00.000 = DateTime(2012, 4, 1, 0, 0, 0, 0, timezoneoffset from Now())
+define LiteralBeforeLaterExplicitEvaluationOffset: @2012-04-01T00:00:00.000 < DateTime(2012, 4, 1, 1, 0, 0, 0, timezoneoffset from Now())
+define LiteralAfterEarlierExplicitEvaluationOffset: @2012-04-01T01:00:00.000 < DateTime(2012, 4, 1, 0, 0, 0, 0, timezoneoffset from Now())
+define BothOffsetlessStillEqual: @2012-04-01T00:00:00.000 = @2012-04-01T00:00:00.000
+define DayPrecisionNoAssumptionLeak: @2012-04-01 = @2012-04-01T00:00+05:00
+define ToStringAppendsAssumedOffset: Matches(ToString(DateTime(2000, 1, 1, 15, 25, 25, 300)), '^2000-01-01T15:25:25[.]300[+-][0-9][0-9]:[0-9][0-9]$')
+define TimeOffsetStillNull: timezoneoffset from @T10:30:00
+"""
+    translated = translate_cql(cql)
+    # DayPrecisionNoAssumptionLeak: below hour precision the comparison
+    # stays on local components and remains uncertain (null) — the assumed
+    # offset must NOT leak into day-precision comparison (CQL-14 doctrine).
+    expected = {
+        "LiteralOffsetIsNotNull": "true",
+        "LiteralOffsetEqualsNowOffset": "true",
+        "ConstructorOffsetEqualsNowOffset": "true",
+        "LiteralEqualsExplicitEvaluationOffset": "true",
+        "LiteralBeforeLaterExplicitEvaluationOffset": "true",
+        "LiteralAfterEarlierExplicitEvaluationOffset": "false",
+        "BothOffsetlessStillEqual": "true",
+        "DayPrecisionNoAssumptionLeak": None,
+        "ToStringAppendsAssumedOffset": "true",
+        "TimeOffsetStillNull": None,
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_value in expected.items():
+            sql = f"SELECT ({translated[name].to_sql()})"
+            py_row = py.execute(sql).fetchone()[0]
+            cpp_row = cpp.execute(sql).fetchone()[0]
+            norm = lambda v: None if v is None else str(v).strip().lower()  # noqa: E731
+            assert norm(py_row) == expected_value, (
+                f"Python mismatch for {name}: {py_row!r} != {expected_value!r}"
+            )
+            assert norm(cpp_row) == expected_value, (
+                f"C++ mismatch for {name}: {cpp_row!r} != {expected_value!r}"
+            )
     finally:
         py.close()
         cpp.close()

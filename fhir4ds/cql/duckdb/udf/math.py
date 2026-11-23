@@ -952,6 +952,11 @@ def cqlTimezoneOffset(value) -> float | None:
     Per CQL §DateTime ISO-8601 representation, ``Z`` is the UTC designator
     and is equivalent to ``+00:00``. The extractor must therefore return
     ``0.0`` for ``Z``-suffixed values, not None.
+
+    CQL #datetime-2: an offset-less DateTime assumes the timezone offset of
+    the evaluation request timestamp (Now() — system-local offset), so
+    offset-less DateTime-with-time strings answer that offset. Time values
+    (no offset in the CQL model) and Date values (no time part) stay NULL.
     """
     if value is None:
         return None
@@ -961,13 +966,19 @@ def cqlTimezoneOffset(value) -> float | None:
     if s.endswith("Z"):
         return 0.0
     m = re.search(r'([+-])(\d{2}):(\d{2})$', s)
-    if not m:
-        return None
-    suffix = f"{m.group(1)}{m.group(2)}:{m.group(3)}"
-    if not _valid_timezone_suffix(suffix):
-        return None
-    sign = 1 if m.group(1) == '+' else -1
-    return float(sign * (int(m.group(2)) + int(m.group(3)) / 60.0))
+    if m:
+        suffix = f"{m.group(1)}{m.group(2)}:{m.group(3)}"
+        if not _valid_timezone_suffix(suffix):
+            return None
+        sign = 1 if m.group(1) == '+' else -1
+        return float(sign * (int(m.group(2)) + int(m.group(3)) / 60.0))
+    # Offset-less DateTime (a 'T' preceded by a date digit — a Time value's
+    # leading 'T' does not qualify): assume the evaluation-request offset.
+    # Date-only and Time strings keep NULL.
+    if re.search(r'\dT\d{2}', s):
+        from fhir4ds.cql.duckdb.udf.datetime import _evaluation_request_offset_minutes
+        return _evaluation_request_offset_minutes() / 60.0
+    return None
 
 
 def registerMathUdfs(con: "duckdb.DuckDBPyConnection") -> None:

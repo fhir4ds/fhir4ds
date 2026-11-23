@@ -3056,7 +3056,17 @@ static cql::DateTimeValue DateTimeFromEpochMillis(int64_t millis, const cql::Dat
 
 static cql::DateTimeValue NormalizeForTemporalCompare(const cql::DateTimeValue &value) {
 	if (!value.has_tz) {
-		return value;
+		// CQL #datetime-2 (cql-tests #88): an offset-less DateTime assumes
+		// the timezone offset of the evaluation request timestamp (Now() —
+		// system-local UTC offset), so it normalizes with that offset
+		// rather than keeping its local components. Callers only reach
+		// here for hour-or-finer comparisons with at least one explicit
+		// offset operand; day-and-coarser comparisons stay on local
+		// components (CQL-14 doctrine).
+		cql::DateTimeValue assumed = value;
+		assumed.has_tz = true;
+		assumed.tz_offset_minutes = cql::evaluation_request_offset_minutes();
+		return DateTimeFromEpochMillis(ToEpochMillisForElapsed(assumed), assumed);
 	}
 	return DateTimeFromEpochMillis(ToEpochMillisForElapsed(value), value);
 }

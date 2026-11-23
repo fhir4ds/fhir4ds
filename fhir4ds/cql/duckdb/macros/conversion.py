@@ -69,6 +69,21 @@ def registerConversionMacros(con: "duckdb.DuckDBPyConnection") -> None:
             WHEN typeof(x) = 'VARCHAR'
                 AND regexp_full_match(CAST(x AS VARCHAR), '^[0-9]{{4}}(-[0-9]{{2}}){{0,2}}T$')
                 THEN regexp_replace(CAST(x AS VARCHAR), 'T$', '')
+            -- CQL #datetime-2 (cql-tests #88/#185): an offset-less DateTime
+            -- assumes the timezone offset of the evaluation request timestamp
+            -- (= Now() -> CURRENT_TIMESTAMP, session/system-local timezone),
+            -- and the DateTime ISO form always carries the offset. Mirror
+            -- the Now() lowering's 2-digit -> +HH:00 offset normalization.
+            WHEN typeof(x) = 'VARCHAR'
+                AND regexp_full_match(
+                    CAST(x AS VARCHAR),
+                    '^[0-9]{{4}}(-[0-9]{{2}}){{0,2}}T[0-9]{{2}}(:[0-9]{{2}}){{0,2}}(\\.[0-9]{{1,3}})?$'
+                )
+                AND regexp_matches(CAST(CURRENT_TIMESTAMP AS VARCHAR), '[+-][0-9]{{2}}:?[0-9]{{0,2}}$')
+                THEN CAST(x AS VARCHAR) || regexp_replace(
+                    regexp_replace(CAST(CURRENT_TIMESTAMP AS VARCHAR), '([+-][0-9]{{2}})$', '\\1:00'),
+                    '^.*?([+-][0-9]{{2}}:[0-9]{{2}})$', '\\1'
+                )
             ELSE CAST(x AS VARCHAR)
         END
     """)

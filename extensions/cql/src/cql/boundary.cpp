@@ -8,6 +8,7 @@
 #include <cstring>
 #include <cctype>
 #include <iomanip>
+#include <ctime>
 
 namespace cql {
 
@@ -909,6 +910,18 @@ Optional<int64_t> cql_precision(const std::string &value) {
 // =====================================================================
 // cql_timezone_offset
 // =====================================================================
+int evaluation_request_offset_minutes() {
+	// CQL #datetime-2: the timezone offset of the evaluation request
+	// timestamp is assumed for offset-less DateTimes. The engine's
+	// evaluation-request timestamp is Now() (DuckDB CURRENT_TIMESTAMP,
+	// session TimeZone defaults to the system-local timezone), so derive
+	// the assumed offset from the system-local UTC offset.
+	const time_t now = time(nullptr);
+	struct tm local {};
+	localtime_r(&now, &local);
+	return static_cast<int>(local.tm_gmtoff / 60);
+}
+
 Optional<double> cql_timezone_offset(const std::string &value) {
 	if (value.empty()) return NullOpt<double>();
 
@@ -929,6 +942,17 @@ Optional<double> cql_timezone_offset(const std::string &value) {
 				return Optional<double>(sign * (hours + mins / 60.0));
 			}
 			break;
+		}
+	}
+	// CQL #datetime-2 (cql-tests #88/#185): an offset-less DateTime assumes
+	// the timezone offset of the evaluation request timestamp. Only
+	// DateTime-with-time values qualify (a 'T' preceded by a date digit — a
+	// Time value's leading 'T' does not); Time values have no offset in the
+	// CQL model and Date values have no time part — both stay null.
+	for (size_t i = 1; i + 1 < value.size(); i++) {
+		if (value[i] == 'T' && isdigit(static_cast<unsigned char>(value[i - 1])) &&
+		    value[i + 1] >= '0' && value[i + 1] <= '9') {
+			return Optional<double>(evaluation_request_offset_minutes() / 60.0);
 		}
 	}
 	return NullOpt<double>();
