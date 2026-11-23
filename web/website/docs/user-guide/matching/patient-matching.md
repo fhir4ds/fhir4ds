@@ -62,20 +62,27 @@ result.evidence    # {'first': 'joe~joel|band=mid|model=name-embed-v1@860f1f59',
 
 The engine implements the **CMS-approved probabilistic matching methodology** — the Category-1 rule table and its evidence budgets, used as specified. fhir4ds adds exactly one deliberate extension (name embeddings for transliterated names, below), built to the same standard; everything else follows the methodology as published.
 
-### Category-1 rules and P(collision)
+### The rule table
 
-The default table `CATEGORY1_RULES` is the 29-rule CMS Category-1 set. Each rule is a conjunction of field modes — `EXACT`, `FUZZY` (Damerau-Levenshtein ≤ 1 on names ≥ 5 chars, nickname groups, prefix abbreviations; DOB ± 1 day) — with a P(collision) derived from per-field u-probabilities:
+Probabilistic matching does not compare whole records — it compares them through a table of **rules**, each naming a small combination of fields that, when they *all* agree, is strong enough evidence on its own that two records describe the same person. The CMS methodology publishes its rule table ("Category-1"); fhir4ds ships it unchanged as `CATEGORY1_RULES`. A few of its 29 rules, to make the shape concrete:
+
+- first name (exact) + date of birth + phone number
+- first + last name (fuzzy) + date of birth (± 1 day) + street address
+- first + last name (fuzzy) + date of birth + email address
+- last name (fuzzy) + date of birth + insurance member ID
+
+Two ideas do the work:
+
+- **Some agreement is strong, some is weak.** An exact phone number or matching date of birth is strong evidence; a fuzzy name match alone is weak. Every field carries a measured weight for how likely two *different* people are to agree on it — a fuzzy first name agrees by chance far more often than a phone number does.
+- **A rule is only as strong as its whole combination.** A rule fires only when *every* field agrees **and** the combined chance of coincidence stays under a strict budget. That is why the table never contains a names-only rule: weak evidence must always be corroborated by a hard anchor (date of birth, SSN4, phone, address, or an identifier).
 
 ```python
-from fhir4ds.matching import CATEGORY1_RULES, FIELD_U_PROBS, APPROVAL_THRESHOLD
+from fhir4ds.matching import CATEGORY1_RULES
 
-len(CATEGORY1_RULES)              # 29
-APPROVAL_THRESHOLD                # 2e-12
-FIELD_U_PROBS["dob"]              # (0.0001, None) — (exact, fuzzy) u-values
-FIELD_U_PROBS["first"]            # (0.02, 0.03)
+len(CATEGORY1_RULES)   # 29 — the CMS Category-1 table, unchanged
 ```
 
-A rule fires only when every field matches *and* the evidence product stays under budget, so weak evidence (a fuzzy name alone) never links two records — the hard anchors (DOB, SSN4, phone, address) must corroborate.
+Name "fuzzy" means a near match: one typo of edit distance, a nickname (Bill/William), or a common prefix abbreviation — with birth dates allowed one day either side. The full field weights and the budget constant are documented in the [API reference](/docs/api-reference/matching/).
 
 ### Name-embedding rules (our one deliberate extension)
 
