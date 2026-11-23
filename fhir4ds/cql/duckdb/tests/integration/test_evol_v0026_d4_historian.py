@@ -104,7 +104,9 @@ def _tz_sql(con):
 def test_subday_during_precision_normalizes_timezones_d4_historian():
     """QA-D4H-001: at hour/minute precision, offset-bearing events must
     compare as normalized instants. Raw-component comparison classified
-    tz2 (local hour 03) and tz4 (local date 06-14) as outside."""
+    tz2 (local hour 03) and tz4 (local date 06-14) as outside. tz5 is
+    offset-naive: per CQL #datetime-2 it assumes the evaluation-request
+    offset (AMUX-165), so its expectation is computed from that offset."""
     native, py = _tz_connections()
     try:
         rn = {
@@ -119,8 +121,18 @@ def test_subday_during_precision_normalizes_timezones_d4_historian():
         native.close()
         py.close()
     assert sorted(rn) == ["tz2", "tz4", "tz5", "tzn"], rn
-    # starts/point/ends during hour of MP: tz2, tz4, tz5 in; tzn out
-    for p, expect in (("tz2", True), ("tz4", True), ("tz5", True), ("tzn", False)):
+    # starts/point/ends during hour of MP: tz2, tz4 in; tzn out. tz5 is the
+    # offset-naive control: per CQL #datetime-2 (AMUX-165, cql-tests #88)
+    # an offset-less DateTime assumes the timezone offset of the evaluation
+    # request timestamp, so its membership is evaluated at that assumed
+    # offset (00:30 local shifted by the evaluation-request offset) —
+    # computed here so the pin holds in any host timezone.
+    from fhir4ds.cql.duckdb.udf.datetime import _evaluation_request_offset_minutes
+
+    _assumed = _evaluation_request_offset_minutes()
+    _tz5_instant_minute = 30 - _assumed  # minute-of-day, UTC
+    tz5_expect = 0 <= _tz5_instant_minute <= 120
+    for p, expect in (("tz2", True), ("tz4", True), ("tz5", tz5_expect), ("tzn", False)):
         row = rn[p]
         assert bool(row[0]) is expect, (p, "StartHour", row)
         assert bool(row[1]) is expect, (p, "PointHour", row)
