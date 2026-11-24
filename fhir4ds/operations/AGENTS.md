@@ -140,3 +140,106 @@ python3 -m pytest fhir4ds/operations/tests fhir4ds/cli/tests fhir4ds/mcp/tests -
 
 MCP tests skip cleanly when the optional `mcp` package is absent
 (`pytest.importorskip`).
+
+## WASM parity gates (Tier A + Tier B, AMUX-175 / 2026-11-24)
+
+The browser apps run translated SQL on duckdb-wasm with **C++ wasm extension bundles plus
+`cql-macros.ts`**, not on desktop DuckDB. These gates keep that surface honest.
+Code: `fhir4ds/operations/tests/wasm_parity/`. Plan:
+`FEATURE_WASM_PARITY_TEST_INFRA.md`. Reports: `tests/output/wasm-parity/*.{json,md}` (gitignored).
+
+- **The reference bundle is named**: `web/cql-cleanroom/src/lib/cql-macros.ts` (116
+  statements). Every `web/*/src/lib/cql-macros.ts` must be byte-identical to it (T6). It is
+  loaded through node, never re-parsed by regex.
+- **Two browser surfaces.** The *simulator* (Tier A) = desktop DuckDB + the x86 bundles + the
+  reference statements: it proves the contract and runs the official corpora cheaply. The
+  *real engine* (Tier B) = headless duckdb-wasm + the **shipped** wasm bundles: only it sees
+  the binder, the planner, the Arrow transport and bundle staleness. Tier A cannot replace
+  Tier B: the two fail different cases.
+- **Step 0 (T1–T7)** `test_wasm_parity_step0.py`: reference parses; simulator is faithful; no
+  wasm-only macros; same-name macros have equal bodies; every desktop macro is in the reference
+  or natively provided; app bundles identical; shipped `.wasm` copies are one known set
+  (`fhir4ds/wasm_extension_bundles.json`, `scripts/build_wasm_extensions.py --verify`).
+- **Tier A** `test_wasm_parity_tier_a.py`, one ratchet test per suite, each reusing the official
+  runner's own comparator: CQL (2,037), FHIRPath R4 (1,191), ViewDefinition (144), OMOP (38).
+  Identical SQL runs on desktop and on the simulator; outcomes `GREEN`, `PARITY_GAP`,
+  `BROWSER_ONLY_PASS`, `BOTH_FAIL`, `ENGINE_DIFF`, `TRANSLATE_DIFF` (must be zero, cannot be
+  registered), `TRANSLATE_ERROR` (reported only).
+- **Tier B** `test_wasm_parity_tier_b.py` (~30 s): B1 real catalog (macro bodies equal the
+  simulation; the exact staleness list), B2 version pins, B3 curated families equal desktop,
+  B4 Arrow transport envelope, B5 opt-in whole CQL corpus on real duckdb-wasm
+  (`FHIR4DS_WASM_FULL_CORPUS=1`, ~35 s).
+
+### The ledger is the policy (`known_gaps.json`)
+
+Register or fix — never ignore. Every non-green case is attributed to the browser names its
+SQL emits (a set difference on the SQL text, never error-text parsing). An unregistered gap
+fails the gate and prints a ready-to-paste entry. Registrations expire (90 days; 30 for
+principle kinds `TS_BODY_DRIFT` / `WASM_ONLY_MACRO` and for in-flight desktop defects). A
+registration whose gap no longer reproduces fails the gate (remove it). `WASM_ONLY_MACRO`
+additionally needs `approved_by`: the browser must not have a macro desktop does not have.
+A **case-level entry names the surface** it was observed on (`simulator` | `real`, or none for
+both); a desktop defect reproduces whenever the desktop verdict fails, whichever surface it is
+compared with.
+
+### Running
+
+```bash
+# Step 0 + Tier A + selftest (capped like every DuckDB-touching suite)
+PYTHONPATH=$PWD bash scripts/capped.sh 16 8 python3 -m pytest \
+  fhir4ds/operations/tests/test_wasm_surface_parity.py \
+  fhir4ds/operations/tests/test_wasm_parity_step0.py \
+  fhir4ds/operations/tests/test_wasm_parity_tier_a.py \
+  fhir4ds/operations/tests/test_wasm_parity_selftest.py -q -p no:cacheprovider
+# Tier B: WITHOUT the cap (chromium cannot start under `ulimit -v`), light
+PYTHONPATH=$PWD python3 -m pytest fhir4ds/operations/tests/test_wasm_parity_tier_b.py -q
+python3 -m fhir4ds.operations.tests.wasm_parity.report [--suite cql] [--tier-b]
+```
+
+`FHIR4DS_REQUIRE_WASM_PARITY=1` and `FHIR4DS_REQUIRE_WASM_REAL=1` turn "environment input
+missing" skips into failures (CI). A lane worktree has no `node_modules`: point
+`FHIR4DS_WASM_NODE_MODULES` at a checkout root that ran `npm install` in `web/cql-cleanroom`.
+
+### Known fragile areas
+
+- **Chromium and the memory cap.** `scripts/capped.sh` sets `RLIMIT_AS`; chromium's V8 sandbox
+  reservation then fails with SIGTRAP. The engine detects a capped address space and reports an
+  environment input (run Tier B uncapped). The hard limit cannot be lifted for a child.
+- **Each real-engine job is a fresh browser and a fresh in-memory database.** Nothing registered
+  in one job survives into the next: `RealWasmEngine.use_reference()` re-registers the
+  reference macros in every boot. Statements that must share state (CREATE, INSERT, SELECT) go
+  in ONE `run([...])` call.
+- **Wasm side modules resolve relative to the main `duckdb-eh.wasm` directory**, not the
+  registered URL: the bundles must be staged beside it (`real_engine._stage`).
+- **Move values as VARCHAR + `typeof()`.** Under the apps' `castBigIntToDouble` flag the Arrow
+  path rounds BIGINT/UBIGINT silently beyond 2^53 and delivers HUGEINT/DECIMAL as the UNSCALED
+  128-bit limbs (scale dropped) and DATE/TIMESTAMP as milliseconds (B4 pins this). The official
+  comparator receives values rebuilt from text (`run_cql.rebuild_test_value`); its list/struct
+  text parser is the only place that rendering is interpreted.
+- **Attribution must see quoted calls.** Translated SQL emits `"Distinct"(...)`, and
+  `"Coalesce"(NULL, 1)` hides a browser macro behind a builtin spelling the shared helper
+  ignores. `surfaces.emitted_names` collects quoted calls itself.
+- **`CREATE MACRO IF NOT EXISTS` is silent in the browser.** A reference statement whose name
+  collides with an engine builtin (`Abs`) does not create a macro and does not fail; T1's
+  "every statement executes" cannot see it. Names that must be the bundle's own need
+  `CREATE OR REPLACE MACRO`.
+- The official runners rewrite tracked `conformance/reports/*` when executed: restore them
+  (`git checkout -- conformance/reports`) after a byte-identity check.
+- Suite evaluators share one connection per surface: each owns its `resources` table shape
+  (`CREATE OR REPLACE`). `conformance/scripts/*.py` import their siblings as top-level modules.
+
+### Baseline recorded (dev `87bece82a55`, corpus `f724ee4`, 2026-11-24)
+
+- Contract: 116 reference statements; 1 wasm-only macro (`Coalesce`); 53 same-name macros with
+  a different body; 33 desktop macros with no browser counterpart; 73 names where the browser
+  runs a native namesake of a desktop macro; 2 app bundles differ from the reference.
+- Tier A CQL: 1,818 GREEN, 126 PARITY_GAP, 60 ENGINE_DIFF, 6 BOTH_FAIL, 22 translate errors.
+- Real engine, whole CQL corpus: 1,809 GREEN, 137 PARITY_GAP, 58 ENGINE_DIFF. The 14 real-only
+  cases are all the **stale shipped wasm bundle** (precision-stepped successor/predecessor,
+  Quantity `div` unit cancellation, the AMUX-171 Time rules).
+- Staleness list (x86 bundles provide, shipped wasm lacks): `comparable`,
+  `cql_equivalent_in_valueset`, `fhirpath_equivalent_in_valueset`, `roundquantity`,
+  `roundquantityto`.
+- Four reference macros are **broken everywhere**, simulator included: `AllTrue`, `AnyTrue`,
+  `AllFalse`, `AnyFalse` call `system.bool_and(list)` / `bool_or(list)`, overloads no DuckDB
+  1.5.x has (Binder Error).

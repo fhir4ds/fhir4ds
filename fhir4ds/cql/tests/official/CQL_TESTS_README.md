@@ -2,10 +2,24 @@
 
 This directory contains the official CQL (Clinical Quality Language) test suite cloned from [cqframework/cql-tests](https://github.com/cqframework/cql-tests).
 
+## How it is checked out
+
+The corpus is a git submodule of this directory (`.gitmodules` entry
+`fhir4ds/cql/tests/official/cql-tests`):
+
+```bash
+git submodule update --init fhir4ds/cql/tests/official/cql-tests
+```
+
+The pinned commit is `f724ee4` (2026-11-16): **2,037** `<test>` elements in 16 XML files. It is
+what `conformance/scripts/run_cql.py` gates and what the WASM parity Tier A gate evaluates
+(`fhir4ds/operations/tests/wasm_parity/evaluators/cql.py`). The counts in the table below
+describe the original 1,718-test snapshot and are kept as history.
+
 ## Overview
 
 - **Repository**: https://github.com/cqframework/cql-tests
-- **Total Test Cases**: 1,718
+- **Total Test Cases**: 1,718 at first import; 2,037 at the pinned commit (see above)
 - **Test Files**: 16 XML files
 - **Total Lines**: 9,317
 

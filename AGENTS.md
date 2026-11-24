@@ -6694,3 +6694,53 @@ loaded)" means the run did NOT exercise the shipped binaries.
   differs because its only signal is temporal). EMER hard-negative veto
   boundary: gap > 2h (exactly 2h is neither candidate nor veto); overlap
   containment >= 0.80 and adjacency gap <= 15m are inclusive.
+
+## WASM parity gates — the browser surface is gated like the desktop (2026-11-24, AMUX-175)
+
+The web apps do not run desktop DuckDB: translated SQL runs on duckdb-wasm (core `v1.5.5`)
+with C++ **wasm** extension bundles plus `web/*/src/lib/cql-macros.ts`. Earlier parity work
+lived in `fhir4ds/operations/tests`, which no CI job ran, and it checked names, not behaviour.
+The gates below are now the contract; details, commands and the fragile areas are in
+`fhir4ds/operations/AGENTS.md` ("WASM parity gates").
+
+**Standing principles (Joel, 2026-11-24):** no macro may exist in the browser that does not
+exist on desktop; drift is not fixed by another one-off campaign but by a gate that makes the
+gaps visible and expires every excuse; the infrastructure comes before fixing the gaps.
+
+- **Step 0** names the reference bundle (`web/cql-cleanroom/src/lib/cql-macros.ts`) and fails on
+  a wasm-only macro, a same-name macro with a different body, a desktop macro the browser
+  lacks, a drifted `cql-macros.ts` copy, or a shipped `.wasm` that is not one known set
+  (`fhir4ds/wasm_extension_bundles.json`, `scripts/build_wasm_extensions.py --verify`).
+- **Tier A** runs the official corpora through the official comparators on a *simulated*
+  browser surface (x86 bundles + the reference macros) — CQL 2,037, FHIRPath R4, ViewDef, OMOP.
+- **Tier B** boots real duckdb-wasm with the shipped wasm bundles in headless chromium. It is
+  the only gate that sees the engine: binder, Arrow transport, bundle staleness. Both tiers
+  run per PR; Step 0 and Tier A must stay green even if Tier B is demoted to the scheduled job.
+- **Every gap is registered or fixed, never ignored** (`wasm_parity/known_gaps.json`): a
+  registration carries a reason, an owner and an expiry (90 days; 30 for principle kinds and
+  in-flight desktop defects); a registration whose gap no longer reproduces fails the gate;
+  `WASM_ONLY_MACRO` needs `approved_by`; a case-level registration names the surface it was
+  seen on. A new gap fails with a ready-to-paste entry — triage is a decision, not a diff.
+
+What the first run found (so nobody re-chases it): 33 desktop macros have no browser
+counterpart, 53 same-name macros have a different body, `AllTrue`/`AnyTrue`/`AllFalse`/
+`AnyFalse` are Binder Errors in every browser, the shipped `cql.duckdb_extension.wasm` lacks
+five functions the desktop bundles provide (`RoundQuantity`, `RoundQuantityTo`, `Comparable`,
+`cqlEquivalentInValueset`, `fhirpathEquivalentInValueset`) and predates the AMUX-171 Time
+rules, and `web/wasm-demo` and `web/cql-clinic` still ship their own diverged `cql-macros.ts`.
+Of the 2,010 runnable official CQL tests, desktop passes 2,004 and real duckdb-wasm 1,867.
+Of the 137 cases only desktop passes, 126 reproduce on the simulator (missing macros and
+body drift — the contract) and 14 are real-only (the stale wasm bundle). Rebuild the wasm bundles with
+the tracked script after this lands on dev — the shipped ones record no source provenance.
+
+**Rules for anyone touching this surface**
+
+- A translator macro that reaches population SQL is ported to the reference bundle or added to
+  the ledger in the same change (`test_macro_sync.py` + Step 0).
+- C++ changes need a wasm rebuild as well as the x86 ones
+  (`scripts/build_wasm_extensions.py`), or the browser silently runs last month's engine.
+  Tier B turns that into an exact list instead of a suspicion.
+- Tier B cannot run under `scripts/capped.sh` (chromium cannot start with a capped address
+  space); it is light and runs uncapped. Everything else stays capped.
+- Values cross to the browser as VARCHAR: under the apps' `castBigIntToDouble` flag Arrow
+  rounds BIGINT beyond 2^53 and delivers DECIMAL/HUGEINT unscaled.
