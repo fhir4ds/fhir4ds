@@ -1169,6 +1169,8 @@ static bool IntervalIncludesQuantityUnknown(const cql::Interval &container, cons
 	       IncomparableQuantityEndpoint(container.high, contained.high);
 }
 
+static bool interval_open_null_uncertain(const cql::Interval &iv);
+
 static void IntervalContainsFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data, b_data;
@@ -1203,6 +1205,14 @@ static void IntervalContainsFunc(DataChunk &args, ExpressionState &state, Vector
 		}
 		if (cql::is_json_interval(b_str)) {
 			auto other = cql::Interval::parse(b_str);
+			// FHIR4-42: an OPEN null bound is an UNKNOWN boundary (§9.14/§9.15
+			// Start/End return null for it), so containment is uncertain — the
+			// guard every sibling relationship predicate carries. A CLOSED null
+			// bound is the point-type extremum and stays determined.
+			if (other && (interval_open_null_uncertain(*iv) || interval_open_null_uncertain(*other))) {
+				result_mask.SetInvalid(i);
+				continue;
+			}
 			if (other && IntervalIncludesQuantityUnknown(*iv, *other)) {
 				result_mask.SetInvalid(i);
 				continue;
@@ -1212,6 +1222,17 @@ static void IntervalContainsFunc(DataChunk &args, ExpressionState &state, Vector
 			auto point = cql::parse_point_value(b_str);
 			if (point && IntervalContainsPointQuantityUnknown(*iv, *point)) {
 				result_mask.SetInvalid(i);
+				continue;
+			}
+			if (point && interval_open_null_uncertain(*iv)) {
+				// Three-valued AND: the OPEN null bound contributes UNKNOWN, so a
+				// determinate FALSE on the remaining side still decides (mirrors
+				// the Python `_and3` composition).
+				if (!iv->contains_point(*point)) {
+					result_data[i] = false;
+				} else {
+					result_mask.SetInvalid(i);
+				}
 				continue;
 			}
 			result_data[i] = point ? iv->contains_point(*point) : false;
@@ -1739,7 +1760,12 @@ static bool PrecisionIntervalUncertainFor(const char *func_name, const cql::Inte
 	return false;
 }
 
-#define DEFINE_PREC_INTERVAL_UDF(FuncName, method_call)                                                                  \
+// FHIR4-42: `guard_open_null` instances answer the three-valued containment
+// semantics of CQL §In (Interval): an OPEN null bound in the CONTAINER is an
+// UNKNOWN boundary, so a determinate FALSE still decides while a would-be TRUE
+// becomes SQL NULL. Only the includes pair needs it (their Python counterparts
+// delegate their bound checks to `intervalContainsPrecise`).
+#define DEFINE_PREC_INTERVAL_UDF(FuncName, method_call, guard_open_null)                                                 \
 	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                      \
 		idx_t count = args.size();                                                                                       \
 		UnifiedVectorFormat a_data, b_data, p_data;                                                                      \
@@ -1769,16 +1795,20 @@ static bool PrecisionIntervalUncertainFor(const char *func_name, const cql::Inte
 				result_mask.SetInvalid(i);                                                                               \
 				continue;                                                                                                \
 			}                                                                                                            \
+			if (guard_open_null && iv1 && iv2 && interval_open_null_uncertain(*iv1) && method_call) {                    \
+				result_mask.SetInvalid(i);                                                                               \
+				continue;                                                                                                \
+			}                                                                                                            \
 			result_data[i] = (iv1 && iv2) ? method_call : false;                                                         \
 		}                                                                                                                \
 	}
 
-DEFINE_PREC_INTERVAL_UDF(IntervalOverlapsPreciseFunc, iv1->overlaps(*iv2, *prec))
-DEFINE_PREC_INTERVAL_UDF(IntervalBeforePreciseFunc, iv1->before(*iv2, *prec))
-DEFINE_PREC_INTERVAL_UDF(IntervalAfterPreciseFunc, iv1->after(*iv2, *prec))
-DEFINE_PREC_INTERVAL_UDF(IntervalIncludesPreciseFunc, iv1->includes(*iv2, *prec))
-DEFINE_PREC_INTERVAL_UDF(IntervalOverlapsBeforePreciseFunc, iv1->overlaps_before(*iv2, *prec))
-DEFINE_PREC_INTERVAL_UDF(IntervalOverlapsAfterPreciseFunc, iv1->overlaps_after(*iv2, *prec))
+DEFINE_PREC_INTERVAL_UDF(IntervalOverlapsPreciseFunc, iv1->overlaps(*iv2, *prec), false)
+DEFINE_PREC_INTERVAL_UDF(IntervalBeforePreciseFunc, iv1->before(*iv2, *prec), false)
+DEFINE_PREC_INTERVAL_UDF(IntervalAfterPreciseFunc, iv1->after(*iv2, *prec), false)
+DEFINE_PREC_INTERVAL_UDF(IntervalIncludesPreciseFunc, iv1->includes(*iv2, *prec), true)
+DEFINE_PREC_INTERVAL_UDF(IntervalOverlapsBeforePreciseFunc, iv1->overlaps_before(*iv2, *prec), false)
+DEFINE_PREC_INTERVAL_UDF(IntervalOverlapsAfterPreciseFunc, iv1->overlaps_after(*iv2, *prec), false)
 
 static void IntervalIncludedInPreciseFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
@@ -1809,6 +1839,13 @@ static void IntervalIncludedInPreciseFunc(DataChunk &args, ExpressionState &stat
 			continue;
 		}
 		if (IntervalIncludesUncertain(*iv2, *iv1, *prec)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		// FHIR4-42: `iv2` is the CONTAINER for `included in`; its OPEN null bound
+		// is UNKNOWN, so a determinate FALSE still decides (see the Python
+		// intervalIncludesPrecise delegation to intervalContainsPrecise).
+		if (interval_open_null_uncertain(*iv2) && iv2->includes(*iv1, *prec)) {
 			result_mask.SetInvalid(i);
 			continue;
 		}
@@ -1860,20 +1897,44 @@ static void IntervalContainsPreciseFunc(DataChunk &args, ExpressionState &state,
 		auto iv = cql::Interval::parse(iv_vals[iv_idx].GetString());
 		if (!iv) { result_mask.SetInvalid(i); continue; }
 		std::string pt_str = pt_vals[pt_idx].GetString();
+		// FHIR4-42: an OPEN null bound is an UNKNOWN boundary at EVERY precision
+		// (§9.14/§9.15 Start/End return null for it) while a CLOSED null bound is
+		// the point-type extremum. Three-valued AND: the UNKNOWN operand lets a
+		// determinate FALSE on the remaining side still decide (mirrors the
+		// Python `_and3` composition).
+		auto open_null_container = interval_open_null_uncertain(*iv);
 		if (cql::is_json_interval(pt_str)) {
 			auto pt_iv = cql::Interval::parse(pt_str);
 			if (pt_iv && IntervalIncludesUncertain(*iv, *pt_iv, *prec)) {
 				result_mask.SetInvalid(i);
 				continue;
 			}
-			result_data[i] = pt_iv ? iv->contains_interval(*pt_iv, *prec) : false;
+			if (!pt_iv) {
+				result_data[i] = false;
+				continue;
+			}
+			bool contained = iv->contains_interval(*pt_iv, *prec);
+			if (open_null_container && contained) {
+				result_mask.SetInvalid(i);
+				continue;
+			}
+			result_data[i] = contained;
 		} else {
 			auto pt = ParsePointValueForPrecision(pt_str);
 			if (pt && IntervalContainsUncertain(*iv, *pt, *prec)) {
 				result_mask.SetInvalid(i);
 				continue;
 			}
-			result_data[i] = pt ? iv->contains_point(*pt, *prec) : false;
+			if (!pt) {
+				result_data[i] = false;
+				continue;
+			}
+			bool contained = iv->contains_point(*pt, *prec);
+			if (open_null_container && contained) {
+				result_mask.SetInvalid(i);
+				continue;
+			}
+			result_data[i] = contained;
 		}
 	}
 }

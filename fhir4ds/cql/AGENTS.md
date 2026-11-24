@@ -7340,7 +7340,8 @@ boilerplate: real DQM data carries open-null bounds —
 CMS645/CMS133 one-sided-Period doctrine), and `intervalContains` answers true
 for a point inside it. Adding the guard therefore changes measure SQL wherever a
 point or interval is tested against such a period, and it needs a C++
-`IntervalContains*Func` mirror plus an extension rebuild. Give it its own card.
+`IntervalContains*Func` mirror plus an extension rebuild.
+**CLOSED by FHIR4-42 — see below.**
 
 
 ### FHIR4-41 — the PRECISION-qualified `starts`/`ends` infer the point type from the PEER (2026-11-24)
@@ -7767,3 +7768,98 @@ ParseError, no SQL leak): `properly between` and `properly within <N> <unit> of`
 Gate after the change: CQL conformance 2036/2043 unchanged (`cql_report.json`
 byte-identical — no fixture uses the spelling), DQM qi-core-2025 47/47 and
 us-core-2025 73/73.
+
+### FHIR4-42 — containment through an OPEN null bound is UNKNOWN, with 3VL (2026-11-24)
+
+`intervalContains` / `intervalContainsPrecise` treated EVERY null bound as
+unbounded, so an OPEN null bound produced a definite verdict. Every sibling
+relationship predicate (`intervalOverlaps`, `intervalIncludes`,
+`intervalProperlyContains`, `intervalMeets`, `intervalStartsSame`, …) already
+carried `_open_null_bound_uncertain`. CQL 1.5.3 §In (Interval) is the whole
+rule and it is asymmetric:
+
+> "For open interval boundaries, exclusive comparison operators are used. For
+> closed interval boundaries, if the interval boundary is null, the result of
+> the boundary comparison is considered true."
+
+So a CLOSED null bound drops out of the conjunction (the point-type extremum via
+§9.14/§9.15 Start/End) while an OPEN null bound is an exclusive comparison
+against an UNKNOWN value — the boundary comparison is NULL and three-valued AND
+decides. Containment therefore does NOT hard-bail on open nulls the way the
+one-sided sibling predicates do; it contributes an UNKNOWN operand
+(`_and3` in `fhir4ds/cql/duckdb/udf/interval.py`):
+
+| expression | before | after |
+|---|---|---|
+| `5 in day of Interval(null, null)` | false | **null** |
+| `5 in day of Interval(null, 10]` | true | **null** (`NULL AND TRUE`) |
+| `500 in day of Interval(null, 10]` | false | false (`NULL AND FALSE`) |
+| `5 in day of Interval[0, null)` | true | **null** |
+| `500 in day of Interval[0, null)` | true | **null** (`TRUE AND NULL`) |
+| `5 in day of Interval[null, null]` / `Interval[null, 10]` / `Interval[0, null]` | true | true (closed) |
+| `null in day of Interval(null, null)` | null | null (§In point-null) |
+
+Both shapes reach the UDF through different routes and BOTH needed a fix:
+
+1. **One-sided open null bounds** arrive as interval JSON (a null bound with its
+   open flag) — `intervalFromBounds(NULL, 10, FALSE, TRUE)` works. The UDF
+   three-valued bounds handle them (`intervalContains`,
+   `intervalContainsPrecise`). Because `intervalIncludesPrecise` /
+   `intervalIncludedInPrecise` delegate their bound checks to
+   `intervalContainsPrecise`, they inherit it and finally agree with plain
+   `intervalIncludes` (which already answered null for the same container).
+2. **BOTH bounds untyped-null with at least one open bracket** never reach the
+   UDF at all: both bounds are SQL NULL, `intervalFromBounds` returns NULL, and
+   §19.3's first-argument-null rule then answers FALSE. That is why
+   `5 in day of Interval(null, null)` was false even before the UDF question.
+   `_translate_in_op`'s precision branch now short-circuits that authored shape
+   to `NULL` (`Unknown AND <extra>` when the parser's AND-inside-precision
+   workaround supplies a second condition). Note `Interval[null, null]` is
+   unaffected: closed null bounds go through the `__null__` sentinel and render
+   real interval JSON.
+
+**DOCTRINE — the one-sided FHIR Period decision (option A: guard in general).**
+`collapse_intervals` maps a Period with only `end` onto an OPEN null low
+("the start is UNKNOWN": `start of` is null, Min/Max ignore it — CMS645) and a
+Period with only `start` onto a CLOSED null high ("the period is ongoing": the
+point-type maximum, so `overlaps` stays determined — CMS145). Only the OPEN half
+moves: an unknown start cannot be claimed to contain a point, while an ongoing
+period genuinely does extend past its start, which the spec's closed-null clause
+sanctions. Making containment agree with `intervalOverlaps` /
+`intervalProperlyContains` (both already returned null for the same one-sided
+shape) is the coherence argument; DQM is the referee and it agrees —
+instrumenting both gated corpora with the guard in place found **ZERO**
+containment calls whose container carried an open null bound, so no measure
+relies on the definite verdict (qi-core-2025 47/47, us-core-2025 73/73
+unchanged). The `end`-only → unknown / `start`-only → ongoing asymmetry is
+pinned by `test_cql_interval_contains_one_sided_period_doctrine_fhir4_42`.
+
+Gate: CQL conformance 2036/2043 with ZERO cells moving (no official fixture
+covers the precision form); DQM qi-core-2025 47/47, us-core-2025 73/73. Pinned
+by `test_interval_part2_parity.py::
+test_cql_interval_contains_open_null_bound_is_unknown_fhir4_42` and
+`::test_cql_interval_contains_one_sided_period_doctrine_fhir4_42` (py-fallback
+== native-loaded == no-Python, plus a dispatch assertion on the one-sided
+Period shapes `collapse_intervals` emits and on the
+`intervalIncludesPrecise` → `intervalIncludes` agreement).
+
+**REBUILD REQUIRED** for the no-Python/WASM surface. The C++ mirrors
+(`IntervalContainsFunc`, `IntervalContainsPreciseFunc`, plus the
+`guard_open_null` instance of `DEFINE_PREC_INTERVAL_UDF` for
+`IntervalIncludesPreciseFunc` and the container guard in
+`IntervalIncludedInPreciseFunc`, all in
+`extensions/cql/src/cql_extension.cpp`) are in the source and compile-check
+clean with production flags, but the shipped bundles predate them.
+`_FHIR4_42_NO_PYTHON_STALE` / `_FHIR4_42_ONE_SIDED_NO_PYTHON_STALE` in
+`test_interval_part2_parity.py` pin the window and flip automatically
+(`_fh42_native_guard_current` probes the loaded binary); delete both maps and
+their branches after `python3 scripts/build_extension_bundles.py --build --abi
+<slot>`. Desktop is unaffected on both connections — `intervalContains` and
+`intervalContainsPrecise` are `_PYTHON_PREFERRED_CPP_CONFLICTS` members, so the
+Python UDFs are the conformance authority.
+
+KNOWN SIBLING GAP (out of this card): the other precision-qualified relationship
+predicates (`intervalOverlapsPrecise`, `intervalBeforePrecise`,
+`intervalAfterPrecise`, `intervalOverlapsBefore/AfterPrecise`) still lack the
+open-null treatment on BOTH engines. Do not widen FHIR4-42's guard into them
+without doing the dual-engine pair and re-running both DQM suites.
