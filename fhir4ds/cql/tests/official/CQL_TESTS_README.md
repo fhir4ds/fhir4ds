@@ -2,33 +2,81 @@
 
 This directory contains the official CQL (Clinical Quality Language) test suite cloned from [cqframework/cql-tests](https://github.com/cqframework/cql-tests).
 
-## Overview
+## Provenance / Pin
 
 - **Repository**: https://github.com/cqframework/cql-tests
-- **Total Test Cases**: 1,718
+- **Pinned commit**: `0a8f7d32809cd1b8f595b89e415bcfc855913b28`
+- **Commit date**: 2026-11-21
+- **Subject**: `Merge pull request #186 from bryantaustin13/truncate-integer-range-tests`
+- **Previous pin**: `316c4939be3a513fa775d78a97c31c6eae018b7a` (2026-11-16)
+
+How this directory is vendored: the `cql-tests` entry is a **gitlink**
+(submodule-style pin) in the fhir4ds index whose commit is the upstream SHA
+above, and the corpus files themselves live in a plain clone of upstream at
+that commit (`git -C fhir4ds/cql/tests/official/cql-tests rev-parse HEAD` must
+equal the pinned SHA). `conformance/scripts/run_cql.py` reads the XML files
+straight off the working tree.
+
+Refreshing the pin (keep both halves of the pin in step):
+
+```bash
+cd fhir4ds/cql/tests/official/cql-tests
+git fetch origin main
+git checkout --detach <upstream-main-sha>
+cd - && git add fhir4ds/cql/tests/official/cql-tests   # bumps the gitlink
+# then update this note (commit, date, subject, counts below)
+/tmp/opencode/capped.sh 20 8 python3 conformance/scripts/run_cql.py
+```
+
+### Upstream PRs NOT yet in this pin
+
+Two open cqframework/cql-tests PRs correct fixtures whose oracles this pin
+still carries; the engine already answers the corrected values, so these cells
+fail until the PRs merge and the pin moves past them:
+
+- **#183** (`Count duration uncertainties from the end of an imprecise start`)
+  — `CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainInterval`
+  (expects 17, spec/reference arithmetic gives 16) and
+  `::TimeDurationBetweenHourDiffPrecision2` (expects 1, gives `[0, 1]`).
+  See the AMUX-169 entry in `fhir4ds/cql/AGENTS.md`.
+- **#184** (`Time ms-null`) — `CqlIntervalOperatorsTest.xml::TimeProperContainsNull`
+  and `::TimeProperInNull` still pin `null` at `version="1.0"`; #184 caps those
+  at `versionTo="1.5.2"` and adds the 1.5.3 `false` pins. See the AMUX-171
+  entry in `fhir4ds/cql/AGENTS.md`.
+
+Do **not** hand-edit the vendored XML to silence them — the pin is upstream's
+content, and the failures are the honest inventory.
+
+## Overview
+
+Counted at the pinned commit (the CQL gate runs every `<test>` element; the
+`versionTo`-superseded cells are counted too, as skips/superseded passes):
+
+- **Total Test Cases**: 2,043
 - **Test Files**: 16 XML files
-- **Total Lines**: 9,317
+- **Groups**: 210
+- **Total Lines**: 11,082
 
 ## Test Categories
 
 | Category | File | Test Cases | Groups | Lines |
 |----------|------|------------|--------|-------|
-| **Interval Operators** | CqlIntervalOperatorsTest.xml | 412 | 30 | 2,183 |
-| **Date/Time Operators** | CqlDateTimeOperatorsTest.xml | 318 | 17 | 1,796 |
-| **Arithmetic Functions** | CqlArithmeticFunctionsTest.xml | 212 | 23 | 996 |
-| **Comparison Operators** | CqlComparisonOperatorsTest.xml | 198 | 8 | 856 |
-| **List Operators** | CqlListOperatorsTest.xml | 212 | 29 | 1,159 |
-| **String Operators** | CqlStringOperatorsTest.xml | 81 | 15 | 463 |
-| **Value Literals & Selectors** | ValueLiteralsAndSelectors.xml | 66 | 14 | 433 |
-| **Aggregate Functions** | CqlAggregateFunctionsTest.xml | 50 | 14 | 313 |
+| **Interval Operators** | CqlIntervalOperatorsTest.xml | 429 | 35 | 2,282 |
+| **Date/Time Operators** | CqlDateTimeOperatorsTest.xml | 322 | 17 | 1,825 |
+| **Comparison Operators** | CqlComparisonOperatorsTest.xml | 281 | 10 | 1,221 |
+| **List Operators** | CqlListOperatorsTest.xml | 268 | 32 | 1,470 |
+| **Arithmetic Functions** | CqlArithmeticFunctionsTest.xml | 261 | 23 | 1,231 |
+| **String Operators** | CqlStringOperatorsTest.xml | 98 | 17 | 569 |
+| **Aggregate Functions** | CqlAggregateFunctionsTest.xml | 84 | 15 | 473 |
+| **Value Literals & Selectors** | ValueLiteralsAndSelectors.xml | 78 | 14 | 491 |
+| **Type Operators** | CqlTypeOperatorsTest.xml | 59 | 14 | 362 |
 | **Logical Operators** | CqlLogicalOperatorsTest.xml | 39 | 5 | 216 |
-| **Types** | CqlTypesTest.xml | 39 | 10 | 227 |
-| **Type Operators** | CqlTypeOperatorsTest.xml | 35 | 11 | 218 |
-| **Nullological Operators** | CqlNullologicalOperatorsTest.xml | 22 | 4 | 127 |
-| **Query Tests** | CqlQueryTests.xml | 12 | 3 | 74 |
-| **Conditional Operators** | CqlConditionalOperatorsTest.xml | 9 | 3 | 121 |
-| **Aggregate Test** | CqlAggregateTest.xml | 9 | 1 | 107 |
-| **Errors & Messaging** | CqlErrorsAndMessagingOperatorsTest.xml | 4 | 1 | 28 |
+| **Types** | CqlTypesTest.xml | 36 | 11 | 283 |
+| **Nullological Operators** | CqlNullologicalOperatorsTest.xml | 35 | 4 | 204 |
+| **Query Tests** | CqlQueryTests.xml | 20 | 8 | 137 |
+| **Conditional Operators** | CqlConditionalOperatorsTest.xml | 14 | 3 | 145 |
+| **Aggregate Test** | CqlAggregateTest.xml | 12 | 1 | 127 |
+| **Errors & Messaging** | CqlErrorsAndMessagingOperatorsTest.xml | 7 | 1 | 46 |
 
 ## Test Structure
 
