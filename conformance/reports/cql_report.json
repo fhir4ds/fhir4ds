@@ -10448,8 +10448,7 @@
       {
         "name": "CoalesceMoreThanFiveArgs",
         "result": {
-          "passed": false,
-          "error": "Expected error or NULL per CQL \u00a716, got 15"
+          "passed": true
         }
       },
       {
