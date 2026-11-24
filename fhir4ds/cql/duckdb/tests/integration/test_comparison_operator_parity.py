@@ -5,9 +5,13 @@ from __future__ import annotations
 import json
 
 import duckdb
+import pytest
 
 from fhir4ds.cql.duckdb import register
 from fhir4ds.cql.duckdb.extension import _register_python_supplements
+from fhir4ds.cql.duckdb.tests.integration.wasm_runtime_helpers import (
+    load_cql_bundled_extension,
+)
 from fhir4ds.cql.parser import parse_expression
 from fhir4ds.cql.parser.ast_nodes import BinaryExpression
 from fhir4ds.cql.translator import translate_cql
@@ -22,6 +26,13 @@ def _python_only_connection() -> duckdb.DuckDBPyConnection:
 def _cpp_connection() -> duckdb.DuckDBPyConnection:
     con = duckdb.connect(config={"allow_unsigned_extensions": True})
     register(con, include_fhirpath=True)
+    return con
+
+
+def _no_python_connection() -> duckdb.DuckDBPyConnection:
+    """C++ extension only — the WASM/browser-style surface."""
+    con = duckdb.connect(config={"allow_unsigned_extensions": True})
+    con.execute(f"LOAD '{load_cql_bundled_extension()}'")
     return con
 
 
@@ -813,3 +824,185 @@ def test_cql_duration_quantity_compare_exact_rational_parity() -> None:
     finally:
         py.close()
         cpp.close()
+
+
+def _quantity_json(value: int | float, unit: str) -> str:
+    return json.dumps(
+        {
+            "value": value,
+            "unit": unit,
+            "code": unit,
+            "system": "http://unitsofmeasure.org",
+        }
+    )
+
+
+# FHIR4-36: calendar year/month equivalence compares in MONTHS, not days.
+#
+# Official fixture CqlComparisonOperatorsTest.xml::TestYearEquivalentMonths pins
+# `1 year ~ 12 months` -> true. The day-based equivalence table gives 365 d
+# (1 year) vs 360 d (12 * 30 d), so a day-space reading returns FALSE and
+# contradicts the fixture. CQL 1.5 Appendix B time-valued quantity factors give
+# the calendar relation 1 year = 12 months directly, so a year<->month pair must
+# be compared in a month space (12 vs 12), exactly like the equality/ordering
+# path already did before this fix.
+_CALENDAR_MONTH_EQUIVALENCE_CASES: list[tuple[str, str, str, str, bool]] = [
+    (
+        "TestYearEquivalentMonths",
+        "1 year ~ 12 months",
+        _quantity_json(1, "year"),
+        _quantity_json(12, "months"),
+        True,
+    ),
+    (
+        "TestYearEquivalentMonthsCommuted",
+        "12 months ~ 1 year",
+        _quantity_json(12, "months"),
+        _quantity_json(1, "year"),
+        True,
+    ),
+    (
+        "TestYearEquivalentDays",
+        "1 year ~ 365 days",
+        _quantity_json(1, "year"),
+        _quantity_json(365, "days"),
+        True,
+    ),
+    (
+        "TestMonthEquivalentDays",
+        "1 month ~ 30 days",
+        _quantity_json(1, "month"),
+        _quantity_json(30, "days"),
+        True,
+    ),
+    (
+        "TestQuantityYearEquivalentA",
+        "1 year ~ 1 'a'",
+        _quantity_json(1, "year"),
+        _quantity_json(1, "a"),
+        True,
+    ),
+    # Unpinned by fixtures; all three engines agree on the day-based reading
+    # (365 d vs 360 d). Deliberately NOT moved to month space: the month-space
+    # family is CALENDAR-keyword only, and widening it to UCUM 'a'/'mo' would
+    # make `1 year = 1 'a'` compare 12 vs 12 and return true, breaking the
+    # fixture-pinned EMPTY of TestQuantityYearEqualA / TestQuantityMonthEqualMo.
+    (
+        "UcumYearMonthStaysDayBased",
+        "1 'a' ~ 12 'mo'",
+        _quantity_json(1, "a"),
+        _quantity_json(12, "mo"),
+        False,
+    ),
+]
+
+# Invariants this change must not move (fixture-pinned elsewhere).
+_CALENDAR_MONTH_UNCHANGED_CASES: list[tuple[str, str, str, str, bool | None]] = [
+    (
+        "TestQuantityYearEqualA",
+        "1 year = 1 'a'",
+        _quantity_json(1, "year"),
+        _quantity_json(1, "a"),
+        None,
+    ),
+    (
+        "TestQuantityMonthEqualMo",
+        "1 month = 1 'mo'",
+        _quantity_json(1, "month"),
+        _quantity_json(1, "mo"),
+        None,
+    ),
+    (
+        "TestQuantityMonthNotEqualMo",
+        "1 month != 1 'mo'",
+        _quantity_json(1, "month"),
+        _quantity_json(1, "mo"),
+        None,
+    ),
+    (
+        "TestQuantityMonthEqualMonths",
+        "1 month = 1 months",
+        _quantity_json(1, "month"),
+        _quantity_json(1, "months"),
+        True,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "con_factory",
+    [
+        pytest.param(_cpp_connection, id="native"),
+        pytest.param(_python_only_connection, id="forced_python"),
+        pytest.param(_no_python_connection, id="no_python"),
+    ],
+)
+def test_cql_calendar_year_month_equivalence_uses_month_space_fhir4_36(
+    con_factory,
+) -> None:
+    """FHIR4-36: `1 year ~ 12 months` is true on every engine.
+
+    Found during AMUX-169: the forced-Python-fallback connection answered FALSE
+    while the native and no-Python engines answered TRUE. Root cause was the
+    Python `_compare_cql_duration_quantities` equivalence branch, which always
+    converted to DAYS (year -> 365, month -> 30) and therefore compared 365 vs
+    360 for the calendar pair. `extensions/cql/src/cql/quantity.cpp` had already
+    grown the month-space branch (`calendar_month_factor`), so only the Python
+    authority was wrong; it now mirrors the native rule for EVERY operator.
+    """
+    con = con_factory()
+    try:
+        for name, label, left, right, expected in _CALENDAR_MONTH_EQUIVALENCE_CASES:
+            row = con.execute(
+                "SELECT quantityCompare(?, ?, '~')", [left, right]
+            ).fetchone()
+            assert row[0] is expected, f"{name} ({label}) -> {row[0]}, want {expected}"
+
+        for name, label, left, right, expected in _CALENDAR_MONTH_UNCHANGED_CASES:
+            op = "!=" if "!=" in label else "=="
+            row = con.execute(
+                "SELECT quantityCompare(?, ?, ?)", [left, right, op]
+            ).fetchone()
+            assert row[0] is expected, f"{name} ({label}) -> {row[0]}, want {expected}"
+    finally:
+        con.close()
+
+
+@pytest.mark.parametrize(
+    "con_factory",
+    [
+        pytest.param(_cpp_connection, id="native"),
+        pytest.param(_python_only_connection, id="forced_python"),
+        pytest.param(_no_python_connection, id="no_python"),
+    ],
+)
+def test_cql_calendar_year_month_equivalence_translated_fhir4_36(
+    con_factory,
+) -> None:
+    """The same rule must hold through translated CQL, not only the bare UDF."""
+    cql = """library CalendarEquivalence version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define YearEqMonths: 1 year ~ 12 months
+define MonthsEqYear: 12 months ~ 1 year
+define YearEqDays: 1 year ~ 365 days
+define MonthEqDays: 1 month ~ 30 days
+define YearEqA: 1 year ~ 1 'a'
+define YearEqualsA: 1 year = 1 'a'
+"""
+    translated = translate_cql(cql)
+    con = con_factory()
+    try:
+        expected = {
+            "YearEqMonths": True,
+            "MonthsEqYear": True,
+            "YearEqDays": True,
+            "MonthEqDays": True,
+            "YearEqA": True,
+            "YearEqualsA": None,
+        }
+        for name, want in expected.items():
+            sql = "SELECT " + translated[name].to_sql()
+            assert con.execute(sql).fetchone() == (want,), name
+    finally:
+        con.close()

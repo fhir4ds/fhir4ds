@@ -504,26 +504,43 @@ def _compare_cql_duration_quantities(q1_dict: dict, q2_dict: dict, op: str):
             ctx.prec = 60
             return Decimal(frac.numerator) / Decimal(frac.denominator)
 
+    # Calendar year/month pairs (BOTH sides in the year-month family) compare in
+    # MONTHS for EVERY operator, including equivalence. The conversion table is
+    # month-based for year<->month (1 year = 12 months) and day-based for
+    # year/month versus day-and-below (12 * 30 d = 360 d, but 1 year = 365 d), so
+    # no single day mapping satisfies both rows. Reading `1 year ~ 12 months` in
+    # day space gives 365 vs 360 and answers FALSE; the official fixture
+    # CqlComparisonOperatorsTest.xml::TestYearEquivalentMonths pins TRUE, so the
+    # calendar pair has to be compared in a month space (12 vs 12).
+    #
+    # Mirrors extensions/cql/src/cql/quantity.cpp
+    # compare_cql_duration_quantities()'s calendar_month_factor() block; keep the
+    # two in lockstep (FHIR4-36).
+    #
+    # The family is deliberately CALENDAR-KEYWORD ONLY (year/years/month/months):
+    # admitting UCUM 'a'/'mo' would compare `1 year = 1 'a'` in months as 12 vs
+    # 12 and return TRUE, breaking the fixture-pinned EMPTY of
+    # TestQuantityYearEqualA / TestQuantityMonthEqualMo ("definite time and
+    # calendar units are not comparable"). UCUM year/month equivalence therefore
+    # stays on the day-based path below (1 'a' ~ 12 'mo' -> false, 365 vs 360).
+    months1 = _CQL_VARIABLE_CALENDAR_UNITS.get(unit1)
+    months2 = _CQL_VARIABLE_CALENDAR_UNITS.get(unit2)
+    if months1 is not None and months2 is not None:
+        # Exact rational month comparison (the same machinery the equality /
+        # ordering path already used), now applied to `~` / `!~` as well.
+        left = _to_decimal(_exact_days(value1, _CQL_VARIABLE_CALENDAR_UNITS, unit1))
+        right = _to_decimal(_exact_days(value2, _CQL_VARIABLE_CALENDAR_UNITS, unit2))
+        return _apply_quantity_compare(left, right, op, precision1, precision2)
+
     if op in ("~", "!~"):
         left = _to_decimal(_exact_days(value1, _CQL_EQUIVALENT_DURATION_DAYS, unit1))
         right = _to_decimal(_exact_days(value2, _CQL_EQUIVALENT_DURATION_DAYS, unit2))
         return _apply_quantity_compare(left, right, op, precision1, precision2)
 
     if unit1 in _CQL_VARIABLE_CALENDAR_UNITS or unit2 in _CQL_VARIABLE_CALENDAR_UNITS:
-        if unit1 in _CQL_VARIABLE_CALENDAR_UNITS and unit2 in _CQL_VARIABLE_CALENDAR_UNITS:
-            left = _exact_days(value1, _CQL_VARIABLE_CALENDAR_UNITS, unit1)
-            right = _exact_days(value2, _CQL_VARIABLE_CALENDAR_UNITS, unit2)
-            if op == ">":
-                return left > right
-            if op == "<":
-                return left < right
-            if op == ">=":
-                return left >= right
-            if op == "<=":
-                return left <= right
-            if op == "==":
-                return left == right
-            return left != right
+        # Exactly one side is a calendar year/month unit by this point (the
+        # both-sides case returned above). Calendar and definite durations are
+        # not comparable for equality/ordering, so the result is null.
         return None
 
     left = _exact_days(value1, _CQL_DEFINITE_DURATION_DAYS, unit1)
