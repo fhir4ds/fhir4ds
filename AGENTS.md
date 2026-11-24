@@ -6736,9 +6736,9 @@ gaps visible and expires every excuse; the infrastructure comes before fixing th
 What the first run found (so nobody re-chases it): 33 desktop macros have no browser
 counterpart, 53 same-name macros have a different body, `AllTrue`/`AnyTrue`/`AllFalse`/
 `AnyFalse` are Binder Errors in every browser, the shipped `cql.duckdb_extension.wasm` lacks
-five functions the desktop bundles provide (`RoundQuantity`, `RoundQuantityTo`, `Comparable`,
-`cqlEquivalentInValueset`, `fhirpathEquivalentInValueset`) and predates the AMUX-171 Time
-rules, and `web/wasm-demo` and `web/cql-clinic` still ship their own diverged `cql-macros.ts`.
+six functions the desktop bundles provide (`RoundQuantity`, `RoundQuantityTo`, `Comparable`,
+`cqlEquivalentInValueset`, `fhirpathEquivalentInValueset`, `cqlDateTimeEquivalentListElement`)
+and predates the AMUX-171 Time rules, and `web/wasm-demo` and `web/cql-clinic` still ship their own diverged `cql-macros.ts`.
 Of the 2,010 runnable official CQL tests, desktop passes 2,004 and real duckdb-wasm 1,867.
 Of the 137 cases only desktop passes, 126 reproduce on the simulator (missing macros and
 body drift — the contract) and 14 are real-only (the stale wasm bundle). Rebuild the wasm bundles with

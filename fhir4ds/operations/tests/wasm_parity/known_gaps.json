@@ -334,11 +334,12 @@
       "target": [
         "comparable",
         "cql_equivalent_in_valueset",
+        "cqldatetimeequivalentlistelement",
         "fhirpath_equivalent_in_valueset",
         "roundquantity",
         "roundquantityto"
       ],
-      "reason": "Tier B (real duckdb-wasm with the SHIPPED bundles) lacks these five functions that the desktop x86 bundles provide: the shipped cql.duckdb_extension.wasm predates them. Any measure SQL that emits one of them is a Catalog Error in every browser app. Fix: a tracked rebuild with scripts/build_wasm_extensions.py, which also records the source provenance the shipped bundles lack.",
+      "reason": "Tier B (real duckdb-wasm with the SHIPPED bundles) lacks these functions that the desktop x86 bundles provide: the shipped cql.duckdb_extension.wasm (built 2026-10-24) predates them. RoundQuantity/RoundQuantityTo/Comparable/cqlEquivalentInValueset/fhirpathEquivalentInValueset are the November CQL 2.0 functions; cqlDateTimeEquivalentListElement is FHIR4-34 (dev rebuilt the x86 slots in 64303b05be9). Any measure SQL that emits one of them is a Catalog Error in every browser app. Fix: a tracked rebuild with scripts/build_wasm_extensions.py, which also records the source provenance the shipped bundles lack.",
       "owner": "fhir4ds lane",
       "since": "2026-11-24",
       "expires": "2027-02-22"
@@ -391,39 +392,32 @@
       "surface": "real"
     },
     {
-      "id": "cql-engine-diff-stale-wasm-time-interval-null-bounds",
-      "kind": "ENGINE_DIFF",
-      "suite": "cql",
-      "target": [
-        "CqlIntervalOperatorsTest.xml::TestMeetsAfterNull",
-        "CqlIntervalOperatorsTest.xml::TimeProperContainsNull",
-        "CqlIntervalOperatorsTest.xml::TimeProperInNull"
-      ],
-      "reason": "Real duckdb-wasm only (Tier B, whole-corpus run): the shipped cql.duckdb_extension.wasm predates the AMUX-171 Time rule in Interval::properly_contains_point_nullable, so a Time interval with second-vs-millisecond bounds evaluates to null in the browser where desktop returns a determined boolean. Fix: a tracked rebuild of the wasm bundles with scripts/build_wasm_extensions.py (fhir4ds lane, after this lands on dev).",
-      "owner": "fhir4ds lane",
-      "since": "2026-11-24",
-      "expires": "2027-02-22",
-      "surface": "real"
-    },
-    {
       "id": "cql-desktop-defects-strict-boolean-fhir4-33",
       "kind": "DESKTOP_DEFECT",
       "suite": "cql",
       "target": [
-        "CqlIntervalOperatorsTest.xml::TestIntegerInUnknownIntervalNull",
-        "CqlIntervalOperatorsTest.xml::TestMaxIntervalEndsFalse",
-        "CqlIntervalOperatorsTest.xml::TestMaxIntervalStartsFalse",
         "CqlIntervalOperatorsTest.xml::TimeProperContainsNull",
-        "CqlIntervalOperatorsTest.xml::TimeProperInNull",
-        "CqlListOperatorsTest.xml::ProperContains1",
-        "CqlListOperatorsTest.xml::ProperContainsTimeNull",
-        "CqlListOperatorsTest.xml::ProperIn1",
-        "CqlListOperatorsTest.xml::ProperInTimeNull"
+        "CqlIntervalOperatorsTest.xml::TimeProperInNull"
       ],
-      "reason": "In flight in the fhir4ds lane. Dev landed the strict Boolean comparison in the official CQL gate (FHIR4-33, c3e2610f694: a null result no longer satisfies an expected false) before the engine changes that satisfy it: the list-element Time equality rule (FHIR4-34) and the interval null-bound cases. A fresh run of pristine origin/dev gives 2022/2037 while its committed conformance/reports/cql_report.json says 2029/2037; these 9 are the difference. Removes when those fixes merge (this registration then goes stale and must be deleted).",
+      "reason": "In flight in the fhir4ds lane. Dev landed the strict Boolean comparison in the official CQL gate (FHIR4-33) before the engine changes that satisfy it. Seven of the nine first registered no longer reproduce after FHIR4-34/38/39/40 and were removed from this entry. These two still fail on the desktop surface: properly includes / properly in over Time bounds with second-vs-millisecond precision (the AMUX-171 remaining gap). Removes when that fix merges (this registration then goes stale and must be deleted).",
       "owner": "fhir4ds lane",
       "since": "2026-11-24",
       "expires": "2026-12-24"
+    },
+    {
+      "id": "cql-parity-gap-stale-wasm-interval-null-bounds",
+      "kind": "PARITY_GAP",
+      "suite": "cql",
+      "surface": "real",
+      "target": [
+        "CqlIntervalOperatorsTest.xml::TestMaxIntervalEndsFalse",
+        "CqlIntervalOperatorsTest.xml::TestMaxIntervalStartsFalse",
+        "CqlIntervalOperatorsTest.xml::TestMeetsAfterNull"
+      ],
+      "reason": "Real duckdb-wasm only (Tier B, whole-corpus run). Desktop now passes these after FHIR4-38 (starts/ends resolve a closed null bound to the point-type extreme) and FHIR4-40 (a point in an open-null-bound interval is unknown); the shipped cql.duckdb_extension.wasm predates both, so the browser still returns the old answer. Fix: a tracked rebuild of the wasm bundles with scripts/build_wasm_extensions.py (fhir4ds lane, after this lands on dev).",
+      "owner": "fhir4ds lane",
+      "since": "2026-11-24",
+      "expires": "2027-02-22"
     }
   ]
 }

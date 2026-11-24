@@ -291,7 +291,8 @@ US-Core 2025 variant: 180 KB, 270k codes).
   Quantity `div` unit cancellation, the AMUX-171 Time rules).
 - Staleness list (x86 bundles provide, shipped wasm lacks): `comparable`,
   `cql_equivalent_in_valueset`, `fhirpath_equivalent_in_valueset`, `roundquantity`,
-  `roundquantityto`.
+  `roundquantityto`, `cqlDateTimeEquivalentListElement` (dev rebuilt the x86 slots in
+  `64303b05be9`; the PR's first real CI run flagged it).
 - Four reference macros are **broken everywhere**, simulator included: `AllTrue`, `AnyTrue`,
   `AllFalse`, `AnyFalse` call `system.bool_and(list)` / `bool_or(list)`, overloads no DuckDB
   1.5.x has (Binder Error).
