@@ -1339,8 +1339,20 @@ def _precision_aware_compare(a, b) -> int | None:
     ``'2017-09-01T00:00:00'`` second), the comparison is uncertain —
     the coarser-precision operand does not specify the finer components,
     so the spec returns null rather than assuming they are zero.
+
+    TIME bounds are the documented EXCEPTION.  CQL §Time (present from
+    1.5.3) says "seconds and milliseconds are combined and represented as
+    a Decimal for the purposes of comparison ... When milliseconds are
+    null, they are combined as .0 ... This is true of all comparison
+    operations for time values ... or when comparison is performed as part
+    of other operations such as interval meets and overlaps".  A Time bound
+    therefore compares at millisecond precision with a null millisecond
+    read as 0, so ``Interval[@T12:00:00.001, ...] properly includes
+    @T12:00:00`` is determined FALSE (the point is 12:00:00.000, before the
+    closed start) rather than null — cql-tests PR #184.  DateTime bounds
+    keep the uncertainty above (fixtures outrank prose).
     """
-    from .datetime import _compare_at_min_precision, _infer_precision
+    from .datetime import _compare_at_min_precision, _infer_precision, _is_time_only_text
     # If both are strings and they're date/datetime values, use precision-aware comparison
     if isinstance(a, str) and isinstance(b, str):
         a_s = _normalize_datetime_str(a.strip())
@@ -1361,8 +1373,10 @@ def _precision_aware_compare(a, b) -> int | None:
                         # DateTimeIncludedInNull pins interval-boundary
                         # second-vs-millisecond precision mismatch as
                         # UNCERTAIN; fixtures outrank the combined-decimal
-                        # rule for public comparisons.
-                        combined_seconds_ms=False,
+                        # rule for public comparisons.  TIME bounds are the
+                        # §Time exception (combined .0 for null ms) — see the
+                        # docstring.
+                        combined_seconds_ms=_is_time_only_text(a_s) and _is_time_only_text(b_s),
                     )
                     if not certain:
                         return None  # Uncertain due to precision mismatch

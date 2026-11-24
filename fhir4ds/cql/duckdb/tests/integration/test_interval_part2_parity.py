@@ -14,6 +14,30 @@ from fhir4ds.cql.translator import CQLToSQLTranslator, translate_cql
 from .wasm_runtime_helpers import no_python_connection
 
 
+# CQL 1.5.3 (§Time): "Although the milliseconds are specified with a separate
+# component, seconds and milliseconds are combined and represented as a Decimal
+# for the purposes of comparison ... When milliseconds are null, they are
+# combined as .0 ... This is true of all comparison operations for time values
+# ... or when comparison is performed as part of other operations such as
+# interval meets and overlaps."
+#
+# AMUX-171 applies that rule to TIME interval boundaries
+# (fhir4ds/cql/duckdb/udf/interval.py::_precision_aware_compare).  DateTime
+# bounds are deliberately exempt: the official fixture
+# CqlIntervalOperatorsTest.xml::DateTimeIncludedInNull pins interval-boundary
+# second-vs-millisecond mismatch as UNCERTAIN, and fixtures outrank prose.
+#
+# The bundled C++ engine has NOT been rebuilt with the Time rule, so on a
+# no-Python connection (WASM/browser surface)
+# extensions/cql/src/cql/interval.cpp::Interval::properly_contains_point_nullable
+# still reports NULL.  REBUILD REQUIRED - delete this map and the divergence
+# assertions once the extension bundles are rebuilt from these sources.
+_NO_PYTHON_TIME_MS_STALE = {
+    "TimeProperContainsUncertain": None,
+    "TimeProperInUncertain": None,
+}
+
+
 def _python_only_connection() -> duckdb.DuckDBPyConnection:
     con = duckdb.connect(config={"allow_unsigned_extensions": True})
     _register_python_supplements(con, cpp_loaded=False, include_fhirpath=True)
@@ -91,8 +115,8 @@ def test_cql_interval_part2_translated_sql_matches_cpp_registration() -> None:
         # null: the open/unknown null boundaries (low of the left operand,
         # high of the right operand) make the comparison indeterminate.
         "MeetsAfterNullHigh": (None,),
-        "TimeProperContainsUncertain": (None,),
-        "TimeProperInUncertain": (None,),
+        "TimeProperContainsUncertain": (False,),
+        "TimeProperInUncertain": (False,),
         "TimeProperContainsPrecisionUncertain": (None,),
         "TimeProperInPrecisionUncertain": (None,),
         "NotEqualCheck": (True,),
@@ -125,7 +149,10 @@ def test_cql_interval_part2_translated_sql_matches_cpp_registration() -> None:
                 cpp_result = cpp.execute(sql).fetchone()
                 no_py_result = no_py.execute(sql).fetchone()
                 assert cpp_result == py_result, name
-                assert no_py_result == py_result, name
+                if name in _NO_PYTHON_TIME_MS_STALE:
+                    assert no_py_result == (_NO_PYTHON_TIME_MS_STALE[name],), name
+                else:
+                    assert no_py_result == py_result, name
                 if name in expected:
                     assert py_result == expected[name], name
     finally:
@@ -268,6 +295,12 @@ def test_cql_interval_part2_boundary_regressions_match_no_python_cpp() -> None:
         (
             "SELECT intervalProperlyContains("
             "intervalFromBounds('T12:00:00.001', 'T21:59:59.999', true, true), 'T12:00:00')",
+            # CQL 1.5.3 §Time: null milliseconds combine as .0, so the point is
+            # 12:00:00.000 — before the closed start — hence FALSE (was NULL
+            # before the combined-precision rule; cql-tests PR #184).
+            (False,),
+            # REBUILD REQUIRED: the no-Python C++ engine still returns NULL here
+            # (see _NO_PYTHON_TIME_MS_STALE).
             (None,),
         ),
         (
@@ -292,10 +325,15 @@ def test_cql_interval_part2_boundary_regressions_match_no_python_cpp() -> None:
     cpp = _cpp_connection()
     try:
         with no_python_connection() as no_py:
-            for sql, expected in cases:
+            for case in cases:
+                sql, expected = case[0], case[1]
+                # Optional third element pins an engine-specific no-Python (C++
+                # only) expectation where the bundled binary has not been
+                # rebuilt with a newer rule.
+                no_py_expected = case[2] if len(case) > 2 else expected
                 assert py.execute(sql).fetchone() == expected
                 assert cpp.execute(sql).fetchone() == expected
-                assert no_py.execute(sql).fetchone() == expected
+                assert no_py.execute(sql).fetchone() == no_py_expected
     finally:
         py.close()
         cpp.close()
@@ -1222,3 +1260,136 @@ class TestExternalReviewB13IntervalFollowUps:
         assert i >= 0
         seg = sql[i : i + 2000]
         assert "intervalStart(" in seg or "intervalEnd(" in seg, seg[:300]
+
+
+def test_cql_interval_time_ms_null_combined_precision_cql_153_amux171() -> None:
+    """CQL 1.5.3 §Time: null milliseconds are combined as ``.0``.
+
+    Spec text (cql.hl7.org/09-b-cqlreference.html#time, from 1.5.3):
+    "Although the milliseconds are specified with a separate component,
+    seconds and milliseconds are combined and represented as a Decimal for the
+    purposes of comparison, duration, and difference calculation. When
+    milliseconds are null, they are combined as .0 ... This is true of all
+    comparison operations for time values, whether explicit ... or implicit
+    ... or when comparison is performed as part of other operations such as
+    interval meets and overlaps."
+
+    cql-tests PR #184 pins the consequence for interval-point containment:
+    ``Interval[@T12:00:00.001, @T21:59:59.999] properly includes @T12:00:00``
+    is FALSE (the point reads 12:00:00.000, before the closed start), where the
+    pre-1.5.3 pin (``versionTo="1.5.2"``) said null.
+
+    The referees that MUST NOT change are pinned here too: DateTime interval
+    bounds keep the second-vs-millisecond uncertainty
+    (CqlIntervalOperatorsTest.xml::DateTimeIncludedInNull), and a point whose
+    milliseconds component is *extracted* from a null-ms Time is data-absent
+    (null), so the precision-qualified fixtures stay null.
+    """
+    authority = {
+        # cql-tests #184: the 1.5.3 pair.
+        "properly includes (point before closed start)": (
+            "SELECT intervalProperlyContains("
+            "intervalFromBounds('T12:00:00.001', 'T21:59:59.999', true, true), "
+            "'T12:00:00')",
+            (False,),
+        ),
+        "properly includes (point == closed high)": (
+            "SELECT intervalProperlyContains("
+            "intervalFromBounds('T10:00:00.000', 'T12:00:00.000', true, true), "
+            "'T12:00:00')",
+            (False,),
+        ),
+        # Point equal to the CLOSED authored start is not *properly* contained
+        # (official fixtures TimeProperContainsFalse / TimeProperInFalse).
+        "properly includes (point == closed start)": (
+            "SELECT intervalProperlyContains("
+            "intervalFromBounds('T12:00:00.000', 'T21:59:59.999', true, true), "
+            "'T12:00:00')",
+            (False,),
+        ),
+        "properly includes (point strictly inside)": (
+            "SELECT intervalProperlyContains("
+            "intervalFromBounds('T12:00:00.000', 'T21:59:59.999', true, true), "
+            "'T12:00:01')",
+            (True,),
+        ),
+        # Interval equality/equivalence: combined decimal precision makes the
+        # second-precision interval equal to the millisecond-precision one
+        # (previously null / false).
+        "time interval equals across ms precision": (
+            "SELECT intervalEquals("
+            "intervalFromBounds('T10:00:00', 'T11:00:00', true, true), "
+            "intervalFromBounds('T10:00:00.000', 'T11:00:00.000', true, true))",
+            (True,),
+        ),
+        "time interval equivalent across ms precision": (
+            "SELECT intervalEquivalent("
+            "intervalFromBounds('T10:00:00', 'T11:00:00', true, true), "
+            "intervalFromBounds('T10:00:00.000', 'T11:00:00.000', true, true))",
+            (True,),
+        ),
+        # REFEREES - unchanged by the Time rule.
+        "DateTimeIncludedInNull referee": (
+            "SELECT intervalIncludedIn("
+            "intervalFromBounds('2017-09-01T00:00:00', '2017-09-01T00:00:00', true, true), "
+            "intervalFromBounds('2017-09-01T00:00:00.000', '2017-12-30T23:59:59.999', true, true))",
+            (None,),
+        ),
+        "millisecond-extracted Time point stays data-absent": (
+            "SELECT intervalProperlyContains("
+            "intervalFromBounds('T12:00:00.001', 'T21:59:59.999', true, true), "
+            "CAST(NULL AS VARCHAR))",
+            (None,),
+        ),
+        "DateTime contains precision keeps uncertainty": (
+            "SELECT intervalContainsPrecise("
+            "intervalFromBounds('2017-09-01T00:00:00.000', '2017-12-30T23:59:59.999', true, true), "
+            "intervalFromBounds('2017-09-01T00:00:00', '2017-09-01T00:00:00', true, true), "
+            "'millisecond')",
+            (None,),
+        ),
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for label, (sql, expected) in authority.items():
+            assert py.execute(sql).fetchone() == expected, label
+            # intervalProperlyContains / intervalEquals / intervalEquivalent /
+            # intervalContainsPrecise are all in _PYTHON_PREFERRED_CPP_CONFLICTS,
+            # so a normal native-loaded connection runs the Python authority.
+            assert cpp.execute(sql).fetchone() == expected, label
+    finally:
+        py.close()
+        cpp.close()
+
+    # End-to-end through the translator: the cql-tests #184 expressions.
+    translated = translate_cql(
+        """library TimeMs version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define ProperIncludesNoMs: Interval[@T12:00:00.001, @T21:59:59.999] properly includes @T12:00:00
+define ProperIncludedInNoMs: @T12:00:00 properly included in Interval[@T12:00:00.001, @T21:59:59.999]
+define ProperIncludesPrecisionNull: Interval[@T12:00:00.001, @T21:59:59.999] properly includes millisecond of @T12:00:00
+define ProperIncludedInPrecisionNull: @T12:00:00 properly included in millisecond of Interval[@T12:00:00.001, @T21:59:59.999]
+"""
+    )
+    end_to_end = {
+        "ProperIncludesNoMs": (False,),
+        "ProperIncludedInNoMs": (False,),
+        # REFEREE: `millisecond of @T12:00:00` is data-absent -> the null-ms
+        # precision-qualified fixtures TimeProperContainsPrecisionNull /
+        # TimeProperInPrecisionNull stay null.
+        "ProperIncludesPrecisionNull": (None,),
+        "ProperIncludedInPrecisionNull": (None,),
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected in end_to_end.items():
+            sql = f"SELECT {translated[name].to_sql()}"
+            assert py.execute(sql).fetchone() == expected, name
+            assert cpp.execute(sql).fetchone() == expected, name
+    finally:
+        py.close()
+        cpp.close()
