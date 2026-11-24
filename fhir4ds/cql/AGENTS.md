@@ -7285,9 +7285,8 @@ precision)` per operand, and a single all-null interval cannot infer its point
 type, so the closed-null cells stay null there. The same seam also returns null
 for a NON-null Integer interval (`Interval[1, 10] starts day of Interval[1, 15]`)
 because the precision qualifier is defined only for Date/DateTime/Time point
-types. Closing it needs a peer-aware Start/End arity that the bundled C++
-surface does not implement; pinned in the regression test as
-`*PrecisionGapNull`.
+types. **CLOSED by FHIR4-41 — see below; the `*PrecisionGapNull` pins are now
+determined booleans.**
 
 
 ### FHIR4-40 — point `in` an OPEN-null-bound interval is UNKNOWN (2026-11-24)
@@ -7344,8 +7343,78 @@ point or interval is tested against such a period, and it needs a C++
 `IntervalContains*Func` mirror plus an extension rebuild. Give it its own card.
 
 
-## AMUX-169 — duration-uncertainty minimum uses the first comparand's LATEST possible value (2026-11-24)
+### FHIR4-41 — the PRECISION-qualified `starts`/`ends` infer the point type from the PEER (2026-11-24)
 
+FHIR4-38 fixed the unqualified form and pinned the precision-qualified one as a
+gap: `starts day of` lowered to
+`cqlSameAsP(intervalStart(X), intervalStart(Y), precision)` plus the end
+conjunct, and `intervalStart` cannot infer a point type from a single all-null
+interval. Two distinct shapes were both NULL:
+
+1. **All-null closed operand, temporal point type** — `Interval[null, null]
+   starts day of Interval[@2024-01-01, @2024-12-31]`. CQL 1.5 §19.30 Starts /
+   §19.13 Ends: *"This operator uses the semantics described in the Start and
+   End operators to determine interval boundaries, particularly when those
+   boundaries are null."* §9.14/§9.15 make a CLOSED null bound the point-type
+   extremum, and `Interval<T>` is satisfied by BOTH operands — so the type comes
+   from the PEER, exactly as FHIR4-38's peer-aware sentinels do. New UDFs
+   `intervalStartWithPeer(interval, peer)` / `intervalEndWithPeer(interval,
+   peer)` (`fhir4ds/cql/duckdb/udf/interval.py`, thin wrappers over the shared
+   `_interval_start`/`_interval_end` bodies, so 1-arg behaviour and bound
+   formatting are byte-identical) supply it; the translator emits them in the
+   precision branches of `_translate_starts_op` / `_translate_ends_op`.
+   OPEN null bounds still return null (`Interval(null, null)`), and a pair where
+   NEITHER side carries a bound (`Interval[null, null] ... Interval[null,
+   null]`) stays null (`Interval<Any>`).
+
+2. **Non-temporal point type with a precision qualifier** — ADJUDICATED, not a
+   gap. §19.13/§19.30: *"If precision is specified **and the point type is a
+   Date, DateTime, or Time type**, comparisons used in the operation are
+   performed at the specified precision."* The qualifier is CONDITIONAL, and the
+   reference implementation ignores it outside that branch:
+   `StartsEvaluator`/`EndsEvaluator`
+   (cqframework/clinical_quality_language,
+   `engine/src/commonMain/kotlin/.../elm/executing/`) select the precision-aware
+   comparison only under `leftStart is BaseTemporal && rightStart is
+   BaseTemporal`; the else branch is `Equal + LessOrEqual` (starts) /
+   `GreaterOrEqual + Equal` (ends). So `Interval[1, 10] starts day of
+   Interval[1, 15]` is **TRUE**, not null, and
+   `Interval[null, null] starts day of Interval[1, 10]` is **FALSE**.
+   `_precision_qualifier_is_noop` (translator `_operators.py`) drops the
+   qualifier and emits `intervalStartsSame`/`intervalEndsSame` when every
+   STATICALLY KNOWN point type is non-temporal. Residual (documented, not
+   pinned): a non-temporal interval whose point type is only known at runtime
+   (static type `Any`) still takes the precision form and returns null — the
+   static check is conservative on purpose, and CQL's own typing knows `T` here.
+
+Lowering contract pinned in `test_interval_part3_parity.py`: temporal/unknown
+point types emit `intervalStartWithPeer`, statically non-temporal ones emit
+`intervalStartsSame` and no `cqlSameAsP`.
+
+Official gate unchanged at 2036/2043 (A/B on a pristine `dev` worktree: the
+same 7 pre-existing failures, no starts/ends fixture exercises an all-null
+bound); DQM qi-core 47/47 and us-core 73/73 unchanged. Pinned by
+`test_interval_part3_parity.py::
+test_cql_interval_part3_precision_starts_ends_peer_point_type_fhir4_41`
+(Date/DateTime/Time across `starts`/`ends`, plus the open-null and uninferrable
+null controls, plus the Integer/Decimal/Quantity adjudication) and the
+direct-UDF sibling.
+
+**REBUILD REQUIRED** for the no-Python/WASM surface: the C++ mirrors
+(`IntervalStartWithPeerFunc`/`IntervalEndWithPeerFunc` in
+`extensions/cql/src/cql_extension.cpp`, sharing `SentinelForNullBound` with the
+1-arg forms) are in the source but not in the shipped bundles. Until
+`scripts/build_extension_bundles.py --build --abi <slot>` runs, translated SQL
+that uses those two names raises a Catalog Error there.
+`wasm_runtime_helpers.FHIR4_41_NO_PYTHON_STALE` pins the window (and
+`test_wasm_cpp_surface.CQL_REQUIRED` subtracts the two pending names); set it to
+False after the rebuild and the same tests assert real parity. Desktop is
+unaffected — both names are in `_PYTHON_PREFERRED_CPP_CONFLICTS`, so the Python
+UDFs are the conformance authority on py-fallback and native-loaded
+connections alike.
+
+
+## AMUX-169 — duration-uncertainty minimum uses the first comparand's LATEST possible value (2026-11-24)
 CQL 1.5 Language Semantics "Determining Difference and Duration": *"The lower
 bound of that range is found by determining the duration between the maximum
 possible value of the first comparand and the minimum possible value of the

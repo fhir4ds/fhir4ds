@@ -12,7 +12,7 @@ from fhir4ds.cql.parser import parse_expression
 from fhir4ds.cql.parser.ast_nodes import BinaryExpression, FunctionRef, UnaryExpression
 from fhir4ds.cql.translator import translate_cql
 
-from .wasm_runtime_helpers import no_python_connection
+from .wasm_runtime_helpers import no_python_connection, no_python_row
 
 
 def _python_only_connection() -> duckdb.DuckDBPyConnection:
@@ -350,7 +350,9 @@ define ExpandValidNumericPer: expand Interval[1, 5] per 2
                 sql = f"SELECT {translated[name].to_sql()}"
                 py_value = py.execute(sql).fetchone()[0]
                 cpp_value = cpp.execute(sql).fetchone()[0]
-                no_py_value = no_py.execute(sql).fetchone()[0]
+                # FHIR4-41 peer-aware Start/End are not in the bundled C++
+                # yet; the helper pins that rebuild window.
+                no_py_value = no_python_row(no_py, sql, (py_value,), label=name)[0]
                 if isinstance(py_value, list):
                     # List-returning results (e.g. list except) arrive as
                     # DuckDB LISTs, not JSON text.
@@ -1072,7 +1074,9 @@ define ExpandOpenNullLow: expand Interval(null, 5]
                 sql = f"SELECT {translated[name].to_sql()}"
                 py_value = py.execute(sql).fetchone()[0]
                 cpp_value = cpp.execute(sql).fetchone()[0]
-                no_py_value = no_py.execute(sql).fetchone()[0]
+                # FHIR4-41 peer-aware Start/End are not in the bundled C++
+                # yet; the helper pins that rebuild window.
+                no_py_value = no_python_row(no_py, sql, (py_value,), label=name)[0]
                 if isinstance(expected_result, list) and not isinstance(py_value, list):
                     assert _load_json(py_value) == _load_json(cpp_value) == _load_json(no_py_value), name
                     assert _load_json(py_value) == expected_result
@@ -1149,7 +1153,9 @@ define ContainsStartOfFirst: Interval[4, 6] contains start of First({ Interval[4
                 sql = f"SELECT {translated[name].to_sql()}"
                 py_value = py.execute(sql).fetchone()[0]
                 cpp_value = cpp.execute(sql).fetchone()[0]
-                no_py_value = no_py.execute(sql).fetchone()[0]
+                # FHIR4-41 peer-aware Start/End are not in the bundled C++
+                # yet; the helper pins that rebuild window.
+                no_py_value = no_python_row(no_py, sql, (py_value,), label=name)[0]
                 if name == "CollapseIdxExcept":
                     # intervalExcept JSON scalar quoting of numeric bounds
                     # differs between the Python UDF ("low": 6) and the pure

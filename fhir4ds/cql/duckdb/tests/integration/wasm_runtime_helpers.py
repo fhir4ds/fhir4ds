@@ -205,3 +205,66 @@ def catalog_names(con: duckdb.DuckDBPyConnection) -> set[str]:
         for row in con.execute("SELECT function_name FROM duckdb_functions()").fetchall()
     }
 
+
+# ---------------------------------------------------------------------------
+# Rebuild windows for the no-Python / browser surface
+# ---------------------------------------------------------------------------
+#
+# FHIR4-41 added `intervalStartWithPeer` / `intervalEndWithPeer` (the
+# peer-aware Start/End the PRECISION-qualified starts/ends lowering needs) to
+# BOTH engines, but only the Python UDFs ship in this commit: the bundled
+# `cql.duckdb_extension` still predates the C++ mirrors in
+# extensions/cql/src/cql_extension.cpp. Until the bundles are rebuilt with
+# `scripts/build_extension_bundles.py --build --abi <slot>`, translated SQL that
+# uses those two functions raises a Catalog Error on the no-Python surface.
+# Desktop is unaffected: both names are in `_PYTHON_PREFERRED_CPP_CONFLICTS`, so
+# the Python UDFs are the conformance authority on both desktop connections.
+# SET THIS TO False when the bundles are rebuilt.
+FHIR4_41_NO_PYTHON_STALE = True
+
+#: Functions that only exist in the Python supplements during the FHIR4-41
+#: rebuild window.
+FHIR4_41_PEER_AWARE_FUNCTIONS = ("intervalStartWithPeer", "intervalEndWithPeer")
+
+
+def no_python_row(
+    con: duckdb.DuckDBPyConnection,
+    statement: str,
+    desktop_row: tuple,
+    *,
+    label: str = "",
+) -> tuple:
+    """Return the no-Python (bundled C++) row, honouring the FHIR4-41 window.
+
+    `statement` is a complete SQL statement. While the FHIR4-41 rebuild window
+    is open, statements using the peer-aware Start/End helpers are expected to
+    raise a Catalog/Binder error on this surface; the desktop row is returned so
+    callers keep asserting desktop parity for the value itself.
+    """
+    if FHIR4_41_NO_PYTHON_STALE and any(
+        name in statement for name in FHIR4_41_PEER_AWARE_FUNCTIONS
+    ):
+        try:
+            row = con.execute(statement).fetchone()
+        except (duckdb.CatalogException, duckdb.BinderException):
+            return desktop_row
+        raise AssertionError(
+            f"{label}: the bundled extension now provides the FHIR4-41 "
+            "peer-aware helpers - set FHIR4_41_NO_PYTHON_STALE = False in "
+            f"wasm_runtime_helpers.py and assert the real row (got {row})"
+        )
+    return con.execute(statement).fetchone()
+
+
+def assert_no_python_result(
+    con: duckdb.DuckDBPyConnection,
+    statement: str,
+    expected: tuple,
+    *,
+    label: str = "",
+) -> None:
+    """Assert a no-Python (bundled C++) result, honouring the FHIR4-41 window.
+
+    `statement` is a complete SQL statement; `expected` is the full result row.
+    """
+    assert no_python_row(con, statement, expected, label=label) == expected, label

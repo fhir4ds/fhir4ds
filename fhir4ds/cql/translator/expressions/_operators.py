@@ -6949,6 +6949,64 @@ class OperatorsMixin:
             return expr.expression
         return expr
 
+    #: CQL point types for which a `<precision> of` qualifier changes the
+    #: comparison precision — CQL 1.5 §19.13 Ends / §19.30 Starts: "If precision
+    #: is specified and the point type is a Date, DateTime, or Time type,
+    #: comparisons used in the operation are performed at the specified
+    #: precision."
+    _PRECISION_QUALIFIED_TEMPORAL_POINT_TYPES = frozenset({"date", "datetime", "time"})
+
+    def _static_interval_point_type(self, node: Any) -> Optional[str]:
+        """Point type ``T`` of ``Interval<T>`` when it is statically known."""
+        name = self._static_structural_type_name(node)
+        if not name or not name.startswith("Interval<") or not name.endswith(">"):
+            return None
+        point_type = name[len("Interval<"):-1].strip()
+        if not point_type or point_type == "Any":
+            return None
+        return point_type
+
+    def _precision_qualifier_is_noop(self, *nodes: Any) -> bool:
+        """True when every statically known operand point type is non-temporal.
+
+        FHIR4-41: the precision qualifier is CONDITIONAL on the point type
+        (§19.13/§19.30, quoted above). For every other point type the
+        reference implementation ignores the qualifier and compares exactly —
+        `StartsEvaluator`/`EndsEvaluator`
+        (cqframework/clinical_quality_language
+        engine/src/commonMain/kotlin/org/opencds/cqf/cql/engine/elm/executing/):
+        only the ``leftStart is BaseTemporal && rightStart is BaseTemporal``
+        branch selects the precision-aware comparison; the else branch is
+        Equal + LessOrEqual (starts) / GreaterOrEqual + Equal (ends). Those
+        cells therefore have a DETERMINED answer, not null.
+        """
+        known_types = [
+            point_type
+            for point_type in (self._static_interval_point_type(node) for node in nodes)
+            if point_type
+        ]
+        if not known_types:
+            return False
+        return all(
+            point_type.split(".")[-1].lower()
+            not in self._PRECISION_QUALIFIED_TEMPORAL_POINT_TYPES
+            for point_type in known_types
+        )
+
+    @staticmethod
+    def _boundary_at_precision_with_peer(
+        function_name: str,
+        interval: SQLExpression,
+        peer_interval: SQLExpression,
+    ) -> SQLCast:
+        """Peer-aware Start/End of `interval` (`function_name` selects which)."""
+        return SQLCast(
+            expression=SQLFunctionCall(
+                name=function_name, args=[interval, peer_interval]
+            ),
+            target_type="VARCHAR",
+        )
+
     @staticmethod
     def _point_as_interval(point: SQLExpression) -> SQLExpression:
         """Wrap a point value as a degenerate interval [point, point].
@@ -7315,16 +7373,21 @@ class OperatorsMixin:
                     if self._is_fhir_interval_expression(right_translated) or isinstance(right_translated, SQLInterval)
                     else self._point_as_interval(right_translated)
                 )
+                if self._precision_qualifier_is_noop(expr.left, inner_expr):
+                    # FHIR4-41 (b): the point type is non-temporal, so the
+                    # precision qualifier is a no-op and §19.30 reduces to the
+                    # exact comparison (Equal + LessOrEqual).
+                    return SQLFunctionCall(
+                        name="intervalStartsSame", args=[left_interval, right_interval]
+                    )
                 starts_same = SQLFunctionCall(
                     name="cqlSameAsP",
                     args=[
-                        SQLCast(
-                            expression=SQLFunctionCall(name="intervalStart", args=[left_interval]),
-                            target_type="VARCHAR",
+                        self._boundary_at_precision_with_peer(
+                            "intervalStartWithPeer", left_interval, right_interval
                         ),
-                        SQLCast(
-                            expression=SQLFunctionCall(name="intervalStart", args=[right_interval]),
-                            target_type="VARCHAR",
+                        self._boundary_at_precision_with_peer(
+                            "intervalStartWithPeer", right_interval, left_interval
                         ),
                         SQLLiteral(value=precision_str),
                     ],
@@ -7332,13 +7395,11 @@ class OperatorsMixin:
                 ends_within = SQLFunctionCall(
                     name="cqlSameOrBeforeP",
                     args=[
-                        SQLCast(
-                            expression=SQLFunctionCall(name="intervalEnd", args=[left_interval]),
-                            target_type="VARCHAR",
+                        self._boundary_at_precision_with_peer(
+                            "intervalEndWithPeer", left_interval, right_interval
                         ),
-                        SQLCast(
-                            expression=SQLFunctionCall(name="intervalEnd", args=[right_interval]),
-                            target_type="VARCHAR",
+                        self._boundary_at_precision_with_peer(
+                            "intervalEndWithPeer", right_interval, left_interval
                         ),
                         SQLLiteral(value=precision_str),
                     ],
@@ -7637,16 +7698,46 @@ class OperatorsMixin:
                 if isinstance(precision_str, str):
                     precision_str = precision_str.lower()
                 inner_expr = expr.right.right
-                interval_end = SQLFunctionCall(name="intervalEnd", args=[left])
-                interval_start = SQLFunctionCall(name="intervalStart", args=[left])
                 right_translated = self.translate(inner_expr, usage=ExprUsage.SCALAR)
-                if self._is_fhir_interval_expression(right_translated) or isinstance(right_translated, SQLInterval):
+                right_is_interval = (
+                    self._is_fhir_interval_expression(right_translated)
+                    or isinstance(right_translated, SQLInterval)
+                )
+                # FHIR4-41: operand forms promoted to intervals for the peer
+                # (Interval<T> is shared by both operands, so it also supplies
+                # the point type for an all-null CLOSED interval).
+                left_interval = (
+                    left
+                    if self._is_fhir_interval_expression(left) or isinstance(left, SQLInterval)
+                    else self._point_as_interval(left)
+                )
+                right_interval = (
+                    right_translated if right_is_interval else self._point_as_interval(right_translated)
+                )
+                if self._precision_qualifier_is_noop(expr.left, inner_expr):
+                    # FHIR4-41 (b): non-temporal point type — the qualifier is a
+                    # no-op, so §19.13 reduces to the exact comparison
+                    # (GreaterOrEqual + Equal).
+                    return SQLFunctionCall(
+                        name="intervalEndsSame", args=[left_interval, right_interval]
+                    )
+                interval_end = SQLFunctionCall(
+                    name="intervalEndWithPeer", args=[left, right_interval]
+                )
+                interval_start = SQLFunctionCall(
+                    name="intervalStartWithPeer", args=[left, right_interval]
+                )
+                if right_is_interval:
                     # CQL 1.5 §9 Ends: start(left) >= start(right) AND
                     # end(left) == end(right), both at the given precision.
                     # Point operands promote to degenerate intervals [p, p],
                     # so the start conjunct compares against the point itself.
-                    right_start = SQLFunctionCall(name="intervalStart", args=[right_translated])
-                    right_end = SQLFunctionCall(name="intervalEnd", args=[right_translated])
+                    right_start = SQLFunctionCall(
+                        name="intervalStartWithPeer", args=[right_translated, left_interval]
+                    )
+                    right_end = SQLFunctionCall(
+                        name="intervalEndWithPeer", args=[right_translated, left_interval]
+                    )
                 else:
                     right_start = right_translated
                     right_end = right_translated
