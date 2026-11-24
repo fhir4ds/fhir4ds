@@ -404,6 +404,26 @@
       "since": "2026-11-24",
       "expires": "2027-02-22",
       "surface": "real"
+    },
+    {
+      "id": "cql-desktop-defects-strict-boolean-fhir4-33",
+      "kind": "DESKTOP_DEFECT",
+      "suite": "cql",
+      "target": [
+        "CqlIntervalOperatorsTest.xml::TestIntegerInUnknownIntervalNull",
+        "CqlIntervalOperatorsTest.xml::TestMaxIntervalEndsFalse",
+        "CqlIntervalOperatorsTest.xml::TestMaxIntervalStartsFalse",
+        "CqlIntervalOperatorsTest.xml::TimeProperContainsNull",
+        "CqlIntervalOperatorsTest.xml::TimeProperInNull",
+        "CqlListOperatorsTest.xml::ProperContains1",
+        "CqlListOperatorsTest.xml::ProperContainsTimeNull",
+        "CqlListOperatorsTest.xml::ProperIn1",
+        "CqlListOperatorsTest.xml::ProperInTimeNull"
+      ],
+      "reason": "In flight in the fhir4ds lane. Dev landed the strict Boolean comparison in the official CQL gate (FHIR4-33, c3e2610f694: a null result no longer satisfies an expected false) before the engine changes that satisfy it: the list-element Time equality rule (FHIR4-34) and the interval null-bound cases. A fresh run of pristine origin/dev gives 2022/2037 while its committed conformance/reports/cql_report.json says 2029/2037; these 9 are the difference. Removes when those fixes merge (this registration then goes stale and must be deleted).",
+      "owner": "fhir4ds lane",
+      "since": "2026-11-24",
+      "expires": "2026-12-24"
     }
   ]
 }
