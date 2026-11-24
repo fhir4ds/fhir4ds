@@ -1084,7 +1084,6 @@ define TemporalOpenBothBounded: @2024-06-15 in day of Interval(@2024-01-01, @202
     cpp = _cpp_connection()
     try:
         with no_python_connection() as no_py:
-            native_current = _fh42_native_guard_current(no_py)
             for name, expr in translated.items():
                 sql = f"SELECT {expr.to_sql()}"
                 py_result = py.execute(sql).fetchone()
@@ -1092,33 +1091,12 @@ define TemporalOpenBothBounded: @2024-06-15 in day of Interval(@2024-01-01, @202
                 no_py_result = no_py.execute(sql).fetchone()
                 assert py_result == cpp_result, (name, sql, py_result, cpp_result)
                 assert py_result == expected[name], (name, sql, py_result)
-                if native_current:
-                    assert no_py_result == expected[name], (
-                        name,
-                        sql,
-                        no_py_result,
-                        "the bundled extension implements the FHIR4-42 guard - "
-                        "delete _FHIR4_42_NO_PYTHON_STALE and its branch",
-                    )
-                else:
-                    stale = _FHIR4_42_NO_PYTHON_STALE.get(name, expected[name])
-                    assert no_py_result == stale, (name, sql, no_py_result, stale)
+                assert no_py_result == expected[name], (name, sql, no_py_result)
     finally:
         py.close()
         cpp.close()
 
 
-#: The bundled ``cql.duckdb_extension`` predates FHIR4-42, so the no-Python
-#: (WASM) surface keeps the old definite verdicts until the bundles are rebuilt
-#: with ``python3 scripts/build_extension_bundles.py --build --abi <slot>``.
-#: The branch above flips automatically once the rebuilt binary is deployed -
-#: delete this map and its branch when that happens.
-_FHIR4_42_NO_PYTHON_STALE: dict[str, tuple] = {
-    "OpenLowNullPrecise": (True,),
-    "OpenHighNullPrecise": (True,),
-    "PointInsideOpenHighNull": (True,),
-    "TemporalTypedNullOpenHigh": (True,),
-}
 
 
 def _fh42_native_guard_current(con: duckdb.DuckDBPyConnection) -> bool:
@@ -1165,10 +1143,6 @@ _FHIR4_42_ONE_SIDED_PERIOD_CASES: dict[str, tuple[str, str, bool | None, bool | 
 }
 
 #: Stale no-Python values for the one-sided cases the guard changes.
-_FHIR4_42_ONE_SIDED_NO_PYTHON_STALE: dict[str, tuple[bool | None, bool | None]] = {
-    "endOnlyOpenLowBefore": (True, True),
-}
-
 
 def test_cql_interval_contains_one_sided_period_doctrine_fhir4_42() -> None:
     """FHIR4-42: one-sided FHIR Periods through containment (the doctrine pin).
@@ -1189,7 +1163,6 @@ def test_cql_interval_contains_one_sided_period_doctrine_fhir4_42() -> None:
     cpp = _cpp_connection()
     try:
         with no_python_connection() as no_py:
-            native_current = _fh42_native_guard_current(no_py)
             for label, (iv, point, expected, expected_precise) in (
                 _FHIR4_42_ONE_SIDED_PERIOD_CASES.items()
             ):
@@ -1207,19 +1180,7 @@ def test_cql_interval_contains_one_sided_period_doctrine_fhir4_42() -> None:
                     cpp_row = cpp.execute(sql).fetchone()
                     no_py_row = no_py.execute(sql).fetchone()
                     assert py_row == cpp_row == (want,), (label, fn, py_row, cpp_row, want)
-                    if native_current:
-                        assert no_py_row == (want,), (
-                            label,
-                            fn,
-                            no_py_row,
-                            "the bundled extension implements the FHIR4-42 guard",
-                        )
-                    else:
-                        stale = _FHIR4_42_ONE_SIDED_NO_PYTHON_STALE.get(
-                            label, (expected, expected_precise)
-                        )
-                        stale_want = stale[0] if prec is None else stale[1]
-                        assert no_py_row == (stale_want,), (label, fn, no_py_row, stale_want)
+                    assert no_py_row == (want,), (label, fn, no_py_row, want)
 
             # The doctrine is produced by collapse_intervals itself: prove the
             # two one-sided shapes it emits are the ones pinned above.
@@ -1247,8 +1208,7 @@ def test_cql_interval_contains_one_sided_period_doctrine_fhir4_42() -> None:
             assert py.execute(includes_sql).fetchone() == (None,)
             assert py.execute(includes_precise_sql).fetchone() == (None,)
             assert cpp.execute(includes_precise_sql).fetchone() == (None,)
-            if native_current:
-                assert no_py.execute(includes_precise_sql).fetchone() == (None,)
+            assert no_py.execute(includes_precise_sql).fetchone() == (None,)
     finally:
         py.close()
         cpp.close()
