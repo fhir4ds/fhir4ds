@@ -115,6 +115,43 @@ _UNCERTAIN_NUMERIC_HELPERS = {
     "cqlUncertainMultiply",
 }
 
+# CQL §Coalesce (FHIR4-44): the signature list is CLOSED and asymmetric —
+# identical in CQL 1.5 (cql.hl7.org/2019May/09-b-cqlreference.html §4.1) and
+# the current 2.0 Appendix B:
+#
+#     Coalesce<T>(argument1 T, argument2 T) T
+#     Coalesce<T>(argument1 T, argument2 T, argument3 T) T
+#     Coalesce<T>(argument1 T, argument2 T, argument3 T, argument4 T) T
+#     Coalesce<T>(argument1 T, ..., argument5 T) T
+#     Coalesce<T>(arguments List<T>) T            // unbounded, list only
+#
+# The spec's own example spells out the consequence —
+# ``define CoalesceError: Coalesce(null, 15, null, null, null, null)
+#   // more than 5 inputs must be represented as list`` — and the official
+# fixture CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs marks
+# that call invalid="semantic". A sixth SCALAR argument therefore matches no
+# overload. This supersedes the CQL-08 (2026-08-20) "variadic with no upper
+# bound" reading; the List<T> overload remains unbounded. Lockstep: the public
+# UDF carries the same cap (`udf/logical.py::_COALESCE_MAX_SCALAR_ARITY`).
+_COALESCE_MAX_SCALAR_ARITY = 5
+
+
+def _validate_coalesce_scalar_arity(count: int) -> None:
+    """Reject a Coalesce invocation with more than five SCALAR arguments.
+
+    Call this with the AUTHORED CQL argument count, never with the SQL
+    COALESCE argument count: one list argument that expands to six SQL
+    arguments is the List<T> overload and stays legal.
+    """
+    if count > _COALESCE_MAX_SCALAR_ARITY:
+        raise TranslationError(
+            f"Coalesce has no scalar overload with more than 5 inputs "
+            f"(got {count}): CQL §Coalesce defines 2..5 scalar arguments plus "
+            "a single List<T> argument — represent more than 5 inputs as a "
+            "list, e.g. Coalesce({ ... })"
+        )
+
+
 # CQL-10 HISTORIAN QA-002: statically-known operand types that are NEVER
 # valid for the CQL 1.5 §16 arithmetic operator family (no String/Boolean
 # overload exists and Table 9-E defines no implicit String/Boolean ->
@@ -1969,14 +2006,16 @@ class FunctionsMixin:
             if isinstance(source_node, Query):
                 arg_nodes[0] = source_node
         if name.lower() == "coalesce" and len(arg_nodes) >= 2:
-            # CQL 1.5 §Coalesce: scalar invocation takes two or more
-            # variadic arguments (no upper bound) and all arguments must be
-            # implicitly castable to a common type. Integer/Long/Decimal and
-            # String have no common implicit conversion, so a static mix of
-            # string-family and numeric-family operands is a translation
-            # error — regardless of argument order (DuckDB's COALESCE binder
-            # accepts or rejects mixed types order-dependently, which is not
-            # a spec-grounded behavior).
+            # CQL §Coalesce: the scalar overload set is closed at five
+            # arguments (2..5 scalar signatures plus one List<T> signature;
+            # "more than 5 inputs must be represented as list"), and all
+            # arguments must be implicitly castable to a common type.
+            # Integer/Long/Decimal and String have no common implicit
+            # conversion, so a static mix of string-family and numeric-family
+            # operands is a translation error — regardless of argument order
+            # (DuckDB's COALESCE binder accepts or rejects mixed types
+            # order-dependently, which is not a spec-grounded behavior).
+            _validate_coalesce_scalar_arity(len(arg_nodes))
             _STRING_FAMILY = {"String"}
             _NUMERIC_FAMILY = {"Integer", "Long", "Decimal"}
             seen_families = set()
@@ -3807,9 +3846,25 @@ class FunctionsMixin:
     def _translate_coalesce(self, args: list) -> SQLExpression:
         """Translate CQL Coalesce with type compatibility handling.
 
-        CQL §22.6: Coalesce returns the first non-null argument.
-        When called with a single list argument, returns the first non-null element.
+        CQL §Coalesce returns the first non-null argument. When called with a
+        single list argument, returns the first non-null element.
+
+        The signature list is CLOSED and asymmetric (CQL 1.5 §4.1 / 2.0
+        Appendix B, identical in both): four scalar overloads of 2, 3, 4 and 5
+        arguments, plus one unbounded ``Coalesce<T>(arguments List<T>) T``.
+        The spec's own example spells out the consequence — "more than 5
+        inputs must be represented as list" — and the official fixture
+        ``CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs`` marks
+        that call ``invalid="semantic"``. A sixth SCALAR argument therefore
+        matches no overload (FHIR4-44; this supersedes the CQL-08
+        "variadic, no upper bound" reading).
         """
+        # Arity is a property of the CQL invocation, so it is checked on the
+        # authored argument count BEFORE the single-list expansion below: one
+        # list argument that expands to six SQL COALESCE arguments is the
+        # List<T> overload, not a six-scalar call.
+        _validate_coalesce_scalar_arity(len(args))
+
         def _coalesce_query_list(source: SQLSelect) -> SQLSubquery:
             if not source.columns:
                 return SQLSubquery(query=SQLSelect(columns=[SQLNull()], limit=1))
