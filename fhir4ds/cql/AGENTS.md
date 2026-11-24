@@ -7114,3 +7114,72 @@ via `_format_time_bound_for_raw` at the authored precision. Pinned by
 `duckdb/tests/integration/test_interval_part3_parity.py::
 test_cql_interval_point_properly_includes_authored_bound_amux168` (dual-engine
 + no-Python parity).
+
+## AMUX-171 — Time ms-null combined precision at interval boundaries (2026-11-24)
+
+CQL §Time (cql.hl7.org/09-b-cqlreference.html#time, text present from 1.5.3):
+"Although the milliseconds are specified with a separate component, seconds and
+milliseconds are combined and represented as a Decimal for the purposes of
+comparison ... When milliseconds are null, they are combined as .0 ... This is
+true of all comparison operations for time values, whether explicit ... or
+implicit ... or when comparison is performed as part of other operations such
+as interval meets and overlaps."
+
+`fhir4ds/cql/duckdb/udf/interval.py::_precision_aware_compare` passed
+`combined_seconds_ms=False` for EVERY temporal precision mismatch (the
+DateTimeIncludedInNull doctrine), so every TIME interval operator returned NULL
+whenever one operand's milliseconds were null. It now passes
+`combined_seconds_ms=` TRUE only when BOTH operands are TIME-only
+(`datetime._is_time_only_text`). DateTime/Date bounds are untouched — the
+official fixture `CqlIntervalOperatorsTest.xml::DateTimeIncludedInNull` still
+pins interval-boundary second-vs-millisecond mismatch as UNCERTAIN, and that
+fixture remains the referee.
+
+Visible behaviour changes (all on the Python authority, which serves every
+desktop connection because the interval UDFs are in
+`_PYTHON_PREFERRED_CPP_CONFLICTS`):
+
+| expression | before | after |
+|---|---|---|
+| `Interval[@T12:00:00.001, @T21:59:59.999] properly includes @T12:00:00` | null | false |
+| `@T12:00:00 properly included in Interval[@T12:00:00.001, @T21:59:59.999]` | null | false |
+| `Interval[@T12:00:00.000, …] properly includes @T12:00:00` | null | false |
+| `Interval[@T10:00:00, @T11:00:00] = Interval[@T10:00:00.000, @T11:00:00.000]` | null | true |
+| same with `~` | false | true |
+
+cql-tests PR #184 pins rows 1-2 at `version="1.5.3"` and caps the previous
+`null` pins at `versionTo="1.5.2"`; harness run (corpus `d95d6c6`, conf
+`Build.CqlVersion = "2.0"`) went 4 pass / 4 fail → 6 pass / 2 fail, with both
+`*NoMillisecondsFalse` cases flipping null→false and the precision-pin referees
+still null.
+
+TWO ADJACENT GAPS LEFT OPEN (each deserves its own card — do not fold them
+into an interval-boundary change):
+
+1. **List-element temporal equality.** `cqlDateTimeEqualListElement` /
+   `cqlDateTimeEquivalentListElement` (`udf/datetime.py`) also pass
+   `combined_seconds_ms=False`, so `{ @T15:59:59.999, … } properly includes
+   @T15:59:59` returns null where the official (version 1.0, still on main)
+   fixtures `CqlListOperatorsTest.xml::ProperContainsTimeNull` /
+   `ProperInTimeNull` expect FALSE. Their docstring claims the fixtures pin
+   null — that is stale. The internal gate hides it: `run_cql.py::compare_results`
+   treats `False ≡ None` as equal, so the internal 2029/2037 number is NOT
+   evidence either way for this class; the external cql-tests-runner is.
+   Fixing it requires the C++ mirror (`CqlDateTimeEqualListElementFunc`) in
+   lockstep plus an extension rebuild.
+2. **`<point> in <Interval>` with literal Time bounds** lowers to raw SQL
+   `BETWEEN` in `_translate_in_op` (lexicographic string compare), so
+   `@T12:00:00 in Interval[@T12:00:00.000, @T21:59:59.999]` is FALSE where
+   the combined-precision rule requires TRUE. Routing that block through
+   `intervalContains` is a translator change with DQM blast radius
+   (`during`/`in` over measurement periods rides the same shape).
+
+REBUILD REQUIRED for the no-Python/WASM surface:
+`extensions/cql/src/cql/interval.cpp`
+(`Interval::properly_contains_point_nullable` and the sibling bound
+comparison) has not been rebuilt with the Time rule, so a `no_python_connection`
+still returns NULL for rows 1-3 above. `test_interval_part2_parity.py` pins
+that gap in `_NO_PYTHON_TIME_MS_STALE` / the per-engine expectation in
+`test_cql_interval_part2_boundary_regressions_match_no_python_cpp`; delete both
+when the bundled extensions are rebuilt and the assertions become plain
+cross-engine equality again.
