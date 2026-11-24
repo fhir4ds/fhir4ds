@@ -2213,6 +2213,89 @@ class OperatorsMixin:
             return {0: 4, 1: 5, 2: 6}.get(colons), False
         return None
 
+    def _static_time_operand_rank(self, node) -> Optional[int]:
+        """Precision rank of a statically TIME-valued operand (6=second, 7=ms).
+
+        Returns ``None`` for anything that is not provably a Time value at
+        second-or-finer (but no finer than millisecond) precision:
+
+        * Date / DateTime operands — a second-vs-millisecond precision
+          mismatch at a DATE/TIME BOUNDARY is *uncertain* per the official
+          fixture ``CqlIntervalOperatorsTest.xml::DateTimeIncludedInNull``
+          (CQL-16/CQL-03 doctrine), which ``intervalContains`` does not model.
+        * hour/minute-precision Time operands — the CQL comparison of those is
+          *uncertain* (precision mismatch), not a lexicographic verdict; that
+          is an orthogonal, still-unpinned gap.
+        * dynamic expressions whose precision is only known at runtime.
+
+        Within the eligible set every comparison is CERTAIN (CQL 1.5 §Time:
+        "seconds and milliseconds are combined and represented as a Decimal
+        for the purposes of comparison ... When milliseconds are null, they
+        are combined as .0"), which is what makes it safe to hand the
+        comparison to the interval engine.
+        """
+        if isinstance(node, FunctionRef):
+            name = node.name.lower()
+            if name == "timeofday":
+                # CQL-14 SKEPTIC: TimeOfDay() is a second-precision Time.
+                return 6
+            if name != "time":
+                return None
+        elif isinstance(node, DateTimeLiteral):
+            # Only the ``T``-prefixed (time-only) literal form is a Time
+            # value; a plain date/dateTime literal is a Date/DateTime.
+            text = str(node.value or "")
+            if not text.startswith("T"):
+                return None
+            time_text = text[1:]
+            if "." in time_text and len(time_text.split(".", 1)[1].rstrip("Z")) > 3:
+                return None
+        elif isinstance(node, TimeLiteral):
+            text = node.value[1:] if node.value.startswith("T") else node.value
+            if "." in text and len(text.split(".", 1)[1]) > 3:
+                return None
+        else:
+            return None
+        info = self._static_temporal_precision_info(node)
+        if info is None:
+            return None
+        rank, date_only = info
+        if date_only or rank not in (6, 7):
+            return None
+        return rank
+
+    def _is_engine_routed_time_interval_membership(self, point_ast, interval_ast) -> bool:
+        """True when ``point in Interval[..]`` must be answered by the interval engine.
+
+        FHIR4-35: the literal-``Interval`` branch of ``_translate_in_op`` lowers
+        a closed/bounded membership to a raw SQL ``BETWEEN``, which compares the
+        Time spellings LEXICOGRAPHICALLY. ``'T12:00:00' < 'T12:00:00.000'``, so
+        ``@T12:00:00 in Interval[@T12:00:00.000, @T21:59:59.999]`` fell below
+        its own closed low bound and returned FALSE where the combined
+        seconds/milliseconds precision rule (§Time) requires TRUE. The mirror
+        operators (``contains``, ``during``) and every sibling interval
+        predicate already dispatch to ``intervalContains``; only the
+        point-in-interval form was lexicographic.
+
+        The reroute is deliberately narrow: it fires only when the point AND
+        both bounds are statically Time-valued at second-or-finer precision
+        and both bounds are closed (the only shape that reaches the ``BETWEEN``
+        fast path). Numeric/String/dynamic-FHIR operands, Age and Duration
+        uncertainty operands (handled above), Quantity bounds (already
+        engine-routed above), Date/DateTime operands, and hour/minute-precision
+        Time operands keep their existing lowering.
+        """
+        if not isinstance(interval_ast, Interval):
+            return False
+        if not (interval_ast.low_closed and interval_ast.high_closed):
+            return False
+        if interval_ast.low is None or interval_ast.high is None:
+            return False
+        for operand in (point_ast, interval_ast.low, interval_ast.high):
+            if self._static_time_operand_rank(operand) is None:
+                return False
+        return True
+
     def _is_definite_uncertainty_interval_expr(self, node, _depth: int = 0) -> bool:
         """Return true when static duration/difference math is known interval-valued."""
         if _depth > 4:
@@ -5242,6 +5325,29 @@ class OperatorsMixin:
                             ),
                         ]
                         return SQLBinaryOp(operator="AND", left=conditions[0], right=conditions[1])
+                    # FHIR4-35 (CQL 1.5 §Time combined seconds/milliseconds
+                    # precision): a raw SQL BETWEEN compares Time spellings
+                    # lexicographically, so `@T12:00:00` fell below its own
+                    # closed `@T12:00:00.000` low bound. Hand statically-typed
+                    # Time membership to the same engine path the mirror
+                    # operators (contains/during) already use. Every other
+                    # operand shape keeps the fast path below.
+                    if self._is_engine_routed_time_interval_membership(
+                        expr.left, expr.right
+                    ):
+                        time_interval = SQLFunctionCall(
+                            name="intervalFromBounds",
+                            args=[
+                                low_sql,
+                                high_sql,
+                                SQLLiteral(value=True),
+                                SQLLiteral(value=True),
+                            ],
+                        )
+                        return SQLFunctionCall(
+                            name="intervalContains",
+                            args=[time_interval, self._ensure_interval_varchar(left)],
+                        )
                     # [a, b] -> x BETWEEN a AND b
                     return SQLBinaryOp(
                         operator="BETWEEN",

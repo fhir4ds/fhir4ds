@@ -7170,12 +7170,14 @@ into an interval-boundary change):
    all can only assert "empty"), so both fixtures are visible failures in the
    new 2022/2037 baseline and the external cql-tests-runner is no longer the
    only referee for null-vs-false.
-2. **`<point> in <Interval>` with literal Time bounds** lowers to raw SQL
+2. ~~**`<point> in <Interval>` with literal Time bounds** lowers to raw SQL
    `BETWEEN` in `_translate_in_op` (lexicographic string compare), so
    `@T12:00:00 in Interval[@T12:00:00.000, @T21:59:59.999]` is FALSE where
-   the combined-precision rule requires TRUE. Routing that block through
-   `intervalContains` is a translator change with DQM blast radius
-   (`during`/`in` over measurement periods rides the same shape).
+   the combined-precision rule requires TRUE.~~ **RESOLVED by FHIR4-35
+   (2026-11-24)** — see "FHIR4-35 — Time point-in-literal-Interval" below.
+   The reroute is gated on a provably-certain operand set, so the DQM blast
+   radius the note warned about is empty (79 `in Interval[` sites across the
+   qi-core + us-core corpora contain ZERO `@T` Time literals).
 
 REBUILD REQUIRED for the no-Python/WASM surface:
 `extensions/cql/src/cql/interval.cpp`
@@ -7474,3 +7476,79 @@ Successor+Predecessor groups at `Build.CqlVersion=1.5` went 14 pass / 8 fail
 a pre-existing runner-side Long rendering artifact (`PredecessorOf1L` /
 `SuccessorOf1L` compare `0L`/`2L` as text and fail identically in BOTH modes —
 the internal conformance gate passes both).
+
+## FHIR4-35 — Time point-in-literal-`Interval` compares instants, not text (2026-11-24)
+
+CQL 1.5 §Time: "seconds and milliseconds are combined and represented as a
+Decimal for the purposes of comparison ... When milliseconds are null, they are
+combined as .0 ... This is true of all comparison operations for time values
+... or when comparison is performed as part of other operations". So
+`@T12:00:00` and `@T12:00:00.000` are the SAME instant.
+
+The literal-`Interval` branch of `_translate_in_op` lowered closed/bounded
+membership to a raw SQL `BETWEEN`, which compares the VARCHAR spellings
+LEXICOGRAPHICALLY: `'T12:00:00' < 'T12:00:00.000'`, so the point fell below its
+own closed low bound. The mirror operators (`contains`, `during`) and every
+sibling interval predicate already dispatched to `intervalContains`; only the
+point-in-interval form was lexicographic.
+
+    'T12:00:00' BETWEEN 'T12:00:00.000' AND 'T21:59:59.999'        -- FALSE
+    intervalContains(intervalFromBounds('T12:00:00.000', 'T21:59:59.999',
+                     TRUE, TRUE), CAST('T12:00:00' AS VARCHAR))    -- TRUE
+
+THE NARROWING RULE (why this is not a broad reroute). A new
+`_is_engine_routed_time_interval_membership` gate fires ONLY when the point AND
+both bounds are statically Time-valued at second-or-finer (and no finer than
+millisecond) precision, with both bounds closed — i.e. exactly the set where
+§Time makes every comparison CERTAIN. `_static_time_operand_rank` accepts
+`@T..` `TimeLiteral`s, `T`-prefixed literals, `Time(...)` with all-literal
+components, and `TimeOfDay()` (second precision). Everything else keeps its
+existing lowering, deliberately:
+
+* **Date/DateTime operands** — a second-vs-millisecond mismatch at a
+  DATE/TIME BOUNDARY is UNCERTAIN per the official fixture
+  `CqlIntervalOperatorsTest.xml::DateTimeIncludedInNull` (the AMUX-171 /
+  CQL-03 doctrine). `intervalContains` does not model that uncertainty, so
+  routing DateTime through it would manufacture a definitive TRUE the fixtures
+  forbid. `@2012-01-01T12:00:00 in Interval[@2012-01-01T12:00:00.000, ...]`
+  therefore still returns FALSE (the `contains` mirror says TRUE — a
+  pre-existing inconsistency between the two spellings, NOT this card).
+* **hour/minute-precision Time operands** — the CQL verdict there is
+  *uncertain*, not lexicographic; that is an orthogonal, still-unpinned gap
+  (`@T12 in Interval[@T12:00:00.000, ...]` stays FALSE).
+* **dynamic operands** (`Observation.effective`, `Encounter.period`, `.value`)
+  and **numeric / String / Quantity** operands — the raw comparison is what
+  those paths were introduced for; the `in`/`during` over measurement periods
+  shape is untouched.
+
+Evidence that the blast radius is empty: 79 `in Interval[` sites exist across
+the qi-core-2025 and us-core-2025 CQL corpora and NOT ONE contains a `@T` Time
+literal, so the gate cannot fire in any measure. Confirmed empirically — every
+qi-core (47) and us-core (73) measure's `sql_size_bytes` is BYTE-IDENTICAL to
+the pre-change report, and a pristine `git archive dev` snapshot generates the
+same sizes for the four sentinels: CMS0334 766,779 / CMS1218 1,180,020 /
+CMS190 146,248 / CMS2 135,193 bytes (delta 0 on each).
+
+Gate: official CQL conformance stays 2029/2037 with ZERO cells moving (no
+official fixture covers Time literal `in`); DQM qi-core 47/47 and us-core 73/73
+unchanged. Pinned by
+`duckdb/tests/integration/test_interval_part1_parity.py::
+test_cql_interval_part1_time_point_in_literal_interval_match_no_python_cpp`
+(11 Time cells on py-fallback / native-loaded / no-Python engines + a dispatch
+assertion that the emitted SQL uses `intervalContains` and no `BETWEEN`) and
+`::test_cql_interval_part1_dynamic_point_in_literal_interval_keeps_between_fast_path`
+(the narrowing guard: dynamic FHIR, numeric, String, Quantity, Age-uncertainty,
+hour-precision Time and DateTime operands all keep `BETWEEN`).
+
+No C++ change and NO REBUILD: `intervalContains`/`intervalFromBounds` already
+exist natively and the no-Python engine answers the Time cells correctly (the
+parity test asserts all three engines).
+
+SEPARATE PRE-EXISTING BUG found while probing the operator family (verified
+identically on the pristine `dev` snapshot, out of this card's scope): the
+`properly contains` KEYWORD spelling is not translated for ANY point type —
+`Interval[1, 10] properly contains 5` emits the raw text
+`intervalFromBounds(CAST(1 AS VARCHAR), CAST(10 AS VARCHAR), TRUE, TRUE)
+properly contains 5` and raises a DuckDB ParserException at execution
+(`properly included in` and `Interval properly contains Interval` are fine).
+Give it its own card.
