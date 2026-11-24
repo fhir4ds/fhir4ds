@@ -696,6 +696,96 @@ def test_cql_list_part2_typed_null_list_properly_includes_returns_null_per_spec(
         cpp.close()
 
 
+def _cql_list_part2_null_list_scalar_peer_library() -> str:
+    """CQL §10.19/§10.20 Properly Includes / Properly Included In (List).
+
+    Null propagation is scoped to the LIST-LIST overload only:
+
+    * "For the list-list overload, if either argument is null, the result is
+      null." — the spec says nothing about null propagation for the
+      list-singleton overload, whose rule is "returns true if the list
+      contains (i.e. includes) the element, and it is not the only element in
+      the list."
+    * §10.1 Contains pins the consequence for a null list: "If the first
+      argument is null, the result is false."
+
+    So a NULL LIST against a SCALAR peer contains nothing and properly
+    contains nothing -> FALSE, never null. The scalar-peer sibling already
+    answers FALSE (`ProperInNullRightFalse`); only the null-LIST side was
+    wrongly null-propagated.
+    """
+    return """library List2NullListScalarPeer version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define PC1_NullListProperlyIncludesScalar: null as List<String> properly includes 'a'
+define PC1P_NullListProperlyIncludesScalar: (null as List<String>) properly includes 'a'
+define PI1_ScalarProperlyIncludedInNullList: 'a' properly included in null as List<String>
+define PI1P_ScalarProperlyIncludedInNullList: 'a' properly included in (null as List<String>)
+define Control_ProperlyIncludesScalar: { 'a', 'b' } properly includes 'a'
+define Control_ScalarProperlyIncludedIn: 'a' properly included in { 'a', 'b' }
+define NullListVsNullList: (null as List<String>) properly includes (null as List<String>)
+define NullListVsNullListIn: (null as List<String>) properly included in (null as List<String>)
+define NullListVsNonNullList: (null as List<String>) properly includes { 'a', 'b' }
+define NonNullListVsNullList: { 'a', 'b' } properly includes (null as List<String>)
+define NullScalarPeerIn: null as String properly included in { 's', 'u', 'n' }
+define NullScalarPeerIncludes: { 's', 'u', 'n' } properly includes null as String
+define NullIntListVsScalar: (null as List<Integer>) properly includes 1
+define ScalarInNullIntList: 1 properly included in (null as List<Integer>)
+"""
+
+
+def test_cql_list_part2_null_list_with_scalar_peer_is_false_per_spec() -> None:
+    """CQL §10.19/§10.20: a NULL LIST operand against a SCALAR peer is FALSE.
+
+    Official fixtures ``CqlListOperatorsTest.xml::ProperContains1``
+    (``null as List<String> properly includes 'a'``) and ``::ProperIn1``
+    (``'a' properly included in null as List<String>``) both pin ``false``.
+
+    This is the interval/list analogue of the already-correct null SCALAR
+    peer case (``ProperInNullRightFalse``): the list-singleton overload does
+    not null-propagate, it evaluates "list contains element AND list is
+    longer than one element" — a null list contains nothing, so the result is
+    false. Only the LIST-LIST overload propagates null.
+    """
+    translated = translate_cql(_cql_list_part2_null_list_scalar_peer_library())
+    expected = {
+        # FHIR4-39: the two cells that were null before the fix.
+        "PC1_NullListProperlyIncludesScalar": (False,),
+        "PC1P_NullListProperlyIncludesScalar": (False,),
+        "PI1_ScalarProperlyIncludedInNullList": (False,),
+        "PI1P_ScalarProperlyIncludedInNullList": (False,),
+        # Non-null controls keep normal semantics.
+        "Control_ProperlyIncludesScalar": (True,),
+        "Control_ScalarProperlyIncludedIn": (True,),
+        # LIST-LIST overload keeps null propagation (unchanged).
+        "NullListVsNullList": (None,),
+        "NullListVsNullListIn": (None,),
+        "NullListVsNonNullList": (None,),
+        "NonNullListVsNullList": (None,),
+        # Element overload with a null SCALAR peer stays FALSE (unchanged).
+        "NullScalarPeerIn": (False,),
+        "NullScalarPeerIncludes": (False,),
+        "NullIntListVsScalar": (False,),
+        "ScalarInNullIntList": (False,),
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    no_py_cm = no_python_connection()
+    no_py = no_py_cm.__enter__()
+    try:
+        for name, expr in translated.items():
+            sql = f"SELECT {expr.to_sql()}"
+            py_result = py.execute(sql).fetchone()
+            cpp_result = cpp.execute(sql).fetchone()
+            no_py_result = no_py.execute(sql).fetchone()
+            assert cpp_result == py_result, f"{name}: native {cpp_result!r} != python {py_result!r}"
+            assert no_py_result == py_result, f"{name}: no-python {no_py_result!r} != python {py_result!r}"
+            assert py_result == expected[name], f"{name}: got {py_result!r}, expected {expected[name]!r}"
+    finally:
+        no_py_cm.__exit__(None, None, None)
+        py.close()
+        cpp.close()
 
 
 # ---------------------------------------------------------------------------
