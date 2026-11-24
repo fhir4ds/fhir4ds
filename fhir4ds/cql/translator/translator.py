@@ -93,6 +93,7 @@ from ..translator.types import (
     deduplicate_retrieve_ctes,
 )
 from ..translator.queries import SQLQueryBuilder, CTEReference
+from ..translator.cql_version import DEFAULT_CQL_VERSION, validate_cql_version
 from ..translator.context import (
     MeasurementPeriod,
     SQLTranslationContext as ContextSQLTranslationContext,
@@ -205,6 +206,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         closure_loaded: bool = False,
         terminology_endpoint: Optional[Any] = None,
         strict_profiles: bool = True,
+        cql_version: str = DEFAULT_CQL_VERSION,
         _inherited_comparison_precision: Optional[tuple] = None,
     ) -> None:
         """
@@ -238,6 +240,15 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 conjunct is omitted and the retrieve matches the base resource
                 type instead — use it for data that does not populate
                 ``meta.profile``. The negation-profile exclusion is unaffected.
+            cql_version: CQL specification version this library is
+                translated for (default ``"2.0"``), selecting
+                version-dependent operator semantics. Currently the
+                ``successor of`` / ``predecessor of`` step for Decimal and
+                Quantity values: CQL <= 1.5.3 uses the fixed minimum Decimal
+                precision (10^-8) while CQL 2.0 uses the authored precision.
+                Included libraries inherit it. CQL source text carries no
+                specification-version marker, so this is engine configuration
+                (see ``translator/cql_version.py`` for citations).
             _inherited_comparison_precision: Internal — CQL 2.0
                 #DefaultComparisonPrecision (FHIR-41326) propagation.
                 ``(effective_precision, parents_own_clause)`` passed to an
@@ -256,6 +267,10 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
 
         self._connection = connection
         self._strict_profiles = strict_profiles
+        # CQL specification version policy for version-dependent operator
+        # semantics (successor/predecessor Decimal step). Validated eagerly
+        # so a typo surfaces at construction, not mid-translation.
+        self._cql_version = validate_cql_version(cql_version)
         # CQL 2.0 #DefaultComparisonPrecision propagation (CQL20-D).
         self._inherited_comparison_precision = _inherited_comparison_precision
         # (precision, clause) this library's OWN directive declares, or None.
@@ -3745,6 +3760,11 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         # builder reads it to decide whether a profile-qualified retrieve
         # requires the canonical in `meta.profile`.
         self._context.strict_profiles = getattr(self, "_strict_profiles", True)
+
+        # CQL specification version (successor/predecessor Decimal step):
+        # every context this translator creates inherits the policy so
+        # included libraries translate with the same semantics.
+        self._context.cql_version = getattr(self, "_cql_version", DEFAULT_CQL_VERSION)
 
         # CQL 2.0 model definitions (trial-use, chunk CQL20-E): register
         # `define type` / `define context ... of type ...` /

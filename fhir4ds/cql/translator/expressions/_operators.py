@@ -143,6 +143,7 @@ from ...parser.ast_nodes import (
     UnaryExpression,
 )
 from ...translator.context import ExprUsage, RowShape, DefinitionMeta
+from ...translator.cql_version import DEFAULT_CQL_VERSION, uses_minimum_precision_ordinals
 from ...translator.function_inliner import ParameterPlaceholder
 from ...translator.placeholder import RetrievePlaceholder
 from ...translator.type_map import infer_fhir_property_type_str, static_source_cql_type
@@ -10156,6 +10157,29 @@ class OperatorsMixin:
             return self._valueset_url_from_literal(sql_expr.value)
         return None
 
+    def _ordinal_helper_name(self, kind: str) -> str:
+        """Return the successor/predecessor UDF name for the CQL version.
+
+        CQL 2.0 (§Successor/§Predecessor) steps a Decimal or decimal-authored
+        Quantity by 1 * its authored precision; CQL <= 1.5.3 steps by the
+        minimum Decimal precision (10^-8) instead. The two rules are separate
+        UDFs so the emitted SQL states which one it means — there is no hidden
+        session state and both desktop engines (Python, and C++ which prefers
+        the Python UDFs for these names) agree.
+
+        Args:
+            kind: ``"successor"`` or ``"predecessor"``.
+
+        Returns:
+            ``successorOf``/``predecessorOf`` for CQL 2.0+, otherwise the
+            ``...MinimumPrecision`` helper.
+        """
+        base = "successorOf" if kind == "successor" else "predecessorOf"
+        version = getattr(self.context, "cql_version", DEFAULT_CQL_VERSION)
+        if uses_minimum_precision_ordinals(version):
+            return base + "MinimumPrecision"
+        return base
+
     def _translate_unary_expression(self, expr: UnaryExpression, boolean_context: bool = False) -> SQLExpression:
         """Translate a CQL unary expression to SQL."""
         operator = expr.operator.lower() if isinstance(expr.operator, str) else expr.operator
@@ -10426,11 +10450,18 @@ class OperatorsMixin:
             return SQLFunctionCall(name="pointFrom", args=[operand])
 
         # Ordinal operators: predecessor of, successor of
-        # CQL §22.25/§22.26: step size depends on type
-        # Integer: ±1, Decimal: ±10^-8, Long: ±1
+        # CQL §22.25/§22.26 (2.0 numbering) / §6.14/§6.18 (1.5.3 numbering):
+        # the step depends on the type and, for Decimal/Quantity, on the CQL
+        # version — see _ordinal_helper_name.
         if operator == "predecessor of":
+            # CQL version gate: the Decimal/Quantity step is the fixed minimum
+            # Decimal precision (10^-8) for CQL <= 1.5.3 and the authored
+            # precision for CQL 2.0. The helper name selects the rule; the
+            # Integer/Long/Date/DateTime/Time steps are identical in both
+            # versions, so they keep the same helper either way.
+            ordinal_name = self._ordinal_helper_name("predecessor")
             if isinstance(expr.operand, Quantity):
-                return SQLFunctionCall(name="predecessorOf", args=[_quantity_literal_json(expr.operand)])
+                return SQLFunctionCall(name=ordinal_name, args=[_quantity_literal_json(expr.operand)])
             if (
                 isinstance(expr.operand, UnaryExpression)
                 and expr.operand.operator.lower() == "singleton from"
@@ -10439,7 +10470,7 @@ class OperatorsMixin:
                 and isinstance(expr.operand.operand.elements[0], Quantity)
             ):
                 return SQLFunctionCall(
-                    name="predecessorOf",
+                    name=ordinal_name,
                     args=[_quantity_literal_json(expr.operand.operand.elements[0])],
                 )
             # CQL-11 EXPLORER QA-001: CQL §22.25 Predecessor: "If the result
@@ -10472,13 +10503,14 @@ class OperatorsMixin:
                             SQLNull(),
                         )
                     ],
-                    else_clause=SQLFunctionCall(name="predecessorOf", args=[operand]),
+                    else_clause=SQLFunctionCall(name=ordinal_name, args=[operand]),
                 )
-            return SQLFunctionCall(name="predecessorOf", args=[operand])
+            return SQLFunctionCall(name=ordinal_name, args=[operand])
 
         if operator == "successor of":
+            ordinal_name = self._ordinal_helper_name("successor")
             if isinstance(expr.operand, Quantity):
-                return SQLFunctionCall(name="successorOf", args=[_quantity_literal_json(expr.operand)])
+                return SQLFunctionCall(name=ordinal_name, args=[_quantity_literal_json(expr.operand)])
             if (
                 isinstance(expr.operand, UnaryExpression)
                 and expr.operand.operator.lower() == "singleton from"
@@ -10487,7 +10519,7 @@ class OperatorsMixin:
                 and isinstance(expr.operand.operand.elements[0], Quantity)
             ):
                 return SQLFunctionCall(
-                    name="successorOf",
+                    name=ordinal_name,
                     args=[_quantity_literal_json(expr.operand.operand.elements[0])],
                 )
             # CQL-11 EXPLORER QA-001: CQL §22.26 Successor: "If the result
@@ -10514,9 +10546,9 @@ class OperatorsMixin:
                             SQLNull(),
                         )
                     ],
-                    else_clause=SQLFunctionCall(name="successorOf", args=[operand]),
+                    else_clause=SQLFunctionCall(name=ordinal_name, args=[operand]),
                 )
-            return SQLFunctionCall(name="successorOf", args=[operand])
+            return SQLFunctionCall(name=ordinal_name, args=[operand])
 
         # Singleton from operator - extract single element from list
         if operator == "singleton from":

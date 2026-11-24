@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from ..translator.profile_registry import ProfileRegistry
 
 from ..translator.column_registry import ColumnRegistry
+from ..translator.cql_version import DEFAULT_CQL_VERSION
 from ..translator.warnings import TranslationWarnings
 
 # Well-known CQL identifiers from the specification
@@ -528,6 +529,13 @@ class SQLTranslationContext:
     # precision precision-less Date/DateTime/Time comparisons in THIS
     # library are lowered at, or None for the spec default (millisecond).
     default_comparison_precision: Optional[str] = None
+
+    # CQL specification version this library is translated for. Selects
+    # version-dependent operator semantics (currently the successor/
+    # predecessor Decimal step: CQL <= 1.5.3 = fixed 10^-8, CQL 2.0 =
+    # authored precision). Set from the translator's `cql_version` option;
+    # included libraries inherit the including library's value.
+    cql_version: str = DEFAULT_CQL_VERSION
 
     # Execution context type
     _context_type: str = "Unfiltered"
@@ -1137,6 +1145,10 @@ class SQLTranslationContext:
         # context into the next translation.
         self.active_context_info = None
         self.default_comparison_precision = None
+        # CQL specification version is translation-wide policy; the owning
+        # translator re-applies its configured value in _setup_context, so a
+        # reset must not leave a previous library's version in place.
+        self.cql_version = DEFAULT_CQL_VERSION
         self._context_type = "Unfiltered"
         self._definition_names.clear()
         self._included_definition_names.clear()

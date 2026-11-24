@@ -56,6 +56,7 @@ def evaluate_cql_request(request: CQLRequest, config: CQLServerConfig | None = N
         translator = CQLToSQLTranslator(
             connection=conn,
             terminology_endpoint=_build_endpoint(request.terminology_endpoint_url),
+            cql_version=config.cql_version,
         )
         sql = translator.translate_library_to_sql(library, final_definition="return")
         rows = conn.execute(sql).fetchall()

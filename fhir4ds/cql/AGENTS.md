@@ -7247,3 +7247,72 @@ post-#183. `test_datetime_part1_parity.py::_NATIVE_DURATION_UNCERTAINTY_STALE`
 and `test_wasm_translate_execute_gate.py::EXPECTED["DurationUncertainDays"]`
 pin the stale values and auto-flip on rebuild — delete the map and update the
 gate expectation then.
+
+## AMUX-170 — successor/predecessor are CQL-VERSION aware (2026-11-24)
+
+CQL changed the `successor of` / `predecessor of` step for Decimal and Quantity
+values between 1.5.3 and 2.0, and the engine implements BOTH rules, selected by
+translator configuration.
+
+- CQL 1.5.3 (§6.14 Predecessor / §6.18 Successor,
+  https://cql.hl7.org/2019May/09-b-cqlreference.html): "For Decimal, successor
+  is equivalent to adding the minimum precision value for the Decimal type, or
+  10^-08"; "For Quantity values, the successor is equivalent to adding 1 if the
+  quantity is an integer, and the minimum precision value for the Decimal type
+  if the quantity is a decimal." Fixtures: `successor of 1.0 // 1.00000001`,
+  `predecessor of 1.0 // 0.99999999`.
+- CQL 2.0.0 (§Successor, https://cql.hl7.org/09-b-cqlreference.html#successor):
+  "For Decimal, successor is equivalent to adding 1 * the precision of the
+  argument"; Quantity likewise. Fixtures: `successor of 1.0 // 1.1`,
+  `successor of 1.00000000 // 1.00000001`. This is what the engine did
+  unconditionally before AMUX-170 (the "CQL-11 doctrine" integer-authored ->
+  step 1 / decimal-authored -> authored scale rule is exactly the 2.0 rule).
+
+**Default is 2.0** (`fhir4ds/cql/translator/cql_version.py::
+DEFAULT_CQL_VERSION`), so nothing moved: DQM result sets and the vendored
+cql-tests snapshot's `version="2.0"` fixtures are gated on 2.0 semantics, and
+the official gate stays 2029/2037. 1.5.3 semantics are opt-in per translation
+via `cql_version` on `CQLToSQLTranslator`, `translate_cql` /
+`translate_library` / `translate_library_to_sql`, `evaluate_measure`, and
+`CQLServerConfig` (the `$cql` facade).
+
+WHERE THE VERSION COMES FROM — there is no in-library CQL-version marker:
+`library X version 'n'` is the library's own semantic version (the cql-tests
+harness emits `library Conformance version '1.0'` for every fixture and the
+official corpus carries BOTH version-gated variants), `using FHIR version` is
+the model version, and the cql-tests-runner's `Build.CqlVersion` only selects
+WHICH fixtures run (`versionSkipReason` in
+`src/shared/run-test-core.ts`) — it is never sent to the engine. So the mode is
+engine configuration and MUST match the conf the harness runs: a 1.5 conf
+against a 2.0-mode facade still fails the 1.5-era rows.
+
+Implementation: the version is translated into the emitted SQL by choosing the
+UDF NAME (`_ordinal_helper_name` in `expressions/_operators.py`) —
+`successorOf`/`predecessorOf` (2.0, authored precision) vs
+`successorOfMinimumPrecision`/`predecessorOfMinimumPrecision` (<= 1.5.3, fixed
+10^-8). No hidden session state, no arity change to the existing UDFs, and the
+policy lives on the translation context (`context.cql_version`) so included
+libraries inherit it through `include_handler` (pinned by
+`test_cql_successor_predecessor_version_flows_into_included_libraries_amux170`).
+Integer/Long/Date/DateTime/Time steps are identical in both versions and the
+CQL-11 Integer-range boundary CASE guards are unchanged (the guard's else arm
+swaps helper name only).
+
+**NO REBUILD NEEDED, but the browser surface is 2.0-only.**
+`predecessorOf`/`successorOf` are in `_PYTHON_PREFERRED_CPP_CONFLICTS` (Python
+is the desktop authority), and the two new helpers are Python-only — so
+`cql.duckdb_extension` is untouched. Consequence: a library translated with
+`cql_version < 2.0` emits a function the C++/WASM surface does not implement.
+The browser demo and every default path translate at 2.0, so nothing regresses;
+if 1.5 mode is ever needed in WASM, port the two helpers to
+`extensions/cql/src/cql/math.cpp` + `cql_extension.cpp` and add a
+`cql-macros.ts` entry.
+
+Harness evidence (cql-tests PR #187, corpus `c532391`, `$cql` facade on
+127.0.0.1:8187, runner `npx tsx src/bin/cql-tests.ts run-tests`):
+Successor+Predecessor groups at `Build.CqlVersion=1.5` went 14 pass / 8 fail
+(engine 2.0) -> 20 pass / 2 fail (engine 1.5.3). The 6 semantic rows flipped
+(`SuccessorOf1D/101D/1QCM`, `PredecessorOf1D/101D/1QCM`); the remaining 2 are
+a pre-existing runner-side Long rendering artifact (`PredecessorOf1L` /
+`SuccessorOf1L` compare `0L`/`2L` as text and fail identically in BOTH modes —
+the internal conformance gate passes both).

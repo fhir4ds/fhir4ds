@@ -130,6 +130,20 @@ class CQLServerConfig:
     library_name: str = "FHIR4DSCqlRunner"
     max_request_bytes: int = 1_000_000
     metadata_first_serialization: bool = True
+    # CQL specification version the facade evaluates expressions for
+    # (default "2.0"). Selects version-dependent operator semantics — see
+    # fhir4ds/cql/translator/cql_version.py. A cql-tests-runner
+    # ``Build.CqlVersion`` in the runner config only selects WHICH test cases
+    # apply; it is never sent to the engine, so the matching mode must be
+    # configured here.
+    cql_version: str = "2.0"
+
+    def __post_init__(self) -> None:
+        # Fail fast at construction (INV-9): a typo'd CQL version should never
+        # surface as a per-request $cql evaluation error.
+        from fhir4ds.cql.translator.cql_version import validate_cql_version
+
+        validate_cql_version(self.cql_version)
 
     @property
     def cql_paths(self) -> tuple[str, ...]:

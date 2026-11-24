@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 import duckdb
 import pytest
@@ -1119,3 +1119,313 @@ def test_cql_quantity_negate_round_extreme_magnitude_exact_serialization_rev26()
     finally:
         py.close()
         cpp.close()
+
+
+def _decimal_text(value) -> str:
+    """Normalize a UDF numeric result to its exact decimal text.
+
+    Temporal results (Date/DateTime/Time strings) are returned verbatim.
+    """
+    if isinstance(value, str):
+        try:
+            return str(Decimal(value.strip()))
+        except InvalidOperation:
+            return value
+    return str(Decimal(str(value)))
+
+
+_AMUX170_CQL = """library SuccessorPrecisionVersioning version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define SuccDecimalQuantity: successor of 1.0 'cm'
+define PredDecimalQuantity: predecessor of 1.0 'cm'
+define SuccHundredthsQuantity: successor of 1.23 'cm'
+define PredHundredthsQuantity: predecessor of 1.23 'cm'
+define SuccIntegerQuantity: successor of 5 'cm'
+define PredIntegerQuantity: predecessor of 5 'cm'
+define SuccDecimal: successor of 1.0
+define PredDecimal: predecessor of 1.0
+define SuccHundredths: successor of 1.01
+define PredHundredths: predecessor of 1.01
+define SuccFullScale: successor of 1.00000000
+define SuccInteger: successor of 1
+define PredInteger: predecessor of 1
+define SuccLong: successor of 1L
+define SuccDate: successor of @2020-01-01
+define SuccDateTime: successor of DateTime(2000, 1, 1)
+define SuccTime: successor of @T12:00:00.000
+define SuccMaxInteger: successor of maximum Integer
+define PredMinInteger: predecessor of minimum Integer
+define SuccDynamicQuantity: successor of (1.4 'cm' + 0.0 'cm')
+define PredDynamicQuantity: predecessor of (1.4 'cm' + 0.0 'cm')
+"""
+
+# CQL 2.0 step = 1 * the authored precision of the argument (§Successor).
+_AMUX170_EXPECTED_20 = {
+    "SuccDecimalQuantity": ("1.1", "cm"),
+    "PredDecimalQuantity": ("0.9", "cm"),
+    "SuccHundredthsQuantity": ("1.24", "cm"),
+    "PredHundredthsQuantity": ("1.22", "cm"),
+    "SuccIntegerQuantity": ("6", "cm"),
+    "PredIntegerQuantity": ("4", "cm"),
+    "SuccDecimal": "1.1",
+    "PredDecimal": "0.9",
+    "SuccHundredths": "1.02",
+    # 1.01 - 0.01 = 1.00; the engine surfaces the UDF's Decimal as a DOUBLE, so
+    # the observable text is "1.0" (numerically the fixture's 1.00).
+    "PredHundredths": "1.0",
+    "SuccFullScale": "1.00000001",
+    "SuccInteger": "2",
+    "PredInteger": "0",
+    "SuccLong": "2",
+    "SuccDate": "2020-01-02",
+    "SuccDateTime": "2000-01-02T",
+    "SuccTime": "T12:00:00.001",
+    "SuccMaxInteger": None,
+    "PredMinInteger": None,
+    "SuccDynamicQuantity": ("1.5", "cm"),
+    "PredDynamicQuantity": ("1.3", "cm"),
+}
+
+# CQL 1.5.3 step for Decimal/Quantity = the minimum Decimal precision, 10^-08
+# ("the minimum precision value for the Decimal type, or 10^-08"), regardless
+# of the authored precision. Integer-authored quantities still add 1, and the
+# Date/DateTime/Time/Integer/Long rules are identical in both versions.
+_AMUX170_EXPECTED_1553 = {
+    "SuccDecimalQuantity": ("1.00000001", "cm"),
+    "PredDecimalQuantity": ("0.99999999", "cm"),
+    "SuccHundredthsQuantity": ("1.23000001", "cm"),
+    "PredHundredthsQuantity": ("1.22999999", "cm"),
+    "SuccIntegerQuantity": ("6", "cm"),
+    "PredIntegerQuantity": ("4", "cm"),
+    "SuccDecimal": "1.00000001",
+    "PredDecimal": "0.99999999",
+    "SuccHundredths": "1.01000001",
+    "PredHundredths": "1.00999999",
+    "SuccFullScale": "1.00000001",
+    "SuccInteger": "2",
+    "PredInteger": "0",
+    "SuccLong": "2",
+    "SuccDate": "2020-01-02",
+    "SuccDateTime": "2000-01-02T",
+    "SuccTime": "T12:00:00.001",
+    "SuccMaxInteger": None,
+    "PredMinInteger": None,
+    "SuccDynamicQuantity": ("1.40000001", "cm"),
+    "PredDynamicQuantity": ("1.39999999", "cm"),
+}
+
+
+def _quantity_value_unit(payload: str) -> tuple[str, str]:
+    parsed = json.loads(payload)
+    return _decimal_text(parsed["value"]), parsed.get("code") or parsed["unit"]
+
+
+def _assert_successor_surface(con: duckdb.DuckDBPyConnection, translated, expected) -> None:
+    for name, expected_value in expected.items():
+        sql = "SELECT " + translated[name].to_sql()
+        got = con.execute(sql).fetchone()[0]
+        if isinstance(expected_value, tuple):
+            assert got is not None, f"{name}: expected a Quantity, got NULL"
+            assert _quantity_value_unit(got) == expected_value, (
+                f"{name}: expected {expected_value}, got {_quantity_value_unit(got)}"
+            )
+        elif expected_value is None:
+            assert got is None, f"{name}: expected NULL, got {got!r}"
+        else:
+            assert got is not None, f"{name}: expected {expected_value}, got NULL"
+            assert _decimal_text(got) == expected_value, (
+                f"{name}: expected {expected_value}, got {_decimal_text(got)}"
+            )
+
+
+def test_cql_successor_predecessor_cql_version_semantics_amux170() -> None:
+    """AMUX-170: successor/predecessor must be CQL-version aware.
+
+    CQL 1.5.3 (`https://cql.hl7.org/2019May/09-b-cqlreference.html`, §6.14
+    Predecessor / §6.18 Successor): "For Decimal, successor is equivalent to
+    adding the minimum precision value for the Decimal type, or 10^-08"; "For
+    Quantity values, the successor is equivalent to adding 1 if the quantity
+    is an integer, and the minimum precision value for the Decimal type if the
+    quantity is a decimal". Examples: `successor of 1.0 // 1.00000001`,
+    `predecessor of 1.0 // 0.99999999`.
+
+    CQL 2.0 (`https://cql.hl7.org/09-b-cqlreference.html#successor`): "For
+    Decimal, successor is equivalent to adding 1 * the precision of the
+    argument"; Quantity likewise. Examples: `successor of 1.0 // 1.1`,
+    `successor of 1.00000000 // 1.00000001`.
+
+    The engine default stays 2.0 (today's behaviour), so DQM measures and the
+    vendored cql-tests 2.0-versioned fixtures do not move; 1.5.3 semantics are
+    opt-in per translation.
+    """
+    from fhir4ds.cql.translator.cql_version import (
+        DEFAULT_CQL_VERSION,
+        uses_minimum_precision_ordinals,
+    )
+
+    # --- policy surface -------------------------------------------------
+    assert DEFAULT_CQL_VERSION == "2.0"
+    for version in ("1.5", "1.5.3", "1.4", "1.9.9"):
+        assert uses_minimum_precision_ordinals(version) is True, version
+    for version in ("2.0", "2.0.0", "2.1", "3.0"):
+        assert uses_minimum_precision_ordinals(version) is False, version
+    for invalid in ("", "  ", "two", "2.x", "1.5 beta"):
+        with pytest.raises(ValueError):
+            uses_minimum_precision_ordinals(invalid)
+
+    # --- CQL 2.0 (default): current behaviour must not move ------------
+    translated_20 = translate_cql(_AMUX170_CQL)
+    translated_20_explicit = translate_cql(_AMUX170_CQL, cql_version="2.0.0")
+    translated_1553 = translate_cql(_AMUX170_CQL, cql_version="1.5.3")
+
+    for name in _AMUX170_EXPECTED_20:
+        # 2.0 is the frozen default and an explicit 2.0 request is identical.
+        assert (
+            translated_20[name].to_sql() == translated_20_explicit[name].to_sql()
+        ), f"{name}: explicit 2.0 changed the SQL"
+        # 1.5.3 mode must actually select the minimum-precision ordinals for
+        # Decimal/Quantity operands, and never for the other types.
+        if _AMUX170_EXPECTED_1553[name] != _AMUX170_EXPECTED_20[name]:
+            assert "successorOfMinimumPrecision" in translated_1553[name].to_sql() or (
+                "predecessorOfMinimumPrecision" in translated_1553[name].to_sql()
+            ), f"{name}: 1.5.3 mode kept the 2.0 ordinal"
+    # Integer/Long/Date/DateTime/Time steps are identical in both versions, so
+    # their 1.5.3 and 2.0 expectations coincide (asserted below on both
+    # engines) even though they route through the version's helper name.
+    for name in ("SuccInteger", "PredInteger", "SuccLong", "SuccDate", "SuccDateTime", "SuccTime"):
+        assert _AMUX170_EXPECTED_1553[name] == _AMUX170_EXPECTED_20[name], (
+            f"{name}: the ordinal rule for this type is version-independent"
+        )
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        _assert_successor_surface(py, translated_20, _AMUX170_EXPECTED_20)
+        _assert_successor_surface(cpp, translated_20, _AMUX170_EXPECTED_20)
+        _assert_successor_surface(py, translated_1553, _AMUX170_EXPECTED_1553)
+        _assert_successor_surface(cpp, translated_1553, _AMUX170_EXPECTED_1553)
+
+        # Direct UDF surface (public helper names, both desktop engines).
+        direct = {
+            'SELECT successorOfMinimumPrecision(\'{"value":1.0,"code":"cm"}\')': True,
+            'SELECT predecessorOfMinimumPrecision(\'{"value":1.0,"code":"cm"}\')': True,
+            'SELECT successorOfMinimumPrecision(\'{"value":5,"code":"cm"}\')': True,
+            'SELECT successorOfMinimumPrecision(1.0)': False,
+            'SELECT predecessorOfMinimumPrecision(1.0)': False,
+            'SELECT successorOfMinimumPrecision(1)': False,
+            'SELECT successorOfMinimumPrecision(\'T12:00:00.000\')': False,
+        }
+        expected_direct = {
+            'SELECT successorOfMinimumPrecision(\'{"value":1.0,"code":"cm"}\')': ("1.00000001", "cm"),
+            'SELECT predecessorOfMinimumPrecision(\'{"value":1.0,"code":"cm"}\')': ("0.99999999", "cm"),
+            'SELECT successorOfMinimumPrecision(\'{"value":5,"code":"cm"}\')': ("6", "cm"),
+            'SELECT successorOfMinimumPrecision(1.0)': "1.00000001",
+            'SELECT predecessorOfMinimumPrecision(1.0)': "0.99999999",
+            'SELECT successorOfMinimumPrecision(1)': "2",
+            'SELECT successorOfMinimumPrecision(\'T12:00:00.000\')': "T12:00:00.001",
+        }
+        for sql in direct:
+            py_got = py.execute(sql).fetchone()[0]
+            cpp_got = cpp.execute(sql).fetchone()[0]
+            assert py_got == cpp_got, f"parity drift: {sql}\n py {py_got!r} != cpp {cpp_got!r}"
+            expected_value = expected_direct[sql]
+            if isinstance(expected_value, tuple):
+                assert _quantity_value_unit(py_got) == expected_value
+            else:
+                assert _decimal_text(py_got) == expected_value, (
+                    f"{sql}: expected {expected_value}, got {_decimal_text(py_got)}"
+                )
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_successor_predecessor_version_flows_into_included_libraries_amux170() -> None:
+    """The CQL version is a translation-wide policy: an included library's
+    successor/predecessor must honour the INCLUDING library's version."""
+    from fhir4ds.cql.parser import parse_cql
+    from fhir4ds.cql.translator import CQLToSQLTranslator
+
+    child = parse_cql(
+        """library Helper version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define SuccHelperQuantity: successor of 1.0 'cm'
+"""
+    )
+    parent = parse_cql(
+        """library Main version '1.0.0'
+using FHIR version '4.0.1'
+include Helper version '1.0.0' called H
+context Patient
+define SuccViaHelper: H.SuccHelperQuantity
+"""
+    )
+
+    def loaded(alias: str):
+        return child if alias == "Helper" else None
+
+    py = _python_only_connection()
+    try:
+        py.execute(
+            "CREATE TABLE resources "
+            "(id VARCHAR, resourceType VARCHAR, resource JSON, patient_ref VARCHAR)"
+        )
+        py.execute(
+            "INSERT INTO resources VALUES ('p1', 'Patient', "
+            "'{\"resourceType\":\"Patient\",\"id\":\"p1\"}'::JSON, 'p1')"
+        )
+        for cql_version, expected in (("1.5.3", "1.00000001"), ("2.0", "1.1")):
+            translator = CQLToSQLTranslator(
+                connection=py, library_loader=loaded, cql_version=cql_version
+            )
+            sql = translator.translate_library_to_population_sql(
+                library=parent, output_columns={"SuccViaHelper": "SuccViaHelper"}
+            )
+            rows = py.execute(sql).fetchall()
+            assert len(rows) == 1, f"cql_version={cql_version}: expected one patient row"
+            assert _quantity_value_unit(rows[0][1]) == (expected, "cm"), (
+                f"cql_version={cql_version}: included library ignored the policy, "
+                f"got {rows[0][1]!r}"
+            )
+    finally:
+        py.close()
+
+
+def test_cql_successor_predecessor_cql_version_on_evaluate_measure_amux170(tmp_path) -> None:
+    """The measure-entry surface exposes the same CQL-version policy."""
+    from fhir4ds.cql import evaluate_measure
+
+    library = tmp_path / "StepMeasure.cql"
+    library.write_text(
+        "library StepMeasure version '1.0.0'\n"
+        "using FHIR version '4.0.1'\n"
+        "context Patient\n"
+        "define \"Step\": successor of 1.0 'cm'\n"
+    )
+
+    py = _python_only_connection()
+    try:
+        py.execute(
+            "CREATE TABLE resources "
+            "(id VARCHAR, resourceType VARCHAR, resource JSON, patient_ref VARCHAR)"
+        )
+        py.execute(
+            "INSERT INTO resources VALUES ('p1', 'Patient', "
+            "'{\"resourceType\":\"Patient\",\"id\":\"p1\"}'::JSON, 'p1')"
+        )
+        for cql_version, expected in (("1.5.3", "1.00000001"), ("2.0", "1.1")):
+            frame = evaluate_measure(
+                str(library),
+                py,
+                output_columns={"Step": "Step"},
+                cql_version=cql_version,
+            )
+            rows = frame.to_dict("records")
+            assert len(rows) == 1
+            assert _quantity_value_unit(rows[0]["Step"]) == (expected, "cm"), (
+                f"evaluate_measure(cql_version={cql_version}) got {rows[0]['Step']!r}"
+            )
+    finally:
+        py.close()

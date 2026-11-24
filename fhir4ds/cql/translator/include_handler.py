@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Set, TYPE_CHECKING
 _logger = logging.getLogger(__name__)
 
 from ..errors import CircularIncludeError, TranslationError
+from ..translator.cql_version import DEFAULT_CQL_VERSION
 from ..parser.ast_nodes import (
     Definition,
     FunctionDefinition,
@@ -338,6 +339,12 @@ class IncludeHandlerMixin:
                 # included library behaves exactly like one in the caller.
                 strict_profiles=getattr(
                     self, "_strict_profiles", getattr(context, "strict_profiles", True)
+                ),
+                # The CQL specification version is translation-wide policy: an
+                # included library's successor/predecessor must honour the
+                # including library's version.
+                cql_version=getattr(
+                    self, "_cql_version", getattr(context, "cql_version", DEFAULT_CQL_VERSION)
                 ),
                 # CQL 2.0 #DefaultComparisonPrecision propagation (CQL20-D).
                 _inherited_comparison_precision=child_comparison_directive,

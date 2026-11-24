@@ -322,6 +322,7 @@ def evaluate_measure(
     terminology_endpoint: Optional["TerminologyEndpoint"] = None,
     closure_loaded: bool = False,
     strict_profiles: bool = True,
+    cql_version: str = "2.0",
 ) -> Any:
     """
     Evaluate a CQL measure against all patients in a single query.
@@ -354,6 +355,12 @@ def evaluate_measure(
                    ``meta.profile``: the profile filter is then omitted and the
                    retrieve matches the base resource type. The negation-profile
                    exclusion stays active either way.
+        cql_version: CQL specification version (default ``"2.0"``) the library
+                   is translated for. CQL <= 1.5.3 uses the fixed minimum
+                   Decimal precision (10^-8) as the ``successor of`` /
+                   ``predecessor of`` step for Decimal and Quantity values;
+                   CQL 2.0 uses the authored precision. See
+                   ``fhir4ds/cql/translator/cql_version.py``.
         terminology_endpoint: Optional Phase 1 medterm4ds terminology endpoint
                    (a ``TerminologyEndpoint`` Protocol implementation such as
                    ``HTTPTerminologyEndpoint``). When supplied, ValueSet
@@ -493,6 +500,7 @@ def evaluate_measure(
         closure_loaded=closure_loaded,
         terminology_endpoint=terminology_endpoint,
         strict_profiles=strict_profiles,
+        cql_version=cql_version,
     )
 
     # Set up library loader if include_paths provided

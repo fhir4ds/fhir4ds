@@ -66,6 +66,7 @@ from ..translator.translator import (
     ParameterBinding,
     PatientContext,
 )
+from ..translator.cql_version import DEFAULT_CQL_VERSION
 from ..translator.function_inliner import (
     FunctionDef,
     FunctionInliner,
@@ -138,6 +139,7 @@ def translate_cql(
     cql_text: str,
     connection: Optional[Any] = None,
     strict_profiles: bool = True,
+    cql_version: str = DEFAULT_CQL_VERSION,
 ) -> Dict[str, "SQLExpression"]:
     """
     Translate CQL text to SQL expressions.
@@ -152,6 +154,11 @@ def translate_cql(
             profile-qualified retrieve requires the profile canonical in the
             resource's ``meta.profile``; when False the filter is omitted and
             the retrieve matches the base resource type.
+        cql_version: CQL specification version (default ``"2.0"``),
+            selecting version-dependent operator semantics (the
+            ``successor of`` / ``predecessor of`` Decimal/Quantity step:
+            CQL <= 1.5.3 uses the fixed 10^-8 minimum Decimal precision,
+            CQL 2.0 uses the authored precision).
 
     Returns:
         Dictionary mapping definition names to SQL expressions.
@@ -173,7 +180,7 @@ def translate_cql(
 
     library = parse_cql(cql_text)
     translator = CQLToSQLTranslator(
-        connection=connection, strict_profiles=strict_profiles
+        connection=connection, strict_profiles=strict_profiles, cql_version=cql_version
     )
     return translator.translate_library(library)
 
@@ -182,6 +189,7 @@ def translate_library(
     library: "Library",
     connection: Optional[Any] = None,
     strict_profiles: bool = True,
+    cql_version: str = DEFAULT_CQL_VERSION,
 ) -> Dict[str, "SQLExpression"]:
     """
     Translate a parsed CQL library to SQL expressions.
@@ -208,7 +216,7 @@ def translate_library(
         results = translate_library(library)
     """
     translator = CQLToSQLTranslator(
-        connection=connection, strict_profiles=strict_profiles
+        connection=connection, strict_profiles=strict_profiles, cql_version=cql_version
     )
     return translator.translate_library(library)
 
@@ -218,6 +226,7 @@ def translate_library_to_sql(
     final_definition: Optional[str] = None,
     connection: Optional[Any] = None,
     strict_profiles: bool = True,
+    cql_version: str = DEFAULT_CQL_VERSION,
 ) -> str:
     """
     Translate a parsed CQL library to a complete SQL statement.
@@ -234,6 +243,9 @@ def translate_library_to_sql(
             profile-qualified retrieve requires the profile canonical in the
             resource's ``meta.profile``; when False the filter is omitted and
             the retrieve matches the base resource type.
+        cql_version: CQL specification version (default ``"2.0"``), selecting
+            version-dependent operator semantics (the ``successor of`` /
+            ``predecessor of`` Decimal/Quantity step).
 
     Returns:
         Complete SQL string with WITH clause and CTEs.
@@ -246,7 +258,9 @@ def translate_library_to_sql(
         sql = translate_library_to_sql(library, final_definition="Numerator")
         print(sql)
     """
-    translator = CQLToSQLTranslator(connection=connection, strict_profiles=strict_profiles)
+    translator = CQLToSQLTranslator(
+        connection=connection, strict_profiles=strict_profiles, cql_version=cql_version
+    )
     return translator.translate_library_to_sql(library, final_definition)
 
 

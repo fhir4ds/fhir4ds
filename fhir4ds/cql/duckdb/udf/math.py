@@ -525,7 +525,13 @@ def _step_temporal_string(value: str, direction: int) -> str | None:
     return f"{y:04d}-{mo:02d}-{d:02d}T{h:02d}:{mi:02d}:{s:02d}.{ms:03d}{suffix}"
 
 
-def _step_quantity_json(value: str, direction: int) -> str | None:
+#: CQL minimum Decimal precision (10^-8), the 1.5.3 ordinal step.
+_CQL_MINIMUM_DECIMAL_STEP = Decimal("0.00000001")
+
+
+def _step_quantity_json(
+    value: str, direction: int, minimum_precision: bool = False
+) -> str | None:
     match = _QUANTITY_VALUE_NUMBER_RE.search(value)
     if not match:
         return None
@@ -545,23 +551,46 @@ def _step_quantity_json(value: str, direction: int) -> str | None:
         return None
 
     unit = parsed.get("unit") or parsed.get("code") or "1"
-    # Decimal-authored quantities step by 10^-fractional-scale of the
-    # AUTHORED value text (PredecessorOf1QCMPrecision: 1.0 'cm' -> 0.9 'cm');
-    # integer-authored keep the integer step (CQL-11 doctrine).
+    # CQL 2.0 (§Successor): a decimal-authored Quantity steps by 1 * the
+    # AUTHORED precision (PredecessorOf1QCMPrecision: 1.0 'cm' -> 0.9 'cm').
+    # CQL <= 1.5.3 (§6.18 Successor): any decimal-authored Quantity steps by
+    # the minimum Decimal precision, 10^-08 (1.0 'cm' -> 1.00000001 'cm').
+    # Both versions step an INTEGER-authored quantity by 1 (CQL-11 doctrine).
     if "." in raw_number or "e" in raw_number.lower():
-        scale = max(-current.as_tuple().exponent, 0)
-        step = Decimal(1).scaleb(-scale) if scale > 0 else Decimal("0.00000001")
+        if minimum_precision:
+            step = _CQL_MINIMUM_DECIMAL_STEP
+        else:
+            scale = max(-current.as_tuple().exponent, 0)
+            step = Decimal(1).scaleb(-scale) if scale > 0 else _CQL_MINIMUM_DECIMAL_STEP
     else:
         step = Decimal(1)
     return _format_cql_quantity(current + direction * step, unit)
 
 
-def _step_value(x, direction: int) -> str | float | int | None:
+def _decimal_step(current: Decimal, minimum_precision: bool) -> Decimal:
+    """Return the successor/predecessor step for a Decimal operand.
+
+    CQL 2.0 (§Successor): "successor is equivalent to adding 1 * the precision
+    of the argument" — the authored fractional scale. CQL <= 1.5.3
+    (§6.18 Successor): "adding the minimum precision value for the Decimal
+    type, or 10^-08", regardless of the authored precision.
+    """
+    if minimum_precision:
+        return _CQL_MINIMUM_DECIMAL_STEP
+    scale = max(-current.as_tuple().exponent, 0)
+    return Decimal(1).scaleb(-scale) if scale > 0 else _CQL_MINIMUM_DECIMAL_STEP
+
+
+def _step_value(x, direction: int, minimum_precision: bool = False) -> str | float | int | None:
     """Shared implementation for predecessorOf/successorOf.
 
     Args:
         x: Input value (int, float, Decimal, str, date, datetime, or None).
         direction: +1 for successor, -1 for predecessor.
+        minimum_precision: Apply the CQL <= 1.5.3 ordinal step (a fixed 10^-8
+            for Decimal / decimal-authored Quantity values) instead of the
+            CQL 2.0 authored-precision step. Integer/Long/Date/DateTime/Time
+            are unaffected by this flag.
     """
     if x is None:
         return None
@@ -578,7 +607,7 @@ def _step_value(x, direction: int) -> str | float | int | None:
             return _step_time_string(x_stripped, direction)
         # Quantity JSON
         if x_stripped.startswith('{'):
-            return _step_quantity_json(x_stripped, direction)
+            return _step_quantity_json(x_stripped, direction, minimum_precision)
         # Date/datetime string
         stepped_temporal = _step_temporal_string(x_stripped, direction)
         if stepped_temporal is not None:
@@ -586,8 +615,7 @@ def _step_value(x, direction: int) -> str | float | int | None:
         # Try numeric string
         try:
             v = Decimal(x_stripped)
-            scale = max(-v.as_tuple().exponent, 0)
-            step = Decimal(1).scaleb(-scale) if scale > 0 else Decimal("0.00000001")
+            step = _decimal_step(v, minimum_precision)
             if (direction < 0 and v <= _CQL_DECIMAL_MIN) or (direction > 0 and v >= _CQL_DECIMAL_MAX):
                 return None
             return float(v + direction * step)
@@ -595,12 +623,12 @@ def _step_value(x, direction: int) -> str | float | int | None:
             _logger.debug("Unexpected error in UDF _step_value numeric parse: %s", e)
             return None
     if isinstance(x, Decimal) or isinstance(x, float):
-        # Decimal step is 10^-scale of the OPERAND's fractional digits
-        # (cql-tests PredecessorOf1DPrecision: predecessor of 1.0 is 0.9,
-        # not 0.99999999 — supersedes the flat 1e-8 doctrine).
+        # Decimal step follows the CQL version: 2.0 uses the OPERAND's
+        # fractional digits (cql-tests PredecessorOf1DPrecision: predecessor of
+        # 1.0 is 0.9); 1.5.3 uses the fixed minimum Decimal precision (1.0 ->
+        # 0.99999999).
         decimal_value = x if isinstance(x, Decimal) else Decimal(str(x))
-        scale = max(-decimal_value.as_tuple().exponent, 0)
-        step = Decimal(1).scaleb(-scale) if scale > 0 else Decimal("0.00000001")
+        step = _decimal_step(decimal_value, minimum_precision)
         if (direction < 0 and decimal_value <= _CQL_DECIMAL_MIN) or (
             direction > 0 and decimal_value >= _CQL_DECIMAL_MAX
         ):
@@ -619,8 +647,9 @@ def _step_value(x, direction: int) -> str | float | int | None:
 def predecessorOf(x) -> str | float | int | None:
     """CQL Predecessor (§22.25): returns the value one step less than x.
 
-    Integer/Long: x - 1, Decimal: x - 10^-8, Date: x - 1 day,
-    DateTime: x - 1 ms, Time: x - 1 ms, Quantity: value - step.
+    Integer/Long: x - 1, Decimal: x - 10^-8 [CQL 1.5.3] or x - authored
+    precision [CQL 2.0], Date: x - 1 day, DateTime: x - 1 ms, Time: x - 1 ms,
+    Quantity: value - step.
     """
     try:
         return _step_value(x, -1)
@@ -632,13 +661,60 @@ def predecessorOf(x) -> str | float | int | None:
 def successorOf(x) -> str | float | int | None:
     """CQL Successor (§22.26): returns the value one step greater than x.
 
-    Integer/Long: x + 1, Decimal: x + 10^-8, Date: x + 1 day,
-    DateTime: x + 1 ms, Time: x + 1 ms, Quantity: value + step.
+    Integer/Long: x + 1, Decimal: x + 10^-8 [CQL 1.5.3] or x + authored
+    precision [CQL 2.0], Date: x + 1 day, DateTime: x + 1 ms, Time: x + 1 ms,
+    Quantity: value + step.
     """
     try:
         return _step_value(x, +1)
     except (OverflowError, ValueError, TypeError) as e:
         _logger.debug("UDF successorOf returned null for boundary/invalid input: %s", e)
+        return None
+
+
+def predecessorOfMinimumPrecision(x) -> str | float | int | None:
+    """CQL <= 1.5.3 Predecessor (§6.14, 2019May): fixed 10^-8 Decimal step.
+
+    Per CQL 1.5.3: "For Decimal, predecessor is equivalent to subtracting the
+    minimum precision value for the Decimal type, or 10^-08"; "For Quantity
+    values, the predecessor is equivalent to subtracting 1 if the quantity is
+    an integer, and the minimum precision value for the Decimal type if the
+    quantity is a decimal." Integer/Long/Date/DateTime/Time are unchanged.
+
+    Emitted by the translator when ``cql_version`` is below 2.0; this Python
+    UDF is the desktop conformance authority (C++, and therefore the browser
+    surface, implements the 2.0 rule only — see AGENTS.md).
+    """
+    try:
+        return _step_value(x, -1, minimum_precision=True)
+    except (OverflowError, ValueError, TypeError) as e:
+        _logger.debug(
+            "UDF predecessorOfMinimumPrecision returned null for boundary/invalid input: %s",
+            e,
+        )
+        return None
+
+
+def successorOfMinimumPrecision(x) -> str | float | int | None:
+    """CQL <= 1.5.3 Successor (§6.18, 2019May): fixed 10^-8 Decimal step.
+
+    Per CQL 1.5.3: "For Decimal, successor is equivalent to adding the minimum
+    precision value for the Decimal type, or 10^-08"; "For Quantity values, the
+    successor is equivalent to adding 1 if the quantity is an integer, and the
+    minimum precision value for the Decimal type if the quantity is a decimal."
+    Integer/Long/Date/DateTime/Time are unchanged.
+
+    Emitted by the translator when ``cql_version`` is below 2.0; this Python
+    UDF is the desktop conformance authority (C++, and therefore the browser
+    surface, implements the 2.0 rule only — see AGENTS.md).
+    """
+    try:
+        return _step_value(x, +1, minimum_precision=True)
+    except (OverflowError, ValueError, TypeError) as e:
+        _logger.debug(
+            "UDF successorOfMinimumPrecision returned null for boundary/invalid input: %s",
+            e,
+        )
         return None
 
 
@@ -995,6 +1071,12 @@ def registerMathUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     con.create_function("mathTruncate", mathTruncate, null_handling="special")
     con.create_function("predecessorOf", predecessorOf, null_handling="special")
     con.create_function("successorOf", successorOf, null_handling="special")
+    con.create_function(
+        "predecessorOfMinimumPrecision", predecessorOfMinimumPrecision, null_handling="special"
+    )
+    con.create_function(
+        "successorOfMinimumPrecision", successorOfMinimumPrecision, null_handling="special"
+    )
     con.create_function("__fhir4ds_py_HighBoundary", highBoundary, null_handling="special")
     con.create_function("__fhir4ds_py_LowBoundary", lowBoundary, null_handling="special")
     con.execute(
