@@ -7603,13 +7603,42 @@ the two Time cells at 1.5.3 and caps the null ones at 1.5.2), re-check that the
 gate recognises the new pairing — a 1.5.2 cap with a 1.5.3 (not 2.0) sibling
 would keep running the capped cell and keep failing.
 
-**CLEAN-CHECKOUT HOLE (pre-existing, HIGH, needs its own card).** The
-`cql-tests` gitlink has NO `.gitmodules` entry, so `git submodule update
---init` cannot materialise it, and the CI conformance job only checks out
+**CLEAN-CHECKOUT HOLE — RESOLVED by FHIR4-45 (2026-11-24).** The `cql-tests`
+gitlink had NO `.gitmodules` entry, so `git submodule update --init` could not
+materialise it and the CI conformance job only checks out
 `tests/data/ecqm-content-qicore-2025`. In a fresh `git worktree add … dev` the
-directory is EMPTY; `run_cql.py` then prints "CQL tests directory not found"
-and returns WITHOUT rewriting the TRACKED `conformance/reports/cql_report.json`
-(exit status 0), so `run_all.py`/CI report the previously committed numbers as
-a pass. A corpus refresh is inert in CI until the corpus is actually vendored
-(tracked files, or a real submodule + a checkout step) and `run_cql.py` hard-
-fails when its input is missing.
+directory was EMPTY; `run_cql.py` then printed "CQL tests directory not found"
+and returned WITHOUT rewriting the TRACKED `conformance/reports/cql_report.json`
+(exit 0), so `run_all.py`/CI reported the previously committed numbers as a
+pass. Reproduced on this card: fresh `dev` worktree -> 0 XML files, exit 0,
+report md5 unchanged (548f7c57), `run_all.get_summary` -> 2035/2043.
+
+Two-part fix (both parts are load-bearing):
+
+1. **The corpus is VENDORED** (plain tracked files, gitlink deleted) — precedent
+   `fhir4ds/viewdef/tests/spec_tests/` and `tests/data/ecqm-content-qicore-2025/`.
+   A `.gitmodules` entry was rejected because it does not fix the observed
+   failure: linked worktrees do not materialise submodules either, and the CI
+   step names a different path (verified: `git submodule update --init
+   tests/data/ecqm-content-qicore-2025` exits 0 as a no-op because that path is
+   itself vendored). Fresh worktree now has all 16 XML files.
+2. **`run_cql.py` hard-fails on corpus problems**: absent / empty / fewer XML
+   files than the pin -> exit **2**, stale report DELETED then replaced by an
+   explicit `__corpus_integrity__` failure; fewer test cases collected than the
+   pin -> exit 2 with the real numbers plus a shortfall sentinel; an unparseable
+   corpus XML is a failed cell instead of a silently-dropped file; more files
+   than the pin -> loud WARNING. `fhir4ds/cql/tests/official/corpus_manifest.json`
+   (pin + 16 files + 2043 cases) is the single source of truth.
+3. **`run_all.py` can no longer be fooled**: it keeps each child's outcome
+   (a failed child is printed as NOT RUN and contributes nothing to the totals),
+   verifies the report was REWRITTEN this run by `(mtime_ns, size)` fingerprint,
+   rejects a 0-test report, and exits 1 on any of those. This closes the DQM
+   "stale report summarized as 47/47" pattern for every suite, not just CQL.
+   Rate-based failures (the 8 known cells above) still exit 0 with the
+   INCOMPLETE banner, so those honest fixtures do not make the gate
+   permanently red.
+
+Doctrine for future corpora: a conformance corpus must either be vendored or be
+a REAL submodule with a checkout step in the workflow that runs the gate — and
+either way the runner must hard-fail when its input is missing. A runner that
+prints an error and returns has no referee.
