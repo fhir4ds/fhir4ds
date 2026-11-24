@@ -324,6 +324,11 @@ def _format_day_precision_datetime(value: date | datetime) -> str:
 def _format_adjusted_bound_for_raw(value: Any, raw_value: Any = None) -> Any:
     if _is_quantity_bound(value):
         return value["__cql_quantity_json__"]
+    # AMUX-168: a Time bound is stored as integer milliseconds; when the
+    # authored bound was a Time spelling, render it back as a Time value at
+    # the authored precision instead of leaking the millisecond count.
+    if isinstance(value, int) and not isinstance(value, bool) and _is_time_like_string(raw_value):
+        return _format_time_bound_for_raw(value, raw_value)
     if isinstance(value, datetime):
         if _is_day_precision_datetime_string(raw_value):
             return _format_day_precision_datetime(value)
@@ -331,6 +336,28 @@ def _format_adjusted_bound_for_raw(value: Any, raw_value: Any = None) -> Any:
     if isinstance(value, date):
         return value.isoformat()
     return value
+
+
+def _format_time_bound_for_raw(millis: int, raw_value: Any = None) -> str:
+    """Render a Time bound (ms since midnight) at the AUTHORED precision.
+
+    CQL §9 Time values carry their authored precision (``@T13``,
+    ``@T12:31``, ``@T12:00:01``, ``@T12:00:00.001``).  ``_parse_interval``
+    stores Time bounds as integer milliseconds, so stepping an open bound
+    must re-render it with the same spelling the native engine produces.
+    """
+    precision = _temporal_precision_from_raw(raw_value) or "millisecond"
+    total = millis % 86400000
+    hours, rem = divmod(total, 3600000)
+    minutes, rem = divmod(rem, 60000)
+    seconds, millis_part = divmod(rem, 1000)
+    if precision == "hour":
+        return f"T{hours:02d}"
+    if precision == "minute":
+        return f"T{hours:02d}:{minutes:02d}"
+    if precision == "second":
+        return f"T{hours:02d}:{minutes:02d}:{seconds:02d}"
+    return f"T{hours:02d}:{minutes:02d}:{seconds:02d}.{millis_part:03d}"
 
 
 def _successor_for_bound(value: Any, raw_value: Any = None) -> Any:
@@ -527,7 +554,18 @@ def _parse_interval(value: str) -> dict | None:
     low_was_open = low is not None and not low_closed
     high_was_open = high is not None and not high_closed
     if low is not None and not low_closed:
-        if isinstance(low, int):
+        # AMUX-168: a Time bound parses to integer milliseconds, so the plain
+        # INTEGER branch below would step it by 1 ms and emit the raw
+        # millisecond count as the effective bound (e.g. start of
+        # Interval(@T12:00:00.000, ...) returned '43200001').  Step by the
+        # AUTHORED precision and keep a Time spelling.
+        if _is_time_like_string(low_val):
+            stepped = _successor_for_bound(low, low_val)
+            if stepped is not None:
+                low = stepped
+                low_closed = True
+                low_raw = _format_time_bound_for_raw(stepped, low_val)
+        elif isinstance(low, int):
             low = low + 1
             low_closed = True
             low_raw = str(low)
@@ -550,7 +588,13 @@ def _parse_interval(value: str) -> dict | None:
             low_closed = True
             low_raw = _format_adjusted_bound_for_raw(low, low_val)
     if high is not None and not high_closed:
-        if isinstance(high, int):
+        if _is_time_like_string(high_val):
+            stepped = _predecessor_for_bound(high, high_val)
+            if stepped is not None:
+                high = stepped
+                high_closed = True
+                high_raw = _format_time_bound_for_raw(stepped, high_val)
+        elif isinstance(high, int):
             high = high - 1
             high_closed = True
             high_raw = str(high)
@@ -1203,11 +1247,30 @@ def intervalProperlyContains(interval: str | None, point: str | None) -> bool | 
     if not iv or pt is None:
         return None
 
+    # AMUX-168: an OPEN null bound is an UNKNOWN boundary (Start/End are
+    # null), so containment is uncertain.  intervalProperlyIncludes and the
+    # other relationship predicates already apply this guard; the point
+    # overload was missing it (native returns NULL, the fallback said true).
+    if _open_null_bound_uncertain(iv):
+        return None
+
     low, high = iv["low"], iv["high"]
     point_for_compare = point if _is_temporal_string(point) else pt
 
     # Official CQL conformance treats interval-point "properly includes" as
     # strict containment: boundary points are not properly contained.
+    #
+    # AMUX-168: strictness applies to the AUTHORED bound, not the
+    # successor-normalized effective bound.  _parse_interval rewrites an open
+    # bound into the closed effective bound (low +1 step / high -1 step), so
+    # for a bound that WAS open the effective bound itself is INSIDE the
+    # interval: Interval(1, 5] properly includes 2.  The reference engine
+    # (cqframework ProperContainsEvaluator) evaluates After(point, start) &&
+    # Before(point, end) against the authored bounds, which is exactly
+    # "inclusive on an authored-open effective bound, strict on an
+    # authored-closed one".
+    low_was_open_normalized = bool(iv.get("low_closed")) and bool(iv.get("low_was_open"))
+    high_was_open_normalized = bool(iv.get("high_closed")) and bool(iv.get("high_was_open"))
     low_ok = True
     if low is not None:
         low_for_compare = _interval_bound(iv, "low", "low_raw")
@@ -1218,7 +1281,7 @@ def intervalProperlyContains(interval: str | None, point: str | None) -> bool | 
         )
         if cmp is None:
             return None
-        low_ok = cmp < 0
+        low_ok = cmp <= 0 if low_was_open_normalized else cmp < 0
     high_ok = True
     if high is not None:
         high_for_compare = _interval_bound(iv, "high", "high_raw")
@@ -1229,7 +1292,7 @@ def intervalProperlyContains(interval: str | None, point: str | None) -> bool | 
         )
         if cmp is None:
             return None
-        high_ok = cmp < 0
+        high_ok = cmp <= 0 if high_was_open_normalized else cmp < 0
     return low_ok and high_ok
 
 

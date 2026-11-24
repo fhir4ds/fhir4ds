@@ -840,3 +840,142 @@ define DateStartPlusDay: (start of Interval[@2024-01-01, @2024-02-01]) + 1 day
     finally:
         py.close()
         cpp.close()
+
+
+def test_cql_interval_point_properly_includes_authored_bound_amux168() -> None:
+    """AMUX-168: interval-point ``properly includes`` must compare the point
+    against the AUTHORED interval bound, not the successor-normalized
+    effective bound.
+
+    Spec (cql.hl7.org 09-b, #properly-includes): "For the interval-point
+    overload, this operator returns true if the interval contains (i.e.
+    includes) the point, and the interval is not a unit interval containing
+    only the point."  Reference implementation confirmation: cqframework
+    ``ProperContainsEvaluator.properContains(Interval, BaseTemporal)``
+    evaluates ``After(point, start) && Before(point, end)`` against the
+    AUTHORED bounds.
+
+    ``Interval(1, 5]`` contains 2 (its successor-normalized start), so the
+    point is strictly inside the authored interval: true.  The Python
+    fallback normalized the open bound to a CLOSED effective bound at
+    ``_parse_interval`` and then kept the closed-boundary strict comparison,
+    so every open-bound effective-start/end point returned false while the
+    native engine returned true.
+
+    Related root cause in the same normalization: a Time bound is stored as
+    integer milliseconds, so ``_parse_interval`` stepped it through the
+    plain-INTEGER branch and emitted the raw millisecond count as the
+    effective bound -- ``start of Interval(@T12:00:00.000, ...)`` returned
+    ``'43200001'`` instead of ``'T12:00:00.001'``.
+
+    The pinned CLOSED-boundary strictness is unchanged (and is asserted here
+    so a future "fix" cannot silently flip it): cql-tests ``version="1.0"``
+    fixtures ``TimeProperContainsFalse`` / ``TimeProperInFalse`` (in
+    ``fhir4ds/cql/tests/official/cql-tests/tests/cql/CqlIntervalOperatorsTest.xml``)
+    require FALSE for a point equal to a CLOSED start boundary, and the
+    conformance referee depends on it.  cql-tests PR #159 flips those two
+    fixtures to true with no CQL-version distinction (the prose is identical
+    in 1.5.3 and 2.0.0), so that adjudication is deliberately NOT applied
+    here -- see the NOT A BUG registry entry in extensions/cql/AGENTS.md.
+    """
+    lib = """library IntervalPointProperlyIncludes168 version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+// closed bounds: strict (fixture-pinned) -- unchanged
+define ClosedStartPoint: Interval[@T12:00:00.000, @T21:59:59.999] properly includes @T12:00:00.000
+define ClosedStartInPoint: @T12:00:00.000 properly included in Interval[@T12:00:00.000, @T21:59:59.999]
+define IntClosedStart: Interval[1, 5] properly includes 1
+define IntClosedEnd: Interval[1, 5] properly includes 5
+define IntUnitPoint: Interval[1, 1] properly includes 1
+define IntInterior: Interval[1, 5] properly includes 3
+// open bounds: strict against the AUTHORED bound, so the effective boundary
+// point is inside -> true; the authored boundary point stays outside -> false
+define IntOpenLowEffectiveStart: Interval(1, 5] properly includes 2
+define IntOpenLowAuthoredBoundary: Interval(1, 5] properly includes 1
+define IntOpenHighEffectiveEnd: Interval[1, 5) properly includes 4
+define IntOpenHighAuthoredBoundary: Interval[1, 5) properly includes 5
+define IntOpenBothEffectiveStart: Interval(1, 5) properly includes 2
+define IntOpenBothEffectiveEnd: Interval(1, 5) properly includes 4
+define DecimalOpenLowEffectiveStart: Interval(1.0, 5.0] properly includes 1.00000001
+define DecimalOpenHighEffectiveEnd: Interval[1.0, 5.0) properly includes 4.99999999
+define DateOpenLowEffectiveStart: Interval(@2024-01-01, @2025-01-01) properly includes @2024-01-02
+define DateOpenHighEffectiveEnd: Interval[@2024-01-01, @2025-01-01) properly includes @2024-12-31
+define TimeOpenLowEffectiveStart: Interval(@T12:00:00.000, @T18:00:00.000) properly includes @T12:00:00.001
+define TimeOpenLowAuthoredBoundary: Interval(@T12:00:00.000, @T18:00:00.000) properly includes @T12:00:00.000
+define DateTimeOpenLowEffectiveStart: Interval(@2024-01-01T00:00:00.000, @2024-02-01T00:00:00.000) properly includes @2024-01-01T00:00:00.001
+define QuantityOpenLowEffectiveStart: Interval(1 'g', 5 'g'] properly includes 1.00000001 'g'
+// mirror direction (point properly included in interval) uses the same UDF
+define MirrorOpenLowEffectiveStart: 2 properly included in Interval(1, 5]
+define MirrorClosedStart: 1 properly included in Interval[1, 5]
+define MirrorOpenLowAuthoredBoundary: 1 properly included in Interval(1, 5]
+// an OPEN null bound is an UNKNOWN boundary (Start/End are null) -> null
+define OpenNullLowUncertain: Interval(null as Integer, 5] properly includes 3
+// open Time bounds must render as Time strings at the authored precision
+define TimeOpenStart: start of Interval(@T12:00:00.000, @T18:00:00.000)
+define TimeOpenEnd: end of Interval(@T12:00:00.000, @T18:00:00.000)
+define TimeOpenStartHourPrecision: start of Interval(@T12, @T18)
+define TimeOpenEndHourPrecision: end of Interval(@T12, @T18)
+define TimeOpenStartMinutePrecision: start of Interval(@T12:30, @T18:30)
+define TimeOpenEndMinutePrecision: end of Interval(@T12:30, @T18:30)
+define TimeOpenStartSecondPrecision: start of Interval(@T12:00:00, @T18:00:00)
+define TimeOpenEndSecondPrecision: end of Interval(@T12:00:00, @T18:00:00)
+"""
+    expected = {
+        # fixture-pinned closed-boundary strictness (unchanged)
+        "ClosedStartPoint": False,
+        "ClosedStartInPoint": False,
+        "IntClosedStart": False,
+        "IntClosedEnd": False,
+        "IntUnitPoint": False,
+        "IntInterior": True,
+        # open bounds compare strictly against the authored bound
+        "IntOpenLowEffectiveStart": True,
+        "IntOpenLowAuthoredBoundary": False,
+        "IntOpenHighEffectiveEnd": True,
+        "IntOpenHighAuthoredBoundary": False,
+        "IntOpenBothEffectiveStart": True,
+        "IntOpenBothEffectiveEnd": True,
+        "DecimalOpenLowEffectiveStart": True,
+        "DecimalOpenHighEffectiveEnd": True,
+        "DateOpenLowEffectiveStart": True,
+        "DateOpenHighEffectiveEnd": True,
+        "TimeOpenLowEffectiveStart": True,
+        "TimeOpenLowAuthoredBoundary": False,
+        "DateTimeOpenLowEffectiveStart": True,
+        "QuantityOpenLowEffectiveStart": True,
+        "MirrorOpenLowEffectiveStart": True,
+        "MirrorClosedStart": False,
+        "MirrorOpenLowAuthoredBoundary": False,
+        # open null bound -> uncertain
+        "OpenNullLowUncertain": None,
+        # open Time bounds render at the authored precision
+        "TimeOpenStart": "T12:00:00.001",
+        "TimeOpenEnd": "T17:59:59.999",
+        "TimeOpenStartHourPrecision": "T13",
+        "TimeOpenEndHourPrecision": "T17",
+        "TimeOpenStartMinutePrecision": "T12:31",
+        "TimeOpenEndMinutePrecision": "T18:29",
+        "TimeOpenStartSecondPrecision": "T12:00:01",
+        "TimeOpenEndSecondPrecision": "T17:59:59",
+    }
+
+    translated = translate_cql(lib)
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for name, expr in translated.items():
+                sql = f"SELECT {expr.to_sql()}"
+                py_result = py.execute(sql).fetchone()
+                cpp_result = cpp.execute(sql).fetchone()
+                no_py_result = no_py.execute(sql).fetchone()
+                assert no_py_result == py_result, (
+                    f"{name}: python fallback {py_result} != native {no_py_result}"
+                )
+                assert cpp_result == py_result, f"{name}: cpp {cpp_result} != python {py_result}"
+                assert py_result == (expected[name],), (
+                    f"{name}: got {py_result}, expected {(expected[name],)}"
+                )
+    finally:
+        py.close()
+        cpp.close()
