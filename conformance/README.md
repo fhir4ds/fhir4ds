@@ -24,9 +24,10 @@ Runs all conformance suites and displays a unified summary table.
 - **Output**: `conformance/reports/fhirpath_report.json`
 
 ### CQL (Clinical Quality Language)
-- **Source**: `tests/data/cql-tests/` (cloned logic)
+- **Source**: `fhir4ds/cql/tests/official/cql-tests/tests/cql/` (vendored; pin + counts in `fhir4ds/cql/tests/official/corpus_manifest.json`)
 - **Run**: `python3 conformance/scripts/run_cql.py`
 - **Output**: `conformance/reports/cql_report.json`
+- **Failure mode**: exits **2** when the corpus is absent/empty/incomplete (FHIR4-45); a missing corpus is never reported as a pass.
 
 ### DQM (QI Core 2025)
 - **Source**: `tests/data/ecqm-content-qicore-2025/`

@@ -1,10 +1,23 @@
 """Shared utility for appending conformance run results to a persistent log."""
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
 LOG_FILE = Path("conformance/reports/conformance.log")
+
+
+def log_file() -> Path:
+    """Resolve the log path, honouring FHIR4DS_CONFORMANCE_LOG.
+
+    FHIR4-45: the gate-integrity tests exercise ``run_cql.main`` in-process,
+    and those runs must not append entries to the tracked log. Resolving the
+    path at call time (instead of importing a frozen constant) is what makes
+    the override reach the log writer.
+    """
+    override = os.environ.get("FHIR4DS_CONFORMANCE_LOG")
+    return Path(override) if override else LOG_FILE
 
 
 def _collect_stats(report_path: str | Path):
@@ -56,6 +69,7 @@ def log_run(suite_name: str, report_path: str | Path) -> None:
     else:
         lines.append("  Failures: none")
 
-    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(LOG_FILE, "a") as f:
+    destination = log_file()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with open(destination, "a") as f:
         f.write("\n".join(lines) + "\n")
