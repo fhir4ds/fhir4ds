@@ -7552,3 +7552,64 @@ identically on the pristine `dev` snapshot, out of this card's scope): the
 properly contains 5` and raises a DuckDB ParserException at execution
 (`properly included in` and `Interval properly contains Interval` are fine).
 Give it its own card.
+
+## cql-tests corpus pin + official-gate failure ledger (FHIR4-37, 2026-11-24)
+
+**Pin**: upstream `cqframework/cql-tests` **0a8f7d3** (2026-11-21, "Merge pull
+request #186 … truncate-integer-range-tests"), previous `316c493` (2026-11-16).
+Both halves of the pin must agree: the `cql-tests` entry is a **gitlink**
+in the fhir4ds index AND a working clone. They had drifted (gitlink `f724ee4`
+vs tree `316c493`); a local `diff.ignoresubmodules=all` in this repo HIDES the
+bump from `git diff`/`git show --stat`, so verify with
+`git ls-tree HEAD fhir4ds/cql/tests/official/cql-tests` and
+`git -C fhir4ds/cql/tests/official/cql-tests rev-parse HEAD` (both must equal
+the pin). Refresh procedure + per-file counts: `official/CQL_TESTS_README.md`.
+
+**Gate**: official CQL 2029/2037 -> **2035/2043** (+6 Truncate range-edge cells
+from upstream #186, 0 newly failing). The 4 re-pinned expressions (#178
+`System.Quantity`/`System.Ratio` qualification, #179 `ToBoolean(null as
+String)`) already passed. The same 8 cells fail before and after — their
+ledger, so nobody re-triages them as regressions:
+
+| cell | class | why the engine is not wrong |
+|---|---|---|
+| `CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainInterval` | stale oracle (open upstream #183) | expects 17; **16** is the spec answer. Language Semantics "Determining Difference and Duration": the low bound is the duration from the first comparand's MAXIMUM possible value — `DateTime(2014,1,15)` is a day-precision datetime, i.e. `[…T23:59:59.999]` -> 16 days (AMUX-169 entry in the root AGENTS.md). |
+| `CqlDateTimeOperatorsTest.xml::TimeDurationBetweenHourDiffPrecision2` | stale oracle (open upstream #183) | expects 1; `hours between @T06 and @T07:00:00` is `[0,1]` — an operand whose precision IS the requested unit still has unknown finer components (same normative sentence as above). |
+| `CqlIntervalOperatorsTest.xml::TimeProperContainsNull` / `::TimeProperInNull` | stale oracle (open upstream #184) | pin `null` at `version="1.0"`; CQL §Time combines seconds+milliseconds as one decimal (".0 when milliseconds are null") for ALL comparison operations, so the 1.5.3 answer is **false** (AMUX-171). |
+| `CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse` / `::…False2` | fixture asserts a STATIC error (`invalid="true"`), engine evaluates | §Equivalent: "two tuple values are equivalent if and only if the tuples are of the same type, and the values for all elements by name are equivalent" — different element sets are **false**, which is what the engine returns. Only a static type checker would reject the expression. |
+| `CqlComparisonOperatorsTest.xml::NotEquivalentNullNull` | fixture asserts `invalid="semantic"` for the untyped `null` (`null !~ null`) | §Equivalent: "returns true if the arguments are equivalent in value, **or if they are both null**; and false otherwise" -> `!~` is false. Same untyped-null ambiguity class upstream #179 just fixed for `ToBoolean(null)`. |
+| `CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs` | **REAL ENGINE DEVIATION (open)** — see below | fixture is RIGHT this time; a prior doctrine said otherwise. |
+
+**COALESCE DOCTRINE CORRECTION (supersedes the CQL-08 "variadic, no upper
+bound" note).** The spec's own Coalesce examples carry
+`define CoalesceError: Coalesce(null, 15, null, null, null, null) // more than 5
+inputs must be represented as list` — present verbatim in BOTH
+`https://cql.hl7.org/2019May/09-b-cqlreference.html` (1.5.3) and the current
+`https://cql.hl7.org/09-b-cqlreference.html`. Our translator therefore accepts
+6+ scalar arguments (`Coalesce(null, 15, null, null, null, null)` returns 15)
+where the spec says the form is an error. Runtime dispatch for 2..5 and the
+List overload is otherwise fine, and no 6+ comma-separated `Coalesce` call
+appears in the qi-core-2025 / us-core-2025 corpora, so the blast radius is
+small — but the arity guard is a **separate card** (translator validation +
+`invalid` expectation + DQM re-gate). Do not re-assert the old "no upper
+bound" doctrine without re-reading the spec example.
+
+**`versionTo` gating caveat (`conformance/scripts/run_cql.py`).** A cell capped
+at `versionTo < 2.0` is treated as a superseded pass ONLY when a sibling with
+`version >= 2.0` and the BYTE-IDENTICAL expression exists; otherwise the
+1.5-era cell still runs and fails. The five `SuccessorOf*/PredecessorOf*` rows
+resolve that way today. When the pin moves past upstream #184 (which re-pins
+the two Time cells at 1.5.3 and caps the null ones at 1.5.2), re-check that the
+gate recognises the new pairing — a 1.5.2 cap with a 1.5.3 (not 2.0) sibling
+would keep running the capped cell and keep failing.
+
+**CLEAN-CHECKOUT HOLE (pre-existing, HIGH, needs its own card).** The
+`cql-tests` gitlink has NO `.gitmodules` entry, so `git submodule update
+--init` cannot materialise it, and the CI conformance job only checks out
+`tests/data/ecqm-content-qicore-2025`. In a fresh `git worktree add … dev` the
+directory is EMPTY; `run_cql.py` then prints "CQL tests directory not found"
+and returns WITHOUT rewriting the TRACKED `conformance/reports/cql_report.json`
+(exit status 0), so `run_all.py`/CI report the previously committed numbers as
+a pass. A corpus refresh is inert in CI until the corpus is actually vendored
+(tracked files, or a real submodule + a checkout step) and `run_cql.py` hard-
+fails when its input is missing.
