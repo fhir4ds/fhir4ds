@@ -16,13 +16,13 @@ from datetime import date
 import pytest
 
 from fhir4ds.operations.tests.wasm_parity import evaluators, report
-from fhir4ds.operations.tests.wasm_parity.evaluators import cql
+from fhir4ds.operations.tests.wasm_parity.evaluators import cql, fhirpath, omop, viewdef
 from fhir4ds.operations.tests.wasm_parity.reference_bundle import (
     EnvironmentInputMissing,
     required,
 )
 
-SUITES = {cql.SUITE: cql}
+SUITES = {cql.SUITE: cql, fhirpath.SUITE: fhirpath, viewdef.SUITE: viewdef, omop.SUITE: omop}
 
 
 @pytest.mark.parametrize("suite", sorted(SUITES))

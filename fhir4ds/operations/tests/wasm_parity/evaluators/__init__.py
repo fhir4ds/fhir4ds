@@ -81,6 +81,40 @@ def suspects_for(sql: str, contract) -> tuple[tuple[str, ...], tuple[str, ...]]:
     return tuple(sorted(flagged)), tuple(sorted(missing))
 
 
+def _short(text: object, limit: int = 200) -> str:
+    return " ".join(str(text).split())[:limit]
+
+
+def pass_fail_case(
+    case_id: str,
+    passed_d: bool,
+    reason_d: str,
+    passed_b: bool,
+    reason_b: str,
+    sql: str = "",
+    contract=None,
+) -> CaseOutcome:
+    """Outcome for runners that report pass/fail plus a reason string only.
+
+    Both surfaces passing is GREEN: a pass/fail runner cannot see type or
+    representation drift, and that resolution is the runner's own contract.
+    """
+    verdict_d = "pass" if passed_d else f"fail: {_short(reason_d)}"
+    verdict_b = "pass" if passed_b else f"fail: {_short(reason_b)}"
+    if passed_d and passed_b:
+        outcome, detail = GREEN, ""
+    elif passed_d:
+        outcome, detail = PARITY_GAP, verdict_b
+    elif passed_b:
+        outcome, detail = BROWSER_ONLY_PASS, verdict_d
+    else:
+        outcome, detail = BOTH_FAIL, verdict_d
+    suspects, missing = ((), ())
+    if sql and contract is not None:
+        suspects, missing = suspects_for(sql, contract)
+    return CaseOutcome(case_id, outcome, verdict_d, verdict_b, detail, suspects, missing)
+
+
 def _live_name_entries(
     entries: list[Entry], today: date
 ) -> tuple[dict[str, str], dict[str, str], dict[str, list[str]]]:

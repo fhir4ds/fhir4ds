@@ -287,7 +287,7 @@ def cli(argv: list[str] | None = None) -> int:
     browser = surfaces.browser_sim_connection(reference)
     try:
         computed = contract_mod.compute(desktop, reference)
-        violations = contract_mod.check_reference_and_simulator(reference, computed)
+        violations = contract_mod.check_reference(computed) + contract_mod.check_simulator(reference)
         violations += contract_mod.evaluate(computed, entries, today=today)
         write_contract(
             computed, surfaces.simulator_fidelity(reference), violations, entries, today=today
@@ -315,9 +315,14 @@ def cli(argv: list[str] | None = None) -> int:
 
 
 def _evaluators() -> dict:
-    from .evaluators import cql
+    from .evaluators import cql, fhirpath, omop, viewdef
 
-    return {cql.SUITE: cql}
+    return {
+        cql.SUITE: cql,
+        fhirpath.SUITE: fhirpath,
+        viewdef.SUITE: viewdef,
+        omop.SUITE: omop,
+    }
 
 
 if __name__ == "__main__":
