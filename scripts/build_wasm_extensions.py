@@ -31,6 +31,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -60,6 +61,10 @@ CONFIGURE_FLAGS = (
     "-DENABLE_JEMALLOC=ON",
     "-DENABLE_THREAD_SANITIZER=OFF",
     '-DCMAKE_CXX_FLAGS=-fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1',
+    # Declare the platform instead of letting the build RUN a compiled probe
+    # (duckdb_platform_binary.js) to detect it; the recorded cache sets both.
+    "-DDUCKDB_CUSTOM_PLATFORM=wasm_eh",
+    "-DDUCKDB_EXPLICIT_PLATFORM=wasm_eh",
 )
 
 
@@ -96,22 +101,31 @@ def verify(require_source: bool = False) -> int:
 
 
 def _commands(bundle: dict, abi: str, sdk: Path, jobs: int) -> list[list[str]]:
+    """The configure and compile commands. Every value is shell-quoted: a flag value with a
+    space (``CMAKE_CXX_FLAGS=-fwasm-exceptions -DWEBDB_FAST_EXCEPTIONS=1``) must reach CMake
+    as ONE argument, or the second half silently becomes an unused CMake variable."""
     name = bundle["extension"]
     source, build = REPO / "extensions" / name / "duckdb", REPO / "extensions" / name / "build" / "wasm_eh"
     toolchain = sdk / "upstream" / "emscripten" / "cmake" / "Modules" / "Platform" / "Emscripten.cmake"
-    configure = (
-        "emcmake cmake --fresh -S {source} -B {build} -DCMAKE_TOOLCHAIN_FILE={toolchain} "
-        "-DDUCKDB_EXTENSION_CONFIGS={config} -DOVERRIDE_GIT_DESCRIBE=v{abi} {flags}"
-    ).format(
-        source=source,
-        build=build,
-        toolchain=toolchain,
-        config=REPO / "extensions" / name / "extension_config.cmake",
-        abi=abi,
-        flags=" ".join(CONFIGURE_FLAGS),
+    q = shlex.quote
+    configure = " ".join(
+        [
+            "emcmake",
+            "cmake",
+            "-S",
+            q(str(source)),
+            "-B",
+            q(str(build)),
+            q(f"-DCMAKE_TOOLCHAIN_FILE={toolchain}"),
+            q(f"-DDUCKDB_EXTENSION_CONFIGS={REPO / 'extensions' / name / 'extension_config.cmake'}"),
+            q(f"-DOVERRIDE_GIT_DESCRIBE=v{abi}"),
+            *(q(flag) for flag in CONFIGURE_FLAGS),
+        ]
     )
-    compile_ = f"make -C {build} -j{jobs} {name}_loadable_extension OVERRIDE_GIT_DESCRIBE=v{abi}"
-    return [["bash", "-c", f"source {sdk / 'emsdk_env.sh'} && {configure}"], ["bash", "-c", compile_]]
+    # The emsdk environment is needed for BOTH steps: the link rule calls `emcc` by name.
+    env = f"source {q(str(sdk / 'emsdk_env.sh'))} && "
+    compile_ = f"make -C {q(str(build))} -j{jobs} {name}_loadable_extension OVERRIDE_GIT_DESCRIBE=v{abi}"
+    return [["bash", "-c", env + configure], ["bash", "-c", env + compile_]]
 
 
 def build(bundle: dict, manifest: dict, *, dry_run: bool, jobs: int) -> dict:
@@ -123,7 +137,17 @@ def build(bundle: dict, manifest: dict, *, dry_run: bool, jobs: int) -> dict:
         raise RuntimeError(f"duckdb submodule not initialised: git submodule update --init extensions/{name}/duckdb")
     sdk = emsdk_root()
     original = _git(submodule, "rev-parse", "HEAD") if initialised else None
+    # The build directory is parked so CMake configures from scratch (the emsdk environment
+    # supplies CMake 3.22, which has no `--fresh`, and a stale cache makes configure fail
+    # or misdirect the build). The previous cache is put back in ``finally``, like the x86
+    # twin script does.
+    build_dir = REPO / "extensions" / name / "build" / "wasm_eh"
+    parked = build_dir.with_name("wasm_eh.parked")
     try:
+        if build_dir.exists() and not dry_run:
+            if parked.exists():
+                shutil.rmtree(parked)
+            build_dir.rename(parked)
         if initialised:
             if _git(submodule, "tag", "-l", f"v{abi}") != f"v{abi}":
                 _git(submodule, "fetch", "--depth", "1", "origin", f"refs/tags/v{abi}:refs/tags/v{abi}")
@@ -143,6 +167,11 @@ def build(bundle: dict, manifest: dict, *, dry_run: bool, jobs: int) -> dict:
     finally:
         if original is not None:
             _git(submodule, "checkout", "--detach", original)
+        if parked.exists():
+            if build_dir.exists():
+                shutil.rmtree(build_dir)
+            parked.rename(build_dir)
+            print("    restored the previous build cache")
     if dry_run:
         return {}
     return {

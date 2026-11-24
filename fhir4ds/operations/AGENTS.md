@@ -279,6 +279,37 @@ US-Core 2025 variant: 180 KB, 270k codes).
   (if it does through an unread projection it is a silent no-op). Not run: a negative control
   with the pre-fix translator.
 
+### Rebuilding the wasm bundles — what the first real run taught (2026-11-24)
+
+`python3 scripts/build_wasm_extensions.py --build --extension cql|fhirpath -j 4` under a cap
+(one at a time; ~1–2 min each here). Its first real run failed four times before it built;
+every failure is now fixed in the script, and each is a trap for anyone rebuilding by hand:
+
+- **No `cmake --fresh`.** The emsdk environment puts the system CMake 3.22 on the path and
+  `--fresh` needs 3.24. The script parks the existing build directory instead (and restores it
+  in `finally`, like `scripts/build_extension_bundles.py`).
+- **Declare the platform.** Without `DUCKDB_CUSTOM_PLATFORM=wasm_eh` and
+  `DUCKDB_EXPLICIT_PLATFORM=wasm_eh` the build compiles a probe and tries to RUN it to detect
+  the platform, and that fails here.
+- **Quote every configure argument.** `CMAKE_CXX_FLAGS` holds two flags with a space between
+  them; unquoted through a shell it splits, `-fwasm-exceptions` reaches the compiler and
+  `-DWEBDB_FAST_EXCEPTIONS=1` is silently dropped as an unused CMake variable. That flag governs
+  exception interoperability with the browser engine, so the bundle would load and misbehave.
+- **The emsdk environment is needed for the link step too**: the link rule calls `emcc` by name.
+- **DuckDB sources without the network.** `dev` carries no gitlink for
+  `extensions/*/extension-ci-tools`, and a plain `git submodule update --init` clones DuckDB
+  over the network. An object-sharing clone of another checkout's copy works offline:
+  `git clone --shared --no-checkout <other>/extensions/cql/duckdb extensions/cql/duckdb`,
+  then check out the recorded commit; the `v1.5.5` tag comes with it. Remove the clone afterwards
+  (800 MB per extension).
+- **A rebuild makes every other tracked copy stale.** The built website snapshots
+  (`web/website/static/{cql-cleanroom,cql-clinic-app,wasm-app,viewing-room-app}/{assets,extensions}`)
+  and `fhir4ds/devserver/static-cleanroom/{assets,extensions}` hold copies of the bundles. They
+  are in the manifest's `install` lists, so the script keeps them identical (the same bytes an
+  app rebuild would produce for that one file). BulkPublishDemo's copies are deliberately NOT
+  installed: it pins a different duckdb-wasm version (ledger: `bundle-drift-bulk-publisher`).
+- `--verify` exits 1 while BulkPublishDemo's drift exists; that is the intended signal.
+
 ### Baseline recorded (dev `87bece82a55`, corpus `f724ee4`, 2026-11-24)
 
 - Contract: 116 reference statements; 1 wasm-only macro (`Coalesce`); 53 same-name macros with
@@ -286,13 +317,14 @@ US-Core 2025 variant: 180 KB, 270k codes).
   runs a native namesake of a desktop macro; 2 app bundles differ from the reference.
 - Tier A CQL: 1,818 GREEN, 126 PARITY_GAP, 60 ENGINE_DIFF, 6 BOTH_FAIL, 22 translate errors.
 - Tier A ViewDefinition 144/144 and OMOP 38/38 GREEN.
-- Real engine, whole CQL corpus: 1,809 GREEN, 137 PARITY_GAP, 58 ENGINE_DIFF. The 14 real-only
-  cases are all the **stale shipped wasm bundle** (precision-stepped successor/predecessor,
-  Quantity `div` unit cancellation, the AMUX-171 Time rules).
-- Staleness list (x86 bundles provide, shipped wasm lacks): `comparable`,
-  `cql_equivalent_in_valueset`, `fhirpath_equivalent_in_valueset`, `roundquantity`,
-  `roundquantityto`, `cqlDateTimeEquivalentListElement` (dev rebuilt the x86 slots in
-  `64303b05be9`; the PR's first real CI run flagged it).
+- Real engine, whole CQL corpus, BEFORE the wasm rebuild: 1,809 GREEN, 137 PARITY_GAP,
+  58 ENGINE_DIFF — 17 cases were real-only and all were the stale shipped wasm bundle.
+- Staleness list BEFORE the rebuild (x86 bundles provided, shipped wasm lacked):
+  `comparable`, `cql_equivalent_in_valueset`, `fhirpath_equivalent_in_valueset`,
+  `roundquantity`, `roundquantityto`, `cqlDateTimeEquivalentListElement`.
+- AFTER the 2026-11-24 rebuild (both bundles, from dev `80a826eca2d`): the staleness list
+  is empty and real duckdb-wasm gives exactly the simulator's numbers on the whole CQL
+  corpus (1,816 GREEN, 126 PARITY_GAP, 60 ENGINE_DIFF, 8 BOTH_FAIL). No real-only gap is left.
 - Four reference macros are **broken everywhere**, simulator included: `AllTrue`, `AnyTrue`,
   `AllFalse`, `AnyFalse` call `system.bool_and(list)` / `bool_or(list)`, overloads no DuckDB
   1.5.x has (Binder Error).

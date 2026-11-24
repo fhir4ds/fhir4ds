@@ -6735,14 +6735,19 @@ gaps visible and expires every excuse; the infrastructure comes before fixing th
 
 What the first run found (so nobody re-chases it): 33 desktop macros have no browser
 counterpart, 53 same-name macros have a different body, `AllTrue`/`AnyTrue`/`AllFalse`/
-`AnyFalse` are Binder Errors in every browser, the shipped `cql.duckdb_extension.wasm` lacks
+`AnyFalse` are Binder Errors in every browser, the shipped `cql.duckdb_extension.wasm` lacked
 six functions the desktop bundles provide (`RoundQuantity`, `RoundQuantityTo`, `Comparable`,
 `cqlEquivalentInValueset`, `fhirpathEquivalentInValueset`, `cqlDateTimeEquivalentListElement`)
-and predates the AMUX-171 Time rules, and `web/wasm-demo` and `web/cql-clinic` still ship their own diverged `cql-macros.ts`.
-Of the 2,010 runnable official CQL tests, desktop passes 2,004 and real duckdb-wasm 1,867.
-Of the 137 cases only desktop passes, 126 reproduce on the simulator (missing macros and
-body drift — the contract) and 14 are real-only (the stale wasm bundle). Rebuild the wasm bundles with
-the tracked script after this lands on dev — the shipped ones record no source provenance.
+and predated the AMUX-171 Time rules, and `web/wasm-demo` and `web/cql-clinic` still ship
+their own diverged `cql-macros.ts`.
+
+**The wasm bundles were rebuilt on 2026-11-24** with `scripts/build_wasm_extensions.py` from
+dev `80a826eca2d`, and `fhir4ds/wasm_extension_bundles.json` records their provenance. On the
+2,010 runnable official CQL tests real duckdb-wasm now gives exactly the simulator's numbers
+(1,816 green, 126 parity gaps from missing macros and body drift, 60 representation
+differences): no real-only gap is left. So every C++ change needs that rebuild, or the browser
+silently runs an older engine than desktop. The script's first real run failed four times
+before it built; the causes are recorded in `fhir4ds/operations/AGENTS.md`.
 
 **Tier C (real measure SQL on real duckdb-wasm) is not a gate yet; a one-measure spike
 (2026-11-24) says it should be.** CMS159's full population SQL binds and runs on real
@@ -6758,8 +6763,9 @@ unread projection is a silent no-op. Details: `fhir4ds/operations/AGENTS.md`.
 - A translator macro that reaches population SQL is ported to the reference bundle or added to
   the ledger in the same change (`test_macro_sync.py` + Step 0).
 - C++ changes need a wasm rebuild as well as the x86 ones
-  (`scripts/build_wasm_extensions.py`), or the browser silently runs last month's engine.
-  Tier B turns that into an exact list instead of a suspicion.
+  (`scripts/build_wasm_extensions.py --build --extension <name>`), or the browser silently
+  runs last month's engine. Tier B turns that into an exact list instead of a suspicion, and
+  the ledger forces the now-stale registrations to be deleted.
 - Tier B cannot run under `scripts/capped.sh` (chromium cannot start with a capped address
   space); it is light and runs uncapped. Everything else stays capped.
 - Values cross to the browser as VARCHAR: under the apps' `castBigIntToDouble` flag Arrow

@@ -295,24 +295,14 @@
       "target": [
         "web/website/package.json",
         "web/website/static/bulk-publisher-app/extensions/cql.duckdb_extension.wasm",
-        "web/website/static/bulk-publisher-app/workers/cql.duckdb_extension.wasm"
+        "web/website/static/bulk-publisher-app/workers/cql.duckdb_extension.wasm",
+        "web/website/static/bulk-publisher-app/extensions/fhirpath.duckdb_extension.wasm",
+        "web/website/static/bulk-publisher-app/workers/fhirpath.duckdb_extension.wasm"
       ],
-      "reason": "BulkPublishDemo ships a distinct cql wasm binary (sha256 e047fa7e...) and a caret-range duckdb-wasm pin (^1.33.1-dev41.0) while the four other apps pin 1.33.1-dev64.0 exactly and share one bundle set. Removed when the scripted wasm rebuild installs one bundle set everywhere (decision D-3) and the pin is made exact.",
+      "reason": "BulkPublishDemo (web/website/src/components/BulkPublishDemo, in the built snapshot web/website/static/bulk-publisher-app) ships its own cql and fhirpath wasm binaries and pins a different @duckdb/duckdb-wasm version (^1.33.1-dev41.0) than the other apps (1.33.1-dev64.0). Not overwritten by the wasm rebuild: the rebuilt bundles target the v1.5.5 core of the other apps and may not load under this app's pin. Owner: web apps \u2014 unify the pin, then let scripts/build_wasm_extensions.py install into its directories too.",
       "owner": "web apps",
       "since": "2026-11-24",
       "expires": "2027-02-22"
-    },
-    {
-      "id": "wasm-bundle-provenance-unknown",
-      "kind": "PROVENANCE_UNKNOWN",
-      "target": [
-        "web/cql-cleanroom/public/extensions/cql.duckdb_extension.wasm",
-        "web/cql-cleanroom/public/extensions/fhirpath.duckdb_extension.wasm"
-      ],
-      "reason": "The shipped wasm bundles (cql built 2026-10-24, fhirpath 2026-09-19) carry only the v1.5.5 ABI stamp; no commit or source hash was recorded, so their distance from HEAD cannot be stated. Removed when scripts/build_wasm_extensions.py rebuilds them and fills `source` in fhir4ds/wasm_extension_bundles.json.",
-      "owner": "fhir4ds lane",
-      "since": "2026-11-24",
-      "expires": "2026-12-24"
     },
     {
       "id": "ts-body-drift-broken-bool-aggregates",
@@ -329,69 +319,6 @@
       "expires": "2026-12-24"
     },
     {
-      "id": "wasm-stale-functions-2026-11",
-      "kind": "STALE_WASM_FUNCTION",
-      "target": [
-        "comparable",
-        "cql_equivalent_in_valueset",
-        "cqldatetimeequivalentlistelement",
-        "fhirpath_equivalent_in_valueset",
-        "roundquantity",
-        "roundquantityto"
-      ],
-      "reason": "Tier B (real duckdb-wasm with the SHIPPED bundles) lacks these functions that the desktop x86 bundles provide: the shipped cql.duckdb_extension.wasm (built 2026-10-24) predates them. RoundQuantity/RoundQuantityTo/Comparable/cqlEquivalentInValueset/fhirpathEquivalentInValueset are the November CQL 2.0 functions; cqlDateTimeEquivalentListElement is FHIR4-34 (dev rebuilt the x86 slots in 64303b05be9). Any measure SQL that emits one of them is a Catalog Error in every browser app. Fix: a tracked rebuild with scripts/build_wasm_extensions.py, which also records the source provenance the shipped bundles lack.",
-      "owner": "fhir4ds lane",
-      "since": "2026-11-24",
-      "expires": "2027-02-22"
-    },
-    {
-      "id": "cql-parity-gap-stale-wasm-predecessor-successor-precision",
-      "kind": "PARITY_GAP",
-      "suite": "cql",
-      "target": [
-        "CqlArithmeticFunctionsTest.xml::PredecessorOf101DPrecision",
-        "CqlArithmeticFunctionsTest.xml::PredecessorOf1DPrecision",
-        "CqlArithmeticFunctionsTest.xml::PredecessorOf1QCMPrecision",
-        "CqlArithmeticFunctionsTest.xml::SuccessorOf101DPrecision",
-        "CqlArithmeticFunctionsTest.xml::SuccessorOf1DPrecision"
-      ],
-      "reason": "Real duckdb-wasm only (Tier B, whole-corpus run): the shipped cql.duckdb_extension.wasm predates the CQL 2.0 precision-stepped predecessor/successor, so its native function steps a flat 1e-8 while desktop runs the current implementation and passes. Fix: a tracked rebuild of the wasm bundles with scripts/build_wasm_extensions.py (fhir4ds lane, after this lands on dev).",
-      "owner": "fhir4ds lane",
-      "since": "2026-11-24",
-      "expires": "2027-02-22",
-      "surface": "real"
-    },
-    {
-      "id": "cql-parity-gap-stale-wasm-quantity-div-unit",
-      "kind": "PARITY_GAP",
-      "suite": "cql",
-      "target": [
-        "CqlArithmeticFunctionsTest.xml::TruncatedDivide10By5DQuantity",
-        "CqlArithmeticFunctionsTest.xml::TruncatedDivide10d1ByNeg3D1Quantity",
-        "CqlArithmeticFunctionsTest.xml::TruncatedDivide414By206DQuantity"
-      ],
-      "reason": "Real duckdb-wasm only (Tier B, whole-corpus run): in the shipped cql.duckdb_extension.wasm a Quantity truncated divide keeps the unreduced unit instead of cancelling to '1' (fixed on desktop by the CQL-10 EXPLORER unit-cancellation change). Fix: a tracked rebuild of the wasm bundles with scripts/build_wasm_extensions.py (fhir4ds lane, after this lands on dev).",
-      "owner": "fhir4ds lane",
-      "since": "2026-11-24",
-      "expires": "2027-02-22",
-      "surface": "real"
-    },
-    {
-      "id": "cql-parity-gap-stale-wasm-time-combined-precision",
-      "kind": "PARITY_GAP",
-      "suite": "cql",
-      "target": [
-        "CqlComparisonOperatorsTest.xml::TestHourEqualMinutes",
-        "CqlComparisonOperatorsTest.xml::TestMinuteEqualSeconds",
-        "CqlComparisonOperatorsTest.xml::TestYearEquivalentMonths"
-      ],
-      "reason": "Real duckdb-wasm only (Tier B, whole-corpus run): the shipped cql.duckdb_extension.wasm predates the AMUX-171 refinement (seconds and milliseconds are one combined precision for Time comparisons), so 1 hour = 60 minutes is false in the browser and true on desktop. The root AGENTS.md already records REBUILD REQUIRED for this. Fix: a tracked rebuild of the wasm bundles with scripts/build_wasm_extensions.py (fhir4ds lane, after this lands on dev).",
-      "owner": "fhir4ds lane",
-      "since": "2026-11-24",
-      "expires": "2027-02-22",
-      "surface": "real"
-    },
-    {
       "id": "cql-desktop-defects-strict-boolean-fhir4-33",
       "kind": "DESKTOP_DEFECT",
       "suite": "cql",
@@ -403,21 +330,6 @@
       "owner": "fhir4ds lane",
       "since": "2026-11-24",
       "expires": "2026-12-24"
-    },
-    {
-      "id": "cql-parity-gap-stale-wasm-interval-null-bounds",
-      "kind": "PARITY_GAP",
-      "suite": "cql",
-      "surface": "real",
-      "target": [
-        "CqlIntervalOperatorsTest.xml::TestMaxIntervalEndsFalse",
-        "CqlIntervalOperatorsTest.xml::TestMaxIntervalStartsFalse",
-        "CqlIntervalOperatorsTest.xml::TestMeetsAfterNull"
-      ],
-      "reason": "Real duckdb-wasm only (Tier B, whole-corpus run). Desktop now passes these after FHIR4-38 (starts/ends resolve a closed null bound to the point-type extreme) and FHIR4-40 (a point in an open-null-bound interval is unknown); the shipped cql.duckdb_extension.wasm predates both, so the browser still returns the old answer. Fix: a tracked rebuild of the wasm bundles with scripts/build_wasm_extensions.py (fhir4ds lane, after this lands on dev).",
-      "owner": "fhir4ds lane",
-      "since": "2026-11-24",
-      "expires": "2027-02-22"
     }
   ]
 }
