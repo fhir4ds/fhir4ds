@@ -485,6 +485,19 @@ static Optional<int> compare_interval_order_nullable(const BoundValue &left, con
 			return Optional<int>(cmp);
 		}
 		if (left_rank != right_rank) {
+			// CQL §Time (AMUX-171): "seconds and milliseconds are combined ...
+			// When milliseconds are null, they are combined as .0 ... This is
+			// true of all comparison operations for time values ... or when
+			// comparison is performed as part of other operations such as
+			// interval meets and overlaps."  A TIME bound therefore compares
+			// at millisecond precision with a null millisecond read as 0, so
+			// the result is DETERMINED rather than uncertain.  DATE/DATETIME
+			// keep the uncertainty pinned by CqlIntervalOperatorsTest.xml
+			// DateTimeIncludedInNull (fixtures outrank prose).
+			if (left.type == BoundType::Time) {
+				return Optional<int>(left.dt_val->compare_at_precision(
+				    *right.dt_val, DateTimeValue::Precision::Millisecond));
+			}
 			return NullOpt<int>();
 		}
 		return Optional<int>(0);
@@ -515,6 +528,15 @@ static Optional<bool> bound_equals_nullable(const BoundValue &left, const BoundV
 			return Optional<bool>(false);
 		}
 		if (left_rank != right_rank) {
+			// AMUX-171: TIME bounds combine seconds+milliseconds with a null
+			// millisecond read as .0 (§Time), so mixed second/ms precision is
+			// a DETERMINED equality rather than uncertainty.  DATE/DATETIME
+			// keep the DateTimeIncludedInNull uncertainty.
+			if (left.type == BoundType::Time) {
+				int fine = left.dt_val->compare_at_precision(
+				    *right.dt_val, DateTimeValue::Precision::Millisecond);
+				return Optional<bool>(fine == 0);
+			}
 			return NullOpt<bool>();
 		}
 		return Optional<bool>(true);
