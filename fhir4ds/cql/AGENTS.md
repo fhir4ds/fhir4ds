@@ -7646,3 +7646,55 @@ Doctrine for future corpora: a conformance corpus must either be vendored or be
 a REAL submodule with a checkout step in the workflow that runs the gate — and
 either way the runner must hard-fail when its input is missing. A runner that
 prints an error and returns has no referee.
+
+## `properly contains` is not CQL (FHIR4-43, 2026-11-24)
+
+There is no `properly contains` operator. In CQL 1.5.3
+(https://cql.hl7.org/2019May/grammar.html) and 2.0
+(https://cql.hl7.org/grammar.html) the `properly` modifier is accepted only by
+`between`, `includes`, `during` / `included in`, and `within ... of`; the
+reference implementation's `grammar/cql.g4` agrees, and Appendix B has zero
+`properly contains` entries in either version. The point-in-interval reads are
+spelled
+
+    properly includes      (left Interval<T>, right T)      -- §9.22
+    properly included in   (left T, right Interval<T>)      -- §9.23 (also `properly during`)
+
+The lexer used to pre-tokenize `properly contains` into a dedicated
+`PROPER_CONTAINS` token, so the parser produced an operator string that no
+translator dispatch site handled: `SQLBinaryOp` then carried the raw text
+(`intervalFromBounds(...) properly contains 5`) into the generated SQL and
+DuckDB raised a `ParserException` at execution — for every point type, the
+list form and the interval-interval form. `properly in` was the same defect.
+Both are now rejected in the parser's `PROPERLY` branch with a typed
+`ParseError` naming the valid spellings; `BINARY_OPERATOR_MAP` no longer
+carries the stale `"properly contains": None  # Handled specially` entry, which
+no site ever handled.
+
+**Do not "fix" this by adding a dispatch entry.** Translating a spelling the
+language does not have would extend CQL silently (invisible to conformance)
+and would require inventing the interval-interval reading too — CQL `contains`
+over an interval only takes a point (§9.4). Rejecting it is also this branch's
+established behaviour: an unrecognised `properly` combination already surfaced
+as a trailing-token error rather than being silently accepted.
+
+### Operator-string audit (repeat after parser changes)
+
+`ast`-walk `fhir4ds/cql/parser/parser.py` for every `BinaryExpression(operator=...)`
+site (static literals, one-hole f-strings, and the dynamic `op`/`operator`/
+`full_operator` variables), then resolve each against the translator: a literal
+reference anywhere under `fhir4ds/cql/translator/`, a documented prefix family
+(`after <prec> of`, `starts ...`, `within <N> <unit> of`, `on or after <prec> of`,
+...), or a bare timing quantifier (`_parse_bare_temporal_operator` /
+`_parse_within_operator` in `_temporal_utils.py`). Current state: **82 distinct
+emitted specs, 0 unresolved**. The invariant is the CQL-19 doctrine — a
+parser-emitted operator string with no dispatch falls through to SQL pass-through
+and produces Binder/Parser exceptions at execution, so a new operator spelling
+must either get a dispatch site or be rejected where it is produced.
+
+Grammar-valid but still unsupported, and NOT defects (they fail loudly with a
+ParseError, no SQL leak): `properly between` and `properly within <N> <unit> of`.
+
+Gate after the change: CQL conformance 2036/2043 unchanged (`cql_report.json`
+byte-identical — no fixture uses the spelling), DQM qi-core-2025 47/47 and
+us-core-2025 73/73.
