@@ -35,6 +35,11 @@ _PYTHON_PREFERRED_CPP_CONFLICTS = {
     # CQL interval/time/boundary edge-case surface.
     "intervalStart",
     "intervalEnd",
+    # FHIR4-41: peer-aware Start/End (the precision-qualified starts/ends
+    # lowering). C++ mirrors live in extensions/cql/src/cql_extension.cpp for
+    # the WASM/no-Python surface; the Python UDFs stay the desktop authority.
+    "intervalStartWithPeer",
+    "intervalEndWithPeer",
     "intervalWidth",
     "intervalContains",
     "intervalProperlyContains",

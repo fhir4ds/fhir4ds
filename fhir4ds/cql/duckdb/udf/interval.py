@@ -894,6 +894,24 @@ def intervalStart(interval: str | None) -> str | None:
     returns the minimum value of the point type.
     For non-interval point values, returns the value itself.
     """
+    return _interval_start(interval)
+
+
+def intervalStartWithPeer(interval: str | None, peer: str | None) -> str | None:
+    """Start of `interval`, inferring the point type from `peer` when needed.
+
+    FHIR4-41: CQL 1.5 §19.30 Starts / §19.13 Ends route boundary determination
+    through §9.14 Start / §9.15 End, and Interval<T> is satisfied by BOTH
+    operands — so an operand whose own bounds are ALL null (a closed
+    `Interval[null, null]`) still resolves to the point-type extremum, with the
+    type supplied by the peer interval. The precision-qualified lowering needs
+    this seam because it cannot express the shared `T` any other way.
+    """
+    return _interval_start(interval, _parse_interval(peer) if peer else None)
+
+
+def _interval_start(interval: str | None, peer_iv: dict | None = None) -> str | None:
+    """Shared Start implementation (FHIR4-41 adds the optional peer)."""
     if not interval:
         return None
     # Non-JSON values that look like dates/numbers are point values
@@ -914,8 +932,17 @@ def intervalStart(interval: str | None) -> str | None:
                 return str(raw_low)
         except JSONDecodeError:
             pass
-        if iv.get("low_closed", True) and iv["high"] is not None:
-            return _cql_minimum_for_peer_bound(iv["high"], iv.get("high_raw"))
+        if iv.get("low_closed", True):
+            sentinel = None
+            if iv["high"] is not None:
+                sentinel = _cql_minimum_for_peer_bound(iv["high"], iv.get("high_raw"))
+            if sentinel is None:
+                # FHIR4-41: point type from the PEER interval (shared Interval<T>).
+                sample = _peer_point_type_sample(peer_iv)
+                if sample is not None:
+                    sentinel = _cql_minimum_for_peer_bound(*sample)
+            if sentinel is not None:
+                return sentinel
         return None
     # Return raw bound values only when the authored boundary was closed.
     # _parse_interval normalizes open discrete bounds to closed effective
@@ -944,6 +971,21 @@ def intervalEnd(interval: str | None) -> str | None:
     returns the maximum value of the point type.
     For non-interval point values, returns the value itself.
     """
+    return _interval_end(interval)
+
+
+def intervalEndWithPeer(interval: str | None, peer: str | None) -> str | None:
+    """End of `interval`, inferring the point type from `peer` when needed.
+
+    FHIR4-41: symmetric to `intervalStartWithPeer` — §9.15 End of a closed null
+    high boundary is the point-type maximum, and the type may come from the
+    other operand of the operator's shared Interval<T>.
+    """
+    return _interval_end(interval, _parse_interval(peer) if peer else None)
+
+
+def _interval_end(interval: str | None, peer_iv: dict | None = None) -> str | None:
+    """Shared End implementation (FHIR4-41 adds the optional peer)."""
     if not interval:
         return None
     # Non-JSON values that look like dates/numbers are point values
@@ -964,8 +1006,17 @@ def intervalEnd(interval: str | None) -> str | None:
                 return str(raw_high)
         except JSONDecodeError:
             pass
-        if iv.get("high_closed", True) and iv["low"] is not None:
-            return _cql_maximum_for_peer_bound(iv["low"], iv.get("low_raw"))
+        if iv.get("high_closed", True):
+            sentinel = None
+            if iv["low"] is not None:
+                sentinel = _cql_maximum_for_peer_bound(iv["low"], iv.get("low_raw"))
+            if sentinel is None:
+                # FHIR4-41: point type from the PEER interval (shared Interval<T>).
+                sample = _peer_point_type_sample(peer_iv)
+                if sample is not None:
+                    sentinel = _cql_maximum_for_peer_bound(*sample)
+            if sentinel is not None:
+                return sentinel
         return None
     try:
         raw = orjson.loads(interval)
@@ -4335,6 +4386,11 @@ def registerIntervalUdfs(con: "duckdb.DuckDBPyConnection") -> None:
     # malformed input), so use null_handling="special" for all of them.
     con.create_function("intervalStart", intervalStart, null_handling="special")
     con.create_function("intervalEnd", intervalEnd, null_handling="special")
+    # FHIR4-41: peer-aware Start/End — the precision-qualified starts/ends
+    # lowering passes the other operand so an all-null operand can still infer
+    # the shared Interval<T> point type (§9.14/§9.15).
+    con.create_function("intervalStartWithPeer", intervalStartWithPeer, null_handling="special")
+    con.create_function("intervalEndWithPeer", intervalEndWithPeer, null_handling="special")
     con.create_function("intervalWidth", intervalWidth, null_handling="special")
     con.create_function("interval_size", interval_size, null_handling="special")
     con.create_function("intervalContains", intervalContains, null_handling="special")
@@ -4397,6 +4453,8 @@ __all__ = [
     "registerIntervalUdfs",
     "intervalStart",
     "intervalEnd",
+    "intervalStartWithPeer",
+    "intervalEndWithPeer",
     "intervalWidth",
     "interval_size",
     "intervalContains",

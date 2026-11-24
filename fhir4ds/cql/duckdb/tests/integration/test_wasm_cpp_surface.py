@@ -10,6 +10,8 @@ from pathlib import Path
 import duckdb
 import pytest
 
+from .wasm_runtime_helpers import FHIR4_41_NO_PYTHON_STALE
+
 
 FHIRPATH_REQUIRED = {
     "fhirpath",
@@ -62,6 +64,12 @@ CQL_REQUIRED = {
     "intervalExcept",
     "intervalOnOrAfter",
     "intervalOnOrBefore",
+    # FHIR4-41 peer-aware Start/End. REBUILD REQUIRED: the C++ mirrors are in
+    # extensions/cql/src/cql_extension.cpp but not in the shipped bundles yet,
+    # so `test_browser_required_functions_exist_without_python_fallback`
+    # subtracts `FHIR4_41_PENDING_CQL` while the flag is set.
+    "intervalStartWithPeer",
+    "intervalEndWithPeer",
     "cqlSameAsP",
     "cqlSameOrAfterP",
     "cqlSameOrBeforeP",
@@ -127,13 +135,17 @@ def _catalog_names(con: duckdb.DuckDBPyConnection) -> set[str]:
     }
 
 
+#: REBUILD REQUIRED (FHIR4-41): mirrored in the C++ source but not in the
+#: shipped bundles yet — see wasm_runtime_helpers.FHIR4_41_NO_PYTHON_STALE.
+FHIR4_41_PENDING_CQL = {"intervalStartWithPeer", "intervalEndWithPeer"}
+
+
 def test_browser_required_functions_exist_without_python_fallback(cpp_only_con) -> None:
     names = {name.lower() for name in _catalog_names(cpp_only_con)}
-    missing = {
-        name
-        for name in FHIRPATH_REQUIRED | CQL_REQUIRED
-        if name.lower() not in names
-    }
+    required = FHIRPATH_REQUIRED | CQL_REQUIRED
+    if FHIR4_41_NO_PYTHON_STALE:
+        required = required - FHIR4_41_PENDING_CQL
+    missing = {name for name in required if name.lower() not in names}
     assert missing == set()
 
 
