@@ -14,7 +14,8 @@ from collections import Counter
 from datetime import date
 from pathlib import Path
 
-from .contract import Contract
+from . import shipped_bundles
+from .contract import FILE_LEVEL_KINDS, Contract
 from .evaluators import SuiteResult
 from .ledger import Entry, Violation
 from .reference_bundle import REPO_ROOT, EnvironmentInputMissing, load_reference_bundle
@@ -265,6 +266,46 @@ def write_suite(
     return _write(result.suite, payload, "\n".join(md) + "\n", today)
 
 
+def write_files(
+    observed: dict[str, list[str]],
+    violations: list[Violation],
+    entries: list[Entry],
+    *,
+    today: date,
+) -> Path:
+    """Report for T7: the shipped WASM extension bundles."""
+    md = [
+        "# WASM parity - Step 0, T7: shipped WASM extension bundles",
+        "",
+        f"Generated {today.isoformat()}. Source of truth: `fhir4ds/wasm_extension_bundles.json`.",
+        "",
+        "| Kind | Target |",
+        "|---|---|",
+        *[f"| {kind} | `{target}` |" for kind, targets in observed.items() for target in targets],
+    ] or ["none observed"]
+    md += [
+        "",
+        "## Ledger entries (file-level)",
+        *_entry_header(),
+        *_entry_rows([e for e in entries if e.kind in FILE_LEVEL_KINDS], today),
+        "",
+        "## Violations (fix, or register with a reason and an owner)",
+        "",
+        *(_violation_lines(violations) or ["none"]),
+        "",
+    ]
+    payload = {
+        "observed": observed,
+        "violations": [v.__dict__ for v in violations],
+        "entries": [
+            {**e.__dict__, "target": e.items, "since": e.since.isoformat(), "expires": e.expires.isoformat()}
+            for e in entries
+            if e.kind in FILE_LEVEL_KINDS
+        ],
+    }
+    return _write("shipped", payload, "\n".join(md) + "\n", today)
+
+
 def _summary_line(name: str, violations: list[Violation]) -> str:
     kinds = Counter(v.code for v in violations)
     return f"{name}: {len(violations)} violation(s) {dict(kinds)}" if violations else f"{name}: OK"
@@ -294,6 +335,14 @@ def cli(argv: list[str] | None = None) -> int:
         )
         print(_summary_line("step0", violations))
         for violation in violations:
+            print(f"  [{violation.code}] {violation.message[:600]}")
+            if violation.proposal is not None:
+                print("  proposal:", json.dumps(violation.proposal))
+        observed = shipped_bundles.observe(shipped_bundles.load_manifest())
+        file_violations = contract_mod.evaluate_files(entries, observed, today=today)
+        write_files(observed, file_violations, entries, today=today)
+        print(_summary_line("shipped", file_violations), observed)
+        for violation in file_violations:
             print(f"  [{violation.code}] {violation.message[:600]}")
             if violation.proposal is not None:
                 print("  proposal:", json.dumps(violation.proposal))

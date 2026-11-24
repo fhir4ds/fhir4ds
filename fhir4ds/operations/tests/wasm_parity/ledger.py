@@ -48,7 +48,7 @@ CASE_KINDS = (
     "DESKTOP_DEFECT",  # neither surface matches the official expectation
 )
 # File-level kinds: the target is a repo-relative path or bundle name.
-FILE_KINDS = ("BUNDLE_DRIFT", "STALE_WASM_BUNDLE", "PROVENANCE_UNKNOWN")
+FILE_KINDS = ("BUNDLE_DRIFT", "WASM_COPY_DRIFT", "STALE_WASM_BUNDLE", "PROVENANCE_UNKNOWN")
 KINDS = NAME_KINDS + CASE_KINDS + FILE_KINDS
 
 PRINCIPLE_KINDS = frozenset({"WASM_ONLY_MACRO", "TS_BODY_DRIFT"})

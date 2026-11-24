@@ -1,0 +1,33 @@
+{
+  "_comment": "Provenance of the WASM extension bundles the web apps ship. duckdb-wasm's core is built from one DuckDB release (duckdb_abi); the side modules must be built for the same release or LOAD fails. `bundles` names the source copy of each extension and where scripts/build_wasm_extensions.py installs it; every other copy in the tree must be byte-identical to the source copy (T7, fhir4ds/operations/tests/wasm_parity/shipped_bundles.py). A bundle's `source` stays null until scripts/build_wasm_extensions.py rebuilds it: the bundles shipped today carry only the ABI stamp.",
+  "schema_version": 1,
+  "duckdb_abi": "1.5.5",
+  "duckdb_wasm_version": "1.33.1-dev64.0",
+  "bundles": [
+    {
+      "extension": "cql",
+      "path": "web/cql-cleanroom/public/extensions/cql.duckdb_extension.wasm",
+      "sha256": "a0bc331b16c9ae32976b342d3037de8b3f6bbdab835ad947f57eb9132ecbb206",
+      "size": 1028266,
+      "install": [
+        "web/cql-cleanroom/public/extensions",
+        "web/cql-clinic/public/extensions",
+        "web/wasm-demo/public/extensions"
+      ],
+      "source": null
+    },
+    {
+      "extension": "fhirpath",
+      "path": "web/cql-cleanroom/public/extensions/fhirpath.duckdb_extension.wasm",
+      "sha256": "2459d91777a621a748678bff8499be4cc3a8fcc6923279794235f8b046df7f0a",
+      "size": 888663,
+      "install": [
+        "web/cql-cleanroom/public/extensions",
+        "web/cql-clinic/public/extensions",
+        "web/wasm-demo/public/extensions",
+        "web/viewing-room/public/extensions"
+      ],
+      "source": null
+    }
+  ]
+}

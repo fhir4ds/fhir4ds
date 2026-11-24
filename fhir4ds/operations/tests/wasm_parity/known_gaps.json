@@ -444,6 +444,31 @@
       "since": "2026-11-24",
       "expires": "2026-12-24",
       "suite": "fhirpath"
+    },
+    {
+      "id": "bundle-drift-bulk-publisher",
+      "kind": "WASM_COPY_DRIFT",
+      "target": [
+        "web/website/package.json",
+        "web/website/static/bulk-publisher-app/extensions/cql.duckdb_extension.wasm",
+        "web/website/static/bulk-publisher-app/workers/cql.duckdb_extension.wasm"
+      ],
+      "reason": "BulkPublishDemo ships a distinct cql wasm binary (sha256 e047fa7e...) and a caret-range duckdb-wasm pin (^1.33.1-dev41.0) while the four other apps pin 1.33.1-dev64.0 exactly and share one bundle set. Removed when the scripted wasm rebuild installs one bundle set everywhere (decision D-3) and the pin is made exact.",
+      "owner": "web apps",
+      "since": "2026-11-24",
+      "expires": "2027-02-22"
+    },
+    {
+      "id": "wasm-bundle-provenance-unknown",
+      "kind": "PROVENANCE_UNKNOWN",
+      "target": [
+        "web/cql-cleanroom/public/extensions/cql.duckdb_extension.wasm",
+        "web/cql-cleanroom/public/extensions/fhirpath.duckdb_extension.wasm"
+      ],
+      "reason": "The shipped wasm bundles (cql built 2026-10-24, fhirpath 2026-09-19) carry only the v1.5.5 ABI stamp; no commit or source hash was recorded, so their distance from HEAD cannot be stated. Removed when scripts/build_wasm_extensions.py rebuilds them and fills `source` in fhir4ds/wasm_extension_bundles.json.",
+      "owner": "fhir4ds lane",
+      "since": "2026-11-24",
+      "expires": "2026-12-24"
     }
   ]
 }

@@ -171,6 +171,28 @@ def evaluate(
     return violations
 
 
+FILE_LEVEL_KINDS = ("STALE_WASM_BUNDLE", "WASM_COPY_DRIFT", "PROVENANCE_UNKNOWN")
+
+
+def evaluate_files(entries: list[Entry], observed: dict[str, list[str]], *, today: date) -> list[Violation]:
+    """T7: file-level gap kinds (shipped bundles) against the ledger.
+
+    ``observed`` maps a kind in ``FILE_LEVEL_KINDS`` to the targets seen right
+    now (``shipped_bundles.observe``). Every observed gap must be registered.
+    """
+    violations: list[Violation] = []
+    for kind in FILE_LEVEL_KINDS:
+        if kind not in observed:
+            continue
+        targets = observed[kind]
+        rec = reconcile([e for e in entries if e.kind == kind], targets, today=today)
+        violations.extend(
+            Violation("T7", code, message, proposal=prop)
+            for code, message, prop in _violation_parts(kind, targets, rec, True)
+        )
+    return violations
+
+
 def _violation_parts(kind, observed, rec, is_required: bool):
     for item, entry_id in sorted(rec.expired.items()):
         yield (

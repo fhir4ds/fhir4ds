@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from fhir4ds.operations.tests.wasm_parity import contract, report, surfaces
+from fhir4ds.operations.tests.wasm_parity import contract, report, shipped_bundles, surfaces
 
 GATE = "Step 0 (browser contract vs desktop)"
 
@@ -39,3 +39,11 @@ def test_t3_t6_contract_gaps_are_registered(wasm_reference, wasm_contract, wasm_
         today=date.today(),
     )
     assert not violations, report.failure_text(GATE, violations)
+
+
+def test_t7_shipped_wasm_bundles_are_one_known_set(wasm_ledger):
+    """T7: every shipped copy matches the manifest, one core pin, provenance recorded."""
+    observed = shipped_bundles.observe(shipped_bundles.load_manifest())
+    violations = contract.evaluate_files(wasm_ledger, observed, today=date.today())
+    report.write_files(observed, violations, wasm_ledger, today=date.today())
+    assert not violations, report.failure_text("Step 0, T7 (shipped WASM bundles)", violations)
