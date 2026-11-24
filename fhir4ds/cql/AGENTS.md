@@ -7094,3 +7094,23 @@ test (mocked 400) alongside it.
 When adding a new adapter or endpoint operation, decide explicitly which class a
 refusal raises; a new "permanent gap" path that returns `[]` + WARNING recreates
 the silent-under-match bug this ruling exists to prevent.
+
+## Interval-point `properly includes`: authored vs effective bounds (AMUX-168, 2026-11-24)
+
+`fhir4ds/cql/duckdb/udf/interval.py::intervalProperlyContains` compares the
+point strictly against the AUTHORED bound. `_parse_interval` normalizes an open
+bound into the closed effective bound, so the comparison must be `cmp <= 0` when
+the bound came from an open bound (`low_closed and low_was_open`) and `cmp < 0`
+when it was authored closed — `Interval(1, 5] properly includes 2` is TRUE
+(reference engine: `ProperContainsEvaluator.properContains` = `After(point,
+start) && Before(point, end)` on the raw bounds). Closed-boundary strictness is
+fixture-pinned and must NOT change: cql-tests fixtures `TimeProperContainsFalse`
+/ `TimeProperInFalse` expect FALSE for a point equal to a CLOSED start, so
+cql-tests PR #159's flip is deliberately not applied (see the NOT A BUG
+registry adjudication in `extensions/cql/AGENTS.md`). The same normalizer bug
+leaked Time bounds as raw millisecond counts — Time bounds are integers, so the
+Time case in `_parse_interval` must precede the plain-integer case and re-render
+via `_format_time_bound_for_raw` at the authored precision. Pinned by
+`duckdb/tests/integration/test_interval_part3_parity.py::
+test_cql_interval_point_properly_includes_authored_bound_amux168` (dual-engine
++ no-Python parity).

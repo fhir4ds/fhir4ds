@@ -739,12 +739,79 @@ See `docs/architecture/AUDIT_REPORT.md` §8 for full details.
 ### NOT A BUG Registry
 *Behaviors that look like bugs but are spec-compliant or intentional design decisions.*
 
-- **Interval-point `properly includes` endpoints**: Preserve strict boundary
-  behavior for the active official CQL conformance target. Although current CQL
-  Reference prose can be read as endpoint-inclusive when the interval is not a
-  unit interval, the bundled official XML cases `TimeProperContainsFalse` and
-  `TimeProperInFalse` expect boundary points to return `false`; changing this
-  regresses conformance from 1706/1706.
+- **Interval-point `properly includes` at a CLOSED endpoint: strict, and it
+  stays strict** (adjudicated AMUX-168, 2026-11-24). CQL prose says "the
+  interval contains (i.e. includes) the point, and the interval is not a unit
+  interval containing only the point", which reads as endpoint-INCLUSIVE, but
+  the bundled official XML cases `TimeProperContainsFalse` (ProperContains
+  group) and `TimeProperInFalse` (ProperIn group) in
+  `fhir4ds/cql/tests/official/cql-tests/tests/cql/CqlIntervalOperatorsTest.xml`
+  require `false` for a point equal to a CLOSED start boundary. cql-tests PR
+  #159 (`fix-152-proper-contains-boundary`, open since 2026-10-01) flips those
+  two fixtures to `true`. Full adjudication recorded because it will come up
+  again:
+  - **No version distinction exists.** The sentence above is verbatim
+    identical in CQL 1.5.3 (`HL7/cql@v1.5.3
+    input/pages/09-b-cqlreference.md`, §Properly Includes) and CQL 2.0.0
+    (cql.hl7.org/09-b-cqlreference.html). Both fixtures carry
+    `version="1.0"`, so the runner's `versionSkipReason` gate applies them to
+    every engine version, and EVERY cql-tests branch (including
+    `br-2-0-0-slice-tests`) carries `false`.
+  - **The reference implementation agrees with the fixtures**, not the prose:
+    `cqframework/clinical_quality_language`
+    `engine/.../elm/executing/ProperContainsEvaluator.kt`
+    `properContains(Interval, BaseTemporal)` = `After(point, start) &&
+    Before(point, end)` — strict on BOTH authored bounds. (`ProperInEvaluator`
+    delegates to it; `ProperIncludesEvaluator` has no interval-point overload.)
+  - Consequence: "fixtures + reference outrank prose" applies. Flipping this
+    costs exactly the two refereed cases (2029/2037 -> 2027/2037) and matches
+    neither the reference engine nor the shipped fixtures.
+- **Open-bound `properly includes` endpoints ARE inclusive (fixed AMUX-168)**:
+  strictness belongs to the AUTHORED bound, so the effective boundary point of
+  an OPEN bound is inside: `Interval(1, 5] properly includes 2` is TRUE
+  (authored low 1 is open → 2 > 1; the reference `After(point, start)` agrees).
+  The Python fallback had normalized the open bound into a closed effective
+  bound and then applied the closed-boundary strict comparison, so every
+  open-bound effective-start/end point returned false while native returned
+  true — and the Python UDF is the DESKTOP AUTHORITY
+  (`intervalProperlyContains` is in `_PYTHON_PREFERRED_CPP_CONFLICTS`), so the
+  wrong answer shipped on every normal connection. Same normalizer bug leaked
+  plain millisecond counts for open Time bounds (`start of
+  Interval(@T12:00:00.000, ...)` → `'43200001'`). Fixed in
+  `fhir4ds/cql/duckdb/udf/interval.py` (`intervalProperlyContains`,
+  `_parse_interval`, `_format_time_bound_for_raw`); no C++ change, the native
+  path was already correct.
+
+### Known Fragile Areas (AMUX-168 additions, 2026-11-24)
+
+- **Two interval bound shapes share one dict.** `_parse_interval` rewrites
+  every OPEN authored bound into the CLOSED effective bound (`low` + one
+  successor step, `high` − one predecessor step) and records the provenance in
+  `low_was_open`/`high_was_open` (`low_closed`/`high_closed` are therefore
+  always `true` afterwards). Any operator whose semantics depend on the
+  AUTHORED bound must consult `low_closed and low_was_open` (normalized-from-
+  open) — comparing the effective bound with a strict `<`/`>` silently turns
+  an interior point into a boundary point. `intervalProperlyContains` is the
+  reference implementation of that rule: `cmp <= 0` when the bound came from
+  an open bound, `cmp < 0` when it was authored closed. `intervalContains`
+  instead re-derives closedness from the JSON flags, which is correct only
+  because it compares the authored raw bound via `_interval_bound`.
+- **`_parse_interval`'s open-bound normalizer is type-dispatched.** Time bounds
+  are stored as integer milliseconds, so the Time case MUST be handled BEFORE
+  the `isinstance(low, int)` case: the integer branch steps by 1 ms instead of
+  the authored precision and puts the raw millisecond count into `low_raw`
+  (`start of Interval(@T12:00:00.000, …)` returned `'43200001'`, and
+  `cqlSameAsP(intervalStart(...), …)` then compared a number to a Time string
+  and returned NULL). `_format_time_bound_for_raw` renders the stepped value at
+  the authored precision ('T13' / 'T12:31' / 'T12:00:01' / 'T12:00:00.001') to
+  match native. A new point type added to `_parse_interval_bound` needs the
+  same "step by authored precision, re-render the spelling" treatment.
+- **`intervalProperlyContains` must keep the open-null-bound guard.** An OPEN
+  null bound is an UNKNOWN boundary (§9.14/§9.15 Start/End → null), so
+  `Interval(null as Integer, 5] properly includes 3` is NULL, matching native
+  and `intervalProperlyIncludes`. The point overload originally omitted
+  `_open_null_bound_uncertain` and answered true.
+
 - **CQL `Coalesce` list lowering with more than five SQL arguments**:
   Translator SQL may render a single CQL list argument such as
   `Coalesce({null, null, null, null, null, 'x'})` as a pure SQL `COALESCE`
