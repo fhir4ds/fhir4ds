@@ -7235,6 +7235,58 @@ cells, py == native == no-Python). Official gate 2022/2037 -> **2024/2037**
 with exactly `ProperContains1` and `ProperIn1` flipping; DQM qi-core 47/47 and
 us-core 73/73 unchanged. Translator-only — no extension rebuild.
 
+### FHIR4-38 — `starts`/`ends` resolve a CLOSED null bound to the point-type extreme (2026-11-24)
+
+CQL 1.5 §9.14 Start / §9.15 End: *"If the low [high] boundary is null and the
+boundary is closed, the result is the minimum [maximum] value of the point
+type."* `Starts` (§19.30) and `Ends` (§19.13) are defined through Start/End, so
+
+    Interval[null, null] starts Interval[1, 10]   // false  (min Integer < 1)
+    Interval[1, 10] ends Interval[null, null]     // false  (max Integer > 10)
+
+are DEFINITE, while the OPEN form `Interval(null, null)` stays UNKNOWN (null)
+because an open null bound is an unknown boundary. `intervalStartsSame` /
+`intervalEndsSame` used to bail out whenever any low/high bound was null, so
+both closed-null cells returned null (official fixtures
+`TestMaxIntervalStartsFalse` / `TestMaxIntervalEndsFalse` expect false;
+`TestUnknownIntervalStartsNull` / `TestUnknownIntervalEndsNull` keep null).
+
+The point type is `Interval<T>` — SHARED by both operands — so when the
+operand's own opposite bound is also null the extremum is inferred from the
+PEER interval. `_sentinel_effective_start` / `_sentinel_effective_end`
+(fhir4ds/cql/duckdb/udf/interval.py) now take an optional `peer_iv`; the
+CQL-16 HISTORIAN `_cql_minimum_for_peer_bound` / `_cql_maximum_for_peer_bound`
+tables are unchanged, and an unresolvable point type (`Interval<Any>`, e.g.
+`Interval[null, null] starts Interval[null, null]`) still returns null. The
+same rule is mirrored in `extensions/cql/src/cql/interval.cpp`
+(`minimum_sentinel_text` / `maximum_sentinel_text`, peer-aware
+`sentinel_start_bound` / `sentinel_end_bound`, `starts_same_nullable` /
+`ends_same_nullable`); the UDF wrappers no longer reject any null-bound
+interval up front.
+
+Official gate 2024/2037 -> **2026/2037** with exactly those two fixtures
+flipping (A/B: reverting only `udf/interval.py` restores 2024/2037); DQM
+qi-core 47/47 and us-core 73/73 unchanged. Pinned by
+`test_interval_part3_parity.py::test_cql_interval_part3_closed_null_bound_starts_ends_fhir4_38`
+plus the direct-UDF sibling.
+
+**REBUILD REQUIRED** for the no-Python/WASM surface: the bundled
+`cql.duckdb_extension` predates the C++ change, so `intervalStartsSame` /
+`intervalEndsSame` still return null there. The parity test carries a
+`no_python_stale` map pinning that; delete it when the bundles are rebuilt.
+Desktop is unaffected (both names are in `_PYTHON_PREFERRED_CPP_CONFLICTS`, so
+py-fallback and native-loaded connections use the Python authority).
+
+KNOWN SEPARATE GAP (not this fix): the PRECISION-qualified form
+(`starts day of`) lowers to `cqlSameAsP(intervalStart(...), intervalStart(...),
+precision)` per operand, and a single all-null interval cannot infer its point
+type, so the closed-null cells stay null there. The same seam also returns null
+for a NON-null Integer interval (`Interval[1, 10] starts day of Interval[1, 15]`)
+because the precision qualifier is defined only for Date/DateTime/Time point
+types. Closing it needs a peer-aware Start/End arity that the bundled C++
+surface does not implement; pinned in the regression test as
+`*PrecisionGapNull`.
+
 
 ## AMUX-169 — duration-uncertainty minimum uses the first comparand's LATEST possible value (2026-11-24)
 
