@@ -7288,6 +7288,60 @@ surface does not implement; pinned in the regression test as
 `*PrecisionGapNull`.
 
 
+### FHIR4-40 — point `in` an OPEN-null-bound interval is UNKNOWN (2026-11-24)
+
+CQL 1.5.3 §In (Interval) is the whole rule:
+
+> "For open interval boundaries, exclusive comparison operators are used. For
+> closed interval boundaries, if the interval boundary is null, the result of
+> the boundary comparison is considered true."
+
+So a CLOSED null bound drops out of the conjunction (true — the point-type
+extremum via §9.14/§9.15), while an OPEN null bound is an exclusive comparison
+against an UNKNOWN value, i.e. the boundary comparison is NULL and three-valued
+AND decides the rest. `_translate_in_op`'s literal-`Interval` branch
+(`fhir4ds/cql/translator/expressions/_operators.py`) dropped open-null boundary
+comparisons entirely and returned a literal FALSE when both bounds were open:
+
+| expression | before | after |
+|---|---|---|
+| `5 in Interval(null, null)` (fixture `TestIntegerInUnknownIntervalNull`) | false | **null** |
+| `5 in Interval[null, null]` (fixture `TestIntegerInMaxIntervalTrue`) | true | true |
+| `5 in Interval(null, 10]` | true | **null** |
+| `5 in Interval[0, null)` | true | **null** |
+| `500 in Interval(null, 10]` | false | false (`NULL AND FALSE`) |
+| `500 in Interval[0, null)` | true | **null** (`TRUE AND NULL`) |
+| `5 in Interval[null, 10]` / `Interval[0, null]` | true | true (closed = true) |
+| `null in Interval[null, null]` | null | null (§In: null point → null) |
+
+Open null bounds contribute `CAST(NULL AS BOOLEAN)` operands, so the emitted SQL
+is `CAST(NULL AS BOOLEAN) AND <other side>` — no new UDF, no C++ change, and the
+both-closed-null maximum-interval `intervalContains` dispatch plus its §19.3
+null-point handling are untouched.
+
+Official gate 2028/2037 -> **2029/2037** with exactly that one fixture flipping
+(A/B reverted only `_operators.py`); DQM qi-core 47/47 and us-core 73/73
+unchanged. Pinned by
+`test_interval_part2_parity.py::test_cql_point_in_interval_open_null_bound_is_unknown_fhir4_40`
+(py-fallback == native-loaded == no-Python).
+
+KNOWN SEPARATE GAP (not this fix): the PRECISION-qualified form
+(`5 in day of Interval(null, null)`) delegates to the `intervalContainsPrecise`
+UDF, and BOTH `intervalContains` and `intervalContainsPrecise`
+(`fhir4ds/cql/duckdb/udf/interval.py`) still lack the
+`_open_null_bound_uncertain` guard their sibling relationship predicates carry,
+so an open null bound is treated as unbounded and the verdict is definite
+(`5 in day of Interval(null, null)` -> false, `5 in day of Interval(null, 10]`
+-> true). That is the same defect one layer down and it is NOT unpinned
+boilerplate: real DQM data carries open-null bounds —
+`collapse_intervals` turns a FHIR Period with only `end` (unknown start) into
+`{"low": null, "high": "...", "lowClosed": false, "highClosed": true}` (the
+CMS645/CMS133 one-sided-Period doctrine), and `intervalContains` answers true
+for a point inside it. Adding the guard therefore changes measure SQL wherever a
+point or interval is tested against such a period, and it needs a C++
+`IntervalContains*Func` mirror plus an extension rebuild. Give it its own card.
+
+
 ## AMUX-169 — duration-uncertainty minimum uses the first comparand's LATEST possible value (2026-11-24)
 
 CQL 1.5 Language Semantics "Determining Difference and Duration": *"The lower
