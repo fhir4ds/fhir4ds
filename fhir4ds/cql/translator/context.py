@@ -18,6 +18,17 @@ if TYPE_CHECKING:
 from ..translator.column_registry import ColumnRegistry
 from ..translator.cql_version import DEFAULT_CQL_VERSION
 from ..translator.warnings import TranslationWarnings
+from .overload import (
+    NO_MATCH,
+    UNIQUE,
+    TypeModel,
+    conversion_rank,
+    format_cql_type,
+    format_type_specifier,
+    parse_cql_type,
+    resolve_least_converting,
+    warn_once,
+)
 
 # Well-known CQL identifiers from the specification
 CQL_PATIENT_CONTEXT = "Patient"
@@ -236,6 +247,52 @@ def _match_overload(
             return func
 
     return None
+
+
+def _receiver_types(overloads: List[Any]) -> List[str]:
+    """Each overload's declared receiver (first-parameter) type, as text."""
+    rendered = []
+    for func in overloads:
+        params = getattr(func, "parameters", None)
+        declared = parse_cql_type(
+            format_type_specifier(getattr(params[0], "type", None) if params else None)
+        )
+        rendered.append(format_cql_type(declared))
+    return rendered
+
+
+def _match_overload_by_conversion(
+    model: TypeModel, overloads: List[Any], resource_type: str
+) -> Optional[Any]:
+    """Rescue pass for a receiver type the name heuristic could not place.
+
+    Ranks each overload's first parameter against the receiver with the CQL
+    conversion precedence, so a profile of a declared type reaches its base
+    type's overload as a subtype instead of falling through to whichever
+    overload was declared last. Only the receiver's type is known here, not
+    whether it is a list, so each overload is ranked for both shapes.
+
+    Returns the unique least-converting overload, or None.
+    """
+    as_list = parse_cql_type(f'List<"{resource_type}">')
+    as_single = parse_cql_type(f'"{resource_type}"')
+    rows = []
+    for func in overloads:
+        params = getattr(func, "parameters", None)
+        declared = parse_cql_type(format_type_specifier(getattr(params[0], "type", None) if params else None))
+        if declared is None:
+            # An overload whose receiver type cannot be read cannot be ranked
+            # against the others.
+            return None
+        ranks = [
+            rank for rank in (
+                conversion_rank(model, as_list, declared),
+                conversion_rank(model, as_single, declared),
+            ) if rank is not NO_MATCH
+        ]
+        rows.append([min(ranks)] if ranks else [NO_MATCH])
+    selection = resolve_least_converting(rows)
+    return overloads[selection.index] if selection.outcome == UNIQUE else None
 
 
 @dataclass
@@ -496,6 +553,12 @@ class SQLTranslationContext:
     resource_type: Optional[str] = None
     # Maps query alias names to their FHIR resource types for overload resolution
     _alias_resource_types: Dict[str, str] = field(default_factory=dict)
+    # While a function-promotion CTE is being built, the synthetic alias that
+    # stands for the promoted function's parameter, mapped to that parameter's
+    # declared type. It is also registered in ``_alias_resource_types`` with
+    # the source's resource type, which is the type of the ROW, not of the
+    # parameter; overload resolution must see the declared type.
+    _promotion_parameter_types: Dict[str, str] = field(default_factory=dict)
     # Maps query aliases over static tuple/list sources to their CQL AST source.
     # This is type-inference metadata only; unlike SymbolInfo.ast_expr, it must
     # never be used as a SQL expression.
@@ -1392,7 +1455,7 @@ class SQLTranslationContext:
 
     def get_function(self, name: str, resource_type: Optional[str] = None) -> Optional[FunctionInfo]:
         """Get a function from the current library.
-        
+
         If resource_type is provided, attempts to find the correct overload
         by matching the first parameter's name or type against the resource type.
         """
@@ -1401,7 +1464,34 @@ class SQLTranslationContext:
             match = _match_overload(overloads, resource_type)
             if match:
                 return match
+            match = self._rescue_overload(overloads, resource_type, name)
+            if match:
+                return match
         return self._functions.get(name)
+
+    def _rescue_overload(
+        self, overloads: List[Any], resource_type: str, label: str
+    ) -> Optional[FunctionInfo]:
+        """Second chance for a receiver type the name heuristic could not place.
+
+        Only a family of several overloads needs it: with one candidate the
+        last-declared fallback already is that candidate. A receiver that is a
+        subtype of exactly one declared receiver type selects that overload;
+        otherwise the caller keeps the last-declared overload, which is logged
+        because nothing shows that it is the right one.
+        """
+        if len(overloads) < 2:
+            return None
+        match = _match_overload_by_conversion(TypeModel(self), overloads, resource_type)
+        if match is not None:
+            return match
+        warn_once(
+            (label, resource_type),
+            f"No overload of function '{label}' takes a receiver of type "
+            f"'{resource_type}' (declared receiver types: {', '.join(_receiver_types(overloads))}); "
+            "using the last-declared overload.",
+        )
+        return None
 
     def get_all_functions(self) -> Dict[str, FunctionInfo]:
         """Get all functions in the current library."""
@@ -1423,6 +1513,11 @@ class SQLTranslationContext:
         if resource_type:
             overloads = library.function_overloads.get(function_name, [])
             match = _match_overload(overloads, resource_type)
+            if match:
+                return match
+            match = self._rescue_overload(
+                overloads, resource_type, f"{library_alias}.{function_name}"
+            )
             if match:
                 return match
         return library.functions.get(function_name)

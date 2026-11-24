@@ -166,6 +166,34 @@ class FunctionInliner:
         )
         self.register_function(registered_func)
 
+    def function_def_for(
+        self, function: Any, library_name: Optional[str] = None
+    ) -> FunctionDef:
+        """A registered-function record for a declaration resolved at a call site.
+
+        ``function`` is a ``FunctionInfo``; the record is what
+        :meth:`expand_function` would otherwise have found by name. Used by
+        call-site overload resolution (AMUX-167), which picks among several
+        declared overloads of one name.
+        """
+        from .overload import format_type_specifier
+
+        parameters = [
+            (
+                getattr(parameter, "name", str(parameter)),
+                format_type_specifier(getattr(parameter, "type", None)),
+            )
+            for parameter in (getattr(function, "parameters", None) or [])
+        ]
+        return FunctionDef(
+            name=getattr(function, "name", ""),
+            library_name=library_name if library_name is not None else getattr(function, "library_alias", None),
+            parameters=parameters,
+            return_type=getattr(function, "return_type", None),
+            body=getattr(function, "expression", None),
+            fluent=bool(getattr(function, "is_fluent", False)),
+        )
+
     def get_function(self, name: str, library_name: Optional[str] = None) -> Optional[FunctionDef]:
         """
         Get a registered function by name.
@@ -1119,6 +1147,7 @@ class FunctionInliner:
         receiver_expr: Expression,
         args: List[Expression],
         library_name: Optional[str] = None,
+        overload: Optional[FunctionDef] = None,
     ) -> Optional[Expression]:
         """
         Expand a fluent function call by substituting parameters in its body.
@@ -1131,21 +1160,30 @@ class FunctionInliner:
             receiver_expr: The CQL AST for the receiver (first fluent param).
             args: The CQL AST arguments (excluding the receiver).
             library_name: Optional library name prefix.
+            overload: The declared overload the call resolved to, when the
+                caller resolved it by argument type (AMUX-167). Overrides the
+                by-name lookup; the body, parameters and library are taken
+                from it. Everything else (promotion, cycle detection,
+                parameter substitution) is unchanged.
 
         Returns:
             Expanded CQL AST, or None if the function is not found.
         """
         key = self._make_function_key(func_name, library_name)
 
-        # Also try without library prefix (common for unqualified calls)
-        func_def = self._functions.get(key)
-        if func_def is None and library_name is None:
-            # Search all registered functions for a match by name
-            for k, fd in self._functions.items():
-                if k == func_name or k.endswith(f".{func_name}"):
-                    func_def = fd
-                    key = k
-                    break
+        func_def: Optional[FunctionDef]
+        if overload is not None:
+            func_def = overload
+        else:
+            func_def = self._functions.get(key)
+            # Also try without library prefix (common for unqualified calls)
+            if func_def is None and library_name is None:
+                # Search all registered functions for a match by name
+                for k, fd in self._functions.items():
+                    if k == func_name or k.endswith(f".{func_name}"):
+                        func_def = fd
+                        key = k
+                        break
 
         if func_def is None or func_def.body is None:
             return None
