@@ -3033,6 +3033,12 @@ static cql::DateTimeValue::Precision PrecisionByRank(int rank) {
 	}
 }
 
+// Precision ranks for the CQL §Time combined seconds+milliseconds rule: the two
+// components are ONE decimal precision, with a null millisecond read as ".0"
+// (see CompareTemporal and the list-element helpers below).
+static constexpr int SECOND_RANK = 5;
+static constexpr int MILLISECOND_RANK = 6;
+
 static cql::DateTimeValue DateTimeFromEpochMillis(int64_t millis, const cql::DateTimeValue &source) {
 	int64_t days = FloorDiv(millis, MS_PER_DAY);
 	int64_t ms_of_day = millis - days * MS_PER_DAY;
@@ -3337,12 +3343,24 @@ DEFINE_CQL_TEMPORAL_TWO_UDF(CqlAfterFunc, TemporalPredicate::After)
 DEFINE_CQL_TEMPORAL_TWO_UDF(CqlDateTimeEqualFunc, TemporalPredicate::SameAs)
 
 // List-element temporal equality (§10.3/§10.4 Equal (List) elements):
-// unlike direct `=` (§12.1 combined seconds/milliseconds decimal
-// precision), element comparisons treat a second-vs-millisecond precision
-// mismatch as UNCERTAIN (null) per the official fixtures
-// ProperContainsTimeNull / ProperInTimeNull. This variant wraps
-// CompareTemporal and clears certainty when precisions differ at the
-// second/millisecond boundary.
+// element comparisons follow the §Equal precision-uncertainty rule, so a
+// second-vs-millisecond precision mismatch on a DateTime/DATE element is
+// UNCERTAIN (null).
+//
+// TIME elements are the §Time exception (FHIR4-34): "Although the
+// milliseconds are specified with a separate component, seconds and
+// milliseconds are combined and represented as a Decimal for the purposes of
+// comparison ... When milliseconds are null, they are combined as .0 ... This
+// is true of all comparison operations for time values, whether explicit ...
+// or implicit ... or when comparison is performed as part of other operations
+// such as interval meets and overlaps."  So Time elements compare at
+// millisecond precision with a null millisecond read as 0, which makes
+//   { @T15:59:59.999, ... } properly includes @T15:59:59   -> false
+// (official fixture CqlListOperatorsTest.xml::ProperContainsTimeNull; the
+// point reads 15:59:59.000, so no element equals it) instead of null.
+// This mirrors AMUX-171's interval-bound rule
+// (extensions/cql/src/cql/interval.cpp) and the Python authority
+// fhir4ds/cql/duckdb/udf/datetime.py::cqlDateTimeEqualListElement.
 static void CqlDateTimeEqualListElementFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data, b_data;
@@ -3368,7 +3386,15 @@ static void CqlDateTimeEqualListElementFunc(DataChunk &args, ExpressionState &st
 		}
 		auto a_rank = PrecisionRank((*a_dt).precision);
 		auto b_rank = PrecisionRank((*b_dt).precision);
+		// §Time: TIME seconds+milliseconds are ONE combined decimal precision.
+		const bool time_combined_sec_ms =
+		    (*a_dt).is_time && (*b_dt).is_time &&
+		    ((a_rank == SECOND_RANK && b_rank == MILLISECOND_RANK) ||
+		     (a_rank == MILLISECOND_RANK && b_rank == SECOND_RANK));
 		auto target = PrecisionByRank(std::min(a_rank, b_rank));
+		if (time_combined_sec_ms) {
+			target = cql::DateTimeValue::Precision::Millisecond;
+		}
 		auto a_use = (*a_dt), b_use = (*b_dt);
 		if (((*a_dt).has_tz || (*b_dt).has_tz) && !(*a_dt).is_time && !(*b_dt).is_time &&
 		    PrecisionRank(target) >= PrecisionRank(cql::DateTimeValue::Precision::Hour)) {
@@ -3380,14 +3406,78 @@ static void CqlDateTimeEqualListElementFunc(DataChunk &args, ExpressionState &st
 			result_data[i] = false;
 			continue;
 		}
-		// Equal at min precision: uncertain whenever precisions differ
-		// (including the second-vs-millisecond boundary — NO combined
-		// decimal precision shortcut for list elements).
-		if (a_rank != b_rank) {
+		// Equal at the compared precision: uncertain whenever precisions
+		// differ, EXCEPT the TIME second/millisecond pair, which is one
+		// combined decimal precision (§Time).
+		if (a_rank != b_rank && !time_combined_sec_ms) {
 			result_mask.SetInvalid(i);
 			continue;
 		}
 		result_data[i] = true;
+	}
+}
+
+// List-element temporal EQUIVALENCE (§6.1.2 Equivalent, CQL 2.0 `~in`/
+// `~contains`): unlike equality, a precision mismatch is FALSE (never null),
+// and equivalent-by-instant values are TRUE. TIME elements combine
+// seconds+milliseconds exactly as equality does (see the §Time note above),
+// while DateTime/DATE elements keep their authored precision, so
+//   { @T15:59:59 }             ~contains @T15:59:59.000             -> true
+//   { @2017-09-01T00:00:00.000 } ~contains @2017-09-01T00:00:00     -> false
+// Mirrors fhir4ds/cql/duckdb/udf/datetime.py::cqlDateTimeEquivalentListElement
+// (the desktop conformance authority); the public SQL-time-only/browser
+// surface previously had no such function at all, so the macro
+// CQLListContainsTemporalEquivalent raised a Catalog error there.
+static void CqlDateTimeEquivalentListElementFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	idx_t count = args.size();
+	UnifiedVectorFormat a_data, b_data;
+	args.data[0].ToUnifiedFormat(count, a_data);
+	args.data[1].ToUnifiedFormat(count, b_data);
+	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
+	auto b_vals = UnifiedVectorFormat::GetData<string_t>(b_data);
+	result.SetVectorType(VectorType::FLAT_VECTOR);
+	auto result_data = fhir4ds_compat::data<bool>(result);
+	// Equivalent is always true-or-false (§6.1.2), so this function never
+	// invalidates a row and leaves the result validity mask all-valid.
+	for (idx_t i = 0; i < count; i++) {
+		auto a_idx = a_data.sel->get_index(i);
+		auto b_idx = b_data.sel->get_index(i);
+		const bool a_valid = a_data.validity.RowIsValid(a_idx);
+		const bool b_valid = b_data.validity.RowIsValid(b_idx);
+		// §6.1.2: null ~ null is true; a one-sided null is FALSE (never null).
+		if (!a_valid && !b_valid) {
+			result_data[i] = true;
+			continue;
+		}
+		if (!a_valid || !b_valid) {
+			result_data[i] = false;
+			continue;
+		}
+		auto a_dt = cql::DateTimeValue::parse(ExtractTemporalOperand(a_vals[a_idx].GetString()));
+		auto b_dt = cql::DateTimeValue::parse(ExtractTemporalOperand(b_vals[b_idx].GetString()));
+		if (!a_dt || !b_dt || (*a_dt).is_time != (*b_dt).is_time) {
+			// Unparseable or mixed Time/DateTime pair: no CQL equivalence.
+			result_data[i] = false;
+			continue;
+		}
+		auto a_rank = PrecisionRank((*a_dt).precision);
+		auto b_rank = PrecisionRank((*b_dt).precision);
+		const bool time_combined_sec_ms =
+		    (*a_dt).is_time && (*b_dt).is_time &&
+		    ((a_rank == SECOND_RANK && b_rank == MILLISECOND_RANK) ||
+		     (a_rank == MILLISECOND_RANK && b_rank == SECOND_RANK));
+		auto target = PrecisionByRank(std::min(a_rank, b_rank));
+		if (time_combined_sec_ms) {
+			target = cql::DateTimeValue::Precision::Millisecond;
+		}
+		auto a_use = (*a_dt), b_use = (*b_dt);
+		if (((*a_dt).has_tz || (*b_dt).has_tz) && !(*a_dt).is_time && !(*b_dt).is_time &&
+		    PrecisionRank(target) >= PrecisionRank(cql::DateTimeValue::Precision::Hour)) {
+			a_use = NormalizeForTemporalCompare(*a_dt);
+			b_use = NormalizeForTemporalCompare(*b_dt);
+		}
+		int cmp = CompareTemporalComponents(a_use, b_use, target);
+		result_data[i] = cmp == 0 && (a_rank == b_rank || time_combined_sec_ms);
 	}
 }
 DEFINE_CQL_TEMPORAL_THREE_UDF(CqlSameOrBeforePFunc, TemporalPredicate::SameOrBefore)
@@ -9833,6 +9923,8 @@ static void LoadInternal(ExtensionLoader &loader) {
 	                      LogicalType::BOOLEAN, CqlDateTimeEqualFunc);
 	RegisterSpecialScalar(loader, "cqlDateTimeEqualListElement", {LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                      LogicalType::BOOLEAN, CqlDateTimeEqualListElementFunc);
+	RegisterSpecialScalar(loader, "cqlDateTimeEquivalentListElement", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::BOOLEAN, CqlDateTimeEquivalentListElementFunc);
 	RegisterSpecialScalar(loader, "cqlSameOrBeforeP",
 	                      {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR}, LogicalType::BOOLEAN,
 	                      CqlSameOrBeforePFunc);
