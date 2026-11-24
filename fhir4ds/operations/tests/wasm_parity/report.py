@@ -187,11 +187,13 @@ def write_suite(
     entries: list[Entry],
     *,
     today: date,
+    stem: str | None = None,
 ) -> Path:
     counts = result.counts()
     in_scope = [e for e in entries if e.suite in (None, result.suite)]
     md = [
-        f"# WASM parity - Tier A: {result.suite}",
+        f"# WASM parity - {'Tier B' if stem else 'Tier A'}: {result.suite} "
+        f"(browser surface: {result.surface})",
         "",
         f"Generated {today.isoformat()}. {len(result.cases)} cases in {result.elapsed:.1f} s; "
         f"{result.gated} not executed by the official runner's own gating.",
@@ -245,6 +247,7 @@ def write_suite(
         md.append(f"| ... {len(non_green) - MAX_CASES_IN_MARKDOWN} more in the JSON |")
     payload = {
         "suite": result.suite,
+        "surface": result.surface,
         "elapsed_seconds": round(result.elapsed, 1),
         "gated": result.gated,
         "counts": counts,
@@ -263,7 +266,7 @@ def write_suite(
             c.__dict__ for c in result.cases if not c.green or c.outcome == "TRANSLATE_ERROR"
         ],
     }
-    return _write(result.suite, payload, "\n".join(md) + "\n", today)
+    return _write((stem or result.suite), payload, "\n".join(md) + "\n", today)
 
 
 def write_files(
@@ -320,6 +323,12 @@ def cli(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--suite", action="append", help="run only this suite (repeatable)")
+    parser.add_argument(
+        "--tier-b",
+        action="store_true",
+        help="also run the Tier B real-browser audit (needs web/cql-cleanroom/node_modules; "
+        "cannot run under a virtual-memory cap)",
+    )
     args = parser.parse_args(argv)
     today = date.today()
     entries = ledger.load()
@@ -357,10 +366,79 @@ def cli(argv: list[str] | None = None) -> int:
                 print(f"  [{violation.code}] {violation.message[:600]}")
                 if violation.proposal is not None:
                     print("  proposal:", json.dumps(violation.proposal))
+        if args.tier_b:
+            violations_b = tier_b_audit(reference, desktop, browser, computed, entries, today)
+            print(_summary_line("real", violations_b))
+            for violation in violations_b:
+                print(f"  [{violation.code}] {violation.message[:600]}")
+                if violation.proposal is not None:
+                    print("  proposal:", json.dumps(violation.proposal))
         return 0
     finally:
         browser.close()
         desktop.close()
+
+
+def tier_b_audit(reference, desktop, browser, computed, entries, today: date) -> list[Violation]:
+    """B1-B4 on the real engine; writes tests/output/wasm-parity/real.{json,md}."""
+    import dataclasses
+
+    from . import evaluators, ledger, real_engine, tier_b
+    from .ledger import Violation
+
+    violations: list[Violation] = []
+    with real_engine.real_engine() as real:
+        real.use_reference(reference)
+        parity = tier_b.macro_parity(real, browser)
+        if any(parity.values()):
+            violations.append(
+                Violation(
+                    "TIER_B",
+                    "SIMULATION_DRIFT",
+                    f"the real macro catalog differs from the simulation: {parity}",
+                )
+            )
+        x86_only, wasm_only = tier_b.staleness(real, browser)
+        print(f"  staleness: x86-only {sorted(x86_only)}; wasm-only {sorted(wasm_only)}")
+        stale = ledger.reconcile(
+            [e for e in entries if e.kind == tier_b.STALE_KIND], x86_only, today=today
+        )
+        for target in stale.unregistered:
+            violations.append(
+                Violation(
+                    "TIER_B",
+                    "UNREGISTERED_GAP",
+                    f"the real engine lacks {target!r}: register it as {tier_b.STALE_KIND} "
+                    "or rebuild the wasm bundles",
+                    proposal=ledger.proposal(tier_b.STALE_KIND, target),
+                )
+            )
+        for target, entry_id in sorted(stale.expired.items()):
+            violations.append(
+                Violation(
+                    "TIER_B",
+                    "EXPIRED_REGISTRATION",
+                    f"{target!r} is still missing from the wasm bundles but registration "
+                    f"{entry_id!r} expired: rebuild, or re-register with a reason",
+                )
+            )
+        if stale.stale:
+            violations.append(
+                Violation(
+                    "TIER_B",
+                    "STALE_REGISTRATION",
+                    f"functions registered as missing now exist in the wasm bundles — remove "
+                    f"them from known_gaps.json: {stale.stale}",
+                )
+            )
+        result = tier_b.run(
+            desktop,
+            real,
+            dataclasses.replace(computed, stale_wasm_functions=tuple(sorted(x86_only))),
+        )
+        violations += evaluators.judge(result, entries, today=today, gate="TIER_B")
+        write_suite(result, violations, entries, today=today, stem="real")
+        return violations
 
 
 def _evaluators() -> dict:

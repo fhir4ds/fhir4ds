@@ -34,7 +34,13 @@ OUTCOMES = (
 ATTRIBUTABLE_KINDS = (PARITY_GAP, ENGINE_DIFF, BROWSER_ONLY_PASS)
 # Name-level kinds that explain a wrong RESULT: a case whose every flagged name
 # is registered under one of these needs no case-level entry.
-ROOT_CAUSE_KINDS = ("MISSING_IN_BROWSER", "WASM_ONLY_MACRO", "TS_BODY_DRIFT", "SIGNATURE_DIFF")
+ROOT_CAUSE_KINDS = (
+    "MISSING_IN_BROWSER",
+    "WASM_ONLY_MACRO",
+    "TS_BODY_DRIFT",
+    "SIGNATURE_DIFF",
+    "STALE_WASM_FUNCTION",
+)
 # Name-level kinds that explain a REPRESENTATION difference only (desktop wraps
 # a Python UDF in a macro; the browser runs the native namesake). They cover
 # ENGINE_DIFF; a wrong result always needs its own case-level entry.
@@ -62,6 +68,7 @@ class SuiteResult:
     cases: tuple[CaseOutcome, ...]
     gated: int = 0  # tests the official runner's own gating does not execute
     elapsed: float = 0.0
+    surface: str = "simulator"  # which browser surface the cases were compared with
 
     def counts(self) -> dict[str, int]:
         out: dict[str, int] = dict.fromkeys(OUTCOMES, 0)
@@ -137,19 +144,36 @@ def _live_name_entries(
     return root, context, expired
 
 
-def judge(result: SuiteResult, entries: list[Entry], *, today: date) -> list[Violation]:
+def judge(
+    result: SuiteResult, entries: list[Entry], *, today: date, gate: str = "TIER_A"
+) -> list[Violation]:
     """Apply the triage policy to one suite's outcomes."""
     root_live, context_live, expired_names = _live_name_entries(entries, today)
     of_kind: dict[str, list[Entry]] = defaultdict(list)
     for entry in entries:
-        if entry.kind in CASE_KINDS and entry.suite == result.suite:
+        if (
+            entry.kind in CASE_KINDS
+            and entry.suite == result.suite
+            # a registration explains cases on the surface it names (or on every surface)
+            and (entry.surface is None or entry.surface == result.surface)
+        ):
             of_kind[entry.kind].append(entry)
 
     violations: list[Violation] = []
+    # A registered desktop defect explains a BROWSER_ONLY_PASS: the browser is right, the
+    # desktop verdict is the one that fails (it only shows against a surface that differs).
+    desktop_defect_live = {
+        item
+        for entry in of_kind["DESKTOP_DEFECT"]
+        if not entry.expired(today)
+        for item in entry.items
+    }
     for kind in ATTRIBUTABLE_KINDS:
         case_ids: list[str] = []
         for case in result.cases:
             if case.outcome != kind:
+                continue
+            if kind == BROWSER_ONLY_PASS and case.case_id in desktop_defect_live:
                 continue
             if case.suspects:
                 stale = {
@@ -162,7 +186,7 @@ def judge(result: SuiteResult, entries: list[Entry], *, today: date) -> list[Vio
                 for name, entry_ids in sorted(stale.items()):
                     violations.append(
                         Violation(
-                            "TIER_A",
+                            gate,
                             "EXPIRED_REGISTRATION",
                             f"{result.suite} {case.case_id}: name-level gap {name!r} is only "
                             f"covered by expired registration {entry_ids}",
@@ -179,7 +203,7 @@ def judge(result: SuiteResult, entries: list[Entry], *, today: date) -> list[Vio
         for item, entry_id in sorted(rec.expired.items()):
             violations.append(
                 Violation(
-                    "TIER_A",
+                    gate,
                     "EXPIRED_REGISTRATION",
                     f"{result.suite} {kind}: entry {entry_id!r} expired but still covers "
                     f"{item!r}; fix the gap or re-register with a reason",
@@ -188,7 +212,7 @@ def judge(result: SuiteResult, entries: list[Entry], *, today: date) -> list[Vio
         if rec.stale:
             violations.append(
                 Violation(
-                    "TIER_A",
+                    gate,
                     "STALE_REGISTRATION",
                     f"{result.suite} {kind}: registered cases no longer reproduce — remove "
                     f"them from known_gaps.json: {rec.stale}",
@@ -197,7 +221,7 @@ def judge(result: SuiteResult, entries: list[Entry], *, today: date) -> list[Vio
         if rec.unregistered:
             violations.append(
                 Violation(
-                    "TIER_A",
+                    gate,
                     "UNREGISTERED_GAP",
                     f"{result.suite} {kind}: {len(rec.unregistered)} unregistered case(s): "
                     f"{rec.unregistered}",
@@ -205,25 +229,32 @@ def judge(result: SuiteResult, entries: list[Entry], *, today: date) -> list[Vio
                         kind,
                         rec.unregistered if len(rec.unregistered) > 1 else rec.unregistered[0],
                         suite=result.suite,
+                        surface=result.surface,
                     ),
                 )
             )
 
-    both_fail = tuple(case.case_id for case in result.cases if case.outcome == BOTH_FAIL)
-    rec = reconcile(of_kind["DESKTOP_DEFECT"], both_fail, today=today)
+    # A desktop defect reproduces whenever the DESKTOP verdict fails, whichever surface it
+    # is compared with: BOTH_FAIL, or BROWSER_ONLY_PASS when the other surface gets it right.
+    desktop_failed = sorted(
+        case.case_id
+        for case in result.cases
+        if case.outcome in (BOTH_FAIL, BROWSER_ONLY_PASS)
+    )
+    rec = reconcile(of_kind["DESKTOP_DEFECT"], desktop_failed, today=today)
     for item, entry_id in sorted(rec.expired.items()):
         violations.append(
             Violation(
-                "TIER_A",
+                gate,
                 "EXPIRED_REGISTRATION",
-                f"{result.suite} BOTH_FAIL: desktop defect entry {entry_id!r} expired but "
-                f"{item!r} still fails on both surfaces",
+                f"{result.suite}: desktop defect entry {entry_id!r} expired but {item!r} "
+                f"still fails on the desktop surface",
             )
         )
     if rec.stale:
         violations.append(
             Violation(
-                "TIER_A",
+                gate,
                 "STALE_REGISTRATION",
                 f"{result.suite} DESKTOP_DEFECT: registered desktop defects no longer "
                 f"reproduce — remove them: {rec.stale}",
@@ -232,18 +263,18 @@ def judge(result: SuiteResult, entries: list[Entry], *, today: date) -> list[Vio
     if rec.unregistered:
         violations.append(
             Violation(
-                "TIER_A",
+                gate,
                 "UNREGISTERED_GAP",
-                f"{result.suite} BOTH_FAIL: {len(rec.unregistered)} desktop defect(s) fail "
-                f"on both surfaces and are unregistered: {rec.unregistered}",
-                proposal=proposal("DESKTOP_DEFECT", list(both_fail), suite=result.suite),
+                f"{result.suite}: {len(rec.unregistered)} desktop defect(s) fail on the "
+                f"desktop surface and are unregistered: {rec.unregistered}",
+                proposal=proposal("DESKTOP_DEFECT", list(rec.unregistered), suite=result.suite),
             )
         )
     for case in result.cases:
         if case.outcome == TRANSLATE_DIFF:
             violations.append(
                 Violation(
-                    "TIER_A",
+                    gate,
                     "TRANSLATE_DIFF",
                     f"{result.suite} {case.case_id}: translated SQL depends on the "
                     f"translation connection ({case.detail}); must be zero and cannot be "

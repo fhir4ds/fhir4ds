@@ -72,10 +72,6 @@
       "id": "ts-body-drift-aggregates",
       "kind": "TS_BODY_DRIFT",
       "target": [
-        "allfalse",
-        "alltrue",
-        "anyfalse",
-        "anytrue",
         "geometricmean",
         "median",
         "mode",
@@ -469,6 +465,97 @@
       "owner": "fhir4ds lane",
       "since": "2026-11-24",
       "expires": "2026-12-24"
+    },
+    {
+      "id": "ts-body-drift-broken-bool-aggregates",
+      "kind": "TS_BODY_DRIFT",
+      "target": [
+        "allfalse",
+        "alltrue",
+        "anyfalse",
+        "anytrue"
+      ],
+      "reason": "The reference bundle defines AllTrue(x) AS system.bool_and(x) (and AnyTrue/AllFalse/AnyFalse on system.bool_or). No DuckDB 1.5.x has a bool_and/bool_or overload for a LIST argument, so every call is a Binder Error in the browser (found by the Tier B real-browser audit, and reproduced on the simulator). Desktop defines its own AllTrue/AnyTrue/AllFalse/AnyFalse macros over the list. Root fix: generate the reference bundle from the desktop catalog.",
+      "owner": "fhir4ds lane",
+      "since": "2026-11-24",
+      "expires": "2026-12-24"
+    },
+    {
+      "id": "wasm-stale-functions-2026-11",
+      "kind": "STALE_WASM_FUNCTION",
+      "target": [
+        "comparable",
+        "cql_equivalent_in_valueset",
+        "fhirpath_equivalent_in_valueset",
+        "roundquantity",
+        "roundquantityto"
+      ],
+      "reason": "Tier B (real duckdb-wasm with the SHIPPED bundles) lacks these five functions that the desktop x86 bundles provide: the shipped cql.duckdb_extension.wasm predates them. Any measure SQL that emits one of them is a Catalog Error in every browser app. Fix: a tracked rebuild with scripts/build_wasm_extensions.py, which also records the source provenance the shipped bundles lack.",
+      "owner": "fhir4ds lane",
+      "since": "2026-11-24",
+      "expires": "2027-02-22"
+    },
+    {
+      "id": "cql-parity-gap-stale-wasm-predecessor-successor-precision",
+      "kind": "PARITY_GAP",
+      "suite": "cql",
+      "target": [
+        "CqlArithmeticFunctionsTest.xml::PredecessorOf101DPrecision",
+        "CqlArithmeticFunctionsTest.xml::PredecessorOf1DPrecision",
+        "CqlArithmeticFunctionsTest.xml::PredecessorOf1QCMPrecision",
+        "CqlArithmeticFunctionsTest.xml::SuccessorOf101DPrecision",
+        "CqlArithmeticFunctionsTest.xml::SuccessorOf1DPrecision"
+      ],
+      "reason": "Real duckdb-wasm only (Tier B, whole-corpus run): the shipped cql.duckdb_extension.wasm predates the CQL 2.0 precision-stepped predecessor/successor, so its native function steps a flat 1e-8 while desktop runs the current implementation and passes. Fix: a tracked rebuild of the wasm bundles with scripts/build_wasm_extensions.py (fhir4ds lane, after this lands on dev).",
+      "owner": "fhir4ds lane",
+      "since": "2026-11-24",
+      "expires": "2027-02-22",
+      "surface": "real"
+    },
+    {
+      "id": "cql-parity-gap-stale-wasm-quantity-div-unit",
+      "kind": "PARITY_GAP",
+      "suite": "cql",
+      "target": [
+        "CqlArithmeticFunctionsTest.xml::TruncatedDivide10By5DQuantity",
+        "CqlArithmeticFunctionsTest.xml::TruncatedDivide10d1ByNeg3D1Quantity",
+        "CqlArithmeticFunctionsTest.xml::TruncatedDivide414By206DQuantity"
+      ],
+      "reason": "Real duckdb-wasm only (Tier B, whole-corpus run): in the shipped cql.duckdb_extension.wasm a Quantity truncated divide keeps the unreduced unit instead of cancelling to '1' (fixed on desktop by the CQL-10 EXPLORER unit-cancellation change). Fix: a tracked rebuild of the wasm bundles with scripts/build_wasm_extensions.py (fhir4ds lane, after this lands on dev).",
+      "owner": "fhir4ds lane",
+      "since": "2026-11-24",
+      "expires": "2027-02-22",
+      "surface": "real"
+    },
+    {
+      "id": "cql-parity-gap-stale-wasm-time-combined-precision",
+      "kind": "PARITY_GAP",
+      "suite": "cql",
+      "target": [
+        "CqlComparisonOperatorsTest.xml::TestHourEqualMinutes",
+        "CqlComparisonOperatorsTest.xml::TestMinuteEqualSeconds",
+        "CqlComparisonOperatorsTest.xml::TestYearEquivalentMonths"
+      ],
+      "reason": "Real duckdb-wasm only (Tier B, whole-corpus run): the shipped cql.duckdb_extension.wasm predates the AMUX-171 refinement (seconds and milliseconds are one combined precision for Time comparisons), so 1 hour = 60 minutes is false in the browser and true on desktop. The root AGENTS.md already records REBUILD REQUIRED for this. Fix: a tracked rebuild of the wasm bundles with scripts/build_wasm_extensions.py (fhir4ds lane, after this lands on dev).",
+      "owner": "fhir4ds lane",
+      "since": "2026-11-24",
+      "expires": "2027-02-22",
+      "surface": "real"
+    },
+    {
+      "id": "cql-engine-diff-stale-wasm-time-interval-null-bounds",
+      "kind": "ENGINE_DIFF",
+      "suite": "cql",
+      "target": [
+        "CqlIntervalOperatorsTest.xml::TestMeetsAfterNull",
+        "CqlIntervalOperatorsTest.xml::TimeProperContainsNull",
+        "CqlIntervalOperatorsTest.xml::TimeProperInNull"
+      ],
+      "reason": "Real duckdb-wasm only (Tier B, whole-corpus run): the shipped cql.duckdb_extension.wasm predates the AMUX-171 Time rule in Interval::properly_contains_point_nullable, so a Time interval with second-vs-millisecond bounds evaluates to null in the browser where desktop returns a determined boolean. Fix: a tracked rebuild of the wasm bundles with scripts/build_wasm_extensions.py (fhir4ds lane, after this lands on dev).",
+      "owner": "fhir4ds lane",
+      "since": "2026-11-24",
+      "expires": "2027-02-22",
+      "surface": "real"
     }
   ]
 }

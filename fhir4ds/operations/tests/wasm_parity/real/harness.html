@@ -1,0 +1,98 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>fhir4ds WASM parity harness (real duckdb-wasm)</title>
+<script type="importmap">
+  {"imports": {"apache-arrow": "/arrow/Arrow.dom.mjs", "tslib": "/tslib/tslib.es6.mjs", "flatbuffers": "/flatbuffers/mjs/flatbuffers.js"}}
+</script>
+<script type="module">
+// Real-browser harness for the WASM parity gates (Tier B).
+//
+// It boots exactly like web/cql-cleanroom/src/lib/duckdb-wasm.ts (same npm package, same
+// worker, same open flags) and LOADs the SHIPPED wasm extension bundles, so a query that runs
+// here runs the way it runs in the apps. SQL arrives pre-translated: there is no Pyodide and
+// no UI. The server (real_engine.py) stages the symlinks for /duckdb, /arrow, /tslib,
+// /flatbuffers and /runtime on an ephemeral localhost port with COOP/COEP headers.
+import * as duckdbNs from "/duckdb/duckdb-browser.mjs";
+const duckdb = duckdbNs.default ?? duckdbNs;
+
+const status = { booted: false, error: null };
+globalThis.__harness = { status };
+
+// Tag every JS value so the host sees what the Arrow transport produced, without
+// String() hiding the DECIMAL-as-BigInt trap (the scale) or BigInt precision.
+function tag(v) {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "bigint") return ["bigint", v.toString()];
+  if (typeof v === "number") return ["number", v];
+  if (typeof v === "boolean") return ["boolean", v];
+  if (typeof v === "string") return ["string", v];
+  if (v instanceof Uint8Array) return ["bytes", v.length];
+  const out = {};
+  for (const [k, x] of Object.entries(v)) out[k] = typeof x === "bigint" ? "bigint:" + x.toString() : tag(x);
+  return ["object", out];
+}
+
+async function run(conn, sql) {
+  return (await conn.query(sql)).toArray().map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, tag(v)])));
+}
+
+try {
+  const worker = new Worker("/runtime/duckdb-browser-eh.worker.js", { type: "classic" });
+  const t0 = performance.now();
+  const db = new duckdb.AsyncDuckDB(new duckdb.VoidLogger(), worker);
+  await db.instantiate("/runtime/duckdb-eh.wasm", null);
+  await db.open({
+    path: ":memory:",
+    query: { castBigIntToDouble: true },
+    allowUnsignedExtensions: true,
+    autoInstallExtensions: false,
+    autoLoadExtensions: false,
+  });
+  const conn = await db.connect();
+  const bootMs = Math.round(performance.now() - t0);
+
+  const loads = {};
+  for (const name of ["fhirpath.duckdb_extension.wasm", "cql.duckdb_extension.wasm"]) {
+    const l0 = performance.now();
+    try {
+      await db.registerFileURL(name, "/runtime/" + name, duckdb.DuckDBDataProtocol.HTTP, false);
+      await conn.query(`LOAD '${name}'`);
+      loads[name] = { ok: true, ms: Math.round(performance.now() - l0) };
+    } catch (e) {
+      loads[name] = { ok: false, error: String(e?.message ?? e).slice(0, 400) };
+    }
+  }
+
+  globalThis.__harness = {
+    status,
+    bootMs,
+    loads,
+    version: (await run(conn, "SELECT version() AS v"))[0].v[1],
+    async macros(stmts) {
+      const failed = [];
+      for (const s of stmts) {
+        try {
+          await conn.query(s);
+        } catch (e) {
+          failed.push(String(e?.message ?? e).split("\n")[0].slice(0, 200));
+        }
+      }
+      return { total: stmts.length, failed };
+    },
+    async run(stmts) {
+      const out = [];
+      for (const [label, sql] of stmts) {
+        try {
+          out.push({ label, ok: true, rows: await run(conn, sql) });
+        } catch (e) {
+          out.push({ label, ok: false, error: String(e?.message ?? e).split("\n")[0].slice(0, 300) });
+        }
+      }
+      return out;
+    },
+  };
+  status.booted = true;
+} catch (e) {
+  status.error = String(e?.message ?? e).slice(0, 500);
+}
+</script>

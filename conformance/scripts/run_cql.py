@@ -15,6 +15,7 @@ import xml.etree.ElementTree as ET
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -405,6 +406,7 @@ class TestExecution:
     value: Any
     value_type: str | None
     error: str | None
+    text: str | None = None  # set by execute_test_text (the VARCHAR form of ``value``)
 
 
 def test_expression(test_elem) -> tuple[str, bool, Any] | None:
@@ -445,6 +447,129 @@ def execute_test_select(conn, sql_expr: str, *, with_type: bool = False) -> Test
     if not row:
         return TestExecution(None, None, None)
     return TestExecution(row[0], row[1] if with_type else None, None)
+
+
+def rebuild_test_value(text: Any, type_name: str | None) -> TestExecution:
+    """Rebuild a ``(VARCHAR, typeof())`` pair into a typed value.
+
+    VARCHAR is the one transport every engine carries losslessly (duckdb-wasm's Arrow
+    reader turns BIGINT/DECIMAL into doubles or limb objects), so the WASM parity gates
+    move values as text and type, then restore the Python type here.
+    """
+    if text is None:
+        return TestExecution(None, type_name, None, None)
+    declared = type_name or ""
+    try:
+        if declared in ("TINYINT", "SMALLINT", "INTEGER", "BIGINT", "HUGEINT", "UTINYINT",
+                        "USMALLINT", "UINTEGER", "UBIGINT", "UHUGEINT"):
+            value: Any = int(text)
+        elif declared.startswith("DECIMAL"):
+            value = Decimal(text)
+        elif declared == "DOUBLE":
+            value = float(text)
+        elif declared == "BOOLEAN":
+            value = text.strip().lower() == "true"
+        elif declared.endswith("[]") or declared.startswith(("STRUCT", "MAP")):
+            value = _parse_composite(str(text))
+        else:
+            value = text
+    except (ArithmeticError, ValueError, IndexError):
+        value = text
+    return TestExecution(value, type_name, None, text)
+
+
+def _parse_composite(text: str) -> Any:
+    """Parse DuckDB's VARCHAR rendering of a LIST or STRUCT into Python objects.
+
+    ``[1, 2, NULL]``, ``[a, b]`` (bare strings), ``['it''s', x]`` (quoted when needed),
+    ``{'start': 16, 'end': 44, lowClosed: true}`` (struct keys quoted, values bare) and
+    arbitrary nesting. Raises ``ValueError`` for anything it does not recognise.
+    """
+    size = len(text)
+
+    def skip(index: int) -> int:
+        while index < size and text[index] == " ":
+            index += 1
+        if index >= size:
+            raise ValueError("truncated composite")
+        return index
+
+    def value(index: int) -> tuple[Any, int]:
+        index = skip(index)
+        char = text[index]
+        if char in "[{":
+            is_list = char == "["
+            closing = "]" if is_list else "}"
+            items: Any = [] if is_list else {}
+            index = skip(index + 1)
+            if text[index] == closing:
+                return items, index + 1
+            while True:
+                first, index = value(index)
+                if is_list:
+                    items.append(first)
+                else:
+                    index = skip(index)
+                    if text[index] != ":":
+                        raise ValueError("struct entry without a colon")
+                    items[str(first)], index = value(index + 1)
+                index = skip(index)
+                if text[index] == ",":
+                    index = skip(index + 1)
+                    continue
+                if text[index] == closing:
+                    return items, index + 1
+                raise ValueError(f"unexpected {text[index]!r} in composite")
+        if char == "'":
+            index += 1
+            buffer: list[str] = []
+            while index < size:
+                if text[index] == "'":
+                    if index + 1 < size and text[index + 1] == "'":
+                        buffer.append("'")
+                        index += 2
+                        continue
+                    return "".join(buffer), index + 1
+                buffer.append(text[index])
+                index += 1
+            raise ValueError("unterminated string")
+
+        end = index
+        while end < size and text[end] not in ",]}":
+            # a colon ends a STRUCT KEY (`'a': 1`), not a time-of-day value (`T10:00`)
+            if text[end] == ":" and (end + 1 == size or text[end + 1] in " ]}"):
+                break
+            end += 1
+        token = text[index:end].strip()
+        if not token:
+            raise ValueError("empty token")
+        if token == "NULL":
+            return None, end
+        if token in ("true", "false"):
+            return token == "true", end
+        if re.fullmatch(r"[+-]?[0-9]+", token):
+            return int(token), end
+        try:
+            return Decimal(token), end
+        except ArithmeticError:
+            return token, end
+
+    parsed, stop = value(0)
+    if stop != size:
+        raise ValueError("trailing text")
+    return parsed
+
+
+def execute_test_text(conn, sql_expr: str) -> TestExecution:
+    """``SELECT (expr)::VARCHAR, typeof((expr))`` — the lossless cross-engine transport."""
+    query = f"SELECT ({sql_expr})::VARCHAR AS value, typeof(({sql_expr})) AS type"
+    try:
+        row = conn.execute(query).fetchone()
+    except Exception as exc:
+        return TestExecution(None, None, str(exc))
+    if not row:
+        return TestExecution(None, None, None)
+    return rebuild_test_value(row[0], row[1])
 
 
 def assess_test(test_elem, execution: TestExecution) -> tuple[bool, str]:

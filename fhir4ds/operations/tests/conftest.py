@@ -1,7 +1,7 @@
 """Session fixtures shared by the WASM parity gates (Step 0 and Tier A).
 
-A missing environment input (node, a corpus, the bundled extensions) skips the
-dependent tests with a message that names the input. Setting
+A missing environment input (node, a corpus, the bundled extensions, the web apps'
+node_modules) skips the dependent tests with a message that names the input. Setting
 ``FHIR4DS_REQUIRE_WASM_PARITY=1`` turns that into a failure for CI.
 """
 
@@ -22,9 +22,11 @@ from fhir4ds.operations.tests.wasm_parity import (
     surfaces as surfaces_mod,
 )
 
+REAL_REQUIRE_ENV = "FHIR4DS_REQUIRE_WASM_REAL"
 
-def _skip_or_fail(exc: reference_mod.EnvironmentInputMissing):
-    if reference_mod.required():
+
+def _skip_or_fail(exc: reference_mod.EnvironmentInputMissing, env: str | None = None):
+    if reference_mod.required() or (env is not None and reference_mod.required(env)):
         raise exc
     pytest.skip(str(exc))
 
@@ -67,3 +69,16 @@ def wasm_contract(wasm_desktop, wasm_reference):
 @pytest.fixture(scope="session")
 def wasm_ledger():
     return ledger_mod.load()
+
+
+@pytest.fixture(scope="session")
+def wasm_real(wasm_reference):
+    """The real engine: headless duckdb-wasm with the shipped wasm bundles (Tier B)."""
+    from fhir4ds.operations.tests.wasm_parity.real_engine import real_engine
+
+    try:
+        with real_engine() as engine:
+            engine.use_reference(wasm_reference)
+            yield engine
+    except reference_mod.EnvironmentInputMissing as exc:
+        _skip_or_fail(exc, REAL_REQUIRE_ENV)

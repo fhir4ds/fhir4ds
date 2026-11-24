@@ -43,15 +43,22 @@ class Contract:
     signature_drift: dict[str, tuple[tuple, tuple]]  # name -> (desktop, browser) signatures
     macro_vs_native: tuple[str, ...]  # desktop macro; the browser runs a native namesake
     app_copies: tuple[tuple[str, str], ...]  # T6: (repo-relative path, status)
+    # Tier B fills this in: x86-bundle functions the SHIPPED wasm bundles lack. Until then
+    # "natively provided" is the x86 proxy.
+    stale_wasm_functions: tuple[str, ...] = ()
 
     def flagged_names(self) -> frozenset[str]:
         """Names known to differ between desktop and the browser contract."""
-        return (
-            frozenset(self.wasm_only_macros)
-            | frozenset(self.body_drift)
-            | frozenset(self.desktop_only_uncovered)
-            | frozenset(self.signature_drift)
-            | frozenset(self.macro_vs_native)
+        return frozenset(
+            name.lower()
+            for name in (
+                *self.wasm_only_macros,
+                *self.body_drift,
+                *self.desktop_only_uncovered,
+                *self.signature_drift,
+                *self.macro_vs_native,
+                *self.stale_wasm_functions,
+            )
         )
 
 

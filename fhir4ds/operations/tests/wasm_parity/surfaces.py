@@ -16,6 +16,7 @@ registered as ``STALE_WASM_BUNDLE``.
 from __future__ import annotations
 
 import atexit
+import re
 import shutil
 import tempfile
 from collections.abc import Iterable
@@ -180,13 +181,25 @@ def extension_names(con: duckdb.DuckDBPyConnection) -> frozenset[str]:
     return frozenset(catalog(con)) - frozenset(_builtin_catalog(duckdb.__version__))
 
 
+QUOTED_CALL_RE = re.compile(r'"([A-Za-z_][A-Za-z0-9_]*)"\s*\(')
+
+
 def emitted_names(sql: str) -> frozenset[str]:
-    """Function/macro names a translated SQL text calls (lower-cased)."""
+    """Function/macro names a translated SQL text calls (lower-cased).
+
+    A quoted identifier followed by a parenthesis — ``"Distinct"([1])``,
+    ``"Coalesce"(NULL, 1)`` — is always a macro call, so it is collected directly: the shared
+    helper skips SQL keywords and builtin spellings such as ``coalesce``, which would hide the
+    browser's same-named macro. Unquoted calls go through the helper (it drops ``IN (``,
+    ``EXISTS (``, ``CAST(`` and friends).
+    """
     from fhir4ds.cql.duckdb.tests.integration.wasm_runtime_helpers import (
         emitted_function_names,
     )
 
-    return frozenset(name.lower() for name in emitted_function_names(sql))
+    names = {name.lower() for name in emitted_function_names(sql)}
+    names.update(match.lower() for match in QUOTED_CALL_RE.findall(sql))
+    return frozenset(names)
 
 
 # --------------------------------------------------------------------------- T2

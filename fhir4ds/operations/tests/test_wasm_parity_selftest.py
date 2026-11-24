@@ -8,6 +8,7 @@ Plan: FEATURE_WASM_PARITY_TEST_INFRA.md step 8 and section 6.
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import date, timedelta
 from itertools import count
 
@@ -182,7 +183,7 @@ def test_translation_errors_and_green_cases_are_not_gated():
 
 
 def fake_contract(**overrides):
-    base = dict(
+    base = contract.Contract(
         reference_statement_count=1,
         reference_registration_mismatch=(),
         desktop_names=frozenset({"a"}),
@@ -194,7 +195,7 @@ def fake_contract(**overrides):
         macro_vs_native=(),
         app_copies=(("web/app/src/lib/cql-macros.ts", "identical"),),
     )
-    return contract.Contract(**{**base, **overrides})
+    return dataclasses.replace(base, **overrides)
 
 
 def test_contract_gates_demand_registration_per_kind():
@@ -228,3 +229,35 @@ def test_t1_t2_violations_name_the_problem():
     drifted = fake_contract(reference_registration_mismatch=("Ghost"))
     (violation,) = contract.check_reference(drifted)
     assert (violation.gate, violation.code) == ("T1", "REFERENCE_EXPORT_DRIFT")
+
+
+# ------------------------------------------------------------------ surface scoping
+
+
+def test_case_registration_applies_only_to_the_surface_it_names():
+    real_only = entry("PARITY_GAP", "CqlX.xml::OnlyReal", suite="cql", surface="real")
+    gap = case(evaluators.PARITY_GAP, name="CqlX.xml::OnlyReal")
+    # on the real engine the registration explains the gap
+    on_real = SuiteResult("cql", (gap,), surface="real")
+    assert evaluators.judge(on_real, [real_only], today=TODAY) == []
+    # on the simulator the same case is green: the real-only entry is out of scope, not stale
+    green = case(evaluators.GREEN, name="CqlX.xml::OnlyReal")
+    assert evaluators.judge(SuiteResult("cql", (green,)), [real_only], today=TODAY) == []
+    # so the same gap on the simulator is NOT covered by a real-only registration
+    assert codes(evaluators.judge(SuiteResult("cql", (gap,)), [real_only], today=TODAY)) == [
+        "UNREGISTERED_GAP"
+    ]
+
+
+def test_a_registration_without_surface_covers_both_surfaces():
+    anywhere = entry("PARITY_GAP", "CqlX.xml::Both", suite="cql")
+    gap = case(evaluators.PARITY_GAP, name="CqlX.xml::Both")
+    for surface in ledger.SURFACES:
+        assert evaluators.judge(SuiteResult("cql", (gap,), surface=surface), [anywhere], today=TODAY) == []
+
+
+def test_surface_is_validated():
+    with pytest.raises(ledger.LedgerError):
+        entry("PARITY_GAP", "x", suite="cql", surface="browserish")
+    with pytest.raises(ledger.LedgerError):  # name-level kinds take no surface
+        entry("TS_BODY_DRIFT", "x", surface="real")

@@ -30,7 +30,11 @@ LEDGER_PATH = Path(__file__).with_name("known_gaps.json")
 
 DEFAULT_EXPIRY_DAYS = 90
 SHORT_EXPIRY_DAYS = 30
-SUITES = ("cql", "fhirpath", "viewdef", "omop")
+SUITES = ("cql", "fhirpath", "viewdef", "omop", "real")
+# A case-level registration names the surface it was observed on (None = every surface).
+# The simulator (x86 bundles + reference macros) and the real engine (duckdb-wasm + the
+# shipped wasm bundles) fail different cases: a real-only gap is GREEN on the simulator.
+SURFACES = ("simulator", "real")
 
 # Name-level kinds: the target is one or more function/macro names.
 NAME_KINDS = (
@@ -38,6 +42,7 @@ NAME_KINDS = (
     "WASM_ONLY_MACRO",  # browser macro with no desktop macro (the principle)
     "TS_BODY_DRIFT",  # same-name macro, different body
     "SIGNATURE_DIFF",  # same-name function, different overload signatures
+    "STALE_WASM_FUNCTION",  # x86 bundles provide it, the shipped wasm bundles do not
     "MACRO_VS_NATIVE",  # desktop macro, browser runs a same-name native function
 )
 # Case-level kinds: the target is a list of case ids and ``suite`` is required.
@@ -113,6 +118,7 @@ class Entry:
     expires: date
     suite: str | None = None
     approved_by: str | None = None
+    surface: str | None = None  # case kinds only; None covers every surface
 
     def expired(self, today: date) -> bool:
         return today > self.expires
@@ -151,6 +157,12 @@ class Entry:
                 )
         elif approved_by is not None:
             raise LedgerError(f"{entry_id}: approved_by only applies to WASM_ONLY_MACRO")
+        surface = data.get("surface")
+        if surface is not None:
+            if kind not in CASE_KINDS:
+                raise LedgerError(f"{entry_id}: only case kinds take a surface")
+            if surface not in SURFACES:
+                raise LedgerError(f"{entry_id}: surface must be one of {SURFACES}")
         return cls(
             entry_id,
             kind,
@@ -161,6 +173,7 @@ class Entry:
             expires,
             suite,
             approved_by,
+            surface,
         )
 
 
@@ -226,7 +239,12 @@ def default_expiry(kind: str, since: date) -> date:
 
 
 def proposal(
-    kind: str, target: object, *, suite: str | None = None, since: date | None = None
+    kind: str,
+    target: object,
+    *,
+    suite: str | None = None,
+    since: date | None = None,
+    surface: str | None = None,
 ) -> dict:
     """A ready-to-paste entry skeleton. ``reason`` and ``owner`` must be filled in."""
     start = since or date.today()
@@ -241,6 +259,8 @@ def proposal(
     }
     if suite is not None:
         entry["suite"] = suite
+    if surface is not None and kind in CASE_KINDS and kind != "DESKTOP_DEFECT":
+        entry["surface"] = surface
     if kind == "WASM_ONLY_MACRO":
         entry["approved_by"] = None
     return entry

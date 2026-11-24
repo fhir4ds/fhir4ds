@@ -53,25 +53,50 @@ def run(desktop, browser, contract, *, corpus_dir: Path | None = None) -> SuiteR
         con.execute("CREATE TABLE IF NOT EXISTS resources (resource VARCHAR, patient_id VARCHAR)")
 
     started = time.perf_counter()
-    outcomes: list[CaseOutcome] = []
-    gated = 0
-    for test in run_cql.iter_corpus_tests(directory):
-        if test.superseded:
-            gated += 1
-            continue
-        outcomes.append(_outcome(run_cql, test, desktop, browser, contract))
+    tests = [test for test in run_cql.iter_corpus_tests(directory) if not test.superseded]
+    gated = sum(1 for _ in run_cql.iter_corpus_tests(directory)) - len(tests)
+    if hasattr(browser, "execute_many"):
+        # A remote surface (the real browser engine) evaluates in batches: one round trip
+        # per chunk instead of one per test.
+        outcomes = _run_batched(run_cql, tests, desktop, browser, contract)
+    else:
+        outcomes = [_outcome(run_cql, test, desktop, browser, contract) for test in tests]
     return SuiteResult(SUITE, tuple(outcomes), gated, time.perf_counter() - started)
+
+
+def _run_batched(run_cql, tests, desktop, browser, contract) -> list[CaseOutcome]:
+    translated: list[tuple[int, object, str]] = []
+    outcomes: dict[int, CaseOutcome] = {}
+    for index, test in enumerate(tests):
+        sql, pre = _translate(run_cql, test, desktop, browser)
+        if pre is None:
+            translated.append((index, test, sql))
+        else:
+            outcomes[index] = pre
+    sqls = [sql for _, _, sql in translated]
+    desktop_execs = [run_cql.execute_test_text(desktop, sql) for sql in sqls]
+    browser_execs = browser.execute_many(sqls)
+    if len(browser_execs) != len(sqls):
+        raise RuntimeError(
+            f"browser returned {len(browser_execs)} executions for {len(sqls)} statements"
+        )
+    for (index, test, sql), exec_d, exec_b in zip(
+        translated, desktop_execs, browser_execs, strict=False
+    ):
+        outcomes[index] = _judge(run_cql, test, sql, exec_d, exec_b, contract)
+    return [outcomes[i] for i in range(len(tests))]
 
 
 def _short(text: object, limit: int = 200) -> str:
     return " ".join(str(text).split())[:limit]
 
 
-def _outcome(run_cql, test, desktop, browser, contract) -> CaseOutcome:
+def _translate(run_cql, test, desktop, browser):
+    """``(sql, None)`` or ``(None, outcome)`` when translation itself is the finding."""
     case_id = f"{test.filename}::{test.name}"
     expr = run_cql.test_expression(test.test_elem)
     if expr is None:
-        return CaseOutcome(
+        return None, CaseOutcome(
             case_id, BOTH_FAIL, "No expression found", "not run", "corpus test has no expression"
         )
     cql_expr = expr[0]
@@ -82,35 +107,53 @@ def _outcome(run_cql, test, desktop, browser, contract) -> CaseOutcome:
             "connection=None": run_cql.translate_test_sql(cql_expr, None),
         }
     except Exception as exc:  # noqa: BLE001 - translation errors are the finding
-        return CaseOutcome(
+        return None, CaseOutcome(
             case_id, TRANSLATE_ERROR, f"translate: {_short(exc)}", "-", "translation-layer"
         )
     differing = [label for label, text in variants.items() if text != sql]
     if differing:
-        return CaseOutcome(
+        return None, CaseOutcome(
             case_id,
             TRANSLATE_DIFF,
             "translated",
             "translated",
             f"SQL differs when translated with {differing}",
         )
+    return sql, None
 
+
+def _outcome(run_cql, test, desktop, browser, contract) -> CaseOutcome:
+    sql, pre = _translate(run_cql, test, desktop, browser)
+    if pre is not None:
+        return pre
     exec_d = run_cql.execute_test_select(desktop, sql, with_type=True)
     exec_b = run_cql.execute_test_select(browser, sql, with_type=True)
+    return _judge(run_cql, test, sql, exec_d, exec_b, contract)
+
+
+def _judge(run_cql, test, sql, exec_d, exec_b, contract) -> CaseOutcome:
+    case_id = f"{test.filename}::{test.name}"
     passed_d, reason_d = run_cql.assess_test(test.test_elem, exec_d)
     passed_b, reason_b = run_cql.assess_test(test.test_elem, exec_b)
     verdict_d = "pass" if passed_d else f"fail: {_short(reason_d)}"
     verdict_b = "pass" if passed_b else f"fail: {_short(reason_b)}"
 
     if passed_d and passed_b:
-        if exec_d.value == exec_b.value and exec_d.value_type == exec_b.value_type:
+        # Values moved as text compare as text (the batched path); raw objects compare raw.
+        if exec_d.text is not None and exec_b.text is not None:
+            same = exec_d.text == exec_b.text
+        else:
+            same = exec_d.value == exec_b.value
+        if same and exec_d.value_type == exec_b.value_type:
             outcome, detail = GREEN, ""
         else:
             outcome = ENGINE_DIFF
-            if exec_d.value == exec_b.value:
+            if same:
                 detail = f"type: desktop={exec_d.value_type} browser={exec_b.value_type}"
             else:
-                detail = f"value: desktop={_short(exec_d.value, 120)!r} browser={_short(exec_b.value, 120)!r}"
+                shown_d = exec_d.text if exec_d.text is not None else _short(exec_d.value, 120)
+                shown_b = exec_b.text if exec_b.text is not None else _short(exec_b.value, 120)
+                detail = f"value: desktop={shown_d!r} browser={shown_b!r}"
     elif passed_d:
         outcome, detail = PARITY_GAP, verdict_b
     elif passed_b:
