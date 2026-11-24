@@ -1469,23 +1469,37 @@ DEFINE_TWO_STR_BOOL_UDF(IntervalMeetsAfterFunc, {
 DEFINE_TWO_STR_BOOL_UDF(IntervalStartsSameFunc, {
 	auto iv1 = cql::Interval::parse(a_str);
 	auto iv2 = cql::Interval::parse(b_str);
-	if (!iv1 || !iv2 || !iv1->low || !iv2->low || !iv1->high || !iv2->high) {
+	if (!iv1 || !iv2) {
 		result_mask.SetInvalid(i);
 		continue;
 	}
 		if (interval_open_null_uncertain(*iv1) || interval_open_null_uncertain(*iv2)) { result_mask.SetInvalid(i); continue; }
-	result_data[i] = iv1->starts_same(*iv2);
+	// FHIR4-38: a CLOSED null bound is the §9.14 point-type extremum (peer
+	// inferred), so it must not be rejected here — the nullable variant owns
+	// the unknown/definite decision.
+	auto starts_res = iv1->starts_same_nullable(*iv2);
+	if (!starts_res) {
+		result_mask.SetInvalid(i);
+		continue;
+	}
+	result_data[i] = *starts_res;
 })
 
 DEFINE_TWO_STR_BOOL_UDF(IntervalEndsSameFunc, {
 	auto iv1 = cql::Interval::parse(a_str);
 	auto iv2 = cql::Interval::parse(b_str);
-	if (!iv1 || !iv2 || !iv1->low || !iv2->low || !iv1->high || !iv2->high) {
+	if (!iv1 || !iv2) {
 		result_mask.SetInvalid(i);
 		continue;
 	}
 		if (interval_open_null_uncertain(*iv1) || interval_open_null_uncertain(*iv2)) { result_mask.SetInvalid(i); continue; }
-	result_data[i] = iv1->ends_same(*iv2);
+	// FHIR4-38: see IntervalStartsSameFunc — closed null bounds are definite.
+	auto ends_res = iv1->ends_same_nullable(*iv2);
+	if (!ends_res) {
+		result_mask.SetInvalid(i);
+		continue;
+	}
+	result_data[i] = *ends_res;
 })
 
 DEFINE_TWO_STR_BOOL_UDF(IntervalEqualsFunc, {
