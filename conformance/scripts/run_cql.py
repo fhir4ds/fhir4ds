@@ -6,6 +6,7 @@ Level 4: Integrates production-grade comparison logic from benchmarking/runner/c
 to bridge the gap between DuckDB output and CQL spec expectations.
 """
 
+import argparse
 import json
 import os
 import re
@@ -29,8 +30,168 @@ from conformance_log import log_run  # noqa: E402
 from fhir4ds.cql import register_udfs, translate_cql  # noqa: E402
 
 # Path to CQL test files
-CQL_TESTS_DIR = Path("fhir4ds/cql/tests/official/cql-tests/tests/cql")
-OUTPUT_FILE = Path("conformance/reports/cql_report.json")
+#
+# FHIR4-45: the corpus is VENDORED (plain files in git) rather than a bare
+# gitlink. Until this card, `fhir4ds/cql/tests/official/cql-tests` was a
+# submodule-style gitlink with NO `.gitmodules` entry, so `git worktree add`
+# and a plain CI checkout materialised an EMPTY directory and the gate below
+# silently reported a stale pass. Every path is overridable through the
+# environment (and through flags) so the failure modes can be exercised
+# without touching the real corpus - see
+# fhir4ds/cql/tests/integration/test_cql_corpus_gate_integrity.py.
+DEFAULT_CQL_TESTS_DIR = Path("fhir4ds/cql/tests/official/cql-tests/tests/cql")
+DEFAULT_OUTPUT_FILE = Path("conformance/reports/cql_report.json")
+DEFAULT_MANIFEST_FILE = Path("fhir4ds/cql/tests/official/corpus_manifest.json")
+
+# Backwards-compatible module aliases were removed in FHIR4-45: every path is
+# resolved through the accessors below so an environment/flag override cannot
+# leave a second, stale copy of the default path lying around.
+
+# Exit codes. 0 = the gate ran; 2 = the gate could not test the corpus at all
+# (absent / empty / materially incomplete). We deliberately do NOT use 1: that
+# is reserved for "the suite ran and cells failed", which the project's policy
+# treats as INCOMPLETE-but-informational while upstream fixture PRs are open.
+EXIT_OK = 0
+EXIT_CORPUS_INTEGRITY = 2
+
+# Suite key used for corpus-integrity failures. It appears in the report so
+# every downstream reader (run_all.get_summary, conformance_log._collect_stats)
+# counts a real failure instead of reading a previous run's numbers.
+INTEGRITY_SUITE_KEY = "__corpus_integrity__"
+
+
+def _env_path(variable: str, default: Path) -> Path:
+    value = os.environ.get(variable)
+    return Path(value) if value else default
+
+
+def default_corpus_dir() -> Path:
+    """Directory holding the corpus XML files (FHIR4DS_CQL_TESTS_DIR)."""
+    return _env_path("FHIR4DS_CQL_TESTS_DIR", DEFAULT_CQL_TESTS_DIR)
+
+
+def output_file() -> Path:
+    """Conformance report path (FHIR4DS_CQL_REPORT)."""
+    return _env_path("FHIR4DS_CQL_REPORT", DEFAULT_OUTPUT_FILE)
+
+
+def manifest_path() -> Path:
+    """Corpus manifest path (FHIR4DS_CQL_MANIFEST)."""
+    return _env_path("FHIR4DS_CQL_MANIFEST", DEFAULT_MANIFEST_FILE)
+
+
+def load_manifest(path: Path | None = None) -> dict[str, Any] | None:
+    """Load the corpus manifest, or None when it is unavailable.
+
+    The manifest is the single source of truth for "how big is the corpus we
+    pinned". Without it the runner can still tell that the corpus is missing or
+    empty, but it cannot tell that a corpus is PARTIAL, so an unavailable
+    manifest is reported loudly (never silently ignored).
+    """
+    manifest_file = Path(path) if path is not None else manifest_path()
+    try:
+        data = json.loads(manifest_file.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        print(
+            f"WARNING: corpus manifest not found at {manifest_file}. "
+            "Corpus completeness cannot be checked against the pinned counts."
+        )
+        return None
+    except (OSError, json.JSONDecodeError) as exc:
+        print(
+            f"WARNING: corpus manifest {manifest_file} is unreadable ({exc}). "
+            "Corpus completeness cannot be checked against the pinned counts."
+        )
+        return None
+    if not isinstance(data, dict) or not isinstance(data.get("xml_file_count"), int):
+        print(
+            f"WARNING: corpus manifest {manifest_file} declares no integer "
+            "'xml_file_count'; completeness cannot be checked."
+        )
+        return None
+    return data
+
+
+def verify_corpus(
+    corpus_dir: Path, manifest: dict[str, Any] | None
+) -> tuple[list[Path], list[str]]:
+    """Check the corpus is present, non-empty and as large as the pin.
+
+    Returns ``(test_files, problems)``. A non-empty ``problems`` list means the
+    gate must FAIL: it would otherwise report a pass for a suite it never ran
+    (absent/empty corpus) or for a smaller corpus than the one that was pinned
+    (partial corpus - the silently-shrinking-denominator failure).
+    """
+    problems: list[str] = []
+
+    if not corpus_dir.is_dir():
+        problems.append(
+            f"official CQL corpus is MISSING from this checkout: {corpus_dir} does not exist. "
+            "The corpus is vendored in git, so this means the checkout is incomplete "
+            "(sparse checkout / partial clone / stale worktree) or the path is wrong. "
+            "Fix: `git checkout HEAD -- fhir4ds/cql/tests/official/cql-tests` "
+            "or re-clone the repository."
+        )
+        return [], problems
+
+    test_files = sorted(corpus_dir.glob("*.xml"))
+    if not test_files:
+        problems.append(
+            f"official CQL corpus is EMPTY: no *.xml test files under {corpus_dir}. "
+            "Zero tests is a gate failure, never a pass. "
+            "Fix: `git checkout HEAD -- fhir4ds/cql/tests/official/cql-tests`."
+        )
+        return [], problems
+
+    if manifest is not None:
+        expected = manifest["xml_file_count"]
+        found = len(test_files)
+        if found < expected:
+            problems.append(
+                f"official CQL corpus is INCOMPLETE: {found} of {expected} XML test files "
+                f"present under {corpus_dir} (pinned commit {manifest.get('pin', 'unknown')}). "
+                "Running now would silently shrink the denominator instead of failing. "
+                "Fix: `git checkout HEAD -- fhir4ds/cql/tests/official/cql-tests`, "
+                "then re-run this gate."
+            )
+        elif found > expected:
+            # More files than the pin describes: the manifest (and the README)
+            # are stale relative to the corpus. The gate still runs every file
+            # present, so it is not weakened - but the pin note must be moved in
+            # the same commit as a corpus refresh.
+            print(
+                f"WARNING: corpus has {found} XML test files but the manifest pins "
+                f"{expected}. The pin note is stale; update corpus_manifest.json and "
+                "the README when refreshing the corpus."
+            )
+
+    return test_files, problems
+
+
+def invalidate_report(report_path: Path) -> None:
+    """Remove any previous report so old numbers cannot be read as a pass."""
+    try:
+        report_path.unlink()
+    except FileNotFoundError:
+        pass
+
+
+def write_integrity_failure_report(report_path: Path, problems: list[str]) -> None:
+    """Replace the report with an explicit corpus-integrity failure.
+
+    A stale report is deleted first: if the write below is interrupted there is
+    then no file at all, which downstream readers already treat as a failure
+    (``get_summary`` returns 0/0 and logs "could not read report").
+    """
+    invalidate_report(report_path)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    tests = [
+        {"name": f"corpus_integrity_{index}", "result": {"passed": False, "error": problem}}
+        for index, problem in enumerate(problems, start=1)
+    ]
+    with open(report_path, "w") as handle:
+        json.dump({INTEGRITY_SUITE_KEY: {"tests": tests}}, handle, indent=2)
+
 
 # XML namespace for CQL tests
 NS = {"ns": "http://hl7.org/fhirpath/tests"}
@@ -511,10 +672,51 @@ def run_test(conn, test_elem) -> tuple[bool, str]:
             return True, ""
         return False, str(e)
 
-def main():
-    if not CQL_TESTS_DIR.exists():
-        print(f"Error: CQL tests directory not found at {CQL_TESTS_DIR}")
-        return
+def _parse_args(argv: list[str] | None):
+    """Parse flags; every option also has an environment-variable default."""
+    parser = argparse.ArgumentParser(
+        description="Run the official CQL test suite against fhir4ds."
+    )
+    parser.add_argument(
+        "--corpus-dir",
+        default=None,
+        help=f"corpus XML directory (default: {DEFAULT_CQL_TESTS_DIR}, or FHIR4DS_CQL_TESTS_DIR)",
+    )
+    parser.add_argument(
+        "--report",
+        default=None,
+        help=f"report path (default: {DEFAULT_OUTPUT_FILE}, or FHIR4DS_CQL_REPORT)",
+    )
+    parser.add_argument(
+        "--manifest",
+        default=None,
+        help=f"corpus manifest (default: {DEFAULT_MANIFEST_FILE}, or FHIR4DS_CQL_MANIFEST)",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parse_args(argv)
+    corpus_dir = Path(args.corpus_dir) if args.corpus_dir else default_corpus_dir()
+    report_path = Path(args.report) if args.report else output_file()
+    manifest = load_manifest(Path(args.manifest) if args.manifest else None)
+
+    # FHIR4-45: a corpus that is absent, empty or materially incomplete must
+    # fail LOUDLY. The previous code printed an error and returned, i.e. exited
+    # 0 and left the committed report untouched - so run_all/CI read the
+    # previous run's numbers and reported them as a pass.
+    test_files, problems = verify_corpus(corpus_dir, manifest)
+    if problems:
+        for problem in problems:
+            print(f"Error: {problem}")
+        write_integrity_failure_report(report_path, problems)
+        log_run("CQL", report_path)
+        print(
+            "\nCQL CONFORMANCE GATE FAILED: the corpus could not be tested, so this run "
+            "proves nothing about CQL conformance. The previous report was invalidated "
+            f"and replaced with an explicit failure at {report_path}."
+        )
+        return EXIT_CORPUS_INTEGRITY
 
     # Initialize DuckDB
     conn = duckdb.connect(":memory:", config={'allow_unsigned_extensions': 'true'})
@@ -529,10 +731,10 @@ def main():
     conn.execute("CREATE TABLE IF NOT EXISTS resources (resource VARCHAR, patient_id VARCHAR)")
 
     report = {}
-    test_files = sorted(CQL_TESTS_DIR.glob("*.xml"))
 
     total_tests = 0
     passed_tests = 0
+    unreadable_files = []
 
     print(f"Running {len(test_files)} CQL test files...")
 
@@ -542,7 +744,19 @@ def main():
             tree = ET.parse(filepath)
             root = tree.getroot()
         except Exception as e:
+            # A corpus file that cannot be parsed used to be silently dropped,
+            # which shrank the denominator instead of failing the gate.
             print(f"  Error parsing {filename}: {e}")
+            unreadable_files.append(filename)
+            report[filename] = {
+                "tests": [
+                    {
+                        "name": filename,
+                        "result": {"passed": False, "error": f"corpus file could not be parsed: {e}"},
+                    }
+                ]
+            }
+            total_tests += 1
             continue
 
         file_results = []
@@ -587,14 +801,48 @@ def main():
         report[filename] = {"tests": file_results}
         print(f"  {filename}: {sum(1 for t in file_results if t['result']['passed'])}/{len(file_results)} passed")
 
-    OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(OUTPUT_FILE, "w") as f:
+    # FHIR4-45: the corpus was present but the run collected fewer cells than
+    # the pin describes. That is either a corpus that silently lost files or a
+    # file the engine could not read - neither may be reported as a pass. The
+    # real per-file numbers are kept (they are honest) and a failing sentinel
+    # entry is added so no reader can see a clean report.
+    integrity_shortfall: list[str] = []
+    if manifest is not None and total_tests < manifest["test_count"]:
+        integrity_shortfall.append(
+            f"official CQL corpus produced {total_tests} test cases but the manifest pins "
+            f"{manifest['test_count']} (pinned commit {manifest.get('pin', 'unknown')}). "
+            "Files may be missing from the corpus or unreadable by the parser"
+            + (f"; unreadable: {', '.join(unreadable_files)}" if unreadable_files else "")
+            + "."
+        )
+        report[INTEGRITY_SUITE_KEY] = {
+            "tests": [
+                {
+                    "name": "corpus_test_count_shortfall",
+                    "result": {"passed": False, "error": integrity_shortfall[0]},
+                }
+            ]
+        }
+
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(report_path, "w") as f:
         json.dump(report, f, indent=2)
 
-    print(f"\nConformance report generated at {OUTPUT_FILE}")
+    print(f"\nConformance report generated at {report_path}")
     if total_tests > 0:
         print(f"Summary: {passed_tests}/{total_tests} tests passed ({passed_tests/total_tests:.1%})")
-    log_run("CQL", OUTPUT_FILE)
+    log_run("CQL", report_path)
+
+    if integrity_shortfall:
+        for problem in integrity_shortfall:
+            print(f"Error: {problem}")
+        print(
+            "\nCQL CONFORMANCE GATE FAILED on corpus integrity: fewer test cases ran than "
+            "the pin requires, so the rate above is not a complete conformance result."
+        )
+        return EXIT_CORPUS_INTEGRITY
+
+    return EXIT_OK
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main(sys.argv[1:]))
