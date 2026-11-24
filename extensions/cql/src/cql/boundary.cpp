@@ -931,21 +931,21 @@ Optional<double> cql_timezone_offset(const std::string &value) {
 		return Optional<double>(0.0);
 	}
 
-	// Search for +HH:MM or -HH:MM at end. A suffix that HAS the offset shape
-	// but fails range validation (`+99:99`, `+14:01`) is an INVALID value and
-	// must stay null — it is not an offset-less value that may acquire the
-	// assumed evaluation-request offset (verified divergence: the native
-	// surface answered -6.0 for `+99:99` where the Python authority answers
-	// null).
-	for (int i = static_cast<int>(value.size()) - 1; i >= 0; i--) {
-		if (value[i] == '+' || value[i] == '-') {
-			std::string suffix = value.substr(i);
-			const bool offset_shaped = suffix.size() == 6 && suffix[3] == ':' &&
-			                           std::isdigit(static_cast<unsigned char>(suffix[1])) &&
-			                           std::isdigit(static_cast<unsigned char>(suffix[2])) &&
-			                           std::isdigit(static_cast<unsigned char>(suffix[4])) &&
-			                           std::isdigit(static_cast<unsigned char>(suffix[5]));
-			if (offset_shaped) {
+	// A '+'/'-' inside the TIME portion is an OFFSET ATTEMPT: it must be a
+	// valid offset (`Z`, `+HH:MM`, `-HH:MM` within +/-14:00) or the value is
+	// invalid (null). It must never fall through to the assumed
+	// evaluation-request offset below — that is reserved for values that carry
+	// no offset text at all (verified divergences: `+99:99`, `+14:01` and
+	// `+aa:bb` each answered the assumed offset where the Python authority
+	// answers null).
+	const size_t time_t = value.find('T');
+	if (time_t != std::string::npos) {
+		const std::string time_part = value.substr(time_t + 1);
+		if (time_part.find('+') != std::string::npos ||
+		    time_part.find('-') != std::string::npos) {
+			for (int i = static_cast<int>(value.size()) - 1; i >= static_cast<int>(time_t); i--) {
+				if (value[i] != '+' && value[i] != '-') continue;
+				const std::string suffix = value.substr(i);
 				if (!valid_timezone_suffix(suffix)) {
 					return NullOpt<double>();
 				}
@@ -954,7 +954,7 @@ Optional<double> cql_timezone_offset(const std::string &value) {
 				int mins = std::atoi(value.substr(i + 4, 2).c_str());
 				return Optional<double>(sign * (hours + mins / 60.0));
 			}
-			break;
+			return NullOpt<double>();
 		}
 	}
 	// CQL #datetime-2 (cql-tests #88/#185): an offset-less DateTime assumes
