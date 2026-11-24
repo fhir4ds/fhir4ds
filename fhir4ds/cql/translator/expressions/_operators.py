@@ -4940,6 +4940,17 @@ class OperatorsMixin:
                 return _is_definitely_null_operand(node.left, translated)
             return False
 
+        def _is_untyped_null_bound(node: Any) -> bool:
+            """True for an untyped ``null`` interval bound (``Interval(null, …)``).
+
+            ``null as Integer`` parses to ``BinaryExpression(as, …)`` and is a
+            TYPED null bound: ``_translate_interval`` passes it as the
+            ``__null__`` sentinel so ``intervalFromBounds`` renders a real
+            interval JSON with the authored closedness, and the UDF decides.
+            Only the untyped form collapses to a SQL NULL bound.
+            """
+            return isinstance(node, Literal) and node.value is None
+
         # CQL interval/list `in`: a null container/list argument returns false.
         if self._definitely_null_operand(expr.right, right):
             return SQLLiteral(value=False)
@@ -4995,6 +5006,37 @@ class OperatorsMixin:
                     extra_condition_ast = BinaryExpression(operator="and", left=extra_condition_ast, right=cond)
 
             interval_expr = self.translate(actual_interval_ast, usage=ExprUsage.SCALAR)
+            # FHIR4-42 (CQL 1.5.3 §In (Interval), applied to the precision form
+            # by the same rule FHIR4-40 used for the unqualified form): "For
+            # open interval boundaries, exclusive comparison operators are
+            # used. For closed interval boundaries, if the interval boundary is
+            # null, the result of the boundary comparison is considered true."
+            # §9.14/§9.15 Start/End return NULL (not the point-type extremum)
+            # for a null OPEN bound, so that comparison is UNKNOWN at EVERY
+            # precision — the qualifier cannot make it determinate. An authored
+            # interval whose BOTH bounds are untyped null with at least one
+            # open bracket therefore evaluates to NULL for any point:
+            # `intervalFromBounds` cannot represent it (two SQL-NULL bounds
+            # collapse to a NULL interval, and §19.3's first-arg-null rule then
+            # answers FALSE). One-sided open null bounds DO reach the UDF as
+            # JSON (a null bound with its open flag), where the UDF's
+            # three-valued bound comparison turns them into an UNKNOWN operand.
+            if (
+                isinstance(actual_interval_ast, Interval)
+                and _is_untyped_null_bound(actual_interval_ast.low)
+                and _is_untyped_null_bound(actual_interval_ast.high)
+                and not (
+                    actual_interval_ast.low_closed
+                    and actual_interval_ast.high_closed
+                )
+            ):
+                unknown_membership = SQLNull()
+                if extra_condition_ast:
+                    extra_sql = self.translate(extra_condition_ast, boolean_context=True)
+                    unknown_membership = SQLBinaryOp(
+                        operator="AND", left=unknown_membership, right=extra_sql
+                    )
+                return unknown_membership
             # CQL §19.11 In precision: dispatch to intervalContainsPrecise
             # when the interval is a recognized interval expression so that
             # partial-precision Date/DateTime/Time bounds propagate

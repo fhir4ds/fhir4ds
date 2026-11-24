@@ -1295,23 +1295,37 @@ def intervalContains(interval: str | None, point: str | None) -> bool | None:
     if not iv or pt is None:
         return None
 
+    # FHIR4-42: an OPEN null bound is an UNKNOWN boundary (§9.14/§9.15 Start
+    # return null — they do not return the point-type extremum), so it
+    # contributes an UNKNOWN operand to the conjunction instead of being
+    # dropped as "unbounded". A CLOSED null bound IS the point-type extremum
+    # and keeps satisfying its side. This is what makes the asymmetric
+    # one-sided-FHIR-Period doctrine consistent: an unknown START
+    # (``collapse_intervals`` renders it as an open null low) cannot be claimed
+    # to contain a point, while an ONGOING end (closed null high) genuinely
+    # extends past its start.
     low, high = iv["low"], iv["high"]
 
-    # Check bounds — None means unbounded (always satisfies that side)
-    low_ok = True
+    # None means unbounded (always satisfies that side), except for an OPEN
+    # null bound, which is unknown (see FHIR4-42 above).
+    low_ok: bool | None = True
     if low is not None:
         cmp = _compare_interval_values(low, pt)
         if cmp is None:
             return None
         low_ok = cmp <= 0 if iv["low_closed"] else cmp < 0
-    high_ok = True
+    elif not iv["low_closed"]:
+        low_ok = None
+    high_ok: bool | None = True
     if high is not None:
         cmp = _compare_interval_values(pt, high)
         if cmp is None:
             return None
         high_ok = cmp <= 0 if iv["high_closed"] else cmp < 0
+    elif not iv["high_closed"]:
+        high_ok = None
 
-    return low_ok and high_ok
+    return _and3(low_ok, high_ok)
 
 
 def intervalProperlyContains(interval: str | None, point: str | None) -> bool | None:
@@ -1791,6 +1805,21 @@ def _open_null_bound_uncertain(iv: dict) -> bool:
     return False
 
 
+def _and3(left: bool | None, right: bool | None) -> bool | None:
+    """Three-valued AND for containment bound comparisons.
+
+    FHIR4-42: an OPEN null bound contributes UNKNOWN rather than TRUE, so
+    ``FALSE AND UNKNOWN`` must stay FALSE while ``TRUE AND UNKNOWN`` becomes
+    NULL — exactly the conjunction ``_translate_in_op`` emits for the
+    unqualified ``in`` form (FHIR4-40).
+    """
+    if left is False or right is False:
+        return False
+    if left is None or right is None:
+        return None
+    return True
+
+
 def intervalOverlaps(interval1: str | None, interval2: str | None) -> bool | None:
     """Check if two intervals overlap.
 
@@ -2084,15 +2113,28 @@ def intervalContainsPrecise(interval: str | None, point: str | None, precision: 
     pt = point if _is_temporal_string(point) else _parse_point(point)
     if pt is None:
         return False
+    # FHIR4-42: an OPEN null bound is an UNKNOWN boundary at EVERY precision
+    # (§9.14/§9.15 Start/End return null for it), so it contributes an UNKNOWN
+    # operand; a CLOSED null bound is the point-type extremum and keeps
+    # satisfying its side. ``intervalIncludesPrecise`` /
+    # ``intervalIncludedInPrecise`` delegate their bound checks here, so they
+    # inherit this and finally agree with plain ``intervalIncludes`` (which
+    # already answered null for the same open-null container).
+    low_ok: bool | None = True
     if iv["low"] is not None:
         cmp = _compare_bound_at_precision(_interval_bound(iv, "low", "low_raw"), pt, str(precision))
         if cmp is None or cmp > 0 or (cmp == 0 and not iv["low_closed"]):
             return None if cmp is None else False
+    elif not iv["low_closed"]:
+        low_ok = None
+    high_ok: bool | None = True
     if iv["high"] is not None:
         cmp = _compare_bound_at_precision(_interval_bound(iv, "high", "high_raw"), pt, str(precision))
         if cmp is None or cmp < 0 or (cmp == 0 and not iv["high_closed"]):
             return None if cmp is None else False
-    return True
+    elif not iv["high_closed"]:
+        high_ok = None
+    return _and3(low_ok, high_ok)
 
 
 def intervalOverlapsPrecise(interval1: str | None, interval2: str | None, precision: str | None) -> bool | None:
