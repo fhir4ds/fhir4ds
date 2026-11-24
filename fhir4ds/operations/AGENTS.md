@@ -203,6 +203,12 @@ missing" skips into failures (CI). A lane worktree has no `node_modules`: point
 
 ### Known fragile areas
 
+- **Only the WASM parity files are in the PR CI job.** `fhir4ds/operations/tests` as a whole is
+  not: `test_capability_matrix.py`, `test_compare_evidence.py::TestMcpCompareTool` and
+  `test_api_surface_contract.py::test_all_names_importable[fhir4ds.serve]` FAIL without the
+  optional `mcp` / `serve` extras instead of skipping (the first CI run that included the
+  directory: 7 failed, 4,361 passed). The ViewDefinition gate needs `jsonschema` (the official
+  runner's report validation); CI installs it, and the gate reports it as a missing input.
 - **Chromium and the memory cap.** `scripts/capped.sh` sets `RLIMIT_AS`; chromium's V8 sandbox
   reservation then fails with SIGTRAP. The engine detects a capped address space and reports an
   environment input (run Tier B uncapped). The hard limit cannot be lifted for a child.

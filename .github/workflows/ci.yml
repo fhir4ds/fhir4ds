@@ -51,7 +51,8 @@ jobs:
       - name: Install package and test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev,measures]"
+          # jsonschema: the official ViewDefinition runner validates its report with it
+          python -m pip install -e ".[dev,measures]" jsonschema
 
       - name: Ruff cleaned packages
         run: >
@@ -63,9 +64,11 @@ jobs:
           conformance/scripts
           --output-format=github
 
-      # fhir4ds/operations/tests holds the WASM parity gates (Step 0 + Tier A). With
-      # FHIR4DS_REQUIRE_WASM_PARITY=1 a missing input (node, corpus, bundles) fails instead
-      # of skipping. Tier B (real duckdb-wasm) runs in the cleanroom job, which has node_modules.
+      # The WASM parity gates (Step 0 + Tier A) live in fhir4ds/operations/tests. Only they
+      # are listed here: the rest of that directory needs the optional mcp/serve extras this
+      # job does not install. With FHIR4DS_REQUIRE_WASM_PARITY=1 a missing input (node,
+      # corpus, bundles) fails instead of skipping. Tier B (real duckdb-wasm) runs in the
+      # cleanroom job, which has node_modules.
       - name: Pytest
         env:
           FHIR4DS_REQUIRE_WASM_PARITY: "1"
@@ -76,8 +79,11 @@ jobs:
           fhir4ds/sources
           fhir4ds/cql/tests/unit
           fhir4ds/viewdef
-          fhir4ds/operations/tests
-          --ignore=fhir4ds/operations/tests/test_wasm_parity_tier_b.py
+          fhir4ds/operations/tests/test_wasm_surface_parity.py
+          fhir4ds/operations/tests/test_wasm_parity_step0.py
+          fhir4ds/operations/tests/test_wasm_parity_tier_a.py
+          fhir4ds/operations/tests/test_wasm_parity_selftest.py
+          fhir4ds/operations/tests/test_macro_sync.py
 
   python-311:
     name: Python 3.11 compatibility

@@ -29,7 +29,13 @@ def runner():
     for entry in (REPO_ROOT, scripts):
         if str(entry) not in sys.path:
             sys.path.insert(0, str(entry))
-    from conformance.scripts import run_viewdef
+    try:
+        from conformance.scripts import run_viewdef
+    except ImportError as exc:  # the official runner validates its report with jsonschema
+        raise EnvironmentInputMissing(
+            f"conformance/scripts/run_viewdef.py needs {exc.name!r} "
+            "(pip install jsonschema)"
+        ) from exc
 
     return run_viewdef
 
