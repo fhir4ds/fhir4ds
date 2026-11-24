@@ -1223,3 +1223,115 @@ define ExpandTruncMonth: expand Interval[@2024-01-15, @2024-03-20] per month
     finally:
         py.close()
         cpp.close()
+
+
+def test_cql_interval_part1_time_point_in_literal_interval_match_no_python_cpp() -> None:
+    """FHIR4-35: `point in Interval[@T.., @T..]` must compare TIME instants, not text.
+
+    CQL 1.5.3 §1.6/§1.11: "When milliseconds are null, they are combined as .0"
+    — for Time values seconds and milliseconds are ONE combined decimal
+    precision — and §Time states that rule holds for "all comparison operations
+    for time values ... or when comparison is performed as part of other
+    operations such as interval meets and overlaps".  So ``@T12:00:00`` and
+    ``@T12:00:00.000`` are the SAME instant, and a closed
+    ``[12:00:00.000, 21:59:59.999]`` interval contains it.
+
+    The literal-``Interval`` branch of ``_translate_in_op`` lowered to a raw SQL
+    ``BETWEEN``, which compares the VARCHAR spellings lexicographically:
+    ``'T12:00:00' < 'T12:00:00.000'``, so the point fell below its own closed
+    low bound and ``in`` returned FALSE.  The mirror operators (``contains``,
+    ``during``) and every sibling interval predicate already dispatch to
+    ``intervalContains``; the point-in-interval form was the only lexicographic
+    outlier in the family.
+    """
+    cql = """library IntervalTimePointIn version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define InSecondPrecisionPoint: @T12:00:00 in Interval[@T12:00:00.000, @T21:59:59.999]
+define InMillisecondPoint: @T12:00:00.000 in Interval[@T12:00:00, @T21:59:59]
+define InAboveRange: @T22:00:00 in Interval[@T12:00:00.000, @T21:59:59.999]
+define InBelowLow: @T11:59:59.999 in Interval[@T12:00:00.000, @T21:59:59.999]
+define InClosedHighBound: @T21:59:59.999 in Interval[@T12:00:00, @T21:59:59.999]
+define InClosedLowBound: @T12:00:00 in Interval[@T12:00:00, @T21:59:59]
+define InConstructor: Time(12, 0, 0) in Interval[@T12:00:00.000, @T21:59:59.999]
+define InFractionalEquivalent: @T12:00:00.1 in Interval[@T12:00:00.100, @T21:59:59.999]
+define InUniformMillisecondPrecision: @T07:59:59.999 in Interval[@T05:59:59.999, @T10:59:59.999]
+define MirrorContains: Interval[@T12:00:00.000, @T21:59:59.999] contains @T12:00:00
+define MirrorDuring: @T12:00:00 during Interval[@T12:00:00.000, @T21:59:59.999]
+"""
+    translated = translate_cql(cql)
+    expected = {
+        # FHIR4-35 repro: both spellings are the 12:00:00.000 instant.
+        "InSecondPrecisionPoint": (True,),
+        "InMillisecondPoint": (True,),
+        "InAboveRange": (False,),
+        "InBelowLow": (False,),
+        "InClosedHighBound": (True,),
+        "InClosedLowBound": (True,),
+        "InConstructor": (True,),
+        "InFractionalEquivalent": (True,),
+        "InUniformMillisecondPrecision": (True,),
+        # The mirror operators were already engine-routed; `in` must agree.
+        "MirrorContains": (True,),
+        "MirrorDuring": (True,),
+    }
+    # Dispatch pin: Time point-in-literal-interval goes through the engine.
+    for name in ("InSecondPrecisionPoint", "InMillisecondPoint", "InConstructor"):
+        sql_text = translated[name].to_sql()
+        assert "intervalContains" in sql_text, (name, sql_text)
+        assert "BETWEEN" not in sql_text, (name, sql_text)
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for name, expected_result in expected.items():
+                sql = f"SELECT {translated[name].to_sql()}"
+                assert py.execute(sql).fetchone() == expected_result, name
+                assert cpp.execute(sql).fetchone() == expected_result, name
+                assert no_py.execute(sql).fetchone() == expected_result, name
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_interval_part1_dynamic_point_in_literal_interval_keeps_between_fast_path() -> None:
+    """FHIR4-35 narrowing: non-Time operands keep the raw comparison.
+
+    The FHIR4-35 reroute is deliberately limited to statically TIME-valued
+    operands at second-or-finer precision.  Everything else in the
+    both-bounds-closed branch must keep its existing lowering: dynamic FHIR
+    units/values (where ``fhirpath_text`` returns a scalar that the raw
+    comparison was introduced for), plain numerics, strings, Age/Duration
+    uncertainty operands, Quantity bounds (already engine-routed), and Time
+    operands at hour/minute precision (whose comparison is *uncertain* per
+    CQL, not lexicographic — an orthogonal gap).
+    """
+    cql = """library IntervalTimePointInScope version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define DynamicDate: Observation.effective in Interval[@2012-01-01, @2012-12-31]
+define DynamicValue: Observation.value in Interval[1, 10]
+define IntegerLiteral: 5 in Interval[1, 10]
+define StringLiteral: 'b' in Interval['a', 'c']
+define QuantityLiteral: 120 'mm[Hg]' in Interval[120 'mm[Hg]', 129 'mm[Hg]']
+define AgeUncertain: AgeInYearsAt(@2020-01-01) in Interval[6, 12]
+define HourPrecisionTime: @T12 in Interval[@T00:00:00, @T23:59:59]
+define DateTimeLiteral: @2012-06-01T12:00:00 in Interval[@2012-01-01T00:00:00, @2012-12-31T00:00:00]
+"""
+    translated = translate_cql(cql)
+
+    for name in ("DynamicDate", "DynamicValue", "IntegerLiteral", "StringLiteral"):
+        sql_text = translated[name].to_sql()
+        assert "BETWEEN" in sql_text, (name, sql_text)
+        assert "intervalContains" not in sql_text, (name, sql_text)
+
+    assert "intervalContains" in translated["QuantityLiteral"].to_sql()
+    assert "cqlUncertainCompare" in translated["AgeUncertain"].to_sql()
+    # Hour/minute-precision Time operands stay on the raw comparison: CQL
+    # precision-uncertainty for those is a separate, unpinned gap.
+    assert "BETWEEN" in translated["HourPrecisionTime"].to_sql()
+    # Date/DateTime points keep the raw comparison too (interval-boundary
+    # second-vs-millisecond is UNKNOWN for dateTime per the official
+    # DateTimeIncludedInNull fixture, which intervalContains does not model).
+    assert "BETWEEN" in translated["DateTimeLiteral"].to_sql()
