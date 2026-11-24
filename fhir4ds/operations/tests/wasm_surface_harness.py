@@ -1,38 +1,31 @@
 """Three-way WASM/desktop surface harness.
 
-The cleanroom browser runtime is ``DuckDB-WASM + the two C++ extensions +
-the SQL macros in ``web/cql-cleanroom/src/lib/cql-macros.ts````. This module
-builds exactly that surface for tests (no Python UDFs), builds the desktop
-surface (``fhir4ds.cql.duckdb.register()``), and evaluates a corpus against a
-SPEC-DERIVED expectation.
+The cleanroom browser runtime is ``DuckDB-WASM + the two C++ extensions + the
+SQL macros in ``web/cql-cleanroom/src/lib/cql-macros.ts``. This module builds
+that surface for tests (no Python UDFs) through ``wasm_parity.surfaces`` --
+which loads exactly the reference statements, read by evaluating the TS module
+in node -- builds the desktop surface (``fhir4ds.cql.duckdb.register()``), and
+evaluates a corpus against a SPEC-DERIVED expectation.
 
 Correctness rule (Joel 2026-10-24): the target is the correct value/type on
-BOTH surfaces — a case passes only when desktop == expected AND browser ==
+BOTH surfaces -- a case passes only when desktop == expected AND browser ==
 expected. Browser == desktop alone is not sufficient (desktop is not the
 authority when the spec/fixtures say otherwise).
 """
 
 from __future__ import annotations
 
-import json
-import re
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal  # noqa: F401 - used by the case corpora below
 from pathlib import Path
 from typing import Any
 
 import duckdb
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-TS_MACRO_FILE = (
-    REPO_ROOT / "web" / "cql-cleanroom" / "src" / "lib" / "cql-macros.ts"
-)
+from fhir4ds.operations.tests.wasm_parity import reference_bundle, surfaces
 
-MACRO_NAME_RE = re.compile(
-    r"CREATE\s+(?:OR\s+REPLACE\s+)?MACRO\s+"
-    r'(?:IF\s+NOT\s+EXISTS\s+)?("?)([A-Za-z_][A-Za-z0-9_]*)\1',
-    re.IGNORECASE,
-)
+REPO_ROOT = Path(__file__).resolve().parents[3]
+TS_MACRO_FILE = reference_bundle.REFERENCE_TS_MACRO_FILE
 
 
 @dataclass(frozen=True)
@@ -45,44 +38,14 @@ class Case:
     spec: str
 
 
-def ts_macro_sql() -> list[str]:
-    """Every CREATE ... MACRO statement from cql-macros.ts, verbatim."""
-    src = TS_MACRO_FILE.read_text(encoding="utf-8")
-    statements: list[str] = []
-    for match in re.finditer(r'"((?:[^"\\]|\\.)*)"', src):
-        try:
-            text = json.loads('"' + match.group(1) + '"')
-        except json.JSONDecodeError:
-            continue
-        if MACRO_NAME_RE.search(text):
-            statements.append(text)
-    return statements
-
-
-def _extension_paths() -> list[Path]:
-    from fhir4ds.cql.duckdb.tests.integration.wasm_runtime_helpers import (
-        extension_paths,
-    )
-
-    return extension_paths()
+def desktop_connection() -> duckdb.DuckDBPyConnection:
+    """Desktop surface: everything ``register()`` installs."""
+    return surfaces.desktop_connection()
 
 
 def browser_connection() -> duckdb.DuckDBPyConnection:
-    """DuckDB-WASM-equivalent surface: C++ extensions + TS SQL macros."""
-    con = duckdb.connect(config={"allow_unsigned_extensions": True})
-    for path in _extension_paths():
-        con.execute(f"LOAD '{path}'")
-    for statement in ts_macro_sql():
-        con.execute(statement)
-    return con
-
-
-def desktop_connection() -> duckdb.DuckDBPyConnection:
-    from fhir4ds.cql.duckdb import register
-
-    con = duckdb.connect(config={"allow_unsigned_extensions": True})
-    register(con)
-    return con
+    """Simulated browser contract: bare + shipped bundles + reference statements."""
+    return surfaces.browser_sim_connection(reference_bundle.load_reference_bundle())
 
 
 def evaluate(con: duckdb.DuckDBPyConnection, expression: str) -> dict[str, Any]:
