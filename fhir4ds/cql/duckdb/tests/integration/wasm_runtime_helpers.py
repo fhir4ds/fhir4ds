@@ -220,7 +220,7 @@ def catalog_names(con: duckdb.DuckDBPyConnection) -> set[str]:
 # Desktop is unaffected: both names are in `_PYTHON_PREFERRED_CPP_CONFLICTS`, so
 # the Python UDFs are the conformance authority on both desktop connections.
 # SET THIS TO False when the bundles are rebuilt.
-FHIR4_41_NO_PYTHON_STALE = True
+FHIR4_41_NO_PYTHON_STALE = False
 
 #: Functions that only exist in the Python supplements during the FHIR4-41
 #: rebuild window.

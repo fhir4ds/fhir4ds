@@ -856,19 +856,15 @@ static std::string MaximumForIntervalPointType(const cql::Interval &iv) {
 // Mirrors fhir4ds/cql/duckdb/udf/interval.py::intervalStartWithPeer /
 // intervalEndWithPeer, which remain the desktop conformance authority (both
 // names are in `_PYTHON_PREFERRED_CPP_CONFLICTS`).
-static std::string SentinelForNullBound(const cql::Interval &iv, const cql::Interval *peer,
-                                        bool want_start) {
-	// Nothing to infer from when the operand's OWN opposite bound is null.
-	if (want_start ? !iv.high : !iv.low) {
-		return std::string();
-	}
-	std::string sentinel = want_start ? MinimumForIntervalPointType(iv) : MaximumForIntervalPointType(iv);
-	if (!sentinel.empty() || peer == nullptr) {
-		return sentinel;
-	}
-	// The peer must carry a real bound: an all-null peer has no point type
-	// either (Interval<Any>), so the result stays unknown.
-	if (!peer->low && !peer->high) {
+// Point-type inference from the PEER interval (FHIR4-41).
+//
+// An `Interval<T>` type argument is satisfied by BOTH operands of
+// `starts`/`ends`, so an operand whose OWN bounds are all null
+// (`Interval[null, null]`) still has a point type — the peer's. Returns
+// empty when there is nothing to infer from (no peer, or an all-null peer,
+// i.e. Interval<Any>).
+static std::string SentinelFromPeer(const cql::Interval *peer, bool want_start) {
+	if (peer == nullptr || (!peer->low && !peer->high)) {
 		return std::string();
 	}
 	// Match the Python authority's sample preference (LOW before HIGH in
@@ -884,6 +880,24 @@ static std::string SentinelForNullBound(const cql::Interval &iv, const cql::Inte
 		sample.low = peer->high;
 	}
 	return want_start ? MinimumForIntervalPointType(sample) : MaximumForIntervalPointType(sample);
+}
+
+static std::string SentinelForNullBound(const cql::Interval &iv, const cql::Interval *peer,
+                                        bool want_start) {
+	// Both bounds null: this operand carries no point type of its own, so the
+	// type comes from the peer (FHIR4-41). Before that card this returned
+	// empty unconditionally, which made the no-Python surface answer NULL where
+	// the Python authority answers the point-type extremum.
+	if (want_start ? !iv.high : !iv.low) {
+		return SentinelFromPeer(peer, want_start);
+	}
+	std::string sentinel = want_start ? MinimumForIntervalPointType(iv) : MaximumForIntervalPointType(iv);
+	if (!sentinel.empty() || peer == nullptr) {
+		return sentinel;
+	}
+	// The peer must carry a real bound: an all-null peer has no point type
+	// either (Interval<Any>), so the result stays unknown.
+	return SentinelFromPeer(peer, want_start);
 }
 
 static void IntervalBoundFunc(DataChunk &args, ExpressionState &state, Vector &result, bool want_start) {
