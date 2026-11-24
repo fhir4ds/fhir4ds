@@ -198,30 +198,75 @@ def _effective_start(iv: dict) -> Any:
     return _successor_for_bound(iv["low"], iv.get("low_raw"))
 
 
-def _sentinel_effective_start(iv: dict) -> Any:
+def _peer_point_type_sample(peer_iv: dict | None) -> tuple[Any, Any] | None:
+    """Return (value, raw) of a peer interval bound usable for type inference.
+
+    FHIR4-38: Start/End signatures are Interval<T> — BOTH operands of a
+    relationship predicate share one point type — so an operand whose own
+    opposite bound is also null can still infer T from the peer interval.
+    """
+    if not peer_iv:
+        return None
+    for key, raw_key in (("low", "low_raw"), ("high", "high_raw")):
+        value = peer_iv.get(key)
+        if value is not None:
+            return value, peer_iv.get(raw_key)
+    return None
+
+
+def _sentinel_effective_start(iv: dict, peer_iv: dict | None = None) -> Any:
     """Effective Start with CQL §9.14 null-bound sentinel semantics.
 
     A closed null low boundary resolves to the minimum value of the point
     type (inferred from the high peer bound) instead of unknown, so
     Meets / On Or After / On Or Before / Overlaps produce determined
     results per the reference engine (Interval.start getter).
+
+    FHIR4-38: when the operand's own high bound is ALSO null, the point type
+    comes from `peer_iv` (the other operand of the same Interval<T> signature)
+    — the closed null bound is still the point-type minimum, never unknown.
     """
     v = _effective_start(iv)
-    if v is None and iv.get("low_closed", True) and iv.get("high") is not None:
+    if v is not None:
+        return v
+    if not iv.get("low_closed", True):
+        return None
+    sent = None
+    if iv.get("high") is not None:
         sent = _cql_minimum_for_peer_bound(iv["high"], iv.get("high_raw"))
-        if sent is not None:
-            return _parse_interval_bound(sent)
-    return v
+    if sent is None:
+        sample = _peer_point_type_sample(peer_iv)
+        if sample is not None:
+            sent = _cql_minimum_for_peer_bound(*sample)
+    if sent is None:
+        return None
+    return _parse_interval_bound(sent)
 
 
-def _sentinel_effective_end(iv: dict) -> Any:
-    """Effective End with CQL §9.15 null-bound sentinel semantics."""
+def _sentinel_effective_end(iv: dict, peer_iv: dict | None = None) -> Any:
+    """Effective End with CQL §9.15 null-bound sentinel semantics.
+
+    FHIR4-38: symmetric to `_sentinel_effective_start` — a closed null high
+    boundary is the point-type maximum, inferred from the operand's own low
+    bound and then from `peer_iv`.
+    """
     v = _effective_end(iv)
-    if v is None and iv.get("high_closed", True) and iv.get("low") is not None:
+    if v is not None:
+        return v
+    if not iv.get("high_closed", True):
+        return None
+    sent = None
+    if iv.get("low") is not None:
         sent = _cql_maximum_for_peer_bound(iv["low"], iv.get("low_raw"))
-        if sent is not None:
-            return _parse_interval_bound(sent)
-    return v
+    if sent is None:
+        sample = _peer_point_type_sample(peer_iv)
+        if sample is not None:
+            sent = _cql_maximum_for_peer_bound(*sample)
+    if sent is None:
+        return None
+    return _parse_interval_bound(sent)
+
+
 # Pattern matching valid point values: dates, datetimes, numbers
 _POINT_VALUE_RE = re.compile(
     r'^\d{4}(-\d{2}(-\d{2}(T\d{2}:\d{2}(:\d{2})?)?)?)?([+-]\d{2}:\d{2}|Z)?$'
@@ -2487,6 +2532,13 @@ def intervalStartsSame(interval1: str | None, interval2: str | None) -> bool | N
     """CQL §19.30 Starts: iv1 starts iv2 iff iv1.start == iv2.start AND iv1.end <= iv2.end.
 
     Returns None (NULL) for null/unparseable inputs per CQL three-valued logic.
+
+    FHIR4-38: Start/End follow the §9.14/§9.15 null-bound sentinel rule, so a
+    CLOSED null bound is the point-type extremum (a definite value) and only an
+    OPEN null bound is unknown. The point type is inferred from the operand's
+    own opposite bound and then from the PEER interval (both operands are
+    Interval<T>) — official fixtures TestMaxIntervalStartsFalse (false) vs
+    TestUnknownIntervalStartsNull (null).
     """
     iv1 = _parse_interval(interval1)
     iv2 = _parse_interval(interval2)
@@ -2494,14 +2546,16 @@ def intervalStartsSame(interval1: str | None, interval2: str | None) -> bool | N
         return None
     if not iv1 or not iv2:
         return None
-    if iv1["low"] is None or iv2["low"] is None:
+    start1 = _sentinel_effective_start(iv1, iv2)
+    start2 = _sentinel_effective_start(iv2, iv1)
+    if start1 is None or start2 is None:
         return None
-    l1, l2 = _normalize_for_compare(iv1["low"], iv2["low"])
+    l1, l2 = _normalize_for_compare(start1, start2)
     if l1 != l2:
         return False
     # CQL Starts also requires iv1.end <= iv2.end (containment at end)
-    end1 = _effective_end(iv1)
-    end2 = _effective_end(iv2)
+    end1 = _sentinel_effective_end(iv1, iv2)
+    end2 = _sentinel_effective_end(iv2, iv1)
     if end1 is None or end2 is None:
         return None
     e1, e2 = _normalize_for_compare(end1, end2)
@@ -2512,6 +2566,11 @@ def intervalEndsSame(interval1: str | None, interval2: str | None) -> bool | Non
     """CQL §19.13 Ends: iv1 ends iv2 iff iv1.start >= iv2.start AND iv1.end == iv2.end.
 
     Returns None (NULL) for null/unparseable inputs per CQL three-valued logic.
+
+    FHIR4-38: symmetric to `intervalStartsSame` — a CLOSED null bound is the
+    §9.14/§9.15 point-type extremum (definite), only an OPEN null bound is
+    unknown. Official fixtures TestMaxIntervalEndsFalse (false) vs
+    TestUnknownIntervalEndsNull (null).
     """
     iv1 = _parse_interval(interval1)
     iv2 = _parse_interval(interval2)
@@ -2519,14 +2578,16 @@ def intervalEndsSame(interval1: str | None, interval2: str | None) -> bool | Non
         return None
     if not iv1 or not iv2:
         return None
-    if iv1["high"] is None or iv2["high"] is None:
+    high1 = _sentinel_effective_end(iv1, iv2)
+    high2 = _sentinel_effective_end(iv2, iv1)
+    if high1 is None or high2 is None:
         return None
-    h1, h2 = _normalize_for_compare(iv1["high"], iv2["high"])
+    h1, h2 = _normalize_for_compare(high1, high2)
     if h1 != h2:
         return False
     # CQL Ends also requires iv1.start >= iv2.start (containment at start)
-    start1 = _effective_start(iv1)
-    start2 = _effective_start(iv2)
+    start1 = _sentinel_effective_start(iv1, iv2)
+    start2 = _sentinel_effective_start(iv2, iv1)
     if start1 is None or start2 is None:
         return None
     s1, s2 = _normalize_for_compare(start1, start2)

@@ -755,6 +755,56 @@ static Optional<BoundValue> effective_end_bound(const Interval &iv) {
 	return iv.high_closed ? iv.high : predecessor_bound(*iv.high);
 }
 
+// Point-type extremum text tables shared by the own-bound and peer-aware
+// sentinel resolvers (CQL 1.5 §9.14 Start / §9.15 End; reference engine
+// Interval.start / Interval.end getters).
+static Optional<std::string> minimum_sentinel_text(const BoundValue &peer) {
+	if (peer.type == BoundType::Time) {
+		return std::string("T00:00:00.000");
+	}
+	if (peer.type == BoundType::Integer) {
+		// §9.14 Start: Long point type (peer beyond int32 — authored L-ness is
+		// erased at translation) sentinels at int64 min (reference MIN_LONG).
+		return std::string((peer.int_val && (*peer.int_val > std::numeric_limits<int32_t>::max() ||
+		                                     *peer.int_val < std::numeric_limits<int32_t>::min()))
+		                       ? "-9223372036854775808"
+		                       : "-2147483648");
+	}
+	if (peer.type == BoundType::Decimal) {
+		return std::string("-99999999999999999999.99999999");
+	}
+	if (peer.type == BoundType::Quantity) {
+		// Reference Interval.start getter: Quantity(MIN_DECIMAL, unit).
+		return std::string("{\"value\":-99999999999999999999.99999999,\"unit\":\"") +
+		       escapeJsonString(peer.qty_unit) + "\"}";
+	}
+	return std::string(peer.raw_str.find('T') != std::string::npos ? "0001-01-01T00:00:00.000"
+	                                                              : "0001-01-01");
+}
+
+static Optional<std::string> maximum_sentinel_text(const BoundValue &peer) {
+	if (peer.type == BoundType::Time) {
+		return std::string("T23:59:59.999");
+	}
+	if (peer.type == BoundType::Integer) {
+		// §9.15 End: Long point type sentinels at int64 max (reference MAX_LONG).
+		return std::string((peer.int_val && (*peer.int_val > std::numeric_limits<int32_t>::max() ||
+		                                     *peer.int_val < std::numeric_limits<int32_t>::min()))
+		                       ? "9223372036854775807"
+		                       : "2147483647");
+	}
+	if (peer.type == BoundType::Decimal) {
+		return std::string("99999999999999999999.99999999");
+	}
+	if (peer.type == BoundType::Quantity) {
+		// Reference Interval.end getter: Quantity(MAX_DECIMAL, unit).
+		return std::string("{\"value\":99999999999999999999.99999999,\"unit\":\"") +
+		       escapeJsonString(peer.qty_unit) + "\"}";
+	}
+	return std::string(peer.raw_str.find('T') != std::string::npos ? "9999-12-31T23:59:59.999"
+	                                                              : "9999-12-31");
+}
+
 static Optional<BoundValue> sentinel_start_bound(const Interval &iv) {
 	// CQL 1.5 §9.14 Start: a closed null low boundary resolves to the
 	// minimum value of the point type (inferred from the high peer bound),
@@ -766,29 +816,46 @@ static Optional<BoundValue> sentinel_start_bound(const Interval &iv) {
 	if (!iv.low_closed || !iv.high) {
 		return NullOpt<BoundValue>();
 	}
-	const BoundValue &peer = *iv.high;
-	std::string sent;
-	if (peer.type == BoundType::Time) {
-		sent = "T00:00:00.000";
-	} else if (peer.type == BoundType::Integer) {
-		// §9.14 Start: Long point type (peer beyond int32 — authored L-ness is
-		// erased at translation) sentinels at int64 min (reference MIN_LONG).
-		sent = (peer.int_val && (*peer.int_val > std::numeric_limits<int32_t>::max() ||
-		                         *peer.int_val < std::numeric_limits<int32_t>::min()))
-		           ? "-9223372036854775808"
-		           : "-2147483648";
-	} else if (peer.type == BoundType::Decimal) {
-		sent = "-99999999999999999999.99999999";
-	} else if (peer.type == BoundType::Quantity) {
-		// Reference Interval.start getter: Quantity(MIN_DECIMAL, unit).
-		std::ostringstream oss;
-		oss << "{\"value\":-99999999999999999999.99999999,\"unit\":\""
-		    << escapeJsonString(peer.qty_unit) << "\"}";
-		return BoundValue::from_interval_bound_string(oss.str());
-	} else {
-		sent = (peer.raw_str.find('T') != std::string::npos) ? "0001-01-01T00:00:00.000" : "0001-01-01";
+	auto text = minimum_sentinel_text(*iv.high);
+	if (!text) {
+		return NullOpt<BoundValue>();
 	}
-	return BoundValue::from_interval_bound_string(sent);
+	return BoundValue::from_interval_bound_string(*text);
+}
+
+// FHIR4-38: Start/End signatures are Interval<T> — BOTH operands of a
+// relationship predicate share one point type — so an operand whose own
+// opposite bound is ALSO null can still infer T from the peer interval
+// (official fixtures TestMaxIntervalStartsFalse / TestMaxIntervalEndsFalse
+// pin those cells at a DEFINITE false, while the OPEN form
+// Interval(null, null) stays unknown).
+static const BoundValue *point_type_sample(const Interval &iv) {
+	if (iv.low) {
+		return &*iv.low;
+	}
+	if (iv.high) {
+		return &*iv.high;
+	}
+	return nullptr;
+}
+
+static Optional<BoundValue> sentinel_start_bound(const Interval &iv, const Interval &peer_iv) {
+	auto own = sentinel_start_bound(iv);
+	if (own) {
+		return own;
+	}
+	if (iv.low || !iv.low_closed) {
+		return NullOpt<BoundValue>();
+	}
+	const BoundValue *sample = point_type_sample(peer_iv);
+	if (!sample) {
+		return NullOpt<BoundValue>();
+	}
+	auto text = minimum_sentinel_text(*sample);
+	if (!text) {
+		return NullOpt<BoundValue>();
+	}
+	return BoundValue::from_interval_bound_string(*text);
 }
 
 static Optional<BoundValue> sentinel_end_bound(const Interval &iv) {
@@ -800,28 +867,31 @@ static Optional<BoundValue> sentinel_end_bound(const Interval &iv) {
 	if (!iv.high_closed || !iv.low) {
 		return NullOpt<BoundValue>();
 	}
-	const BoundValue &peer = *iv.low;
-	std::string sent;
-	if (peer.type == BoundType::Time) {
-		sent = "T23:59:59.999";
-	} else if (peer.type == BoundType::Integer) {
-		// §9.15 End: Long point type sentinels at int64 max (reference MAX_LONG).
-		sent = (peer.int_val && (*peer.int_val > std::numeric_limits<int32_t>::max() ||
-		                         *peer.int_val < std::numeric_limits<int32_t>::min()))
-		           ? "9223372036854775807"
-		           : "2147483647";
-	} else if (peer.type == BoundType::Decimal) {
-		sent = "99999999999999999999.99999999";
-	} else if (peer.type == BoundType::Quantity) {
-		// Reference Interval.end getter: Quantity(MAX_DECIMAL, unit).
-		std::ostringstream oss;
-		oss << "{\"value\":99999999999999999999.99999999,\"unit\":\""
-		    << escapeJsonString(peer.qty_unit) << "\"}";
-		return BoundValue::from_interval_bound_string(oss.str());
-	} else {
-		sent = (peer.raw_str.find('T') != std::string::npos) ? "9999-12-31T23:59:59.999" : "9999-12-31";
+	auto text = maximum_sentinel_text(*iv.low);
+	if (!text) {
+		return NullOpt<BoundValue>();
 	}
-	return BoundValue::from_interval_bound_string(sent);
+	return BoundValue::from_interval_bound_string(*text);
+}
+
+// FHIR4-38: peer-aware End sentinel — see sentinel_start_bound(iv, peer_iv).
+static Optional<BoundValue> sentinel_end_bound(const Interval &iv, const Interval &peer_iv) {
+	auto own = sentinel_end_bound(iv);
+	if (own) {
+		return own;
+	}
+	if (iv.high || !iv.high_closed) {
+		return NullOpt<BoundValue>();
+	}
+	const BoundValue *sample = point_type_sample(peer_iv);
+	if (!sample) {
+		return NullOpt<BoundValue>();
+	}
+	auto text = maximum_sentinel_text(*sample);
+	if (!text) {
+		return NullOpt<BoundValue>();
+	}
+	return BoundValue::from_interval_bound_string(*text);
 }
 
 static bool effective_interval_empty(const Interval &iv) {
@@ -1237,40 +1307,55 @@ int cmp = this_end->compare(*other_end);
 return cmp != -2 && cmp > 0;
 }
 
+Optional<bool> Interval::starts_same_nullable(const Interval &other) const {
+	// CQL 1.5 §19.30 Starts via §9.14/§9.15 Start/End: a CLOSED null bound is
+	// the point-type extremum (a definite value), only an OPEN null bound is
+	// unknown. FHIR4-38: the point type is inferred from the peer interval when
+	// this operand's own opposite bound is null too.
+	auto this_start = sentinel_start_bound(*this, other);
+	auto other_start = sentinel_start_bound(other, *this);
+	if (!this_start || !other_start) {
+		return NullOpt<bool>();
+	}
+	if (this_start->compare(*other_start) != 0) {
+		return false;
+	}
+	auto this_end = sentinel_end_bound(*this, other);
+	auto other_end = sentinel_end_bound(other, *this);
+	if (!this_end || !other_end) {
+		return NullOpt<bool>();
+	}
+	int cmp = this_end->compare(*other_end);
+	return cmp != -2 && cmp <= 0;
+}
+
 bool Interval::starts_same(const Interval &other) const {
-auto this_start = effective_start_bound(*this);
-auto other_start = effective_start_bound(other);
-if (!this_start || !other_start) {
-return false;
+	auto res = starts_same_nullable(other);
+	return res ? *res : false;
 }
-if (this_start->compare(*other_start) != 0) {
-return false;
-}
-auto this_end = effective_end_bound(*this);
-auto other_end = effective_end_bound(other);
-if (!this_end || !other_end) {
-return false;
-}
-int cmp = this_end->compare(*other_end);
-return cmp != -2 && cmp <= 0;
+
+Optional<bool> Interval::ends_same_nullable(const Interval &other) const {
+	// CQL 1.5 §19.13 Ends via §9.14/§9.15 — see starts_same_nullable.
+	auto this_end = sentinel_end_bound(*this, other);
+	auto other_end = sentinel_end_bound(other, *this);
+	if (!this_end || !other_end) {
+		return NullOpt<bool>();
+	}
+	if (this_end->compare(*other_end) != 0) {
+		return false;
+	}
+	auto this_start = sentinel_start_bound(*this, other);
+	auto other_start = sentinel_start_bound(other, *this);
+	if (!this_start || !other_start) {
+		return NullOpt<bool>();
+	}
+	int cmp = this_start->compare(*other_start);
+	return cmp != -2 && cmp >= 0;
 }
 
 bool Interval::ends_same(const Interval &other) const {
-auto this_end = effective_end_bound(*this);
-auto other_end = effective_end_bound(other);
-if (!this_end || !other_end) {
-return false;
-}
-if (this_end->compare(*other_end) != 0) {
-return false;
-}
-auto this_start = effective_start_bound(*this);
-auto other_start = effective_start_bound(other);
-if (!this_start || !other_start) {
-return false;
-}
-int cmp = this_start->compare(*other_start);
-return cmp != -2 && cmp >= 0;
+	auto res = ends_same_nullable(other);
+	return res ? *res : false;
 }
 
 Optional<int64_t> Interval::width_days() const {

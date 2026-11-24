@@ -74,6 +74,10 @@ struct Interval {
 	bool overlaps_after(const Interval &other) const;
 	bool starts_same(const Interval &other) const;
 	bool ends_same(const Interval &other) const;
+	// FHIR4-38: nullable variants — a closed null bound resolves to the point-type
+	// extremum (peer-inferred); only an unresolvable point type is unknown.
+	Optional<bool> starts_same_nullable(const Interval &other) const;
+	Optional<bool> ends_same_nullable(const Interval &other) const;
 
 	// Precision-aware interval equality — returns NullOpt when mixed-precision
 	// temporal bounds make the equality uncertain (per CQL §Equal).
