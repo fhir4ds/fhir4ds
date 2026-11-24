@@ -546,6 +546,13 @@ See `docs/architecture/AUDIT_REPORT.md` §8 for full details.
   translated `Coalesce(List<T>)` must accept query-produced lists and
   query-list aliases, returning the first non-null row rather than treating the
   single query argument as an invalid scalar overload or missing CTE.
+  **Restored by FHIR4-44 (2026-11-24)** after CQL-08's 2026-08-20 removal: the
+  cap is normative (Appendix B enumerates 2..5 scalar signatures plus one
+  `List<T>` signature, and the spec's own example says "more than 5 inputs must
+  be represented as list"). Enforced at the authored-argument boundary via
+  `_functions.py::_validate_coalesce_scalar_arity` and
+  `udf/logical.py::Coalesce`; the list-lowering note below is exactly why the
+  guard may never be applied to the rendered SQL argument count.
   CQL-08 HISTORIAN rerun verified no additional defects across the official
   XML cases, direct DuckDB helper surface, static typed Quantity/Code/Concept
   values, query-produced Boolean/DateTime lists, and dynamic `Patient.active`

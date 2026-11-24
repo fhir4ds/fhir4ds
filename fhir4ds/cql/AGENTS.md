@@ -7578,21 +7578,25 @@ ledger, so nobody re-triages them as regressions:
 | `CqlIntervalOperatorsTest.xml::TimeProperContainsNull` / `::TimeProperInNull` | stale oracle (open upstream #184) | pin `null` at `version="1.0"`; CQL §Time combines seconds+milliseconds as one decimal (".0 when milliseconds are null") for ALL comparison operations, so the 1.5.3 answer is **false** (AMUX-171). |
 | `CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse` / `::…False2` | fixture asserts a STATIC error (`invalid="true"`), engine evaluates | §Equivalent: "two tuple values are equivalent if and only if the tuples are of the same type, and the values for all elements by name are equivalent" — different element sets are **false**, which is what the engine returns. Only a static type checker would reject the expression. |
 | `CqlComparisonOperatorsTest.xml::NotEquivalentNullNull` | fixture asserts `invalid="semantic"` for the untyped `null` (`null !~ null`) | §Equivalent: "returns true if the arguments are equivalent in value, **or if they are both null**; and false otherwise" -> `!~` is false. Same untyped-null ambiguity class upstream #179 just fixed for `ToBoolean(null)`. |
-| `CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs` | **REAL ENGINE DEVIATION (open)** — see below | fixture is RIGHT this time; a prior doctrine said otherwise. |
+| `CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs` | **FIXED by FHIR4-44 (2026-11-24)** — see below | fixture is RIGHT; the former "variadic, no upper bound" doctrine was wrong. |
 
 **COALESCE DOCTRINE CORRECTION (supersedes the CQL-08 "variadic, no upper
-bound" note).** The spec's own Coalesce examples carry
+bound" note; ARITY GUARD LANDED as FHIR4-44).** The spec's own Coalesce
+examples carry
 `define CoalesceError: Coalesce(null, 15, null, null, null, null) // more than 5
 inputs must be represented as list` — present verbatim in BOTH
 `https://cql.hl7.org/2019May/09-b-cqlreference.html` (1.5.3) and the current
-`https://cql.hl7.org/09-b-cqlreference.html`. Our translator therefore accepts
-6+ scalar arguments (`Coalesce(null, 15, null, null, null, null)` returns 15)
-where the spec says the form is an error. Runtime dispatch for 2..5 and the
-List overload is otherwise fine, and no 6+ comma-separated `Coalesce` call
-appears in the qi-core-2025 / us-core-2025 corpora, so the blast radius is
-small — but the arity guard is a **separate card** (translator validation +
-`invalid` expectation + DQM re-gate). Do not re-assert the old "no upper
-bound" doctrine without re-reading the spec example.
+`https://cql.hl7.org/09-b-cqlreference.html`, alongside a CLOSED signature list
+of four scalar overloads (2..5 args) plus one unbounded `Coalesce<T>(arguments
+List<T>) T`. FHIR4-44 restored the cap on BOTH surfaces —
+`_functions.py::_validate_coalesce_scalar_arity` (translator choke point +
+`_translate_function_ref` pre-check, constant `_COALESCE_MAX_SCALAR_ARITY = 5`)
+and `udf/logical.py::Coalesce` — measured on the AUTHORED CQL argument count so
+the single-list overload stays unbounded and one list argument expanding to six
+SQL `COALESCE` arguments is still the list overload. Gate 2035/2043 ->
+**2036/2043** (exactly this cell), DQM qi-core 47/47 / us-core 73/73 unchanged
+(no 6+ scalar `Coalesce` in either corpus). Do not re-assert the old "no upper
+bound" doctrine without re-reading the signature list AND the example.
 
 **`versionTo` gating caveat (`conformance/scripts/run_cql.py`).** A cell capped
 at `versionTo < 2.0` is treated as a superseded pass ONLY when a sibling with

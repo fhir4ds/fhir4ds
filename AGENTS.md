@@ -516,16 +516,59 @@ runtime-identical to its DateTime promotion — representation only, NOT A BUG.
 Division-by-zero nulls feed Coalesce correctly on both engines
 (Coalesce(P.multipleBirthInteger / 0, 42) -> 42 through real retrieves).
 
-CQL-08 nullological doctrine (SKEPTIC, 2026-08-20): CQL 1.5 §Coalesce is
-variadic with NO upper bound — the former 2..5 scalar-arity cap (translator
-`_translate_coalesce` and public UDF `Coalesce` in `udf/logical.py`) was a
-spec violation and is removed; `<2` scalar args still rejects (single-arg is
-the Appendix B `List<T>` overload). Coalesce static operands mixing
-String-family with Integer/Long/Decimal now raise a uniform TranslationError
-in either order (spec: arguments implicitly castable to a common type;
-DuckDB's COALESCE binder was order-dependent). NOT A BUG registry:
-IsTrue/IsFalse on non-Boolean operands return false (never null, no SQL
-truthiness — pinned by test_cql_infix_is_true_false_rejects_sql_truthiness);
+CQL-08 nullological doctrine (SKEPTIC, 2026-08-20; Coalesce arity SUPERSEDED
+by FHIR4-44, 2026-11-24): Coalesce static operands mixing String-family with
+Integer/Long/Decimal raise a uniform TranslationError in either order (spec:
+arguments implicitly castable to a common type; DuckDB's COALESCE binder was
+order-dependent). `<2` scalar args rejects (single-arg is the Appendix B
+`List<T>` overload).
+
+**COALESCE SCALAR ARITY IS CAPPED AT FIVE (FHIR4-44, 2026-11-24) — this
+supersedes the CQL-08 SKEPTIC conclusion "variadic with NO upper bound".**
+The CQL-08 session read §Coalesce prose ("first non-null result in a list of
+arguments") and concluded the former 2..5 scalar-arity cap was a spec
+violation; it was not. Appendix B §Coalesce declares a CLOSED signature list,
+verbatim and identically in CQL 1.5
+(https://cql.hl7.org/2019May/09-b-cqlreference.html §4.1) and the current 2.0
+R2 STU 1 (https://cql.hl7.org/09-b-cqlreference.html#coalesce):
+
+    Coalesce<T>(argument1 T, argument2 T) T
+    Coalesce<T>(argument1 T, argument2 T, argument3 T) T
+    Coalesce<T>(argument1 T, argument2 T, argument3 T, argument4 T) T
+    Coalesce<T>(argument1 T, argument2 T, argument3 T, argument4 T, argument5 T) T
+    Coalesce<T>(arguments List<T>) T
+
+— four scalar overloads (2..5) and ONE unbounded list overload. The spec's own
+example supplies the consequence: `define CoalesceError: Coalesce(null, 15,
+null, null, null, null) // more than 5 inputs must be represented as list`,
+and the official fixture
+`CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs` marks that call
+`invalid="semantic"`. So a sixth SCALAR argument matches no signature and is a
+SEMANTIC error, not a runtime null and not a valid call.
+
+Implemented in both surfaces at the AUTHORED-CQL-argument boundary (so one
+list argument that expands into six SQL `COALESCE` arguments is still the list
+overload):
+`_functions.py::_validate_coalesce_scalar_arity` (module constant
+`_COALESCE_MAX_SCALAR_ARITY = 5`, called from `_translate_function_ref`'s
+coalesce branch and again at the `_translate_coalesce` choke point) and
+`udf/logical.py::Coalesce` (`_COALESCE_MAX_SCALAR_ARITY` for the public UDF —
+the C++ extension registers only the legacy `logicalCoalesce`, so the Python
+UDF is the authority on both connections). Message text: "Coalesce has no
+scalar overload with more than 5 inputs (got N): ... represent more than 5
+inputs as a list". Invariants preserved: `Coalesce(List<T>)` unbounded (6, 9,
+N elements), `<2` scalar args rejects, and one-list→six-SQL-args stays legal.
+Official gate 2035/2043 → **2036/2043** with exactly
+`CoalesceMoreThanFiveArgs` flipping; DQM qi-core 47/47 and us-core 73/73
+unchanged (no 6+ scalar `Coalesce` exists in either corpus — re-verified with a
+paren-balanced scan, not a line grep). Pinned by
+`test_nullological_parity.py::test_cql_coalesce_scalar_arity_capped_at_five_fhir4_44`
+plus the amended arity/value tests in that file. Do not re-assert "variadic
+with no upper bound" without re-reading the signature list AND the example.
+
+CQL-08 NOT A BUG registry: IsTrue/IsFalse on non-Boolean operands return false
+(never null, no SQL truthiness — pinned by
+test_cql_infix_is_true_false_rejects_sql_truthiness);
 the `IsNotNull` function macro is a harmless superset of the spec's
 `is not null` operator form. Expression-level Coalesce(all-null) defines stay
 NULL — only population membership SQL applies the CQL-04 null→FALSE encoding.
