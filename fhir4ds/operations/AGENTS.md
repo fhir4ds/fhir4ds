@@ -161,7 +161,8 @@ Code: `fhir4ds/operations/tests/wasm_parity/`. Plan:
   or natively provided; app bundles identical; shipped `.wasm` copies are one known set
   (`fhir4ds/wasm_extension_bundles.json`, `scripts/build_wasm_extensions.py --verify`).
 - **Tier A** `test_wasm_parity_tier_a.py`, one ratchet test per suite, each reusing the official
-  runner's own comparator: CQL (2,037), FHIRPath R4 (1,191), ViewDefinition (144), OMOP (38).
+  runner's own comparator: CQL (2,037), ViewDefinition (144), OMOP (38), and FHIRPath R4 —
+  where only 3 of 1,191 tests are evaluable today (see the fragile area on XML inputs).
   Identical SQL runs on desktop and on the simulator; outcomes `GREEN`, `PARITY_GAP`,
   `BROWSER_ONLY_PASS`, `BOTH_FAIL`, `ENGINE_DIFF`, `TRANSLATE_DIFF` (must be zero, cannot be
   registered), `TRANSLATE_ERROR` (reported only).
@@ -225,6 +226,15 @@ missing" skips into failures (CI). A lane worktree has no `node_modules`: point
   `CREATE OR REPLACE MACRO`.
 - The official runners rewrite tracked `conformance/reports/*` when executed: restore them
   (`git checkout -- conformance/reports`) after a byte-identity check.
+- **The FHIRPath R4 suite on the native UDF surface is 3 tests, not 1,038.** 999 R4 tests use
+  XML example files; FHIR XML carries every value as a string attribute and the native
+  `fhirpath` UDF reads JSON types, so `Patient.active` arrives as `"true"` and
+  `Patient.active.is(boolean)` is false — the Python core passes because it coerces by
+  model type. The first run filed 119 of those as desktop defects; they were the harness.
+  The evaluator now holds them back and says why (`gated_reasons`), along with tests that
+  expect an error (the UDF surface is non-strict by doctrine). Unlocking them needs a typed
+  FHIR XML-to-JSON conversion for the examples (two are project fixtures with no upstream
+  JSON twin). Until then real FHIRPath coverage is Tier B's `fhirpath_udf` family.
 - Suite evaluators share one connection per surface: each owns its `resources` table shape
   (`CREATE OR REPLACE`). `conformance/scripts/*.py` import their siblings as top-level modules.
 
@@ -234,6 +244,7 @@ missing" skips into failures (CI). A lane worktree has no `node_modules`: point
   a different body; 33 desktop macros with no browser counterpart; 73 names where the browser
   runs a native namesake of a desktop macro; 2 app bundles differ from the reference.
 - Tier A CQL: 1,818 GREEN, 126 PARITY_GAP, 60 ENGINE_DIFF, 6 BOTH_FAIL, 22 translate errors.
+- Tier A ViewDefinition 144/144 and OMOP 38/38 GREEN.
 - Real engine, whole CQL corpus: 1,809 GREEN, 137 PARITY_GAP, 58 ENGINE_DIFF. The 14 real-only
   cases are all the **stale shipped wasm bundle** (precision-stepped successor/predecessor,
   Quantity `div` unit cancellation, the AMUX-171 Time rules).

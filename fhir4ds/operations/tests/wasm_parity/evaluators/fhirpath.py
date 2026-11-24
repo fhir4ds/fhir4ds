@@ -33,6 +33,13 @@ NATIVE_VS_CORE = "NATIVE_VS_CORE"  # the UDF fails the expectation, the Python c
 CORE_ALSO_FAILS = "CORE_ALSO_FAILS"
 
 _INTEGER = re.compile(r"-?\d+")
+# Tests where the ``fhirpath`` UDF surface intentionally differs from the strict Python
+# core (same pattern as the official runner's KNOWN_SPEC_OVERRIDES).
+UDF_SURFACE_EXCLUSIONS: dict[str, str] = {
+    # Primitive-extension shadow nodes (`_birthDate`) are hidden at the UDF boundary by
+    # doctrine (SOF-VD-07 EXPLORER); the strict core still exposes them.
+    "miscEngineTests/testPrimitiveExtensions": "primitive-extension shadow nodes are hidden at the UDF boundary",
+}
 
 
 class _UdfError:
@@ -133,6 +140,34 @@ def _case_id(seen: dict[str, int], test) -> str:
     return test.name if count == 0 else f"{test.name}#{count}"
 
 
+def _gating_reason(run_r4, test) -> str | None:
+    """Why a test is not evaluable on the native UDF surface (None = evaluable).
+
+    The gate must not report a difference that is the harness's own. Three
+    classes are held back and counted:
+
+    * the official runner's excluded groups (the gate evaluates the same tests);
+    * tests that EXPECT an evaluation error: the ``fhirpath`` UDF surface is
+      non-strict by doctrine (row resilience turns errors into empty or a value);
+    * XML example inputs: FHIR XML carries every value as a string attribute, and
+      the native UDF reads JSON types (``Patient.active`` arrives as ``"true"``,
+      not ``true``). The Python core coerces by model type, the UDF does not, so
+      an XML input would show up as a native defect that is really the harness's.
+      Widening this needs a typed FHIR XML-to-JSON conversion.
+    """
+    if test.name.split("/", 1)[0] in run_r4.EXCLUDED_GROUPS:
+        return "official runner exclusion"
+    if test.name in UDF_SURFACE_EXCLUSIONS:
+        return UDF_SURFACE_EXCLUSIONS[test.name]
+    if test.expected_error or test.error_type:
+        return "expects an error (the UDF surface is non-strict by doctrine)"
+    if test.input_resource is None and not str(test.input_file or "").lower().endswith(
+        ".json"
+    ):
+        return "XML example (the native UDF needs typed FHIR JSON)"
+    return None
+
+
 def run(desktop, browser, contract, *, xml_file: Path | None = None) -> SuiteResult:
     """Evaluate the FHIRPath R4 corpus through the native UDF on both surfaces."""
     run_r4 = runner()
@@ -142,8 +177,13 @@ def run(desktop, browser, contract, *, xml_file: Path | None = None) -> SuiteRes
 
     started = time.perf_counter()
     outcomes: list[CaseOutcome] = []
+    gated: dict[str, int] = {}
     seen: dict[str, int] = {}
     for test in run_r4.parse_test_xml(path):
+        reason = _gating_reason(run_r4, test)
+        if reason is not None:
+            gated[reason] = gated.get(reason, 0) + 1
+            continue
         case_id = _case_id(seen, test)
         resource_json = _resource_json(run_r4, test)
         passed_d, reason_d = _verdict(run_r4, test, _evaluate(desktop, test.expression, resource_json))
@@ -161,4 +201,7 @@ def run(desktop, browser, contract, *, xml_file: Path | None = None) -> SuiteRes
         verdict_d = "pass" if passed_d else f"fail: {reason_d}"
         verdict_b = "pass" if passed_b else f"fail: {reason_b}"
         outcomes.append(CaseOutcome(case_id, outcome, verdict_d, verdict_b, detail[:300]))
-    return SuiteResult(SUITE, tuple(outcomes), 0, time.perf_counter() - started)
+    elapsed = time.perf_counter() - started
+    return SuiteResult(
+        SUITE, tuple(outcomes), sum(gated.values()), elapsed, gated_reasons=gated
+    )

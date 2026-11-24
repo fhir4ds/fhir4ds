@@ -6712,7 +6712,9 @@ gaps visible and expires every excuse; the infrastructure comes before fixing th
   lacks, a drifted `cql-macros.ts` copy, or a shipped `.wasm` that is not one known set
   (`fhir4ds/wasm_extension_bundles.json`, `scripts/build_wasm_extensions.py --verify`).
 - **Tier A** runs the official corpora through the official comparators on a *simulated*
-  browser surface (x86 bundles + the reference macros) — CQL 2,037, FHIRPath R4, ViewDef, OMOP.
+  browser surface (x86 bundles + the reference macros) — CQL 2,037, ViewDefinition 144, OMOP
+  38, and FHIRPath R4 (only 3 tests evaluable until the XML examples are typed; see
+  `fhir4ds/operations/AGENTS.md`).
 - **Tier B** boots real duckdb-wasm with the shipped wasm bundles in headless chromium. It is
   the only gate that sees the engine: binder, Arrow transport, bundle staleness. Both tiers
   run per PR; Step 0 and Tier A must stay green even if Tier B is demoted to the scheduled job.

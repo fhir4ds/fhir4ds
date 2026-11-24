@@ -196,7 +196,8 @@ def write_suite(
         f"(browser surface: {result.surface})",
         "",
         f"Generated {today.isoformat()}. {len(result.cases)} cases in {result.elapsed:.1f} s; "
-        f"{result.gated} not executed by the official runner's own gating.",
+        f"{result.gated} held back"
+        + (f" ({'; '.join(f'{n} {why}' for why, n in sorted(result.gated_reasons.items()))})." if result.gated_reasons else " by the official runner's own gating."),
         "",
         "| Outcome | Cases | Meaning |",
         "|---|---|---|",
@@ -250,6 +251,7 @@ def write_suite(
         "surface": result.surface,
         "elapsed_seconds": round(result.elapsed, 1),
         "gated": result.gated,
+        "gated_reasons": dict(result.gated_reasons),
         "counts": counts,
         "missing_name_counts": dict(missing_counter.most_common()),
         "violations": [v.__dict__ for v in violations],

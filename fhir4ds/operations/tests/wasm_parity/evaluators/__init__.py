@@ -8,7 +8,7 @@ decided by the same code the conformance gate runs. One ratchet test per suite
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 
 from ..ledger import CASE_KINDS, Entry, Violation, proposal, reconcile
@@ -69,6 +69,7 @@ class SuiteResult:
     gated: int = 0  # tests the official runner's own gating does not execute
     elapsed: float = 0.0
     surface: str = "simulator"  # which browser surface the cases were compared with
+    gated_reasons: dict[str, int] = field(default_factory=dict)  # why gated tests were held back
 
     def counts(self) -> dict[str, int]:
         out: dict[str, int] = dict.fromkeys(OUTCOMES, 0)
