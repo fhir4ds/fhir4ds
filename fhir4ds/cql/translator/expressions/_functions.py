@@ -47,6 +47,7 @@ from ...parser.ast_nodes import (
 )
 from ...translator.context import ExprUsage, RowShape, DefinitionMeta
 from ...translator.function_inliner import ParameterPlaceholder
+from ...translator.overload_call import choose_call_overload
 from ...translator.placeholder import RetrievePlaceholder
 from ...translator.types import (
     PRECEDENCE,
@@ -2450,7 +2451,24 @@ class FunctionsMixin:
         # Step 5: Try function inliner for library-defined functions
         inliner = self.context.function_inliner
         if inliner:
-            expanded_cql = inliner.expand_function(name, None, func.arguments)
+            # AMUX-167 Stage 1: when the call's argument types are all known
+            # and exactly one declared overload is the least-converting one,
+            # expand that overload; the by-name lookup otherwise. An exact type
+            # match therefore wins over an implicit conversion (CQL 1.5
+            # Developer's Guide "Conversion Precedence") — including the
+            # Decimal argument that must not reach an Integer overload, Table
+            # 9-E defining no Decimal -> Integer conversion at all.
+            resolved = choose_call_overload(self.context, name, func.arguments or [])
+            expanded_cql = inliner.expand_function(
+                name,
+                None,
+                func.arguments,
+                overload=(
+                    inliner.function_def_for(resolved.function, resolved.library_name)
+                    if resolved is not None
+                    else None
+                ),
+            )
             if expanded_cql is not None:
                 return self.translate(expanded_cql)
 
