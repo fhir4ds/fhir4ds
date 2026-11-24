@@ -209,9 +209,15 @@ def normalize_output(output_elem) -> Any:
 
     return parse_cql_literal(text)
 
-def compare_results(actual: Any, expected: Any) -> bool:
+def compare_results(actual: Any, expected: Any, *, expected_asserted: bool = True) -> bool:
     """
     Production-grade comparison logic adapted from comparison.py.
+
+    ``expected_asserted`` distinguishes an explicit fixture assertion from a
+    silently-empty one: the caller passes ``False`` only when the fixture
+    carries no ``<output>`` element at all (see :func:`run_test`). It exists so
+    the one structural leniency below is scoped to that shape instead of being
+    a blanket "falsy is good enough" rule.
     """
     actual = unpack_duckdb_result(actual)
 
@@ -230,12 +236,43 @@ def compare_results(actual: Any, expected: Any) -> bool:
     if actual is None and expected is None:
         return True
 
-    # One None, other not
+    # One None, other not.
     if actual is None or expected is None:
-        # Special case: False vs None for boolean defines (both falsy)
-        if (actual is False and expected is None) or (actual is None and expected is False):
-            return True
-        # Empty list/string/dict vs None
+        # Boolean-typed results are compared STRICTLY (FHIR4-33): a CQL
+        # ``null`` and a CQL ``false`` are different results, so an expected
+        # ``false`` must never be satisfied by a null result, and an expected
+        # ``null`` must never be satisfied by a ``false`` result. This harness
+        # scores the bare expression (``SELECT <expr>``), where SQL NULL
+        # survives as NULL; there is no population-membership layer here that
+        # would legitimately encode null as false. The former blanket
+        # ``False == None`` rule was inherited verbatim from
+        # ``benchmarks/runner/comparison.py``, where it IS correct: that
+        # comparer scores per-patient *population* columns, and CQL Boolean
+        # define population boundaries presence-encode null as false by design.
+        # Copied into an expression-level fixture harness it silently hid every
+        # null-vs-false divergence - including the AMUX-171 Time-millisecond
+        # class, where the fixtures expect ``false`` while the engine answers
+        # null (an EXTERNAL runner was needed to see it).
+        if isinstance(expected, bool) or isinstance(actual, bool):
+            # Narrow allowance, deliberately the ONLY Boolean leniency: a
+            # fixture with NO <output> element makes no value assertion, and
+            # that shape cannot express "false". All 38 such fixtures in the
+            # vendored corpus are ``invalid=...`` fixtures (e.g.
+            # CqlArithmeticFunctionsTest.xml CeilingIntegerGreaterThanMaxInteger,
+            # ValueLiteralsAndSelectors.xml Integer2Pow31), so none currently
+            # reaches this branch; the allowance keeps a falsy result
+            # acceptable for a silently-empty expectation without weakening any
+            # asserted one. An explicit <output>false</output> or
+            # <output>null</output> IS an assertion and stays strict in both
+            # directions.
+            if expected is None and not expected_asserted and actual is False:
+                return True
+            return False
+
+        # Structural (non-Boolean) leniency: an empty list/string/tuple result
+        # against an expectation the fixture left empty. Kept because an
+        # absent <output> cannot express "" / [] / {} either; it is not a
+        # Boolean comparison and has no live user in the current corpus.
         if actual in ([], "", {}) and expected is None:
             return True
         return False
@@ -397,6 +434,10 @@ def run_test(conn, test_elem) -> tuple[bool, str]:
 
     output_elem = test_elem.find("ns:output", NS)
     expected = normalize_output(output_elem)
+    # An absent <output> element makes no value assertion; an explicit
+    # <output>null</output> asserts null. The distinction is what scopes the
+    # single Boolean leniency in compare_results.
+    expected_asserted = output_elem is not None
 
     try:
         # Wrap expression in a dummy library
@@ -450,10 +491,20 @@ def run_test(conn, test_elem) -> tuple[bool, str]:
             return False, f"Expected error or NULL per CQL §16, got {result!r}"
 
         # Comparison logic
-        if compare_results(result, expected):
+        if compare_results(result, expected, expected_asserted=expected_asserted):
             return True, ""
 
-        return False, f"Expected {expected} ({type(expected).__name__}), got {result} ({type(result).__name__})"
+        message = (
+            f"Expected {expected} ({type(expected).__name__}), "
+            f"got {result} ({type(result).__name__})"
+        )
+        # Name the Boolean/null class explicitly: it is the one mismatch kind
+        # this harness used to accept silently (FHIR4-33).
+        if result is None and isinstance(expected, bool):
+            message += " [Boolean expectation: a null result is not false]"
+        elif result is False and expected is None:
+            message += " [Boolean comparison: a false result is not null]"
+        return False, message
 
     except Exception as e:
         if expect_invalid:

@@ -7162,11 +7162,14 @@ into an interval-boundary change):
    @T15:59:59` returns null where the official (version 1.0, still on main)
    fixtures `CqlListOperatorsTest.xml::ProperContainsTimeNull` /
    `ProperInTimeNull` expect FALSE. Their docstring claims the fixtures pin
-   null — that is stale. The internal gate hides it: `run_cql.py::compare_results`
-   treats `False ≡ None` as equal, so the internal 2029/2037 number is NOT
-   evidence either way for this class; the external cql-tests-runner is.
-   Fixing it requires the C++ mirror (`CqlDateTimeEqualListElementFunc`) in
-   lockstep plus an extension rebuild.
+   null — that is stale. Fixing it requires the C++ mirror
+   (`CqlDateTimeEqualListElementFunc`) in lockstep plus an extension rebuild.
+   FHIR4-33 (2026-11-24) made the INTERNAL gate see this class: `run_cql.py`
+   now compares Boolean results strictly (null != false in both directions,
+   with the single allowance that a fixture carrying no `<output>` element at
+   all can only assert "empty"), so both fixtures are visible failures in the
+   new 2022/2037 baseline and the external cql-tests-runner is no longer the
+   only referee for null-vs-false.
 2. **`<point> in <Interval>` with literal Time bounds** lowers to raw SQL
    `BETWEEN` in `_translate_in_op` (lexicographic string compare), so
    `@T12:00:00 in Interval[@T12:00:00.000, @T21:59:59.999]` is FALSE where
@@ -7183,6 +7186,23 @@ that gap in `_NO_PYTHON_TIME_MS_STALE` / the per-engine expectation in
 `test_cql_interval_part2_boundary_regressions_match_no_python_cpp`; delete both
 when the bundled extensions are rebuilt and the assertions become plain
 cross-engine equality again.
+
+### FHIR4-33 strict-gate ledger (2026-11-24)
+
+`run_cql.py::compare_results` no longer treats `False ≡ None`; the internal CQL
+baseline moved **2031/2037 -> 2022/2037** and the 9 newly-visible cells are the
+honest inventory, not regressions: **7 real engine gaps** -
+`TestMaxIntervalStartsFalse`/`TestMaxIntervalEndsFalse` (a CLOSED-null bound
+needs the peer interval's point type inside `starts`/`ends`, the CQL-16
+`_cql_maximum_for_peer_bound` doctrine applied to those two operators),
+`ProperContains1`/`ProperIn1` (a null LIST operand with a SCALAR peer must be
+false; the engine already answers false for a null SCALAR peer, so it is an
+internal inconsistency), `TestIntegerInUnknownIntervalNull` (`in`/`contains`
+over an OPEN-null interval must be null, not false) and the two Time-list cells
+of gap 1 above - plus **2 STALE fixtures** (`TimeProperContainsNull` /
+`TimeProperInNull`, capped at `versionTo="1.5.2"` by cql-tests PR #184 commit
+`d95d6c6`; our corpus pin predates it and the engine already answers the 1.5.3
+`false`). Never re-add a blanket falsy rule to silence these.
 
 ## AMUX-169 — duration-uncertainty minimum uses the first comparand's LATEST possible value (2026-11-24)
 
