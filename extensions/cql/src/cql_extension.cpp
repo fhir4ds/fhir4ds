@@ -3684,7 +3684,15 @@ static cql::Optional<std::string> CqlDurationBetweenString(const std::string &st
 	} else if (date_unit && !date_fully_specified) {
 		both_sufficient_precision = start_rank > unit_rank && end_rank > unit_rank;
 	} else {
-		both_sufficient_precision = start_rank >= unit_rank && end_rank >= unit_rank;
+		// Sub-day targets need one component FINER than the requested unit on
+		// both sides: an operand whose precision is exactly the requested unit
+		// still has unknown finer components (an hour-precision 'T06' is any
+		// instant in [06:00:00.000, 06:59:59.999]), so the duration ranges over
+		// whole units (cql-tests #183: `hours between @T06 and @T07:00:00` is
+		// [0, 1]; CQL 1.5 Language Semantics "Determining Difference and
+		// Duration"). Keep in lockstep with
+		// fhir4ds/cql/duckdb/udf/datetime.py::_duration_between_with_uncertainty.
+		both_sufficient_precision = start_rank > unit_rank && end_rank > unit_rank;
 	}
 	if (both_sufficient_precision || date_fully_specified) {
 		auto duration = ComputeDurationBetweenValue(*start, *end, unit_text, is_week);
@@ -3693,21 +3701,26 @@ static cql::Optional<std::string> CqlDurationBetweenString(const std::string &st
 	}
 
 	auto start_high = HighBoundaryValue(start_text);
-	// A trailing bare 'T' (DateTime-with-no-time marker convention) carries
-	// no time components, so the operand is still date-only.
-	bool start_no_time = (start_text.find('T') == std::string::npos && !start->is_time) ||
-	                     (!start->is_time && !start_text.empty() && start_text.back() == 'T');
-	if (start_no_time && date_unit) {
-		// Date-only operands follow the midnight convention for calendar
-		// (year/month) durations — the crisp day-precision path parses
-		// them at midnight — so the uncertain start's latest possible
-		// instant must not inject a phantom 23:59:59.999 that would flip
-		// an exact anniversary boundary. Day/week targets need the same
-		// convention: a date-only operand is fully specified at day
-		// precision, so its intra-day range must not shave a partial day
-		// off the minimum — official fixture `days between
-		// DateTime(2014, 1, 15) and DateTime(2014, 2)` is Interval[17,44].
-		// Sub-day targets KEEP the full 23:59:59.999 high boundary.
+	// Only a genuine DATE value (no 'T' marker, not a Time value) keeps the
+	// midnight convention: CQL 1.5 §Types/Date makes a day-precision Date a
+	// COMPLETE value, so for calendar (year/month) durations the uncertain
+	// start must not inject a phantom 23:59:59.999 that would flip an exact
+	// anniversary boundary, and for day/week targets its intra-day range must
+	// not shave a partial day off the minimum (spec example
+	// `days between Date(2014, 1, 15) and Date(2014, 2, 1) // 17 days`).
+	//
+	// A DateTime operand (`DateTime(2014, 1, 15)` lowers to the trailing-'T'
+	// day-precision marker, '2014-01-15T') is NOT complete: §Types/DateTime
+	// values with partial precision are "an undefined DateTime occurring
+	// sometime during" that day — [@2014-01-15T00:00:00.000,
+	// @2014-01-15T23:59:59.999] — so the AMUX-169 / cql-tests #183 minimum uses
+	// the LATEST possible value of the first comparand:
+	// `days between DateTime(2014, 1, 15) and DateTime(2014, 2)` is
+	// Interval[16, 44]. Sub-day targets KEEP the full 23:59:59.999 boundary.
+	// Keep in lockstep with
+	// fhir4ds/cql/duckdb/udf/datetime.py::_duration_between_with_uncertainty.
+	bool start_is_date_value = start_text.find('T') == std::string::npos && !start->is_time;
+	if (start_is_date_value && date_unit) {
 		start_high.hour = 0;
 		start_high.minute = 0;
 		start_high.second = 0;

@@ -120,6 +120,29 @@ SELECT cqlDurationBetween('2005T', '2010T', 'year');
 ----
 {"start":4,"end":5,"lowClosed":true,"highClosed":true}
 
+# AMUX-169 / cql-tests #183: the uncertainty minimum uses the LATEST possible
+# value of the first comparand. A Date at day precision is a COMPLETE value
+# (the spec's own `days between Date(2014, 1, 15) and Date(2014, 2, 1) // 17
+# days`), while a day-precision DateTime ('2014-01-15T') spans its whole day
+# [00:00:00.000, 23:59:59.999], so the shortest whole-day duration to
+# February is 16. An operand whose precision is exactly the requested unit
+# still has unknown finer components, so imprecise TIME durations widen.
+# Mirrors fhir4ds/cql/duckdb/udf/datetime.py::_duration_between_with_uncertainty.
+query I
+SELECT cqlDurationBetween('2014-01-15T', '2014-02T', 'day');
+----
+{"start":16,"end":44,"lowClosed":true,"highClosed":true}
+
+query I
+SELECT cqlDurationBetween('2014-01-15', '2014-02T', 'day');
+----
+{"start":17,"end":44,"lowClosed":true,"highClosed":true}
+
+query I
+SELECT cqlDurationBetween('T06', 'T07:00:00', 'hour');
+----
+{"start":0,"end":1,"lowClosed":true,"highClosed":true}
+
 # DifferenceBetween with one coarser operand returns uncertainty, not scalar low boundary.
 query I
 SELECT cqlDifferenceBetween('2012-01-02', '2012', 'month');

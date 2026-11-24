@@ -73,8 +73,18 @@ EXPECTED = {
     "DstDifferenceHoursCtor": "1",
     "DstDifferenceMinutesCtor": "45",
     "PartialPrecisionUncertain": None,
-    # Official fixture CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainInterval
-    # pins Interval[17, 44] (NOT [16, 44] — repaired v0.0.26 d3-HISTORIAN).
+    # AMUX-169 / cql-tests #183: a day-precision DateTime is uncertain WITHIN
+    # its day, so the duration minimum comes from the first comparand's latest
+    # possible value — the authoritative (Python) result is Interval[16, 44]
+    # (CQL 1.5 Language Semantics "Determining Difference and Duration"; the
+    # official fixtures ...UncertainAdd [32, 88], ...Subtract [0, 40] and
+    # CqlTypesTest.xml::DateTimeUncertain [18, 49] are only self-consistent
+    # with that minimum, and cql-tests PR #183 corrects the standalone oracle).
+    #
+    # REBUILD REQUIRED: this is the no-Python (browser/WASM) C++ surface, and
+    # the bundled cql.duckdb_extension predates the AMUX-169 source change, so
+    # it still returns [17, 44] here. Flip this expectation to "start":16 when
+    # the extension bundles are rebuilt (scripts/build_extension_bundles.py).
     "DurationUncertainDays": '{"start":17,"end":44,"lowClosed":true,"highClosed":true}',
     "HighBoundaryDecimal": Decimal("1.58799999"),
     "LowBoundaryDecimal": Decimal("1.58700000"),

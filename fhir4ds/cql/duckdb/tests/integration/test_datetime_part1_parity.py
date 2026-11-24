@@ -752,3 +752,156 @@ define TimeOffsetStillNull: timezoneoffset from @T10:30:00
     finally:
         py.close()
         cpp.close()
+
+
+# AMUX-169 / cql-tests #183: the duration-uncertainty MINIMUM must use the
+# LATEST POSSIBLE value of the first comparand, not its earliest low boundary.
+#
+# CQL 1.5 Language Semantics "Determining Difference and Duration" (and
+# Appendix B §Duration):
+#   "The lower bound of that range is found by determining the duration between
+#    the maximum possible value of the first comparand and the minimum possible
+#    value of the second comparand; and the upper bound is determined using the
+#    minimum possible value of the first comparand and the maximum possible
+#    value of the second."
+# §Types/Date vs §Types/DateTime: a DATE at day precision is a complete value
+# for day-granularity duration (the spec's own example
+# `days between Date(2014, 1, 15) and Date(2014, 2, 1) // 17 days`), while a
+# DAYTIME at day precision is "an undefined DateTime occurring sometime during"
+# that day (Language Semantics: represented as
+# [@2014-01-15T00:00:00.000, @2014-01-15T23:59:59.999]), so
+# `days between DateTime(2014, 1, 15) and DateTime(2014, 2)` is [16, 44].
+#
+# The engine encodes the difference in the operand text: `DateTime(2014, 1, 15)`
+# translates to `'2014-01-15T'` (the DateTime-with-no-time marker) while the
+# Date literal `@2014-01-15` translates to `'2014-01-15'`.
+#
+# The same rule widens imprecise TIME durations: an operand whose precision is
+# exactly the requested unit still has unknown finer components
+# (`hours between @T06 and @T07:00:00` // [0, 1], cql-tests #183).
+_DURATION_UNCERTAINTY_AMUX169_CASES: dict[str, tuple[str, str, str, str]] = {
+    # (start, end, unit, expected) — expected is the authoritative Python value.
+    "DaysFromDayPrecisionDateTime": ("2014-01-15T", "2014-02T", "day",
+                                     '{"start":16,"end":44,"lowClosed":true,"highClosed":true}'),
+    "DaysFromDayPrecisionDateTime2": ("2015-02-10T", "2015-03T", "day",
+                                      '{"start":18,"end":49,"lowClosed":true,"highClosed":true}'),
+    # A DATE at day precision is complete — the spec's own 17-day example.
+    "DaysFromDayPrecisionDate": ("2014-01-15", "2014-02T", "day",
+                                 '{"start":17,"end":44,"lowClosed":true,"highClosed":true}'),
+    "DaysFromDayPrecisionDatePair": ("2014-01-15", "2014-02", "day",
+                                     '{"start":17,"end":44,"lowClosed":true,"highClosed":true}'),
+    # Appendix B §Duration's own uncertain example (must not change).
+    "MonthsSpecExample": ("2012-01-02", "2012", "month",
+                          '{"start":0,"end":10,"lowClosed":true,"highClosed":true}'),
+    # Language Semantics month-precision days example (must not change).
+    "DaysFromMonthPrecisionDates": ("2014-01", "2014-02", "day",
+                                    '{"start":1,"end":58,"lowClosed":true,"highClosed":true}'),
+    # Year/month-target pins (CQL-13 EXPLORER doctrine, official fixture
+    # `years between DateTime(2005) and DateTime(2010) // Interval[4, 5]`).
+    "YearsOfficialFixture": ("2005T", "2010T", "year",
+                             '{"start":4,"end":5,"lowClosed":true,"highClosed":true}'),
+    "MonthsYearPrecisionStart": ("2005T", "2006-05T", "month",
+                                 '{"start":4,"end":16,"lowClosed":true,"highClosed":true}'),
+    # Sub-day targets already used the full high boundary of the start.
+    "HoursFromDayPrecisionDateTime": ("2014-01-15T", "2014-02T", "hour",
+                                      '{"start":384,"end":1079,"lowClosed":true,"highClosed":true}'),
+    # Imprecise TIME durations widen (cql-tests #183, second oracle).
+    "HoursTimeDifferingPrecision": ("T06", "T07:00:00", "hour",
+                                    '{"start":0,"end":1,"lowClosed":true,"highClosed":true}'),
+    "HoursHourPrecisionDateTimes": ("2014-01-15T10", "2014-01-15T12", "hour",
+                                    '{"start":1,"end":2,"lowClosed":true,"highClosed":true}'),
+    "MinutesMinutePrecisionDateTimes": ("2014-01-15T10:30", "2014-01-15T11:30", "minute",
+                                        '{"start":59,"end":60,"lowClosed":true,"highClosed":true}'),
+    # Fully-specified operands stay crisp.
+    "HoursFullySpecifiedTimes": ("T20:26:15.555", "T23:25:15.555", "hour", "2"),
+    "MillisecondsFullySpecified": ("T23:25:25.555", "T23:25:25.560", "millisecond", "5"),
+}
+
+# The bundled cql.duckdb_extension is built from pre-AMUX-169 sources, so the
+# C++-served surface keeps the old values until the extension bundles are
+# rebuilt (python3 scripts/build_extension_bundles.py --build --abi <ver>).
+# The stale branch below keeps this test green on a stale binary and flips
+# automatically once the rebuilt extension is deployed — delete the map (and
+# the branch) when the bundles ship this fix.
+_NATIVE_DURATION_UNCERTAINTY_STALE: dict[str, str] = {
+    "DaysFromDayPrecisionDateTime": '{"start":17,"end":44,"lowClosed":true,"highClosed":true}',
+    "DaysFromDayPrecisionDateTime2": '{"start":19,"end":49,"lowClosed":true,"highClosed":true}',
+    "HoursTimeDifferingPrecision": "1",
+    "HoursHourPrecisionDateTimes": "2",
+    "MinutesMinutePrecisionDateTimes": "60",
+}
+
+
+def _native_duration_uncertainty_is_current(con: duckdb.DuckDBPyConnection) -> bool:
+    """True when the loaded cql extension implements the AMUX-169 rule."""
+    row = con.execute(
+        "SELECT cqlDurationBetween('2014-01-15T', '2014-02T', 'day')"
+    ).fetchone()[0]
+    return isinstance(row, str) and '"start":16' in row
+
+
+def test_cql_duration_uncertainty_min_uses_latest_possible_value_amux169() -> None:
+    """AMUX-169: duration-uncertainty minimum comes from the first comparand's
+    latest possible value; imprecise Time durations widen.
+
+    cql-tests PR #183 (spec-correct reading, corroborated by the official
+    fixtures ``DateTimeDurationBetweenUncertainAdd`` [32, 88],
+    ``...Subtract`` [0, 40] and ``CqlTypesTest.xml::DateTimeUncertain``
+    [18, 49], which are only self-consistent with a 16/18-day minimum).
+    """
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    native_current = _native_duration_uncertainty_is_current(cpp)
+    try:
+        for label, (start, end, unit, expected) in _DURATION_UNCERTAINTY_AMUX169_CASES.items():
+            sql = "SELECT cqlDurationBetween(?, ?, ?)"
+            py_row = py.execute(sql, [start, end, unit]).fetchone()[0]
+            assert py_row == expected, (
+                f"Python authority mismatch for {label}: {py_row!r} != {expected!r}"
+            )
+            cpp_row = cpp.execute(sql, [start, end, unit]).fetchone()[0]
+            if native_current:
+                assert cpp_row == expected, (
+                    f"C++ mismatch for {label}: {cpp_row!r} != {expected!r}"
+                )
+            else:
+                stale = _NATIVE_DURATION_UNCERTAINTY_STALE.get(label, expected)
+                assert cpp_row == stale, (
+                    f"C++ (stale bundled extension) mismatch for {label}: "
+                    f"{cpp_row!r} != {stale!r}"
+                )
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_duration_uncertainty_end_to_end_amux169() -> None:
+    """The cql-tests #183 expressions translate and evaluate end to end."""
+    cql = """library Amux169DurationUncertainty version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define DaysBetweenDayPrecisionDateTime: days between DateTime(2014, 1, 15) and DateTime(2014, 2)
+define HoursBetweenImpreciseTimes: hours between @T06 and @T07:00:00
+define MonthsSpecExample: months between @2012-01-02 and @2012
+define DifferenceMonthsSpecExample: difference in months between @2012-01-02 and @2012
+define DaysBetweenDates: days between @2014-01-15 and @2014-02-01
+"""
+    translated = translate_cql(cql)
+    # DateTime(...) lowers to the trailing-'T' day-precision marker, which is
+    # what distinguishes it from a complete Date value.
+    assert "'2014-01-15T'" in translated["DaysBetweenDayPrecisionDateTime"].to_sql()
+    expected = {
+        "DaysBetweenDayPrecisionDateTime": '{"start":16,"end":44,"lowClosed":true,"highClosed":true}',
+        "HoursBetweenImpreciseTimes": '{"start":0,"end":1,"lowClosed":true,"highClosed":true}',
+        # Appendix B examples — unchanged by AMUX-169.
+        "MonthsSpecExample": '{"start":0,"end":10,"lowClosed":true,"highClosed":true}',
+        "DifferenceMonthsSpecExample": '{"start":0,"end":11,"lowClosed":true,"highClosed":true}',
+        "DaysBetweenDates": "17",
+    }
+    py = _python_only_connection()
+    try:
+        for name, expected_value in expected.items():
+            row = py.execute(f"SELECT ({translated[name].to_sql()})").fetchone()[0]
+            assert row == expected_value, f"Python mismatch for {name}: {row!r} != {expected_value!r}"
+    finally:
+        py.close()

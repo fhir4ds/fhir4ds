@@ -7183,3 +7183,67 @@ that gap in `_NO_PYTHON_TIME_MS_STALE` / the per-engine expectation in
 `test_cql_interval_part2_boundary_regressions_match_no_python_cpp`; delete both
 when the bundled extensions are rebuilt and the assertions become plain
 cross-engine equality again.
+
+## AMUX-169 — duration-uncertainty minimum uses the first comparand's LATEST possible value (2026-11-24)
+
+CQL 1.5 Language Semantics "Determining Difference and Duration": *"The lower
+bound of that range is found by determining the duration between the maximum
+possible value of the first comparand and the minimum possible value of the
+second comparand; and the upper bound is determined using the minimum possible
+value of the first comparand and the maximum possible value of the second."*
+Two consequences were missing from `cqlDurationBetween`
+(`fhir4ds/cql/duckdb/udf/datetime.py::_duration_between_with_uncertainty` and
+its C++ mirror in `extensions/cql/src/cql_extension.cpp`):
+
+1. **A day-precision DATETIME is uncertain WITHIN its day.** §Types/DateTime
+   values with partial precision are "an undefined DateTime occurring sometime
+   during" that day — `[@2014-01-15T00:00:00.000, @2014-01-15T23:59:59.999]`.
+   The engine encodes the difference in the operand text: `DateTime(2014, 1, 15)`
+   lowers to the trailing-`T` marker `'2014-01-15T'`, while the DATE literal
+   `@2014-01-15` lowers to `'2014-01-15'`. A DATE at day precision is COMPLETE
+   (the spec's own `days between Date(2014, 1, 15) and Date(2014, 2, 1) // 17
+   days`), so ONLY a marker-free Date value keeps the midnight convention for
+   the uncertain start's high boundary.
+2. **An operand whose precision is exactly the requested unit still has unknown
+   finer components**, so sub-day duration certainty now requires `rank >
+   unit_rank` on BOTH sides (not `>=`): `hours between @T06 and @T07:00:00` is
+   `[0, 1]`, not `1`. Date-only operands were already `>`-gated, so DQM/FHIR
+   data paths (day- or finer-precision values) are unaffected.
+
+| expression | before | after |
+|---|---|---|
+| `days between DateTime(2014, 1, 15) and DateTime(2014, 2)` | [17, 44] | **[16, 44]** |
+| `days between DateTime(2015, 2, 10) and DateTime(2015, 3)` | [19, 49] | **[18, 49]** |
+| `days between @2014-01-15 and @2014-02` (Date, complete) | [17, 44] | [17, 44] (unchanged) |
+| `hours between @T06 and @T07:00:00` | 1 | **[0, 1]** |
+| `hours between @2014-01-15T10 and @2014-01-15T12` | 2 | **[1, 2]** |
+| `minutes between @2014-01-15T10:30 and @2014-01-15T11:30` | 60 | **[59, 60]** |
+| `months between @2012-01-02 and @2012` (Appendix B) | [0, 10] | [0, 10] (unchanged) |
+| `years between DateTime(2005) and DateTime(2010)` | [4, 5] | [4, 5] (unchanged) |
+| `days between @2014-01 and @2014-02` (month precision) | [1, 58] | [1, 58] (unchanged) |
+
+Adjudicated from cql-tests PR #183 (`Count duration uncertainties from the end
+of an imprecise start`), which is the spec-correct reading: the vendored
+official fixtures are self-inconsistent without it —
+`DateTimeDurationBetweenUncertainAdd` [32, 88] = 16+16,
+`...Subtract` [0, 40] = 16−16, `...Multiply` [256, 1936] = 16² and
+`CqlTypesTest.xml::DateTimeUncertain` [18, 49] all pin a 16/18-day minimum
+while the standalone `DateTimeDurationBetweenUncertainInterval` oracle still
+said 17. Note cql-tests PR #175/#176 assume a 17-day minimum and are NOT the
+reference; and the Kotlin reference engine's `isUncertain(precision)` shortcut
+(`own precision < requested precision`) misses both cases above, so it also
+answers 17 — the spec text + fixture arithmetic govern, not that shortcut.
+
+**REBUILD REQUIRED.** `cqlDurationBetween` is NOT in
+`_PYTHON_PREFERRED_CPP_CONFLICTS`, so the bundled (pre-AMUX-169)
+`cql.duckdb_extension` still serves desktop and the release referee stays
+2029/2037. After `python3 scripts/build_extension_bundles.py --build --abi
+<ver>` the official gate becomes ~2030/2037: the four duration-uncertainty
+fixtures above start passing while the two vendored oracles PR #183 corrects
+(`DateTimeDurationBetweenUncertainInterval` 17 and
+`TimeDurationBetweenHourDiffPrecision2` 1) fail until the vendored
+`fhir4ds/cql/tests/official/cql-tests` snapshot is refreshed from upstream
+post-#183. `test_datetime_part1_parity.py::_NATIVE_DURATION_UNCERTAINTY_STALE`
+and `test_wasm_translate_execute_gate.py::EXPECTED["DurationUncertainDays"]`
+pin the stale values and auto-flip on rebuild — delete the map and update the
+gate expectation then.

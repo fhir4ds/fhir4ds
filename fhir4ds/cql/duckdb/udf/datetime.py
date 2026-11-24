@@ -23,7 +23,6 @@ if TYPE_CHECKING:
 import calendar
 import logging
 import math
-import re
 from datetime import timedelta, datetime as _dt_class
 
 _logger = logging.getLogger(__name__)
@@ -516,7 +515,14 @@ def _duration_between_with_uncertainty(start_str: str, end_str: str, unit: str) 
     elif date_unit and not date_fully_specified:
         both_sufficient_precision = s_idx > unit_idx and e_idx > unit_idx
     else:
-        both_sufficient_precision = s_idx >= unit_idx and e_idx >= unit_idx
+        # Sub-day targets need one component FINER than the requested unit on
+        # both sides: an operand whose precision is exactly the requested unit
+        # still has unknown finer components (an hour-precision @T06 is any
+        # instant in [06:00:00.000, 06:59:59.999]), so the duration ranges over
+        # whole units (cql-tests #183: `hours between @T06 and @T07:00:00` is
+        # [0, 1]; CQL 1.5 Language Semantics "Determining Difference and
+        # Duration").
+        both_sufficient_precision = s_idx > unit_idx and e_idx > unit_idx
     if both_sufficient_precision or date_fully_specified:
         # Both have sufficient precision — certain result
         s = _parse_to_datetime(start_str)
@@ -529,23 +535,28 @@ def _duration_between_with_uncertainty(start_str: str, end_str: str, unit: str) 
     # Uncertainty: compute min/max by using low/high boundaries
     s_low = _low_boundary(start_str)
     s_high = _high_boundary(start_str)
-    # A trailing bare 'T' (DateTime-with-no-time marker convention) carries
-    # no time components, so the operand is still date-only for the midnight
-    # convention.
-    if date_unit and not re.search(r'T\d', start_str):
-        # Date-only operands follow the midnight convention for calendar
-        # (year/month) durations — the crisp day-precision path parses
-        # them at midnight — so the uncertain start's latest possible
-        # instant must not inject a phantom 23:59:59.999 that would flip
-        # an exact anniversary boundary (e.g. years between @1975-03 and
-        # @2020-03-31 must stay 45, not Interval[44,45]).
-        # Day/week targets need the same convention: a date-only operand
-        # is fully specified at day precision, so its intra-day range must
-        # not shave a partial day off the minimum — official fixture
+    if date_unit and 'T' not in start_str:
+        # Only a genuine DATE value keeps the midnight convention. CQL 1.5
+        # §Types/Date: a Date at day precision is a COMPLETE value, so for
+        # calendar (year/month) durations the uncertain start must not inject
+        # a phantom 23:59:59.999 that would flip an exact anniversary boundary
+        # (years between @1975-03 and @2020-03-31 stays 45, not [44,45]), and
+        # for day/week targets its intra-day range must not shave a partial
+        # day off the minimum (the spec's own example
+        # `days between Date(2014, 1, 15) and Date(2014, 2, 1) // 17 days`).
+        #
+        # A DateTime operand (`DateTime(2014, 1, 15)` lowers to the trailing-'T'
+        # day-precision marker) is NOT complete: §Types/DateTime values with
+        # partial precision are "an undefined DateTime occurring sometime
+        # during" that day — [@2014-01-15T00:00:00.000,
+        # @2014-01-15T23:59:59.999] — so the AMUX-169 / cql-tests #183 minimum
+        # uses the LATEST possible value of the first comparand:
         # `days between DateTime(2014, 1, 15) and DateTime(2014, 2)` is
-        # Interval[17, 44], not [16, 44]. Sub-day targets KEEP the full
-        # 23:59:59.999 high boundary (official pin: hours between
-        # date-only day-precise operands is Interval[0, 47]).
+        # Interval[16, 44] (official fixtures
+        # DateTimeDurationBetweenUncertainAdd [32, 88], ...Subtract [0, 40] and
+        # CqlTypesTest.xml::DateTimeUncertain [18, 49] are only self-consistent
+        # with that minimum). Sub-day targets keep the full 23:59:59.999 high
+        # boundary for Date values too.
         s_high = s_high.replace(hour=0, minute=0, second=0, microsecond=0)
     e_low = _low_boundary(end_str)
     e_high = _duration_high_boundary(end_str, unit_key)
