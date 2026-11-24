@@ -75,25 +75,42 @@ def load_cql_bundled_extension() -> str:
 
 
 def extension_paths() -> list[Path]:
-    root = repo_root()
-    return [
-        root
-        / "extensions"
-        / "fhirpath"
-        / "build"
-        / "release"
-        / "extension"
-        / "fhirpath"
-        / "fhirpath.duckdb_extension",
-        root
-        / "extensions"
-        / "cql"
-        / "build"
-        / "release"
-        / "extension"
-        / "cql"
-        / "cql.duckdb_extension",
-    ]
+    """Extensions the no-Python runtime loads.
+
+    Prefers the ABI-matched PACKAGED bundle: the build tree keeps whatever
+    variant was configured there last (and `build_extension_bundles.py` builds
+    in its own tree, leaving the main one untouched), so a build-tree path
+    silently exercises a stale binary — the "rebuild required" pins in the
+    parity suites would pass against code that predates the fix. Verified
+    2026-11-24: the build tree held a Nov 21 binary while the repo bundles
+    carried the AMUX-169/171 fixes, and every no-Python assertion in those
+    suites was therefore testing the old code.
+
+    Falls back to the build tree only when the bundles are absent (a dev tree
+    that never ran the bundle build).
+    """
+    try:
+        return bundled_extension_paths()
+    except FileNotFoundError:
+        root = repo_root()
+        return [
+            root
+            / "extensions"
+            / "fhirpath"
+            / "build"
+            / "release"
+            / "extension"
+            / "fhirpath"
+            / "fhirpath.duckdb_extension",
+            root
+            / "extensions"
+            / "cql"
+            / "build"
+            / "release"
+            / "extension"
+            / "cql"
+            / "cql.duckdb_extension",
+        ]
 
 
 def register_no_python_runtime(con: duckdb.DuckDBPyConnection, tmpdir: Path) -> None:
@@ -101,7 +118,16 @@ def register_no_python_runtime(con: duckdb.DuckDBPyConnection, tmpdir: Path) -> 
     for src in extension_paths():
         if not src.exists():
             raise FileNotFoundError(f"C++ extension is not built: {src}")
-        load_path = tmpdir / src.name
+        # DuckDB only LOADs files named `*.duckdb_extension`, so an ABI-suffixed
+        # bundle (`.duckdb156_extension`, `.duckdb2_extension`) must be copied
+        # under the canonical basename — and the basename drives the entrypoint,
+        # so keep `<name>.duckdb_extension`.
+        name = src.name
+        for sfx in (".duckdb2_extension", ".duckdb156_extension"):
+            if name.endswith(sfx):
+                name = name[: -len(sfx)] + ".duckdb_extension"
+                break
+        load_path = tmpdir / name
         shutil.copy2(src, load_path)
         con.execute(f"LOAD '{load_path}'")
 

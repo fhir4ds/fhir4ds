@@ -27,15 +27,10 @@ from .wasm_runtime_helpers import no_python_connection
 # CqlIntervalOperatorsTest.xml::DateTimeIncludedInNull pins interval-boundary
 # second-vs-millisecond mismatch as UNCERTAIN, and fixtures outrank prose.
 #
-# The bundled C++ engine has NOT been rebuilt with the Time rule, so on a
-# no-Python connection (WASM/browser surface)
-# extensions/cql/src/cql/interval.cpp::Interval::properly_contains_point_nullable
-# still reports NULL.  REBUILD REQUIRED - delete this map and the divergence
-# assertions once the extension bundles are rebuilt from these sources.
-_NO_PYTHON_TIME_MS_STALE = {
-    "TimeProperContainsUncertain": None,
-    "TimeProperInUncertain": None,
-}
+# The bundled C++ engine implements the §Time rule as of the AMUX-171
+# rebuild (extensions/cql/src/cql/interval.cpp compare_interval_order_nullable
+# / bound_equals_nullable), so the no-Python surface agrees with the Python
+# authority and no stale map is needed.
 
 
 def _python_only_connection() -> duckdb.DuckDBPyConnection:
@@ -149,10 +144,7 @@ def test_cql_interval_part2_translated_sql_matches_cpp_registration() -> None:
                 cpp_result = cpp.execute(sql).fetchone()
                 no_py_result = no_py.execute(sql).fetchone()
                 assert cpp_result == py_result, name
-                if name in _NO_PYTHON_TIME_MS_STALE:
-                    assert no_py_result == (_NO_PYTHON_TIME_MS_STALE[name],), name
-                else:
-                    assert no_py_result == py_result, name
+                assert no_py_result == py_result, name
                 if name in expected:
                     assert py_result == expected[name], name
     finally:
@@ -299,9 +291,8 @@ def test_cql_interval_part2_boundary_regressions_match_no_python_cpp() -> None:
             # 12:00:00.000 — before the closed start — hence FALSE (was NULL
             # before the combined-precision rule; cql-tests PR #184).
             (False,),
-            # REBUILD REQUIRED: the no-Python C++ engine still returns NULL here
-            # (see _NO_PYTHON_TIME_MS_STALE).
-            (None,),
+            # Rebuilt C++ engine implements the same §Time rule (AMUX-171).
+            (False,),
         ),
         (
             "SELECT intervalIncludesPrecise("

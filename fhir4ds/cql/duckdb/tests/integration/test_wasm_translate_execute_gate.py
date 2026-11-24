@@ -82,10 +82,10 @@ EXPECTED = {
     # with that minimum, and cql-tests PR #183 corrects the standalone oracle).
     #
     # REBUILD REQUIRED: this is the no-Python (browser/WASM) C++ surface, and
-    # the bundled cql.duckdb_extension predates the AMUX-169 source change, so
-    # it still returns [17, 44] here. Flip this expectation to "start":16 when
-    # the extension bundles are rebuilt (scripts/build_extension_bundles.py).
-    "DurationUncertainDays": '{"start":17,"end":44,"lowClosed":true,"highClosed":true}',
+    # AMUX-169: the duration-uncertainty minimum comes from the first
+    # comparand's latest possible value, so a day-precision DateTime start
+    # contributes 16 (not 17) days. The bundled cql extensions carry the fix.
+    "DurationUncertainDays": '{"start":16,"end":44,"lowClosed":true,"highClosed":true}',
     "HighBoundaryDecimal": Decimal("1.58799999"),
     "LowBoundaryDecimal": Decimal("1.58700000"),
     # CQL 2.0 PredecessorOf1DPrecision (supersedes the 1.5 flat-1e-8 pin,
