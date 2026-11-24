@@ -244,6 +244,41 @@ missing" skips into failures (CI). A lane worktree has no `node_modules`: point
 - Suite evaluators share one connection per surface: each owns its `resources` table shape
   (`CREATE OR REPLACE`). `conformance/scripts/*.py` import their siblings as top-level modules.
 
+### Tier C spike — a real measure's population SQL on real duckdb-wasm (2026-11-24, not a gate yet)
+
+Method: generate the measure's population SQL with the DQM machinery on desktop, export the
+relations it names (`resources`, `valueset_codes`) as plain tables, then in ONE real-engine
+boot create them, insert the rows, and run the identical SQL. Compare per patient as text.
+Measure CMS159 (QI-Core 2025: 100 KB SQL, 67 patients, 429 resources, 98k ValueSet codes;
+US-Core 2025 variant: 180 KB, 270k codes).
+
+- **The CMS159 bind failure does not reproduce.** The full population SQL binds and executes
+  on real duckdb-wasm with the shipped bundles and the reference macros (67 rows, ~5–9 s
+  including the data load). The lateral-dedup portability fix closed that class for this
+  measure.
+- **NEW, silent, and the worst finding of the campaign: ValueSet membership is never populated
+  in a browser engine.** Cold, `in_valueset(resource, path, url)` returns NULL for every row,
+  so every valueset-filtered retrieve is empty and CMS159 reports an empty population:
+  Initial Population 0 (desktop 60 of 67), Numerator 0 (desktop 36). No error is raised. The
+  native function reads an in-process cache, not a table: on desktop the Python loader fills it
+  through `cql_valueset_cache_add` (81,104 entries); nothing does that in a browser. With the
+  cache filled from `valueset_codes`, **66 of 67 patients are byte-identical to desktop and
+  every population column matches**; the 67th differs only in the order of an evidence list
+  (row order across engines is unspecified).
+- **DuckDB prunes an unused scalar projection.** A "load the cache" statement such as
+  `SELECT count(*) FROM (SELECT cql_valueset_cache_add(...) FROM valueset_codes)` NEVER runs
+  the function, because nothing reads its result. The call's result must be consumed (e.g.
+  `sum(CASE WHEN cql_valueset_cache_add(...) IS NOT NULL THEN 1 ELSE 0 END)`). Any app code
+  that loads ValueSets through an unread projection silently loads nothing.
+- `cql_valueset_cache_size()` reports 0 on the shipped wasm bundle even after a successful
+  fill (it works on desktop), so it cannot be used to verify a browser-side load.
+- Cost: INSERT literals carried 19 MB (98k codes) in ~5 s and 51 MB (270k codes) in ~9 s. Fine
+  for a handful of measures; a whole suite needs a bulk path (register a file buffer and
+  `read_json`).
+- Not checked: whether the web apps' dataset loading reaches `cql_valueset_cache_add` at all
+  (if it does through an unread projection it is a silent no-op). Not run: a negative control
+  with the pre-fix translator.
+
 ### Baseline recorded (dev `87bece82a55`, corpus `f724ee4`, 2026-11-24)
 
 - Contract: 116 reference statements; 1 wasm-only macro (`Coalesce`); 53 same-name macros with

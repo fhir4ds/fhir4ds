@@ -6735,6 +6735,15 @@ Of the 137 cases only desktop passes, 126 reproduce on the simulator (missing ma
 body drift — the contract) and 14 are real-only (the stale wasm bundle). Rebuild the wasm bundles with
 the tracked script after this lands on dev — the shipped ones record no source provenance.
 
+**Tier C (real measure SQL on real duckdb-wasm) is not a gate yet; a one-measure spike
+(2026-11-24) says it should be.** CMS159's full population SQL binds and runs on real
+duckdb-wasm, so the bind failure that motivated FHIR4-15/16 does not reproduce. But the
+measure reports an EMPTY population there, silently: `in_valueset` reads an in-process cache
+that only `cql_valueset_cache_add` fills, the Python loader does that on desktop, and nothing
+does it in a browser. With the cache filled, 66 of 67 patients are byte-identical to desktop.
+Note that DuckDB never executes a scalar call whose result nothing reads — a cache load in an
+unread projection is a silent no-op. Details: `fhir4ds/operations/AGENTS.md`.
+
 **Rules for anyone touching this surface**
 
 - A translator macro that reaches population SQL is ported to the reference bundle or added to
