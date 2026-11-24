@@ -2148,19 +2148,34 @@ def cqlDateTimeEqual(a: str | None, b: str | None) -> bool | None:
 def cqlDateTimeEqualListElement(a: str | None, b: str | None) -> bool | None:
     """List-element temporal equality (§10.3/§10.4 Equal (List) elements).
 
-    Unlike direct ``=`` (where seconds+milliseconds are one combined decimal
-    precision per §12.1, making ``T10:00:00.0 = T10:00:00`` certain), list
-    element comparisons follow the §Equal precision-uncertainty rule: a
-    second-vs-millisecond precision mismatch on the element type is
-    UNCERTAIN (null), pinned by the official fixtures ProperContainsTimeNull
-    / ProperInTimeNull (``{...@T15:59:59.999...} properly includes @T15:59:59``
-    -> null) with no counter-pinning fixture for direct element equality.
+    Element comparisons follow the §Equal precision-uncertainty rule: a
+    second-vs-millisecond precision mismatch on a DateTime/DATE element is
+    UNCERTAIN (null).  TIME elements are the §Time exception — "seconds and
+    milliseconds are combined and represented as a Decimal for the purposes of
+    comparison ... When milliseconds are null, they are combined as .0 ... This
+    is true of all comparison operations for time values ... or when
+    comparison is performed as part of other operations" — so they compare at
+    millisecond precision with a null millisecond read as 0 (AMUX-171's rule,
+    applied here to list elements by FHIR4-34).  Consequence:
+
+      { @T15:59:59.999, ... } properly includes @T15:59:59   false
+          (official fixture CqlListOperatorsTest.xml::ProperContainsTimeNull;
+           the point reads 15:59:59.000, so no element equals it)
+      { @T15:59:59 } contains @T15:59:59.000                 true
+      { @2017-09-01T00:00:00.000 } contains @2017-09-01T00:00:00   null
+          (DateTime elements keep the fixture-pinned uncertainty;
+           CqlIntervalOperatorsTest.xml::TimeProperContainsNull /
+           DateTimeIncludedInNull are the interval-surface equivalents.)
     """
     if a is None or b is None:
         return None
     a_s, b_s = str(a), str(b)
     try:
-        cmp, certain = _compare_at_min_precision(a_s, b_s, combined_seconds_ms=False)
+        cmp, certain = _compare_at_min_precision(
+            a_s,
+            b_s,
+            combined_seconds_ms=_is_time_only_text(a_s) and _is_time_only_text(b_s),
+        )
     except (ValueError, KeyError, OverflowError):
         # Malformed temporal text: match the native C++
         # CqlDateTimeEqualListElementFunc, which returns NULL (validity
@@ -2176,10 +2191,13 @@ def cqlDateTimeEqualListElement(a: str | None, b: str | None) -> bool | None:
 def cqlDateTimeEquivalentListElement(a: str | None, b: str | None) -> bool:
     """List-element temporal EQUIVALENCE (CQL 2.0 ``~in``/``~contains``).
 
-    Unlike equality (where precision mismatch is uncertain/null), §6.1.2
-    Equivalent on temporals is FALSE at differing precision, TRUE at equal
-    precision + same instant; offsets compare as instants and seconds/ms
-    are one combined decimal precision.
+    Unlike equality (where a DateTime precision mismatch is uncertain/null),
+    §6.1.2 Equivalent on temporals is FALSE at differing precision, TRUE at
+    equal precision + same instant; offsets compare as instants.
+
+    TIME elements combine seconds+milliseconds (§Time, AMUX-171 rule) like
+    equality does, so ``{@T15:59:59} ~contains @T15:59:59.000`` is TRUE while
+    ``{@2017-09-01T00:00:00.000} ~contains @2017-09-01T00:00:00`` stays FALSE.
     """
     if a is None and b is None:
         return True
@@ -2187,7 +2205,11 @@ def cqlDateTimeEquivalentListElement(a: str | None, b: str | None) -> bool:
         return False
     a_s, b_s = str(a), str(b)
     try:
-        cmp, certain = _compare_at_min_precision(a_s, b_s, combined_seconds_ms=False)
+        cmp, certain = _compare_at_min_precision(
+            a_s,
+            b_s,
+            combined_seconds_ms=_is_time_only_text(a_s) and _is_time_only_text(b_s),
+        )
     except (ValueError, KeyError, OverflowError):
         return False
     if not certain:

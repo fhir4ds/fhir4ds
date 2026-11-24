@@ -74,6 +74,15 @@ _PYTHON_PREFERRED_CPP_CONFLICTS = {
     "cqlSameOrBefore",
     "cqlSameOrAfter",
     "cqlDateTimeEqual",
+    # FHIR4-34: list-element temporal comparisons combine Time
+    # seconds+milliseconds (null ms read as ".0") per CQL §Time, the rule
+    # AMUX-171 applied to interval bounds. The C++ mirrors
+    # (CqlDateTimeEqualListElementFunc / CqlDateTimeEquivalentListElementFunc)
+    # serve the WASM/no-Python surface; the Python UDFs stay the desktop
+    # conformance authority so the §Time list-element rule reaches the
+    # conformance gate without waiting for an extension rebuild.
+    "cqlDateTimeEqualListElement",
+    "cqlDateTimeEquivalentListElement",
     "intervalOverlapsBeforePrecise",
     "intervalOverlapsAfterPrecise",
     "intervalFromBounds",

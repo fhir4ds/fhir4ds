@@ -979,3 +979,193 @@ define TimeOpenEndSecondPrecision: end of Interval(@T12:00:00, @T18:00:00)
     finally:
         py.close()
         cpp.close()
+
+
+# ---------------------------------------------------------------------------
+# FHIR4-38 — starts/ends against a CLOSED null bound (point-type sentinel)
+#
+# CQL 1.5 §9.14 Start / §9.15 End: "If the low [high] boundary is null and the
+# boundary is closed, the result is the minimum [maximum] value of the point
+# type." Starts (§19.30) and Ends (§19.13) are defined through Start/End, so a
+# CLOSED null bound is the point-type EXTREME (a DEFINITE value), never unknown:
+#
+#   Interval[null, null] starts Interval[1, 10]   // false  (min Integer < 1)
+#   Interval[1, 10] ends Interval[null, null]     // false  (max Integer > 10)
+#
+# The point type is Interval<T> — shared by both operands — so it is inferred
+# from the PEER interval when the operand's own opposite bound is also null
+# (the same peer-inference doctrine as the CQL-16 HISTORIAN
+# `_cql_minimum_for_peer_bound` / `_cql_maximum_for_peer_bound` sentinels).
+#
+# An OPEN null bound stays UNKNOWN (Interval(null, null) is the unknown
+# boundary form) and must keep returning null — fixtures
+# TestUnknownIntervalStartsNull / TestUnknownIntervalEndsNull.
+#
+# Official fixtures pinning the closed-null cases:
+#   CqlIntervalOperatorsTest.xml::TestMaxIntervalStartsFalse  -> false
+#   CqlIntervalOperatorsTest.xml::TestMaxIntervalEndsFalse    -> false
+# ---------------------------------------------------------------------------
+
+_INTERVAL_PART3_CLOSED_NULL_LIBRARY = """library ClosedNullStartsEnds version '1.0'
+using FHIR version '4.0.1'
+context Patient
+
+// Closed null bounds -> point-type sentinel -> DEFINITE results.
+define MaxStartsFalse: Interval[null, null] starts Interval[1, 10]
+define MaxEndsFalse: Interval[1, 10] ends Interval[null, null]
+define MaxStartsDateFalse: Interval[null, null] starts Interval[@2024-01-01, @2024-12-31]
+define MaxEndsDateFalse: Interval[@2024-01-01, @2024-12-31] ends Interval[null, null]
+define MaxStartsQuantityFalse: Interval[null, 5.0 'g'] starts Interval[1.0 'g', 10.0 'g']
+// Positive controls: the sentinel really resolves to the peer extreme.
+define LowNullStartsSentinelEqualTrue: Interval[null, 5] starts Interval[-2147483648, 10]
+define HighNullStartsSentinelEqualTrue: Interval[1, null] starts Interval[1, null]
+define HighNullEndsSentinelEqualTrue: Interval[1, null] ends Interval[1, null]
+define HighNullStartsLongerFalse: Interval[1, null] starts Interval[1, 10]
+define UninferrablePointTypeNull: Interval[null, null] starts Interval[null, null]
+// Open null bounds stay UNKNOWN (null) — unchanged by this fix.
+define UnknownStartsNull: Interval(null, null) starts Interval[1, 10]
+define UnknownEndsNull: Interval[1, 10] ends Interval(null, null)
+define UnknownLowStartsNull: Interval(null, 5] starts Interval[1, 10]
+define UnknownHighEndsNull: Interval[1, null) ends Interval[1, 10]
+define NullScalarStartsNull: null starts Interval[1, 10]
+define NullScalarEndsNull: Interval[1, 10] ends null
+// Non-null controls (official fixture truth table, unchanged).
+define IntegerStartsTrue: Interval[4, 10] starts Interval[4, 15]
+define IntegerStartsFalse: Interval[1, 10] starts Interval[4, 10]
+define IntegerEndsTrue: Interval[4, 10] ends Interval[1, 10]
+define IntegerEndsFalse: Interval[44, 50] ends Interval[1, 10]
+define DecimalStartsTrue: Interval[4.0, 10.0] starts Interval[4.0, 15.0]
+define QuantityEndsTrue: Interval[5.0 'g', 10.0 'g'] ends Interval[1.0 'g', 10.0 'g']
+define DateTimeStartsTrue: Interval[DateTime(2012, 1, 5), DateTime(2012, 1, 25)] starts Interval[DateTime(2012, 1, 5), DateTime(2012, 1, 27)]
+define TimeEndsFalse: Interval[@T05:59:59.999, @T10:59:59.999] ends Interval[@T01:59:59.999, @T11:59:59.999]
+// Precision-qualified variants. NOT part of the FHIR4-38 fix: the precision
+// form lowers to cqlSameAsP(cqlSameOrBeforeP)(intervalStart(...),
+// intervalStart(...), precision), and intervalStart cannot infer a point type
+// from a single all-null interval, so the closed-null bound is unknown at that
+// seam (same behaviour for a NON-null Integer interval, e.g.
+// Interval[1, 10] starts day of Interval[1, 15] -> null, because the precision
+// qualifier is only defined for Date/DateTime/Time point types). Resolving it
+// needs a peer-aware Start/End arity that the bundled C++ surface does not
+// implement; pinned here so the gap is visible rather than silent.
+define MaxStartsPrecisionGapNull: Interval[null, null] starts day of Interval[1, 10]
+define MaxEndsPrecisionGapNull: Interval[1, 10] ends day of Interval[null, null]
+"""
+
+
+def test_cql_interval_part3_closed_null_bound_starts_ends_fhir4_38() -> None:
+    """FHIR4-38: starts/ends resolve a CLOSED null bound to the point extreme.
+
+    CQL 1.5 §9.14/§9.15 (Start/End of a closed null boundary is the point-type
+    extremum) applied to §19.30 Starts / §19.13 Ends. Official fixtures
+    TestMaxIntervalStartsFalse / TestMaxIntervalEndsFalse pin the two headline
+    cells at FALSE, not null; the OPEN form keeps returning null
+    (TestUnknownIntervalStartsNull / TestUnknownIntervalEndsNull).
+    """
+    expected = {
+        # Closed null bounds -> sentinel -> definite result.
+        "MaxStartsFalse": False,
+        "MaxEndsFalse": False,
+        "MaxStartsDateFalse": False,
+        "MaxEndsDateFalse": False,
+        "MaxStartsQuantityFalse": False,
+        # The sentinel is the peer extreme, so the comparison can be TRUE.
+        "LowNullStartsSentinelEqualTrue": True,
+        "HighNullStartsSentinelEqualTrue": True,
+        "HighNullEndsSentinelEqualTrue": True,
+        "HighNullStartsLongerFalse": False,
+        # Point type uninferrable on both sides (Interval<Any>) -> null.
+        "UninferrablePointTypeNull": None,
+        # Open null bounds remain unknown (CQL §2: open = unknown boundary).
+        "UnknownStartsNull": None,
+        "UnknownEndsNull": None,
+        "UnknownLowStartsNull": None,
+        "UnknownHighEndsNull": None,
+        "NullScalarStartsNull": None,
+        "NullScalarEndsNull": None,
+        # Non-null controls (official fixture truth table).
+        "IntegerStartsTrue": True,
+        "IntegerStartsFalse": False,
+        "IntegerEndsTrue": True,
+        "IntegerEndsFalse": False,
+        "DecimalStartsTrue": True,
+        "QuantityEndsTrue": True,
+        "DateTimeStartsTrue": True,
+        "TimeEndsFalse": False,
+        # Precision-qualified gap (see the library comment).
+        "MaxStartsPrecisionGapNull": None,
+        "MaxEndsPrecisionGapNull": None,
+    }
+
+    # REBUILD REQUIRED (no-Python / browser surface): the bundled
+    # cql.duckdb_extension still carries the pre-FHIR4-38 C++ sentinel tables,
+    # whose IntervalStartsSameFunc / IntervalEndsSameFunc wrappers reject ANY
+    # interval with a null bound -> NULL. The Python UDFs are the desktop
+    # conformance authority (both `intervalStartsSame` and `intervalEndsSame`
+    # are in _PYTHON_PREFERRED_CPP_CONFLICTS), so py and cpp agree above.
+    # The C++ source (extensions/cql/src/cql/interval.cpp: peer-aware
+    # sentinel_start_bound_with_peer / sentinel_end_bound_with_peer) carries
+    # the same rule; DELETE this map when the bundles are rebuilt.
+    translated = translate_cql(_INTERVAL_PART3_CLOSED_NULL_LIBRARY)
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for name, expr in translated.items():
+                sql = f"SELECT {expr.to_sql()}"
+                py_result = py.execute(sql).fetchone()
+                cpp_result = cpp.execute(sql).fetchone()
+                assert cpp_result == py_result, f"{name}: cpp {cpp_result} != python {py_result}"
+                assert py_result == (expected[name],), (
+                    f"{name}: got {py_result}, expected {(expected[name],)}"
+                )
+                assert no_py.execute(sql).fetchone() == (expected[name],), (
+                    f"{name}: no-Python expected {(expected[name],)}"
+                )
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_interval_part3_closed_null_bound_direct_udf_surface() -> None:
+    """FHIR4-38: direct-UDF sentinel semantics for intervalStartsSame/EndsSame.
+
+    Both UDFs are Python-preferred, so the py-fallback and native-loaded
+    connections route through the same implementation; the closed-null
+    sentinel must be inferred from the PEER interval (Interval<T> is shared).
+    """
+    closed_null = '{"low": null, "high": null, "lowClosed": true, "highClosed": true}'
+    int_1_10 = '{"low":"1","high":"10","lowClosed":true,"highClosed":true}'
+    int_min_10 = '{"low":"-2147483648","high":"10","lowClosed":true,"highClosed":true}'
+    int_null_5 = '{"low": null, "high":"5","lowClosed":true,"highClosed":true}'
+    open_null = '{"low": null, "high": null, "lowClosed": false, "highClosed": false}'
+    date_year = '{"low":"2024-01-01","high":"2024-12-31","lowClosed":true,"highClosed":true}'
+
+    cases = [
+        # Closed null bound -> point-type extremum (definite false/true).
+        ("intervalStartsSame", [closed_null, int_1_10], False),
+        ("intervalEndsSame", [int_1_10, closed_null], False),
+        ("intervalStartsSame", [closed_null, date_year], False),
+        ("intervalEndsSame", [date_year, closed_null], False),
+        ("intervalStartsSame", [int_null_5, int_min_10], True),
+        ("intervalStartsSame", [closed_null, closed_null], None),
+        # Open null bounds stay unknown.
+        ("intervalStartsSame", [open_null, int_1_10], None),
+        ("intervalEndsSame", [int_1_10, open_null], None),
+        # Non-null controls.
+        ("intervalStartsSame", [int_1_10, int_1_10], True),
+        ("intervalEndsSame", [int_1_10, int_1_10], True),
+    ]
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for func, args, want in cases:
+            placeholders = ", ".join("?" for _ in args)
+            sql = f"SELECT {func}({placeholders})"
+            py_result = py.execute(sql, args).fetchone()
+            cpp_result = cpp.execute(sql, args).fetchone()
+            assert cpp_result == py_result, f"{func}{tuple(args)}: cpp/py mismatch"
+            assert py_result == (want,), f"{func}{tuple(args)}: got {py_result}, expected {(want,)}"
+    finally:
+        py.close()
+        cpp.close()

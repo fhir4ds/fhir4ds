@@ -27,6 +27,46 @@ def _cpp_connection() -> duckdb.DuckDBPyConnection:
     return con
 
 
+# ---------------------------------------------------------------------------
+# FHIR4-34: list-element temporal equality combines Time seconds+milliseconds
+# (null milliseconds read as ".0").
+#
+# CQL 1.5.3 §Time: "Although the milliseconds are specified with a separate
+# component, seconds and milliseconds are combined and represented as a
+# Decimal for the purposes of comparison ... When milliseconds are null, they
+# are combined as .0 ... This is true of all comparison operations for time
+# values, whether explicit ... or implicit ... or when comparison is performed
+# as part of other operations such as interval meets and overlaps."
+#
+# AMUX-171 applied that rule to TIME interval boundaries
+# (fhir4ds/cql/duckdb/udf/interval.py::_precision_aware_compare). It never
+# reached the LIST-ELEMENT helpers (cqlDateTimeEqualListElement /
+# cqlDateTimeEquivalentListElement), which hard-coded the uncertainty rule, so
+# Time element comparisons at a second-vs-millisecond mismatch returned NULL.
+# The official fixtures pin the opposite:
+#   CqlListOperatorsTest.xml::ProperContainsTimeNull
+#       { @T15:59:59.999, @T20:59:59.999, @T20:59:49.999 }
+#           properly includes @T15:59:59            -> false
+#   CqlListOperatorsTest.xml::ProperInTimeNull      (mirror) -> false
+# Both were graded NULL and only became visible when the conformance gate
+# stopped treating False and NULL as equal.
+#
+# DateTime/DATE elements are deliberately EXEMPT and keep the fixture-pinned
+# second-vs-millisecond uncertainty (the same split AMUX-171 drew for interval
+# bounds): only TIME elements get the combined decimal precision.
+#
+# Every list-element comparison funnels through CQLListTemporalElementEqual ->
+# cqlDateTimeEqualListElement (list `=`, `contains`/`in`, `properly
+# includes`/`properly included in`, IndexOf) and
+# CQLListContainsTemporalEquivalent -> cqlDateTimeEquivalentListElement
+# (`~contains`/`~in`), so one rule covers all of them.
+#
+# The bundled C++ engine implements the same Time rule (rebuild 2026-11-24), so
+# the no-Python surface agrees with the Python authority and no stale map is
+# needed.
+# ---------------------------------------------------------------------------
+
+
 def test_cql_list_part2_expressions_parse_and_translate() -> None:
     for expression in ["Last({1,2,3})", "Length({1,2,3})", "Skip({1,2,3},1)", "Tail({1,2,3})", "Take({1,2,3},2)"]:
         assert isinstance(parse_expression(expression), FunctionRef)
@@ -323,20 +363,23 @@ def test_cql_list_part2_query_produced_lists_remain_lists() -> None:
 
 def test_cql_list_part2_temporal_uncertainty_matches_no_python_cpp() -> None:
     translated = translate_cql(_cql_list_part2_temporal_uncertainty_library())
-    # Official fixture doctrine (ProperContainsTimeNull / ProperInTimeNull):
-    # list-ELEMENT temporal comparisons treat second-vs-millisecond precision
-    # mismatch as UNCERTAIN (null) — the §1.6 combined-decimal rule applies
-    # to direct `=` (§12.1), not to list element equality. Element-equality
-    # null propagates through contains/in/=/!= per three-valued logic.
-    # (Supersedes the CQL-03 EXPLORER QA-003 combined-sec-ms pin for the
-    # list surface; direct `=` keeps the combined rule.)
+    # FHIR4-34 doctrine (§Time): list-ELEMENT temporal comparisons of TIME
+    # values combine seconds+milliseconds, so a second-vs-millisecond mismatch
+    # is DETERMINED (null ms reads as .0) and these all resolve to
+    # false/true instead of null.  (This supersedes the earlier
+    # ProperContainsTimeNull/ProperInTimeNull reading that treated the pair as
+    # uncertain: the official fixtures themselves expect false, and the gate
+    # stopped treating False and NULL as equal.)  DateTime/DATE list elements
+    # keep the §Equal uncertainty — see
+    # test_cql_list_element_time_ms_combined_precision_fhir434 for those
+    # referees.
     expected = {
-        "ProperIncludesTimeUncertain": (None,),   # element equality uncertain
-        "ProperIncludedInTimeUncertain": (None,),
-        "ContainsTimeUncertain": (None,),
-        "InTimeUncertain": (None,),
-        "EqualTimeUncertain": (None,),            # element null -> list equality null
-        "NotEqualTimeUncertain": (None,),         # not(null) -> null
+        "ProperIncludesTimeUncertain": (False,),   # 15:59:59.000 is not an element
+        "ProperIncludedInTimeUncertain": (False,),
+        "ContainsTimeUncertain": (False,),
+        "InTimeUncertain": (False,),
+        "EqualTimeUncertain": (False,),            # 15:59:59.999 != 15:59:59.000
+        "NotEqualTimeUncertain": (True,),
     }
 
     py = _python_only_connection()
@@ -354,13 +397,14 @@ def test_cql_list_part2_temporal_uncertainty_matches_no_python_cpp() -> None:
             assert py_result == expected[name], name
 
         direct_cases = [
-            # Official-fixture doctrine: element temporal equality with a
-            # second-vs-millisecond precision mismatch is UNCERTAIN (null);
-            # certain false only when the second components differ too.
-            ("SELECT CQLListContainsTemporalEq(['T15:59:59.999'], 'T15:59:59')", (None,)),
+            # §Time combined precision: the element 15:59:59.999 is read at
+            # millisecond precision against 15:59:59.000, so the comparison is
+            # determined FALSE (was NULL); certain false also when the second
+            # components differ.
+            ("SELECT CQLListContainsTemporalEq(['T15:59:59.999'], 'T15:59:59')", (False,)),
             ("SELECT CQLListContainsTemporalEq(['T14:59:59.999'], 'T15:59:59')", (False,)),
-            ("SELECT CQLListHasAllTemporalEq(['T15:59:59.999'], ['T15:59:59'])", (None,)),
-            ("SELECT CQLListEqualTemporalEq(['T15:59:59.999'], ['T15:59:59'])", (None,)),
+            ("SELECT CQLListHasAllTemporalEq(['T15:59:59.999'], ['T15:59:59'])", (False,)),
+            ("SELECT CQLListEqualTemporalEq(['T15:59:59.999'], ['T15:59:59'])", (False,)),
         ]
         for sql, expected_row in direct_cases:
             assert py.execute(sql).fetchone() == expected_row, sql
@@ -696,6 +740,96 @@ def test_cql_list_part2_typed_null_list_properly_includes_returns_null_per_spec(
         cpp.close()
 
 
+def _cql_list_part2_null_list_scalar_peer_library() -> str:
+    """CQL §10.19/§10.20 Properly Includes / Properly Included In (List).
+
+    Null propagation is scoped to the LIST-LIST overload only:
+
+    * "For the list-list overload, if either argument is null, the result is
+      null." — the spec says nothing about null propagation for the
+      list-singleton overload, whose rule is "returns true if the list
+      contains (i.e. includes) the element, and it is not the only element in
+      the list."
+    * §10.1 Contains pins the consequence for a null list: "If the first
+      argument is null, the result is false."
+
+    So a NULL LIST against a SCALAR peer contains nothing and properly
+    contains nothing -> FALSE, never null. The scalar-peer sibling already
+    answers FALSE (`ProperInNullRightFalse`); only the null-LIST side was
+    wrongly null-propagated.
+    """
+    return """library List2NullListScalarPeer version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define PC1_NullListProperlyIncludesScalar: null as List<String> properly includes 'a'
+define PC1P_NullListProperlyIncludesScalar: (null as List<String>) properly includes 'a'
+define PI1_ScalarProperlyIncludedInNullList: 'a' properly included in null as List<String>
+define PI1P_ScalarProperlyIncludedInNullList: 'a' properly included in (null as List<String>)
+define Control_ProperlyIncludesScalar: { 'a', 'b' } properly includes 'a'
+define Control_ScalarProperlyIncludedIn: 'a' properly included in { 'a', 'b' }
+define NullListVsNullList: (null as List<String>) properly includes (null as List<String>)
+define NullListVsNullListIn: (null as List<String>) properly included in (null as List<String>)
+define NullListVsNonNullList: (null as List<String>) properly includes { 'a', 'b' }
+define NonNullListVsNullList: { 'a', 'b' } properly includes (null as List<String>)
+define NullScalarPeerIn: null as String properly included in { 's', 'u', 'n' }
+define NullScalarPeerIncludes: { 's', 'u', 'n' } properly includes null as String
+define NullIntListVsScalar: (null as List<Integer>) properly includes 1
+define ScalarInNullIntList: 1 properly included in (null as List<Integer>)
+"""
+
+
+def test_cql_list_part2_null_list_with_scalar_peer_is_false_per_spec() -> None:
+    """CQL §10.19/§10.20: a NULL LIST operand against a SCALAR peer is FALSE.
+
+    Official fixtures ``CqlListOperatorsTest.xml::ProperContains1``
+    (``null as List<String> properly includes 'a'``) and ``::ProperIn1``
+    (``'a' properly included in null as List<String>``) both pin ``false``.
+
+    This is the interval/list analogue of the already-correct null SCALAR
+    peer case (``ProperInNullRightFalse``): the list-singleton overload does
+    not null-propagate, it evaluates "list contains element AND list is
+    longer than one element" — a null list contains nothing, so the result is
+    false. Only the LIST-LIST overload propagates null.
+    """
+    translated = translate_cql(_cql_list_part2_null_list_scalar_peer_library())
+    expected = {
+        # FHIR4-39: the two cells that were null before the fix.
+        "PC1_NullListProperlyIncludesScalar": (False,),
+        "PC1P_NullListProperlyIncludesScalar": (False,),
+        "PI1_ScalarProperlyIncludedInNullList": (False,),
+        "PI1P_ScalarProperlyIncludedInNullList": (False,),
+        # Non-null controls keep normal semantics.
+        "Control_ProperlyIncludesScalar": (True,),
+        "Control_ScalarProperlyIncludedIn": (True,),
+        # LIST-LIST overload keeps null propagation (unchanged).
+        "NullListVsNullList": (None,),
+        "NullListVsNullListIn": (None,),
+        "NullListVsNonNullList": (None,),
+        "NonNullListVsNullList": (None,),
+        # Element overload with a null SCALAR peer stays FALSE (unchanged).
+        "NullScalarPeerIn": (False,),
+        "NullScalarPeerIncludes": (False,),
+        "NullIntListVsScalar": (False,),
+        "ScalarInNullIntList": (False,),
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    no_py_cm = no_python_connection()
+    no_py = no_py_cm.__enter__()
+    try:
+        for name, expr in translated.items():
+            sql = f"SELECT {expr.to_sql()}"
+            py_result = py.execute(sql).fetchone()
+            cpp_result = cpp.execute(sql).fetchone()
+            no_py_result = no_py.execute(sql).fetchone()
+            assert cpp_result == py_result, f"{name}: native {cpp_result!r} != python {py_result!r}"
+            assert no_py_result == py_result, f"{name}: no-python {no_py_result!r} != python {py_result!r}"
+            assert py_result == expected[name], f"{name}: got {py_result!r}, expected {expected[name]!r}"
+    finally:
+        no_py_cm.__exit__(None, None, None)
+        py.close()
+        cpp.close()
 
 
 # ---------------------------------------------------------------------------
@@ -1052,3 +1186,138 @@ define "FirstGiven": Patient.name.first().given
         assert rows[0][2] == ["Denver"], rows[0]
         assert rows[0][3] == ["John", "Jim"], rows[0]
         assert rows[1][1:] == (None, None, None), rows[1]
+
+
+# =====================================================================
+# FHIR4-34: list-element temporal equality must combine Time
+# seconds+milliseconds (null milliseconds read as ".0").
+# See the doctrine comment and stale no-Python pins at the top of this module.
+# =====================================================================
+def test_cql_list_element_time_ms_combined_precision_fhir434() -> None:
+    """FHIR4-34: Time list elements combine seconds+milliseconds (null ms = .0)."""
+    cases = [
+        # --- the two official fixtures (expected FALSE, were NULL) ---
+        (
+            "ProperContainsTimeNull (fixture)",
+            "{ @T15:59:59.999, @T20:59:59.999, @T20:59:49.999 }"
+            " properly includes @T15:59:59",
+            (False,),
+        ),
+        (
+            "ProperInTimeNull (fixture)",
+            "@T15:59:59 properly included in"
+            " { @T15:59:59.999, @T20:59:59.999, @T20:59:49.999 }",
+            (False,),
+        ),
+        # --- unchanged TRUE siblings (regression guards) ---
+        (
+            "ProperContainsTimeTrue (fixture)",
+            "{ @T15:59:59, @T20:59:59.999, @T20:59:49.999 }"
+            " properly includes @T15:59:59",
+            (True,),
+        ),
+        (
+            "ProperInTimeTrue (fixture)",
+            "@T15:59:59 properly included in"
+            " { @T15:59:59, @T20:59:59.999, @T20:59:49.999 }",
+            (True,),
+        ),
+        # --- the combined decimal precision itself ---
+        (
+            "contains across ms precision (combined)",
+            "{ @T15:59:59 } contains @T15:59:59.000",
+            (True,),
+        ),
+        (
+            "properly included in across ms precision (combined)",
+            "@T15:59:59.000 properly included in { @T15:59:59, @T16:00:00 }",
+            (True,),
+        ),
+        (
+            "contains distinct milliseconds (combined)",
+            "{ @T15:59:59.999 } contains @T15:59:59",
+            (False,),
+        ),
+        (
+            "list equality across ms precision (combined)",
+            "{ @T15:59:59 } = { @T15:59:59.000 }",
+            (True,),
+        ),
+        (
+            "list properly includes across ms precision (combined)",
+            "{ @T15:59:59, @T16:00:00 } properly includes { @T15:59:59.000 }",
+            (True,),
+        ),
+        # --- same-precision controls (unchanged) ---
+        (
+            "contains same precision (control)",
+            "{ @T15:59:59.999 } contains @T15:59:59.999",
+            (True,),
+        ),
+        (
+            "equality same precision (control)",
+            "{ @T15:59:59.999 } = { @T15:59:59.999 }",
+            (True,),
+        ),
+        # --- DateTime/DATE elements: uncertainty is KEPT (referees) ---
+        (
+            "DateTime contains precision mismatch (control)",
+            "{ @2017-09-01T00:00:00.000 } contains @2017-09-01T00:00:00",
+            (None,),
+        ),
+        (
+            "DateTime properly included in precision mismatch (control)",
+            "@2017-09-01T00:00:00 properly included in"
+            " { @2017-09-01T00:00:00.000, @2017-12-30T23:59:59.999 }",
+            (None,),
+        ),
+        (
+            "DateTime list equality precision mismatch (control)",
+            "{ @2017-09-01T00:00:00.000 } = { @2017-09-01T00:00:00 }",
+            (None,),
+        ),
+        (
+            "DateTime contains same precision (control)",
+            "{ @2017-09-01T00:00:00.000 } contains @2017-09-01T00:00:00.000",
+            (True,),
+        ),
+        # --- equivalence (~contains): precision mismatch is FALSE, and TIME
+        # elements combine like equality does ---
+        (
+            "equivalent contains across ms precision (combined)",
+            "{ @T15:59:59 } ~contains @T15:59:59.000",
+            (True,),
+        ),
+        (
+            "equivalent contains DateTime precision mismatch (control)",
+            "{ @2017-09-01T00:00:00.000 } ~contains @2017-09-01T00:00:00",
+            (False,),
+        ),
+    ]
+
+    library = "library ListTimeMs version '1'\n" + "\n".join(
+        f"define R{i}: {expression}"
+        for i, (_label, expression, _expected) in enumerate(cases)
+    )
+    translated = translate_cql(library)
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    no_py_cm = no_python_connection()
+    no_py = no_py_cm.__enter__()
+    try:
+        for i, (label, _expression, expected) in enumerate(cases):
+            sql = f"SELECT {translated[f'R{i}'].to_sql()}"
+            assert py.execute(sql).fetchone() == expected, f"{label} (python)"
+            # cqlDateTimeEqualListElement / cqlDateTimeEquivalentListElement are
+            # Python-preferred on a native-loaded connection (see
+            # _PYTHON_PREFERRED_CPP_CONFLICTS), so the desktop surface carries
+            # the fix as soon as the Python UDFs do.
+            assert cpp.execute(sql).fetchone() == expected, f"{label} (native-loaded)"
+            assert no_py.execute(sql).fetchone() == expected, (
+                f"{label} (no-Python C++)"
+            )
+    finally:
+        py.close()
+        cpp.close()
+        no_py_cm.__exit__(None, None, None)

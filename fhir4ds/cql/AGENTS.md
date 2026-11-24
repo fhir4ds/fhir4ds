@@ -7197,12 +7197,150 @@ needs the peer interval's point type inside `starts`/`ends`, the CQL-16
 `_cql_maximum_for_peer_bound` doctrine applied to those two operators),
 `ProperContains1`/`ProperIn1` (a null LIST operand with a SCALAR peer must be
 false; the engine already answers false for a null SCALAR peer, so it is an
-internal inconsistency), `TestIntegerInUnknownIntervalNull` (`in`/`contains`
+internal inconsistency — **CLOSED by FHIR4-39, see below; baseline is now
+2024/2037**), `TestIntegerInUnknownIntervalNull` (`in`/`contains`
 over an OPEN-null interval must be null, not false) and the two Time-list cells
 of gap 1 above - plus **2 STALE fixtures** (`TimeProperContainsNull` /
 `TimeProperInNull`, capped at `versionTo="1.5.2"` by cql-tests PR #184 commit
 `d95d6c6`; our corpus pin predates it and the engine already answers the 1.5.3
 `false`). Never re-add a blanket falsy rule to silence these.
+
+### FHIR4-39 — list `properly includes`/`included in` null propagation is LIST-LIST only (2026-11-24)
+
+CQL 2.0 §10.19 Properly Includes / §10.20 Properly Included In scope the null
+rule explicitly: *"**For the list-list overload**, if either argument is null,
+the result is null."* The list-singleton overload gets no null-propagation
+clause — its rule is "returns true if the list contains (i.e. includes) the
+element, and it is not the only element in the list" — and §10.1 Contains pins
+the consequence for a null list: *"If the first argument is null, the result is
+false."* Hence a NULL LIST against a SCALAR peer is **FALSE**: it contains
+nothing (so it properly contains nothing), and `'a'` cannot be properly
+included in it either. Only a null LIST-LIST pair is NULL.
+
+`_operators.py` had the guard right for one side and wrong for the other: the
+null LIST guards fired on `left_is_list and left_is_null` /
+`right_is_list and right_is_null` WITHOUT checking that the peer was also a
+list, so they hijacked the element overload before the
+`left_is_list and not right_is_list` branch (the branch that already answers
+the null-SCALAR-peer case, fixture `ProperInNullRightFalse`) could run. The
+guards are now `left_is_list and right_is_list and (left_is_null or
+right_is_null)`, with a residual `null in the LIST position that is not
+list-typed` guard for the unsatisfiable-signature case (`null as Integer
+properly includes { 1 }`).
+
+Pinned by `test_list_part2_parity.py::
+test_cql_list_part2_null_list_with_scalar_peer_is_false_per_spec` (4 fixed
+cells + 2 non-null controls + 4 list-list null cells + 4 null-scalar-peer
+cells, py == native == no-Python). Official gate 2022/2037 -> **2024/2037**
+with exactly `ProperContains1` and `ProperIn1` flipping; DQM qi-core 47/47 and
+us-core 73/73 unchanged. Translator-only — no extension rebuild.
+
+### FHIR4-38 — `starts`/`ends` resolve a CLOSED null bound to the point-type extreme (2026-11-24)
+
+CQL 1.5 §9.14 Start / §9.15 End: *"If the low [high] boundary is null and the
+boundary is closed, the result is the minimum [maximum] value of the point
+type."* `Starts` (§19.30) and `Ends` (§19.13) are defined through Start/End, so
+
+    Interval[null, null] starts Interval[1, 10]   // false  (min Integer < 1)
+    Interval[1, 10] ends Interval[null, null]     // false  (max Integer > 10)
+
+are DEFINITE, while the OPEN form `Interval(null, null)` stays UNKNOWN (null)
+because an open null bound is an unknown boundary. `intervalStartsSame` /
+`intervalEndsSame` used to bail out whenever any low/high bound was null, so
+both closed-null cells returned null (official fixtures
+`TestMaxIntervalStartsFalse` / `TestMaxIntervalEndsFalse` expect false;
+`TestUnknownIntervalStartsNull` / `TestUnknownIntervalEndsNull` keep null).
+
+The point type is `Interval<T>` — SHARED by both operands — so when the
+operand's own opposite bound is also null the extremum is inferred from the
+PEER interval. `_sentinel_effective_start` / `_sentinel_effective_end`
+(fhir4ds/cql/duckdb/udf/interval.py) now take an optional `peer_iv`; the
+CQL-16 HISTORIAN `_cql_minimum_for_peer_bound` / `_cql_maximum_for_peer_bound`
+tables are unchanged, and an unresolvable point type (`Interval<Any>`, e.g.
+`Interval[null, null] starts Interval[null, null]`) still returns null. The
+same rule is mirrored in `extensions/cql/src/cql/interval.cpp`
+(`minimum_sentinel_text` / `maximum_sentinel_text`, peer-aware
+`sentinel_start_bound` / `sentinel_end_bound`, `starts_same_nullable` /
+`ends_same_nullable`); the UDF wrappers no longer reject any null-bound
+interval up front.
+
+Official gate 2024/2037 -> **2026/2037** with exactly those two fixtures
+flipping (A/B: reverting only `udf/interval.py` restores 2024/2037); DQM
+qi-core 47/47 and us-core 73/73 unchanged. Pinned by
+`test_interval_part3_parity.py::test_cql_interval_part3_closed_null_bound_starts_ends_fhir4_38`
+plus the direct-UDF sibling.
+
+**REBUILD REQUIRED** for the no-Python/WASM surface: the bundled
+`cql.duckdb_extension` predates the C++ change, so `intervalStartsSame` /
+`intervalEndsSame` still return null there. The parity test carries a
+`no_python_stale` map pinning that; delete it when the bundles are rebuilt.
+Desktop is unaffected (both names are in `_PYTHON_PREFERRED_CPP_CONFLICTS`, so
+py-fallback and native-loaded connections use the Python authority).
+
+KNOWN SEPARATE GAP (not this fix): the PRECISION-qualified form
+(`starts day of`) lowers to `cqlSameAsP(intervalStart(...), intervalStart(...),
+precision)` per operand, and a single all-null interval cannot infer its point
+type, so the closed-null cells stay null there. The same seam also returns null
+for a NON-null Integer interval (`Interval[1, 10] starts day of Interval[1, 15]`)
+because the precision qualifier is defined only for Date/DateTime/Time point
+types. Closing it needs a peer-aware Start/End arity that the bundled C++
+surface does not implement; pinned in the regression test as
+`*PrecisionGapNull`.
+
+
+### FHIR4-40 — point `in` an OPEN-null-bound interval is UNKNOWN (2026-11-24)
+
+CQL 1.5.3 §In (Interval) is the whole rule:
+
+> "For open interval boundaries, exclusive comparison operators are used. For
+> closed interval boundaries, if the interval boundary is null, the result of
+> the boundary comparison is considered true."
+
+So a CLOSED null bound drops out of the conjunction (true — the point-type
+extremum via §9.14/§9.15), while an OPEN null bound is an exclusive comparison
+against an UNKNOWN value, i.e. the boundary comparison is NULL and three-valued
+AND decides the rest. `_translate_in_op`'s literal-`Interval` branch
+(`fhir4ds/cql/translator/expressions/_operators.py`) dropped open-null boundary
+comparisons entirely and returned a literal FALSE when both bounds were open:
+
+| expression | before | after |
+|---|---|---|
+| `5 in Interval(null, null)` (fixture `TestIntegerInUnknownIntervalNull`) | false | **null** |
+| `5 in Interval[null, null]` (fixture `TestIntegerInMaxIntervalTrue`) | true | true |
+| `5 in Interval(null, 10]` | true | **null** |
+| `5 in Interval[0, null)` | true | **null** |
+| `500 in Interval(null, 10]` | false | false (`NULL AND FALSE`) |
+| `500 in Interval[0, null)` | true | **null** (`TRUE AND NULL`) |
+| `5 in Interval[null, 10]` / `Interval[0, null]` | true | true (closed = true) |
+| `null in Interval[null, null]` | null | null (§In: null point → null) |
+
+Open null bounds contribute `CAST(NULL AS BOOLEAN)` operands, so the emitted SQL
+is `CAST(NULL AS BOOLEAN) AND <other side>` — no new UDF, no C++ change, and the
+both-closed-null maximum-interval `intervalContains` dispatch plus its §19.3
+null-point handling are untouched.
+
+Official gate 2028/2037 -> **2029/2037** with exactly that one fixture flipping
+(A/B reverted only `_operators.py`); DQM qi-core 47/47 and us-core 73/73
+unchanged. Pinned by
+`test_interval_part2_parity.py::test_cql_point_in_interval_open_null_bound_is_unknown_fhir4_40`
+(py-fallback == native-loaded == no-Python).
+
+KNOWN SEPARATE GAP (not this fix): the PRECISION-qualified form
+(`5 in day of Interval(null, null)`) delegates to the `intervalContainsPrecise`
+UDF, and BOTH `intervalContains` and `intervalContainsPrecise`
+(`fhir4ds/cql/duckdb/udf/interval.py`) still lack the
+`_open_null_bound_uncertain` guard their sibling relationship predicates carry,
+so an open null bound is treated as unbounded and the verdict is definite
+(`5 in day of Interval(null, null)` -> false, `5 in day of Interval(null, 10]`
+-> true). That is the same defect one layer down and it is NOT unpinned
+boilerplate: real DQM data carries open-null bounds —
+`collapse_intervals` turns a FHIR Period with only `end` (unknown start) into
+`{"low": null, "high": "...", "lowClosed": false, "highClosed": true}` (the
+CMS645/CMS133 one-sided-Period doctrine), and `intervalContains` answers true
+for a point inside it. Adding the guard therefore changes measure SQL wherever a
+point or interval is tested against such a period, and it needs a C++
+`IntervalContains*Func` mirror plus an extension rebuild. Give it its own card.
+
 
 ## AMUX-169 — duration-uncertainty minimum uses the first comparand's LATEST possible value (2026-11-24)
 

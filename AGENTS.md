@@ -866,27 +866,36 @@ are TIME-only (`_is_time_only_text`). Consequence: cql-tests PR #184's
 FALSE (was null; the point reads 12:00:00.000, before the closed start) and
 Time interval `=`/`~` across second-vs-millisecond bounds are TRUE (were
 null/false). DateTimeIncludedInNull and the `millisecond of @T12:00:00 →
-null` precision fixtures are unchanged referees. TWO ADJACENT GAPS REMAIN
-(deliberately not fixed by AMUX-171, each needs its own card): (a)
-LIST-element temporal equality (`cqlDateTimeEqualListElement` /
-`cqlDateTimeEquivalentListElement`, `udf/datetime.py` +
-`CqlDateTimeEqualListElementFunc` in `cql_extension.cpp`) still passes
-`combined_seconds_ms=False`, so `{@T15:59:59.999} properly includes
-@T15:59:59` returns null where official fixtures ProperContainsTimeNull /
-ProperInTimeNull (version 1.0, main) expect FALSE — the internal
-`run_cql.py` gate cannot see this because `compare_results` treats
-`False ≡ None` as equal; fixing it needs a dual-engine change plus an
-extension rebuild. (b) `<point> in <Interval>` over literal Time bounds
+null` precision fixtures are unchanged referees. The sibling LIST-ELEMENT gap
+was FIXED by FHIR4-34 (2026-11-24): `cqlDateTimeEqualListElement` /
+`cqlDateTimeEquivalentListElement` (`udf/datetime.py`) and
+`CqlDateTimeEqualListElementFunc` / the new
+`CqlDateTimeEquivalentListElementFunc` (`cql_extension.cpp`) now pass
+`combined_seconds_ms` = both operands TIME-only, exactly like
+`_precision_aware_compare` above, so `{@T15:59:59.999} properly includes
+@T15:59:59` is FALSE (fixtures ProperContainsTimeNull / ProperInTimeNull,
+version 1.0) and `{@T15:59:59} contains @T15:59:59.000` is TRUE, while
+DateTime/DATE list elements keep the second-vs-ms uncertainty. Both names are
+in `_PYTHON_PREFERRED_CPP_CONFLICTS` so the desktop conformance gate carries
+the rule without waiting for a rebuild, and `run_cql.py` went 2026 -> 2028
+(the two fixtures). The bundled C++ engine still needs a rebuild
+(REBUILD REQUIRED, then delete
+`test_list_part2_parity.py::_NO_PYTHON_LIST_TIME_MS_STALE` /
+`_NO_PYTHON_FUNCTION_ABSENT`; before this fix the no-Python surface also
+lacked `cqlDateTimeEquivalentListElement` entirely, so temporal `~contains`
+/ `~in` was a Catalog error there). REMAINING GAP (own card):
+`<point> in <Interval>` over literal Time bounds
 lowers to raw SQL BETWEEN (`_translate_in_op`), which compares
 lexicographically, so `@T12:00:00 in Interval[@T12:00:00.000,
 @T21:59:59.999]` is FALSE where it should be TRUE; routing that block
 through `intervalContains` is a translator change with DQM blast radius.
-The bundled C++ engine has NOT been rebuilt with the Time rule either
+The interval-surface C++ rebuild has since LANDED
 (`extensions/cql/src/cql/interval.cpp`,
-`Interval::properly_contains_point_nullable`) — the no-Python/WASM surface
-still returns null there; REBUILD REQUIRED, and
-`test_interval_part2_parity.py::_NO_PYTHON_TIME_MS_STALE` pins the gap so
-the rebuild flips it;
+`Interval::properly_contains_point_nullable`; commit 87bece82a55 dropped
+`test_interval_part2_parity.py::_NO_PYTHON_TIME_MS_STALE` once the bundled
+bundles were rebuilt), so the no-Python/WASM surface now agrees with the
+Time rule for interval bounds — the list-element rebuild above is the
+remaining one;
 (4) Ratio `.numerator`/`.denominator` carry Quantity typing into arithmetic
 dispatch (`_is_cql_quantity_expr` via `_static_source_cql_type`, ToRatio-aware)
 so `.numerator + 5 'mg'` routes to quantity_add, not dateAddQuantity;

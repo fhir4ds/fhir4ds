@@ -893,6 +893,106 @@ define OnOrBeforeUnboundedHighTrue: Interval[1, 5] on or before Interval[6, null
         cpp.close()
 
 
+def test_cql_point_in_interval_open_null_bound_is_unknown_fhir4_40() -> None:
+    """FHIR4-40: point `in` an OPEN-null-bound interval is UNKNOWN, not FALSE.
+
+    Official fixture
+    ``CqlIntervalOperatorsTest.xml::TestIntegerInUnknownIntervalNull`` pins
+    ``5 in Interval(null, null)`` as null; its sibling
+    ``TestIntegerInMaxIntervalTrue`` pins ``5 in Interval[null, null]`` as
+    true. CQL 1.5.3 §In (Interval) states the rule that separates them:
+
+        "For open interval boundaries, exclusive comparison operators are
+        used. For closed interval boundaries, if the interval boundary is
+        null, the result of the boundary comparison is considered true."
+
+    So a CLOSED null bound drops out of the conjunction (treated as true,
+    i.e. the point-type extremum via §9.14/§9.15), while an OPEN null bound
+    is an exclusive comparison against an unknown value -> the comparison is
+    UNKNOWN and three-valued AND decides the rest:
+
+        NULL AND TRUE  -> null   (e.g. 5 in Interval(null, 10])
+        NULL AND FALSE -> false  (e.g. 500 in Interval(null, 10])
+
+    ``_translate_in_op`` used to drop open-null bound comparisons altogether
+    (returning the definite verdict of the other side) and to emit a literal
+    FALSE when both bounds were open, so the fixture got false instead of
+    null.
+
+    NOTE (residual, NOT pinned here): the precision-qualified form
+    (``5 in day of Interval(null, null)``) delegates to the
+    ``intervalContainsPrecise`` UDF, which still lacks the
+    ``_open_null_bound_uncertain`` guard that its sibling relationship
+    predicates carry. Widening it is a dual-engine (C++ mirror + rebuild)
+    change with DQM blast radius through Period-derived open-null intervals,
+    so it is tracked separately from this translator-side fix.
+    """
+    cql = """library FHIR4_40 version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define OpenBothNull: 5 in Interval(null, null)
+define ClosedBothNull: 5 in Interval[null, null]
+define NullPointClosedBothNull: null in Interval[null, null]
+define OpenLowNull: 5 in Interval(null, 10]
+define ClosedLowNull: 5 in Interval[null, 10]
+define PointBelowOpenInterval: 500 in Interval(null, 10]
+define OpenHighNull: 5 in Interval[0, null)
+define ClosedHighNull: 5 in Interval[0, null]
+define TrueAndOpenHighNull: 500 in Interval[0, null)
+define OpenBothNullTemporal: @2024-06-15 in Interval(null, @2024-12-31]
+define ClosedBothNullTemporal: @2024-06-15 in Interval[null, @2024-12-31]
+define OrdinaryClosedInterval: 5 in Interval[1, 10]
+define OrdinaryOpenInterval: 5 in Interval(1, 5]
+"""
+    translated = translate_cql(cql)
+    expected = {
+        # The fixture cell: open null bounds -> unknown.
+        "OpenBothNull": (None,),
+        # The sibling fixture cell: closed null bounds -> the maximum
+        # interval, so a non-null point IS contained.
+        "ClosedBothNull": (True,),
+        # CQL §In (Interval): "If the first argument is null, the result is
+        # null" — checked before the boundary rule.
+        "NullPointClosedBothNull": (None,),
+        # Open low: NULL AND (5 <= 10) -> unknown.
+        "OpenLowNull": (None,),
+        # Closed low: the boundary comparison is considered true.
+        "ClosedLowNull": (True,),
+        # 500 is outside on the determinate side: NULL AND FALSE -> false.
+        "PointBelowOpenInterval": (False,),
+        # Open high: (5 >= 0) AND NULL -> unknown.
+        "OpenHighNull": (None,),
+        "ClosedHighNull": (True,),
+        # (500 >= 0) AND NULL -> unknown (not false: the open side is
+        # unknown, so it cannot be decided).
+        "TrueAndOpenHighNull": (None,),
+        "OpenBothNullTemporal": (None,),
+        "ClosedBothNullTemporal": (True,),
+        # Unaffected controls.
+        "OrdinaryClosedInterval": (True,),
+        "OrdinaryOpenInterval": (True,),
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for name, expr in translated.items():
+                sql = f"SELECT {expr.to_sql()}"
+                py_result = py.execute(sql).fetchone()
+                cpp_result = cpp.execute(sql).fetchone()
+                no_py_result = no_py.execute(sql).fetchone()
+                assert py_result == cpp_result == no_py_result, (
+                    name,
+                    py_result,
+                    cpp_result,
+                    no_py_result,
+                )
+                assert py_result == expected[name], (name, sql, py_result)
+    finally:
+        py.close()
+        cpp.close()
+
+
 def test_cql_interval_part2_long_and_quantity_sentinels_cql16_historian_2026_08() -> None:
     """CQL-16 HISTORIAN (2026-08-22) regressions.
 
