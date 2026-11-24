@@ -1105,18 +1105,6 @@ def test_cql_interval_part3_closed_null_bound_starts_ends_fhir4_38() -> None:
     # The C++ source (extensions/cql/src/cql/interval.cpp: peer-aware
     # sentinel_start_bound_with_peer / sentinel_end_bound_with_peer) carries
     # the same rule; DELETE this map when the bundles are rebuilt.
-    no_python_stale = {
-        "MaxStartsFalse": None,
-        "MaxEndsFalse": None,
-        "MaxStartsDateFalse": None,
-        "MaxEndsDateFalse": None,
-        "MaxStartsQuantityFalse": None,
-        "LowNullStartsSentinelEqualTrue": None,
-        "HighNullStartsSentinelEqualTrue": None,
-        "HighNullEndsSentinelEqualTrue": None,
-        "HighNullStartsLongerFalse": None,
-    }
-
     translated = translate_cql(_INTERVAL_PART3_CLOSED_NULL_LIBRARY)
     py = _python_only_connection()
     cpp = _cpp_connection()
@@ -1130,9 +1118,8 @@ def test_cql_interval_part3_closed_null_bound_starts_ends_fhir4_38() -> None:
                 assert py_result == (expected[name],), (
                     f"{name}: got {py_result}, expected {(expected[name],)}"
                 )
-                no_py_expected = (no_python_stale[name],) if name in no_python_stale else (expected[name],)
-                assert no_py.execute(sql).fetchone() == no_py_expected, (
-                    f"{name}: no-Python expected {no_py_expected}"
+                assert no_py.execute(sql).fetchone() == (expected[name],), (
+                    f"{name}: no-Python expected {(expected[name],)}"
                 )
     finally:
         py.close()

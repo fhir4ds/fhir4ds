@@ -61,41 +61,10 @@ def _cpp_connection() -> duckdb.DuckDBPyConnection:
 # CQLListContainsTemporalEquivalent -> cqlDateTimeEquivalentListElement
 # (`~contains`/`~in`), so one rule covers all of them.
 #
-# The bundled C++ engine has NOT been rebuilt with the Time rule, so on a
-# no-Python connection (WASM/browser surface) the stale results below remain.
-# REBUILD REQUIRED - delete _NO_PYTHON_LIST_TIME_MS_STALE and
-# _NO_PYTHON_FUNCTION_ABSENT once the extension bundles are rebuilt from these
-# sources; the assertions then become plain cross-engine equality.
+# The bundled C++ engine implements the same Time rule (rebuild 2026-11-24), so
+# the no-Python surface agrees with the Python authority and no stale map is
+# needed.
 # ---------------------------------------------------------------------------
-_NO_PYTHON_LIST_TIME_MS_STALE = {
-    # label: expected no-Python (bundled C++) result before the rebuild.
-    "ProperContainsTimeNull (fixture)": (None,),
-    "ProperInTimeNull (fixture)": (None,),
-    "contains across ms precision (combined)": (None,),
-    "properly included in across ms precision (combined)": (None,),
-    "contains distinct milliseconds (combined)": (None,),
-    "list equality across ms precision (combined)": (None,),
-    "list properly includes across ms precision (combined)": (None,),
-    # test_cql_list_part2_temporal_uncertainty_matches_no_python_cpp
-    "ProperIncludesTimeUncertain": (None,),
-    "ProperIncludedInTimeUncertain": (None,),
-    "ContainsTimeUncertain": (None,),
-    "InTimeUncertain": (None,),
-    "EqualTimeUncertain": (None,),
-    "NotEqualTimeUncertain": (None,),
-    "direct: CQLListContainsTemporalEq second-vs-ms": (None,),
-    "direct: CQLListHasAllTemporalEq second-vs-ms": (None,),
-    "direct: CQLListEqualTemporalEq second-vs-ms": (None,),
-}
-
-# The bundled extension predates CqlDateTimeEquivalentListElementFunc (the
-# macro CQLListContainsTemporalEquivalent has always raised a Catalog error on
-# the no-Python surface).  After the rebuild the function exists and these
-# cases evaluate like the other surfaces.
-_NO_PYTHON_FUNCTION_ABSENT = {
-    "equivalent contains across ms precision (combined)",
-    "equivalent contains DateTime precision mismatch (control)",
-}
 
 
 def test_cql_list_part2_expressions_parse_and_translate() -> None:
@@ -424,9 +393,7 @@ def test_cql_list_part2_temporal_uncertainty_matches_no_python_cpp() -> None:
             cpp_result = cpp.execute(sql).fetchone()
             no_py_result = no_py.execute(sql).fetchone()
             assert cpp_result == py_result, name
-            # REBUILD REQUIRED: the bundled C++ engine still returns NULL here
-            # (see _NO_PYTHON_LIST_TIME_MS_STALE).
-            assert no_py_result == _NO_PYTHON_LIST_TIME_MS_STALE.get(name, py_result), name
+            assert no_py_result == py_result, name
             assert py_result == expected[name], name
 
         direct_cases = [
@@ -439,21 +406,10 @@ def test_cql_list_part2_temporal_uncertainty_matches_no_python_cpp() -> None:
             ("SELECT CQLListHasAllTemporalEq(['T15:59:59.999'], ['T15:59:59'])", (False,)),
             ("SELECT CQLListEqualTemporalEq(['T15:59:59.999'], ['T15:59:59'])", (False,)),
         ]
-        stale_labels = {
-            "SELECT CQLListContainsTemporalEq(['T15:59:59.999'], 'T15:59:59')":
-                "direct: CQLListContainsTemporalEq second-vs-ms",
-            "SELECT CQLListHasAllTemporalEq(['T15:59:59.999'], ['T15:59:59'])":
-                "direct: CQLListHasAllTemporalEq second-vs-ms",
-            "SELECT CQLListEqualTemporalEq(['T15:59:59.999'], ['T15:59:59'])":
-                "direct: CQLListEqualTemporalEq second-vs-ms",
-        }
         for sql, expected_row in direct_cases:
             assert py.execute(sql).fetchone() == expected_row, sql
             assert cpp.execute(sql).fetchone() == expected_row, sql
-            no_py_expected = _NO_PYTHON_LIST_TIME_MS_STALE.get(
-                stale_labels.get(sql, ""), expected_row
-            )
-            assert no_py.execute(sql).fetchone() == no_py_expected, sql
+            assert no_py.execute(sql).fetchone() == expected_row, sql
     finally:
         no_py_cm.__exit__(None, None, None)
         py.close()
@@ -1358,12 +1314,7 @@ def test_cql_list_element_time_ms_combined_precision_fhir434() -> None:
             # _PYTHON_PREFERRED_CPP_CONFLICTS), so the desktop surface carries
             # the fix as soon as the Python UDFs do.
             assert cpp.execute(sql).fetchone() == expected, f"{label} (native-loaded)"
-            no_py_expected = _NO_PYTHON_LIST_TIME_MS_STALE.get(label, expected)
-            if label in _NO_PYTHON_FUNCTION_ABSENT:
-                with pytest.raises(duckdb.CatalogException):
-                    no_py.execute(sql).fetchone()
-                continue
-            assert no_py.execute(sql).fetchone() == no_py_expected, (
+            assert no_py.execute(sql).fetchone() == expected, (
                 f"{label} (no-Python C++)"
             )
     finally:
