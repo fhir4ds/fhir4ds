@@ -10,23 +10,97 @@ This directory contains the official CQL (Clinical Quality Language) test suite 
 - **Subject**: `Merge pull request #186 from bryantaustin13/truncate-integer-range-tests`
 - **Previous pin**: `316c4939be3a513fa775d78a97c31c6eae018b7a` (2026-11-16)
 
-How this directory is vendored: the `cql-tests` entry is a **gitlink**
-(submodule-style pin) in the fhir4ds index whose commit is the upstream SHA
-above, and the corpus files themselves live in a plain clone of upstream at
-that commit (`git -C fhir4ds/cql/tests/official/cql-tests rev-parse HEAD` must
-equal the pinned SHA). `conformance/scripts/run_cql.py` reads the XML files
-straight off the working tree.
+How this directory is vendored: **as plain files committed to this repository**
+(vendored snapshot). There is no submodule and no `.gitmodules` entry for it.
 
-Refreshing the pin (keep both halves of the pin in step):
+### Why vendored and not a submodule (FHIR4-45, 2026-11-24)
+
+Until this card the `cql-tests` entry was a bare **gitlink** with no
+`.gitmodules` entry. A gitlink with no module declaration cannot be
+materialised: `git worktree add` and a fresh CI checkout both leave an EMPTY
+directory, and `git submodule update --init` cannot help because git has no URL
+to fetch. `run_cql.py` then printed "CQL tests directory not found", exited
+**0**, and left the previously committed `conformance/reports/cql_report.json`
+untouched — so `run_all.py`/CI read the previous run's numbers and reported
+them as a pass. The gate could be green while testing nothing.
+
+Precedent considered:
+
+| corpus | wiring | why |
+|---|---|---|
+| `fhir4ds/viewdef/tests/spec_tests/` | **vendored** (22 JSON fixtures) | official third-party corpus for the ViewDefinition gate — the closest analogue of this directory |
+| `tests/data/ecqm-content-qicore-2025/` | **vendored** (~43k files) | measure content for the DQM gate |
+| `tests/data/dqm-content-qicore-2026/`, `tests/data/dqm-content-cms-2025/` | **submodules**, declared in `.gitmodules` | the only submodule-wired corpora; both have a module entry so `git submodule update` can materialise them |
+
+Submodule was rejected because it would not have fixed the observed failure:
+
+- `git worktree add` (this project's campaign workflow) does not materialise
+  submodules either, so the empty-directory failure would persist.
+- No CI workflow runs `git submodule update` for this path
+  (`.github/workflows/conformance.yml` initialises only
+  `tests/data/ecqm-content-qicore-2025`), so CI would still have been empty.
+
+Vendoring makes the corpus present in every checkout by construction, which is
+the property a gate needs. It is affordable: the snapshot is ~536 KB across
+16 XML files. The upstream commit pin is recorded in
+[`corpus_manifest.json`](corpus_manifest.json) and in this note.
+
+Snapshot contents: `tests/cql/*.xml` (the corpus, verbatim),
+`tests/testSchema.xsd`, `LICENSE`, `CHANGE_MANAGEMENT.md`, `README.md`.
+Upstream's `.git` and `.github/` are deliberately not vendored.
+
+### Gate integrity contract (FHIR4-45)
+
+`conformance/scripts/run_cql.py` treats corpus problems as gate failures, and
+`conformance/scripts/run_all.py` treats a suite that could not run as a master
+failure. `corpus_manifest.json` is the single source of truth for the expected
+size; update it in the same commit as any corpus refresh.
+
+| condition | exit code | report | master runner |
+|---|---|---|---|
+| corpus directory **absent** (empty checkout / stale worktree) | **2** | stale report deleted, explicit `__corpus_integrity__` failure written | suite reported NOT RUN, gate exits **1** |
+| corpus present but **empty** (no `*.xml`) | **2** | same | same |
+| corpus **partial** (fewer XML files than the manifest pin) | **2** | same | same |
+| corpus present, but **fewer test cases** collected than the pin | **2** | real per-file numbers kept **plus** a failing `corpus_test_count_shortfall` sentinel | gate exits **1** |
+| a corpus XML file **cannot be parsed** | 0 if counts still match, else 2 | that file recorded as a failed test (never silently dropped) | per-case failure |
+| corpus **larger** than the pin | 0 | runs every file present | loud `WARNING`: the pin note is stale |
+| **normal** run | 0 | fresh report | normal summary |
+
+Two further rules in `run_all.py`, because reading whatever report is on disk is
+how a stale pass leaks into CI (AGENTS.md records the same pattern reporting a
+stale `dqm_report.json` as 47/47):
+
+1. A child's non-zero exit is never swallowed — the suite is reported as
+   NOT RUN and contributes no numbers to the totals.
+2. A child that exits **0 without rewriting its report** is a failure. Each
+   report's `(mtime_ns, size)` is captured before the child runs and verified
+   after; an unchanged fingerprint means the suite tested nothing. A report
+   containing **0 tests** is a failure too.
+
+A run where every suite executed and some individual *cells* fail still exits 0
+with an `INCOMPLETE` banner: the pinned corpus carries a handful of cells whose
+upstream fixture PRs are still open (see below), so a rate-based non-zero exit
+would keep the gate permanently red and train readers to ignore it.
+
+### Refreshing the pin
+
+Both halves of the pin must move together — the vendored files and
+`corpus_manifest.json` (commit, date, subject, counts):
 
 ```bash
-cd fhir4ds/cql/tests/official/cql-tests
-git fetch origin main
-git checkout --detach <upstream-main-sha>
-cd - && git add fhir4ds/cql/tests/official/cql-tests   # bumps the gitlink
-# then update this note (commit, date, subject, counts below)
-/tmp/opencode/capped.sh 20 8 python3 conformance/scripts/run_cql.py
+git clone https://github.com/cqframework/cql-tests /tmp/cql-tests
+cd /tmp/cql-tests && git checkout --detach <upstream-main-sha>
+rsync -a --delete \
+  --exclude '.git' --exclude '.github' \
+  /tmp/cql-tests/ ~/src/fhir4ds/fhir4ds/cql/tests/official/cql-tests/
+cd ~/src/fhir4ds
+# update corpus_manifest.json (pin, pin_date, pin_subject, xml_file_count, test_count)
+# and the counts table below, then:
+./scripts/capped.sh 20 8 python3 conformance/scripts/run_cql.py
 ```
+
+Do **not** hand-edit the vendored XML to silence a failure — the pin is
+upstream's content, and the failures are the honest inventory.
 
 ### Upstream PRs NOT yet in this pin
 
