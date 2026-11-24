@@ -12,6 +12,8 @@ import re
 import sys
 import warnings
 import xml.etree.ElementTree as ET
+from collections.abc import Iterator
+from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -386,31 +388,73 @@ def compare_results(actual: Any, expected: Any) -> bool:
     # Fallback: string comparison
     return str(actual).lower() == str(expected).lower()
 
-def run_test(conn, test_elem) -> tuple[bool, str]:
-    """Run a single CQL test case."""
+@dataclass(frozen=True)
+class CorpusTest:
+    """One corpus test plus the version-gating decision of the gate."""
+
+    filename: str
+    name: str
+    test_elem: Any
+    superseded: bool  # recorded as pass ("superseded by 2.0 pin"), never executed
+
+
+@dataclass(frozen=True)
+class TestExecution:
+    """One execution of a translated test expression on one connection."""
+
+    value: Any
+    value_type: str | None
+    error: str | None
+
+
+def test_expression(test_elem) -> tuple[str, bool, Any] | None:
+    """(cql_expr, expect_invalid, expected) or None when the test has no expression."""
     expr_elem = test_elem.find("ns:expression", NS)
     if expr_elem is None:
-        return False, "No expression found"
-
-    cql_expr = expr_elem.text or ""
-    expect_invalid = expr_elem.get("invalid", "false") != "false"
-
+        return None
     output_elem = test_elem.find("ns:output", NS)
-    expected = normalize_output(output_elem)
+    return (
+        expr_elem.text or "",
+        expr_elem.get("invalid", "false") != "false",
+        normalize_output(output_elem),
+    )
+
+
+def translate_test_sql(cql_expr: str, connection) -> str:
+    """Translate one expression (wrapped in a dummy library) to SQL text."""
+    library_text = f"library Conformance version '1.0'\ndefine \"TestResult\": {cql_expr}"
+    results = translate_cql(library_text, connection=connection)
+    return results["TestResult"].to_sql()
+
+
+def execute_test_select(conn, sql_expr: str, *, with_type: bool = False) -> TestExecution:
+    """Execute one translated test expression.
+
+    ``with_type=False`` is the conformance-runner path and is byte-identical to
+    the historical ``SELECT <expr>``. ``with_type=True`` also returns
+    ``typeof(<expr>)``; the WASM parity gate uses it to compare declared types
+    across engines. Execution errors are returned, never raised.
+    """
+    query = (
+        f"SELECT ({sql_expr}), typeof(({sql_expr}))" if with_type else f"SELECT {sql_expr}"
+    )
+    try:
+        row = conn.execute(query).fetchone()
+    except Exception as exc:
+        return TestExecution(None, None, str(exc))
+    if not row:
+        return TestExecution(None, None, None)
+    return TestExecution(row[0], row[1] if with_type else None, None)
+
+
+def assess_test(test_elem, execution: TestExecution) -> tuple[bool, str]:
+    """The official comparator: map one execution outcome to (passed, reason)."""
+    cql_expr, expect_invalid, expected = test_expression(test_elem)
+    if execution.error is not None:
+        return (True, "") if expect_invalid else (False, execution.error)
+    result = execution.value
 
     try:
-        # Wrap expression in a dummy library
-        library_text = f"library Conformance version '1.0'\ndefine \"TestResult\": {cql_expr}"
-
-        # Translate to SQL expression
-        print(f"Translating: {cql_expr}")
-        results = translate_cql(library_text, connection=conn)
-        sql_expr = results["TestResult"].to_sql()
-
-        # Execute in DuckDB
-        res = conn.execute(f"SELECT {sql_expr}").fetchone()
-        result = res[0] if res else None
-
         if expect_invalid:
             # Per the CQL v1.5.3 normative spec (§16 Arithmetic Operators
             # section header): "operations that cause arithmetic overflow
@@ -460,6 +504,70 @@ def run_test(conn, test_elem) -> tuple[bool, str]:
             return True, ""
         return False, str(e)
 
+
+def iter_file_tests(filepath: Path) -> Iterator[CorpusTest]:
+    """Yield every test of one corpus file, applying the gate's version gating."""
+    try:
+        tree = ET.parse(filepath)
+        root = tree.getroot()
+    except Exception as e:
+        print(f"  Error parsing {filepath.name}: {e}")
+        return
+    tests = root.findall(".//ns:test", NS)
+    for test_elem in tests:
+        test_name = test_elem.get("name", "unnamed")
+        # CQL version gating (f724ee4 corpus): fixtures carry version
+        # ranges. We implement CQL 2.0 semantics (precision-stepped
+        # predecessor/successor, ~in/~contains, Slice, ...), so tests
+        # capped at versionTo < 2.0 whose 2.0 re-pin exists under a
+        # *Precision/suffixed name are superseded — but the corpus
+        # convention is versionTo="1.5.3" vs version="2.0" DUPLICATES
+        # of the same expression. Gate: run tests valid AT 2.0 only
+        # (version absent, or version <= 2.0), and skip tests whose
+        # versionTo < 2.0 when a same-expression 2.0 variant exists.
+        t_version_to = test_elem.get("versionTo")
+        superseded = False
+        if t_version_to is not None and t_version_to.strip() not in ("2.0", "2.0.0"):
+            # superseded pre-2.0 pin; check for a 2.0 sibling of the same expression
+            expr_el = test_elem.find("ns:expression", NS)
+            expr_text = (expr_el.text or "").strip() if expr_el is not None else ""
+            has_2_0_sibling = any(
+                (s.get("version") or "").startswith("2.0")
+                and ((s.find("ns:expression", NS).text or "").strip() == expr_text if s.find("ns:expression", NS) is not None else False)
+                for s in tests
+                if s is not test_elem
+            )
+            superseded = has_2_0_sibling
+        yield CorpusTest(filepath.name, test_name, test_elem, superseded)
+
+
+def iter_corpus_tests(tests_dir: Path | None = None) -> Iterator[CorpusTest]:
+    """Yield every test the conformance gate runs, in gate order.
+
+    Shared by ``main()`` and the WASM parity gate, so both iterate the same
+    corpus with the same version gating.
+    """
+    directory = Path(tests_dir) if tests_dir is not None else CQL_TESTS_DIR
+    for filepath in sorted(directory.glob("*.xml")):
+        yield from iter_file_tests(filepath)
+
+
+def run_test(conn, test_elem) -> tuple[bool, str]:
+    """Run a single CQL test case."""
+    expr = test_expression(test_elem)
+    if expr is None:
+        return False, "No expression found"
+    cql_expr, expect_invalid, _expected = expr
+
+    print(f"Translating: {cql_expr}")
+    try:
+        sql_expr = translate_test_sql(cql_expr, conn)
+    except Exception as e:
+        if expect_invalid:
+            return True, ""
+        return False, str(e)
+    return assess_test(test_elem, execute_test_select(conn, sql_expr))
+
 def main():
     if not CQL_TESTS_DIR.exists():
         print(f"Error: CQL tests directory not found at {CQL_TESTS_DIR}")
@@ -487,50 +595,21 @@ def main():
 
     for filepath in test_files:
         filename = filepath.name
-        try:
-            tree = ET.parse(filepath)
-            root = tree.getroot()
-        except Exception as e:
-            print(f"  Error parsing {filename}: {e}")
-            continue
 
         file_results = []
-        for test_elem in root.findall(".//ns:test", NS):
-            test_name = test_elem.get("name", "unnamed")
-            # CQL version gating (f724ee4 corpus): fixtures carry version
-            # ranges. We implement CQL 2.0 semantics (precision-stepped
-            # predecessor/successor, ~in/~contains, Slice, ...), so tests
-            # capped at versionTo < 2.0 whose 2.0 re-pin exists under a
-            # *Precision/suffixed name are superseded — but the corpus
-            # convention is versionTo="1.5.3" vs version="2.0" DUPLICATES
-            # of the same expression. Gate: run tests valid AT 2.0 only
-            # (version absent, or version <= 2.0), and skip tests whose
-            # versionTo < 2.0 when a same-expression 2.0 variant exists.
-            t_version_to = test_elem.get("versionTo")
-            if t_version_to is not None and t_version_to.strip() not in ("2.0", "2.0.0"):
-                # superseded pre-2.0 pin; check for a 2.0 sibling of the same expression
-                expr_el = test_elem.find("ns:expression", NS)
-                expr_text = (expr_el.text or "").strip() if expr_el is not None else ""
-                has_2_0_sibling = any(
-                    (s.get("version") or "").startswith("2.0")
-                    and ((s.find("ns:expression", NS).text or "").strip() == expr_text if s.find("ns:expression", NS) is not None else False)
-                    for s in root.findall(".//ns:test", NS)
-                    if s is not test_elem
-                )
-                if has_2_0_sibling:
-                    file_results.append({"name": test_name, "result": {"passed": True, "skipped": "superseded by 2.0 pin"}})
-                    total_tests += 1
-                    passed_tests += 1
-                    continue
-            passed, reason = run_test(conn, test_elem)
-
-            test_obj = {"name": test_name, "result": {"passed": passed}}
-            if not passed:
-                test_obj["result"]["error"] = reason
+        for corpus_test in iter_file_tests(filepath):
+            test_obj = {"name": corpus_test.name, "result": {"passed": True}}
+            if corpus_test.superseded:
+                test_obj["result"]["skipped"] = "superseded by 2.0 pin"
+            else:
+                passed, reason = run_test(conn, corpus_test.test_elem)
+                test_obj["result"]["passed"] = passed
+                if not passed:
+                    test_obj["result"]["error"] = reason
 
             file_results.append(test_obj)
             total_tests += 1
-            if passed:
+            if test_obj["result"]["passed"]:
                 passed_tests += 1
 
         report[filename] = {"tests": file_results}
