@@ -1169,3 +1169,160 @@ def test_cql_interval_part3_closed_null_bound_direct_udf_surface() -> None:
     finally:
         py.close()
         cpp.close()
+
+
+# ---------------------------------------------------------------------------
+# FHIR4-43 — `properly contains` is not CQL and must not reach SQL
+# ---------------------------------------------------------------------------
+
+#: Every behaviourally-meaningful shape of the rejected spelling: all seven
+#: point types, the list form, the interval-interval form, and the
+#: parenthesised/negated wrappers that keep the inner binary expression.
+_FHIR4_43_REJECTED_SPELLINGS = [
+    "Interval[1, 10] properly contains 5",
+    "Interval[1, 10] properly contains 10",
+    "Interval[1, 1] properly contains 1",
+    "Interval(1, 10] properly contains 2",
+    "Interval[1.0, 10.0] properly contains 5.5",
+    "Interval[@2024-01-01, @2024-12-31] properly contains @2024-06-15",
+    "Interval[@2024-01-01T00:00:00, @2024-06-01T00:00:00] properly contains @2024-03-01T00:00:00",
+    "Interval[@T08:00:00, @T18:00:00] properly contains @T12:00:00",
+    "Interval[1 'g', 10 'g'] properly contains 5 'g'",
+    "{'a', 'b', 'c'} properly contains 'b'",
+    "Interval[1, 10] properly contains Interval[2, 3]",
+    "(Interval[1, 10]) properly contains 5",
+    "not (Interval[1, 10] properly contains 5)",
+    # Same defect class, one line away in the old parser: `properly` never
+    # qualifies `in` in the CQL grammar either.
+    "5 properly in Interval[1, 10]",
+]
+
+
+def test_cql_properly_contains_rejected_at_parse_fhir4_43() -> None:
+    """FHIR4-43: `properly contains` / `properly in` are not CQL operators.
+
+    The CQL grammar lets ``properly`` qualify only ``between``, ``includes``,
+    ``during`` / ``included in`` and ``within ... of`` — verified against
+    https://cql.hl7.org/2019May/grammar.html (1.5.3 ``expression`` /
+    ``intervalOperatorPhrase``), https://cql.hl7.org/grammar.html (2.0), and
+    the reference implementation's ``grammar/cql.g4``.  Appendix B has no
+    ``properly contains`` entry in 1.5.3 or 2.0; the point-in-interval reads
+    are spelled ``properly includes (left Interval<T>, right T)`` (§9.22) and
+    ``properly included in (left T, right Interval<T>)`` (§9.23).
+
+    Before the fix the lexer pre-tokenized ``properly contains`` into a
+    dedicated token, the parser accepted it, and the translator had no
+    dispatch for the resulting operator string — so the raw text
+    ``... properly contains 5`` was emitted into the generated SQL and DuckDB
+    raised a ``ParserException`` at execution for every point type.
+    """
+    import pytest  # local import to match this module's convention
+
+    from fhir4ds.cql.errors import ParseError
+
+    for expression in _FHIR4_43_REJECTED_SPELLINGS:
+        with pytest.raises(ParseError) as excinfo:
+            parse_expression(expression)
+        message = str(excinfo.value)
+        # The error must name the offending spelling AND point at the valid
+        # CQL reads, so an author can fix it without consulting the spec.
+        assert "cannot be used with 'properly'" in message, message
+        assert "properly includes" in message, message
+        assert "properly included in" in message, message
+
+
+def test_cql_properly_contains_never_reaches_generated_sql_fhir4_43() -> None:
+    """FHIR4-43: translation must fail loudly, never emit the raw operator text.
+
+    Guards the CQL-19 doctrine ("a parser-emitted operator string with no
+    translator dispatch falls through to SQL pass-through and produces
+    Binder/Parser exceptions at execution") for this spelling: the failure
+    has to happen at parse/translate time with a typed error, and no
+    generated SQL may ever contain ``properly contains``.
+    """
+    import pytest  # local import to match this module's convention
+
+    from fhir4ds.cql.errors import ParseError
+
+    library = (
+        "library ProperlyContains version '1.0.0'\n"
+        "using FHIR version '4.0.1'\n"
+        "context Patient\n"
+        "define Ctl: Interval[1, 10] properly includes 5\n"
+        "define Bad: Interval[1, 10] properly contains 5\n"
+    )
+    with pytest.raises(ParseError) as excinfo:
+        translate_cql(library)
+    assert "properly contains" in str(excinfo.value)
+
+    # Control: without the rejected define the same library translates, and
+    # the valid spelling lowers through the interval UDF family.
+    ok_library = library.replace("define Bad: Interval[1, 10] properly contains 5\n", "")
+    translated = translate_cql(ok_library)
+    emitted = translated["Ctl"].to_sql()
+    assert "properly contains" not in emitted, emitted
+    assert "intervalProperlyContains" in emitted, emitted
+
+
+def test_cql_properly_includes_point_family_translates_and_executes_fhir4_43() -> None:
+    """FHIR4-43 control: the supported spellings still cover every point type.
+
+    The rejected keyword is the *only* gap in this family: ``properly
+    includes`` (interval left) and ``properly included in`` (interval right,
+    plus the ``properly during`` synonym) lower to ``intervalProperlyContains``
+    and ``intervalProperlyIncludes`` and execute correctly across
+    Integer / Decimal / Date / DateTime / Time / Quantity / String points and
+    the interval-interval overload.
+    """
+    library = """library ProperlyPointFamily version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define IntPoint: Interval[1, 10] properly includes 5
+define IntEndPoint: Interval[1, 10] properly includes 10
+define IntUnit: Interval[1, 1] properly includes 1
+define IntOpenLow: Interval(1, 10] properly includes 2
+define DecimalPoint: Interval[1.0, 10.0] properly includes 5.5
+define DatePoint: Interval[@2024-01-01, @2024-12-31] properly includes @2024-06-15
+define DateTimePoint: Interval[@2024-01-01T00:00:00, @2024-06-01T00:00:00] properly includes @2024-03-01T00:00:00
+define TimePoint: Interval[@T08:00:00, @T18:00:00] properly includes @T12:00:00
+define QuantityPoint: Interval[1 'g', 10 'g'] properly includes 5 'g'
+define IntervalOverload: Interval[1, 10] properly includes Interval[2, 3]
+define MirrorPoint: 5 properly included in Interval[1, 10]
+define MirrorDuring: Interval[2, 3] properly during Interval[1, 10]
+"""
+    expected = {
+        "IntPoint": True,
+        "IntEndPoint": False,  # equal to the closed high bound
+        "IntUnit": False,  # unit interval containing only the point
+        "IntOpenLow": True,  # effective start of Interval(1, 10] is 2
+        "DecimalPoint": True,
+        "DatePoint": True,
+        "DateTimePoint": True,
+        "TimePoint": True,
+        "QuantityPoint": True,
+        "IntervalOverload": True,
+        "MirrorPoint": True,
+        "MirrorDuring": True,
+    }
+
+    translated = translate_cql(library)
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, want in expected.items():
+            sql = translated[name].to_sql()
+            assert "properly" not in sql, f"{name}: raw operator text leaked: {sql}"
+            if name == "IntervalOverload":
+                assert "intervalProperlyIncludes" in sql, f"{name}: {sql}"
+            elif name == "MirrorDuring":
+                # `properly during` is the §9.23 synonym of `properly included in`.
+                assert "intervalProperlyIncludedIn" in sql, f"{name}: {sql}"
+            else:
+                assert "intervalProperlyContains" in sql, f"{name}: {sql}"
+            py_result = py.execute(f"SELECT {sql}").fetchone()
+            cpp_result = cpp.execute(f"SELECT {sql}").fetchone()
+            assert py_result == (want,), f"{name}: py got {py_result}, expected {(want,)}"
+            assert cpp_result == py_result, f"{name}: cpp/py mismatch {cpp_result} vs {py_result}"
+    finally:
+        py.close()
+        cpp.close()
