@@ -7197,12 +7197,44 @@ needs the peer interval's point type inside `starts`/`ends`, the CQL-16
 `_cql_maximum_for_peer_bound` doctrine applied to those two operators),
 `ProperContains1`/`ProperIn1` (a null LIST operand with a SCALAR peer must be
 false; the engine already answers false for a null SCALAR peer, so it is an
-internal inconsistency), `TestIntegerInUnknownIntervalNull` (`in`/`contains`
+internal inconsistency — **CLOSED by FHIR4-39, see below; baseline is now
+2024/2037**), `TestIntegerInUnknownIntervalNull` (`in`/`contains`
 over an OPEN-null interval must be null, not false) and the two Time-list cells
 of gap 1 above - plus **2 STALE fixtures** (`TimeProperContainsNull` /
 `TimeProperInNull`, capped at `versionTo="1.5.2"` by cql-tests PR #184 commit
 `d95d6c6`; our corpus pin predates it and the engine already answers the 1.5.3
 `false`). Never re-add a blanket falsy rule to silence these.
+
+### FHIR4-39 — list `properly includes`/`included in` null propagation is LIST-LIST only (2026-11-24)
+
+CQL 2.0 §10.19 Properly Includes / §10.20 Properly Included In scope the null
+rule explicitly: *"**For the list-list overload**, if either argument is null,
+the result is null."* The list-singleton overload gets no null-propagation
+clause — its rule is "returns true if the list contains (i.e. includes) the
+element, and it is not the only element in the list" — and §10.1 Contains pins
+the consequence for a null list: *"If the first argument is null, the result is
+false."* Hence a NULL LIST against a SCALAR peer is **FALSE**: it contains
+nothing (so it properly contains nothing), and `'a'` cannot be properly
+included in it either. Only a null LIST-LIST pair is NULL.
+
+`_operators.py` had the guard right for one side and wrong for the other: the
+null LIST guards fired on `left_is_list and left_is_null` /
+`right_is_list and right_is_null` WITHOUT checking that the peer was also a
+list, so they hijacked the element overload before the
+`left_is_list and not right_is_list` branch (the branch that already answers
+the null-SCALAR-peer case, fixture `ProperInNullRightFalse`) could run. The
+guards are now `left_is_list and right_is_list and (left_is_null or
+right_is_null)`, with a residual `null in the LIST position that is not
+list-typed` guard for the unsatisfiable-signature case (`null as Integer
+properly includes { 1 }`).
+
+Pinned by `test_list_part2_parity.py::
+test_cql_list_part2_null_list_with_scalar_peer_is_false_per_spec` (4 fixed
+cells + 2 non-null controls + 4 list-list null cells + 4 null-scalar-peer
+cells, py == native == no-Python). Official gate 2022/2037 -> **2024/2037**
+with exactly `ProperContains1` and `ProperIn1` flipping; DQM qi-core 47/47 and
+us-core 73/73 unchanged. Translator-only — no extension rebuild.
+
 
 ## AMUX-169 — duration-uncertainty minimum uses the first comparand's LATEST possible value (2026-11-24)
 
