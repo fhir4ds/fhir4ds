@@ -3783,18 +3783,25 @@ class OperatorsMixin:
                 right_is_list = _properly_is_list(right, getattr(expr, 'right', None))
                 left_is_null = isinstance(left, SQLNull) or (isinstance(left, SQLLiteral) and left.value is None) or self._is_static_null_case(left)
                 right_is_null = isinstance(right, SQLNull) or (isinstance(right, SQLLiteral) and right.value is None) or self._is_static_null_case(right)
-                # CQL §20 List Properly Includes: "For the list-list overload, if
-                # either argument is null, the result is null." Detect typed-null
-                # list operands (translated to `CASE WHEN FALSE THEN NULL ELSE
-                # NULL END`) so the array_length comparison does not silently
-                # short-circuit to FALSE.
-                if left_is_list and left_is_null:
+                # CQL §10.19 List Properly Includes: "For the list-list
+                # overload, if either argument is null, the result is null."
+                # Null propagation is scoped to THAT overload — the spec gives
+                # the list-singleton overload no null-propagation clause
+                # ("returns true if the list contains (i.e. includes) the
+                # element, and it is not the only element in the list"), and
+                # §10.1 Contains pins the consequence for a null list: "If the
+                # first argument is null, the result is false." So a NULL LIST
+                # against a SCALAR peer is FALSE (fixtures
+                # ProperContains1/ProperIn1), and only a null LIST-LIST pair
+                # is NULL. Detect typed-null lists (translated to `CASE WHEN
+                # FALSE THEN NULL ELSE NULL END`) so the array_length
+                # comparison does not silently short-circuit.
+                if left_is_list and right_is_list and (left_is_null or right_is_null):
                     return SQLNull()
-                if right_is_list and right_is_null:
-                    return SQLNull()
-                if left_is_null:
-                    return SQLNull()
-                if right_is_null and right_is_list:
+                if left_is_null and not left_is_list:
+                    # No list-list null rule applies and the left operand is
+                    # not a list at all, so no list signature is satisfiable
+                    # (e.g. `null as Integer properly includes { 1 }`).
                     return SQLNull()
                 if left_is_list and not right_is_list:
                     # List properly includes element = CQL equality contains AND len > 1.
@@ -3880,18 +3887,19 @@ class OperatorsMixin:
                 right_is_list = _properly_is_list(right, getattr(expr, 'right', None))
                 left_is_null = isinstance(left, SQLNull) or (isinstance(left, SQLLiteral) and left.value is None) or self._is_static_null_case(left)
                 right_is_null = isinstance(right, SQLNull) or (isinstance(right, SQLLiteral) and right.value is None) or self._is_static_null_case(right)
-                # CQL §20 List Properly Included In: "For the list-list overload,
-                # if either argument is null, the result is null." Detect typed-
-                # null list operands (translated to `CASE WHEN FALSE THEN NULL
-                # ELSE NULL END`) so the array_length comparison does not
-                # silently short-circuit to FALSE.
-                if left_is_list and left_is_null:
+                # CQL §10.20 List Properly Included In: "For the list-list
+                # overload, if either argument is null, the result is null."
+                # As with properly includes, null propagation is scoped to the
+                # list-list overload; the singleton overload evaluates "element
+                # in list AND list is longer than one element", so a NULL LIST
+                # as the right operand is FALSE (fixture ProperIn1), and the
+                # null SCALAR peer case (ProperInNullRightFalse) stays FALSE.
+                if left_is_list and right_is_list and (left_is_null or right_is_null):
                     return SQLNull()
-                if right_is_list and right_is_null:
-                    return SQLNull()
-                if right_is_null:
-                    return SQLNull()
-                if left_is_null and left_is_list:
+                if right_is_null and not right_is_list:
+                    # No list-list null rule applies and the right operand is
+                    # not a list at all, so no list signature is satisfiable
+                    # (e.g. `{ 1 } properly included in null as Integer`).
                     return SQLNull()
                 if right_is_list and not left_is_list:
                     # Element properly included in list = CQL equality contains AND len > 1.
