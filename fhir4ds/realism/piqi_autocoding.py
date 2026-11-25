@@ -117,8 +117,10 @@ DUCKDB_THREADS_ENV = "FHIR4DS_PIQI_DUCKDB_THREADS"
 #: runs) and not caused by this pipeline (it hit the pre-switch
 #: ``--phase autocode`` process identically). One retry in a FRESH process
 #: is the documented mitigation, and it is logged at WARNING every time so
-#: a flaky host is never quietly papered over.
-AUTOCODING_ATTEMPTS = 2
+#: a flaky host is never quietly papered over. Three attempts: the observed
+#: per-attempt failure rate here is 4 in 6, and a crashed attempt only costs
+#: the 2-5 minutes it survived.
+AUTOCODING_ATTEMPTS = 3
 
 
 def default_duckdb_threads() -> int:
