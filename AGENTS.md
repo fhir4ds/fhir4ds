@@ -6746,3 +6746,72 @@ loaded)" means the run did NOT exercise the shipped binaries.
   differs because its only signal is temporal). EMER hard-negative veto
   boundary: gap > 2h (exactly 2h is neither candidate nor veto); overlap
   containment >= 0.80 and adjacency gap <= 15m are inclusive.
+
+## PIQI auto-coding benchmark is single-pass + in-process (FHIR4-25, 2026-11-24)
+
+`fhir4ds/realism/piqi_autocoding.py` runs every leg — baseline, BEFORE,
+CEILING, auto-coding, AFTER, recovery — in ONE call/process. The
+`--phase piqi|autocode|after` split, its JSONL/partial-report artifacts
+(`stripped.jsonl`, `gold.jsonl`, `augmented.jsonl`, `nostrip_slice.jsonl`,
+`report.partial.json`), the `--phase` flag and the artifact loaders
+(`_load_jsonl`, `_load_partial`, `_require_partial_leg`,
+`_check_artifact_corpus`) are DELETED, not merely unused. The split existed
+because torch/SapBERT and the DuckDB native extension were believed not to
+coexist in one process; medterm4ds PR #24 / FHIR4-23 showed the historical
+same-process segfaults were concurrent native inference (serialized in
+medterm4ds 0.0.14 by `_infer_lock`), and phase isolation only ever worked
+because it incidentally serialized inference. In-process is the SUPPORTED
+embedding pattern; `pyproject.toml` pins `medterm4ds>=0.0.14,<0.0.15`.
+
+**THREADING CONTRACT (medterm4ds `docs/threading-and-embedding.md`) — one
+thread per DuckDB connection.** The DuckDB Python connection is not
+thread-safe; sharing one across threads yields ROW-SHAPE errors
+(`ValueError: not enough values to unpack`), not corruption. Consequences
+encoded in the code:
+
+- `InProcessTerminologyEndpoint` owns ONE medterm4ds engine = ONE DuckDB
+  connection, so `expand`, `expand_intensional` and `search_text` all run
+  under one re-entrant `_engine_lock` (the guide's "external lock around
+  engine calls that share a connection", applied inside the adapter so no
+  host has to remember it). The circuit-breaker counters ride the same
+  lock. Do NOT "optimize" that lock away for throughput.
+- Every `run_benchmark` leg runs on the CALLING thread and opens its own
+  connection: `evaluate_slice` → `_fresh_connection` (one per PIQI leg) and
+  `run_autocoder`'s AutoCoder cache connection. Parallelising augmentation
+  requires per-worker cache connections AND per-worker endpoint instances —
+  never share either.
+
+**Host gotcha — reproduced, environment not code (2026-11-24).** On this
+WSL2 box the in-process auto-coding leg segfaults with
+`segfault at 0 ip 0000000000000000` (a call through a null pointer) when the
+ML runtime and DuckDB run with their default thread pools. Facts measured:
+
+- It hit the PRE-SWITCH `--phase autocode` invocation identically, in a
+  fresh process with no native fhirpath extension registered — so phase
+  isolation never protected against it, and it is NOT a single-pass
+  regression.
+- `MEDTERM4DS_DEVICE=cpu` alone was NOT enough (it crashed again).
+- Stable with every native pool pinned to one thread:
+  `OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1` plus
+  `duckdb.connect(config={'threads': 1})` for the AutoCoder cache
+  connection. 600 resources / ~350 codes, no crash; the same loop with
+  default pools died before the first 100-resource batch finished.
+
+So the medterm4ds guidance ("one thread per DuckDB connection") is
+NECESSARY BUT NOT SUFFICIENT here: also pin the torch/faiss OpenMP pools and
+DuckDB's executor. Consequence for pipeline design: the single-pass run
+evaluates the AFTER PIQI leg with torch already loaded, so long-term the
+safer default is to pin those pools for the whole run on such hosts.
+
+SECOND, still-open observation (medterm4ds-side, degrades gracefully): long
+hybrid-search loops intermittently raise pure-Python errors from the search
+path — `unicodedata.combining() argument must be a unicode character, not
+str_iterator`, `string index out of range`, `'int' object is not callable`.
+`InProcessTerminologyEndpoint` catches them and returns `[]`, so those texts
+simply stay uncoded (visible as coverage loss). The archived 2026-11-20
+sidecar run recorded the same class, so it is not new; it needs an upstream
+medterm4ds card.
+
+The HTTP adapter stays available behind `--http-base-url` as an explicit
+escape hatch for a remote/isolated terminology server; NOTHING in the
+default or tested path requires it.
