@@ -2699,8 +2699,20 @@ class OperatorsMixin:
             guard = SQLBinaryOp(operator="OR", left=guard, right=check)
         return guard
 
-    def _translate_between_expression(self, expr: BinaryExpression) -> Optional[SQLExpression]:
-        """Translate CQL between with explicit null-argument and interval rules."""
+    def _translate_between_expression(
+        self, expr: BinaryExpression, strict: bool = False
+    ) -> Optional[SQLExpression]:
+        """Translate CQL between with explicit null-argument and interval rules.
+
+        ``strict`` selects the ``properly between`` form (FHIR4-46): both
+        bounds become EXCLUSIVE. The reference implementation lowers the point
+        form to ``And(Greater, Less)`` where plain ``between`` is
+        ``And(GreaterOrEqual, LessOrEqual)`` (cql-to-elm
+        ``visitBetweenExpression``; pinned by ``ProperlyBetweenTest.kt``), and
+        the interval form to ``ProperIncludedIn`` in the INCLUSIVE bound
+        interval (Appendix B §Between keeps the "during (or included in) with
+        an inclusive interval" reading).
+        """
         if not (
             isinstance(expr.right, BinaryExpression)
             and str(expr.right.operator).lower() == "and"
@@ -2724,16 +2736,18 @@ class OperatorsMixin:
                 ],
             )
             result: SQLExpression = SQLFunctionCall(
-                name="intervalIncludedIn",
+                name="intervalProperlyIncludedIn" if strict else "intervalIncludedIn",
                 args=[value_sql, inclusive_interval],
             )
         else:
+            low_op = ">" if strict else ">="
+            high_op = "<" if strict else "<="
             low_check = self.translate(
-                BinaryExpression(operator=">=", left=expr.left, right=low_ast),
+                BinaryExpression(operator=low_op, left=expr.left, right=low_ast),
                 usage=ExprUsage.BOOLEAN,
             )
             high_check = self.translate(
-                BinaryExpression(operator="<=", left=expr.left, right=high_ast),
+                BinaryExpression(operator=high_op, left=expr.left, right=high_ast),
                 usage=ExprUsage.BOOLEAN,
             )
             result = SQLBinaryOp(operator="AND", left=low_check, right=high_check)
@@ -2805,8 +2819,11 @@ class OperatorsMixin:
 
         # CQL `between` uses `and` as a bound separator, not as a logical
         # operator. Lower it before translating the synthetic right-side node.
-        if operator == "between":
-            between_result = self._translate_between_expression(expr)
+        # `properly between` (FHIR4-46) is the exclusive-bounds form.
+        if operator in ("between", "properly between"):
+            between_result = self._translate_between_expression(
+                expr, strict=operator == "properly between"
+            )
             if between_result is not None:
                 return between_result
 
@@ -2947,14 +2964,24 @@ class OperatorsMixin:
                 right = _coerce_query_rows_to_list(right)
 
         # CQL §12.3: between — `X between low and high` → `X >= low and X <= high`
-        if operator == "between":
+        # (`properly between` — FHIR4-46 — uses the exclusive comparisons).
+        if operator in ("between", "properly between"):
             if isinstance(right, SQLBinaryOp) and right.operator.upper() == "AND":
+                strict = operator == "properly between"
                 low_check = self.translate(
-                    BinaryExpression(operator=">=", left=expr.left, right=expr.right.left),
+                    BinaryExpression(
+                        operator=">" if strict else ">=",
+                        left=expr.left,
+                        right=expr.right.left,
+                    ),
                     usage=ExprUsage.BOOLEAN,
                 )
                 high_check = self.translate(
-                    BinaryExpression(operator="<=", left=expr.left, right=expr.right.right),
+                    BinaryExpression(
+                        operator="<" if strict else "<=",
+                        left=expr.left,
+                        right=expr.right.right,
+                    ),
                     usage=ExprUsage.BOOLEAN,
                 )
                 return SQLBinaryOp(
@@ -9306,11 +9333,20 @@ class OperatorsMixin:
             return _simple_starts_ends
 
         # "starts within N unit of" / "ends within N unit of" operators
-        # Extract the interval boundary, then delegate to within operator
-        for _prefix, _boundary_fn in (("starts within ", "intervalStart"), ("ends within ", "intervalEnd")):
+        # Extract the interval boundary, then delegate to within operator.
+        # The `properly` variants (FHIR4-46) keep the modifier so the offset
+        # bounds stay exclusive.
+        for _prefix, _boundary_fn, _proper in (
+            ("starts within ", "intervalStart", False),
+            ("ends within ", "intervalEnd", False),
+            ("starts properly within ", "intervalStart", True),
+            ("ends properly within ", "intervalEnd", True),
+        ):
             if operator.startswith(_prefix):
                 _rest = operator[len(_prefix):]
-                within_components = self._parse_within_operator(f"within {_rest}")
+                within_components = self._parse_within_operator(
+                    ("properly " if _proper else "") + f"within {_rest}"
+                )
                 if within_components is not None:
                     boundary_expr = SQLFunctionCall(name=_boundary_fn, args=[left])
                     return self._translate_within_operator(within_components, boundary_expr, right)
