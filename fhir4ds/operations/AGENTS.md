@@ -204,12 +204,17 @@ missing" skips into failures (CI). A lane worktree has no `node_modules`: point
 
 ### Known fragile areas
 
-- **Only the WASM parity files are in the PR CI job.** `fhir4ds/operations/tests` as a whole is
-  not: `test_capability_matrix.py`, `test_compare_evidence.py::TestMcpCompareTool` and
-  `test_api_surface_contract.py::test_all_names_importable[fhir4ds.serve]` FAIL without the
-  optional `mcp` / `serve` extras instead of skipping (the first CI run that included the
-  directory: 7 failed, 4,361 passed). The ViewDefinition gate needs `jsonschema` (the official
-  runner's report validation); CI installs it, and the gate reports it as a missing input.
+- **The whole of `fhir4ds/operations/tests` runs in the PR CI job (WP-4, 2026-11-25).** The
+  python job installs the optional `serve` and `mcp` extras because
+  `test_api_surface_contract.py` freezes those public packages. Without an extra its tests
+  SKIP with the reason (`optional extra 'serve' is not installed here`) instead of failing on
+  the environment; the skip is keyed on the extra's own imports (`fastapi` / `uvicorn`, and
+  `pandas` for `fhir4ds.dqm`), so an installed-but-broken package still fails. Before this, a
+  run without the extras failed on `test_all_names_importable[fhir4ds.serve]` and on
+  `test_wasm_parity_tier_b.py::test_b3_report`, which assumed the family tests had run first;
+  that test now runs any missing family itself and skips with them when the engine is
+  unavailable. The ViewDefinition gate needs `jsonschema` (the official runner's report
+  validation); CI installs it, and the gate reports it as a missing input.
 - **Chromium and the memory cap.** `scripts/capped.sh` sets `RLIMIT_AS`; chromium's V8 sandbox
   reservation then fails with SIGTRAP. The engine detects a capped address space and reports an
   environment input (run Tier B uncapped). The hard limit cannot be lifted for a child.

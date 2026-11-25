@@ -12,9 +12,37 @@ Pins, as executable contract:
 """
 import ast
 import importlib
+import importlib.util
 from pathlib import Path
 
 import pytest
+
+
+def _not_installed(*modules: str) -> list[str]:
+    """Modules of an optional extra that this environment does not have."""
+    return [name for name in modules if importlib.util.find_spec(name) is None]
+
+
+# Two public packages resolve their names through an optional extra:
+# ``fhir4ds.serve`` needs ``[serve]`` (``fhir4ds/serve/app.py`` guards the same
+# imports) and ``fhir4ds.dqm`` needs ``[measures]`` (pandas). CI installs both
+# extras, so the contract is enforced there; a local run without one skips with
+# the reason instead of failing on the environment.
+_SERVE_MISSING = _not_installed("fastapi", "uvicorn")
+_MEASURES_MISSING = _not_installed("pandas")
+
+
+def _needs(extra: str, missing: list[str]):
+    return pytest.mark.skipif(
+        bool(missing), reason=f"optional extra {extra!r} is not installed here"
+    )
+
+
+# package -> mark for the packages resolved through an optional extra
+_OPTIONAL_EXTRA_MARKS = {
+    "fhir4ds.dqm": _needs("measures", _MEASURES_MISSING),
+    "fhir4ds.serve": _needs("serve", _SERVE_MISSING),
+}
 
 PUBLIC_PACKAGES = [
     "fhir4ds",
@@ -40,7 +68,13 @@ ONE_WAY_RULES = [
 ]
 
 
-@pytest.mark.parametrize("pkg", PUBLIC_PACKAGES)
+@pytest.mark.parametrize(
+    "pkg",
+    [
+        pytest.param(p, marks=_OPTIONAL_EXTRA_MARKS[p]) if p in _OPTIONAL_EXTRA_MARKS else p
+        for p in PUBLIC_PACKAGES
+    ],
+)
 def test_all_names_importable(pkg):
     m = importlib.import_module(pkg)
     names = getattr(m, "__all__", None)
