@@ -2,6 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getLesson } from "../lessons";
 import { usePyodide } from "../hooks/usePyodide";
 import { useDuckDB, type FHIRResource } from "../hooks/useDuckDB";
+import {
+  missingValuesetUrls,
+  valuesetWarningMessage,
+} from "../../../shared/valuesetBridge";
 import InstructionsPanel from "./InstructionsPanel";
 import CQLEditor from "./CQLEditor";
 import ResultsPanel, { gradeResults, type GradeReport, type Drill, type ResultsTab } from "./ResultsPanel";
@@ -31,6 +35,10 @@ export default function LessonPage({ lessonId, progress, onBack, onProgressUpdat
   const [result, setResult] = useState<{ columns: string[]; rows: unknown[][] } | null>(null);
   const [report, setReport] = useState<GradeReport | null>(null);
   const [completed, setCompleted] = useState(progress?.completed ?? false);
+  // FHIR4-49: ValueSets this translation needs but the engine cache has not
+  // been seeded with. Non-empty means membership answers UNKNOWN (NULL), so the
+  // lesson can read as "no rows" — say so instead of silently grading wrong.
+  const [unseededValuesets, setUnseededValuesets] = useState<string[]>([]);
   const cqlRef = useRef(cql);
   cqlRef.current = cql;
 
@@ -73,8 +81,16 @@ export default function LessonPage({ lessonId, progress, onBack, onProgressUpdat
       setSql(translated);
       setTranslateTimeMs(timeMs);
 
-      await duckdb.loadFixtures(lesson.fixtures as FHIRResource[]);
+      const seededUrls = await duckdb.loadFixtures(lesson.fixtures as FHIRResource[]);
       if (token !== runTokenRef.current) return;
+
+      // FHIR4-49: a valueset retrieve over an unseeded cache returns NULL for
+      // every row, so the lesson reads as "no data". Surface it loudly.
+      const missing = missingValuesetUrls(translated, seededUrls);
+      setUnseededValuesets(missing);
+      if (missing.length) {
+        console.warn("[valueset-cache]", valuesetWarningMessage(missing));
+      }
 
       const rows = await duckdb.executeQuery(translated);
       if (token !== runTokenRef.current) return;
@@ -122,6 +138,7 @@ export default function LessonPage({ lessonId, progress, onBack, onProgressUpdat
     setResult(null);
     setSql(null);
     setCompleted(false);
+    setUnseededValuesets([]);
     onProgressUpdate(lessonId, { completed: false, lastCql: lesson.template });
   }, [lesson, lessonId, onProgressUpdate]);
 
@@ -140,6 +157,15 @@ export default function LessonPage({ lessonId, progress, onBack, onProgressUpdat
         <h1>{lesson.title}</h1>
         {runtimeStatus ? <span className="runtime-status">{runtimeStatus}</span> : <span className="runtime-status ok">engine ready</span>}
       </header>
+      {unseededValuesets.length > 0 && (
+        <div
+          className="valueset-warning"
+          data-testid="valueset-cache-warning"
+          role="alert"
+        >
+          {valuesetWarningMessage(unseededValuesets)}
+        </div>
+      )}
       <div className="lesson-grid-2">
         <div className="lesson-left">
           <InstructionsPanel lesson={lesson} cql={cql} completed={completed} onResetProgress={handleReset} />

@@ -179,6 +179,21 @@ body {
   color: var(--pass);
 }
 
+/* FHIR4-49: one or more ValueSets this translation needs were never seeded
+   into the engine's in-process cache. Membership then answers UNKNOWN (NULL)
+   and rows vanish — the banner makes that state impossible to miss. */
+.valueset-warning {
+  flex: 0 0 auto;
+  padding: 10px 16px;
+  font-size: 12px;
+  line-height: 1.5;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--warn);
+  background: rgba(215, 186, 125, 0.12);
+  border-bottom: 1px solid var(--warn);
+  white-space: pre-wrap;
+}
+
 .lesson-grid-2 {
   display: grid;
   grid-template-columns: minmax(0, 45fr) minmax(0, 55fr);

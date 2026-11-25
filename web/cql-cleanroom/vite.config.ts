@@ -191,6 +191,12 @@ export default defineConfig({
   },
   server: {
     headers: ISOLATION_HEADERS,
+    // `web/shared/*` is outside this app's root (one shared ValueSet bridge
+    // for every web app, FHIR4-49); the dev server refuses to serve modules
+    // outside its allow list, so include the parent `web/` directory.
+    fs: {
+      allow: [".", ".."],
+    },
   },
   preview: {
     headers: ISOLATION_HEADERS,

@@ -3128,6 +3128,39 @@ fhirpath test_math_parity one.ln()/zero.sqrt() cpp-bool-False vs py-bool-None
 is source-level (the 0.0.13 deployed binary predated the Aug-26 evaluator.cpp
 edit; the v0.0.14 wasm/native rebuild exposed it — FP-11 chunk owner).
 
+## Browser ValueSet cache — seed it or the answer is silently WRONG (FHIR4-49)
+
+`in_valueset` / `fhirpath_in_valueset` never read a SQL table: they read the C++
+process-global `g_valueset_cache`, which only `cql_valueset_cache_add(...)`
+fills. An unseeded url makes every valueset retrieve return SQL NULL, so
+populations read as EMPTY rather than erroring — the worst possible failure for
+a measure demo. There is no warn-once log on that path (the only C++
+diagnostics are the `FHIR4DS_PROFILE_CPP_VALUESET`-gated counters behind
+`cql_valueset_profile_json()`, which never reaches a browser console), so the
+signal has to come from the app.
+
+One implementation, `web/shared/valuesetBridge.ts`, used by all four apps
+(`web/cql-cleanroom/src/lib/valuesetBridge.ts` is a re-export; do not fork):
+
+- `valuesetToRows` / `seedValuesetCache` — flatten FHIR `ValueSet` resources and
+  stage them through `cql_valueset_cache_clear/add`. Empty ValueSets seed a
+  sentinel code so membership is deterministically FALSE, never NULL.
+- `collectValuesetUrls` / `missingValuesetUrls` — read the url literals out of
+  the generated SQL's membership calls, which is exactly the set the query needs
+  loaded.
+- `valuesetWarningMessage` — the shared phrasing for the loud fallback.
+
+Wiring: cleanroom seeds from `DatasetSpec.valueset_resources`; wasm-demo seeds
+at engine init from the dataset's `ValueSet` resources (demo sets live in
+`src/lib/sample-valuesets.ts`) and banners when the generated SQL references an
+unseeded url; cql-clinic re-seeds per lesson bundle and banners the same way.
+Both banners are `[data-testid="valueset-cache-warning"]` and are pinned by
+Playwright (`web/wasm-demo/tests/e2e/valueset-cache.spec.ts`,
+`web/cql-clinic/tests/e2e/valueset-cache.spec.ts`).
+
+`web/viewing-room` is NOT affected: it translates ViewDefinition/SQLQuery only
+and never emits a valueset membership call.
+
 ## WASM / Pyodide Release Checklist
 
 This section documents the recurring release steps required to keep the WASM demo working. Missing any of these steps causes Pyodide initialization failures in the CQL playground.

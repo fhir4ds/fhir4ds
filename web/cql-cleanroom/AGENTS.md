@@ -44,6 +44,12 @@ npx playwright test        # e2e (needs vite preview on :5176, see below)
 - `src/workers/cleanroom.worker.ts` — single worker owning Pyodide +
   DuckDB-WASM; protocol 1:1 with operations signatures; envelopes cross
   as JSON strings (S12).
+- `src/lib/valuesetBridge.ts` is a RE-EXPORT of `web/shared/valuesetBridge.ts`
+  (FHIR4-49): one ValueSet→`g_valueset_cache` bridge shared by the cleanroom,
+  wasm-demo and cql-clinic. Keep it a re-export; the flatten semantics, the
+  seed/clear SQL and the `collectValuesetUrls`/`missingValuesetUrls` guard all
+  live in the shared module, and `tests/unit/valuesetCacheGuard.test.ts` pins
+  the guard's extraction contract.
 - `src/lib/executor.ts` — exact-SQL executor (translated SQL runs
   VERBATIM; no client-side SQL rewriting, ever); Arrow rows materialize
   with DECIMAL rescale (typeId 7 + field scale); positional audit structs
