@@ -1045,6 +1045,13 @@ class ListsMixin:
                     args=args,
                     context=self.context,
                     resource_type=resource_type,
+                    # The receiver type cannot always name a declared receiver
+                    # (CMS145: a union of two Condition profiles resolves to the
+                    # base `Condition`); the argument ASTs let the resolver
+                    # break that tie instead of taking the last-declared
+                    # overload, whose shape may expect a different arity kind
+                    # (single Encounter vs List<Encounter>).
+                    argument_asts=expr.arguments,
                 )
             except NotImplementedError:
                 pass  # No AST builder — fall through to inliner

@@ -148,7 +148,7 @@ def _evidence_targets(result, patient="p1", column="numerator"):
 def con():
     connection = duckdb.connect(config={"allow_unsigned_extensions": "true"})
     register(connection)
-    connection.execute("SET scalar_subquery_error_on_multiple_rows=false")
+    # FHIR4-53: DuckDB default (strict) — generated SQL must be single-row.
     connection.execute(
         "CREATE OR REPLACE TABLE resources ("
         "id VARCHAR, resourceType VARCHAR, resource JSON, patient_ref VARCHAR)")

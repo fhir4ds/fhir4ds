@@ -44,6 +44,10 @@ QI_CORE_SUITE = os.path.join(
     os.path.dirname(__file__), "..", "..", "..", "..", "tests", "data",
     "ecqm-content-qicore-2025",
 )
+US_CORE_SUITE = os.path.join(
+    os.path.dirname(__file__), "..", "..", "..", "..", "tests", "data",
+    "dqm-content-cms-2025",
+)
 STRICT_SETTING = "scalar_subquery_error_on_multiple_rows"
 
 
@@ -216,22 +220,47 @@ def test_query_return_alias_in_nested_scope_is_single_row_and_patient_scoped():
 # ---------------------------------------------------------------------------
 
 
-def _measure_config(measure_id: str):
+def _measure_config(measure_id: str, suite: str = "qi-core-2025"):
     from fhir4ds.dqm.tests.conformance import cli as dqm_cli
 
-    for cfg in dqm_cli._discover_measures("qi-core-2025"):
+    for cfg in dqm_cli._discover_measures(suite):
         if cfg.id == measure_id:
             return cfg
     return None
 
 
+#: ``(suite, measure, all_columns)``. FHIR4-48 fixed CMS56/CMS832 in qi-core;
+#: FHIR4-53 fixes the two shapes us-core still raised on:
+#:
+#: * CMS145 — fluent overload resolution fell back to the LAST-DECLARED
+#:   ``overlapsDayOfEncounter`` overload (single ``Encounter``) for a
+#:   ``List<Encounter>`` argument, so the whole list became an inline query
+#:   source: one row per element read as a scalar.
+#: * CMS156 — a promoted ``let`` CTE over a fluent-call source
+#:   (``([MedicationRequest: VS]).moreThanOneOrder() AntiInfectives``) carried no
+#:   ``_row_key``, so the sibling let that consumes it
+#:   (``timing: dosage.timing``) looked its value up by ``patient_id`` alone.
+#:
+#: ``all_columns=True`` on purpose: a column CTE that a population-only
+#: projection never references still crashes a web app that asks for it.
+STRICT_MEASURES = [
+    ("qi-core-2025", "CMS56", False),
+    ("qi-core-2025", "CMS832", False),
+    ("us-core-2025", "CMS145", True),
+    ("us-core-2025", "CMS156", True),
+]
+
+
 @pytest.mark.slow
-@pytest.mark.parametrize("measure_id", ["CMS56", "CMS832"])
-def test_generated_measure_sql_executes_on_strict_connection(measure_id):
-    """Full population SQL for the two measures that raised the rule."""
-    if not os.path.isdir(QI_CORE_SUITE):
-        pytest.skip(f"qi-core-2025 content package not present at {QI_CORE_SUITE}")
-    cfg = _measure_config(measure_id)
+@pytest.mark.parametrize("suite,measure_id,all_columns", STRICT_MEASURES)
+def test_generated_measure_sql_executes_on_strict_connection(
+    suite, measure_id, all_columns
+):
+    """Full population SQL for the measures that raised the rule."""
+    content_dir = QI_CORE_SUITE if suite.startswith("qi-core") else US_CORE_SUITE
+    if not os.path.isdir(content_dir):
+        pytest.skip(f"{suite} content package not present at {content_dir}")
+    cfg = _measure_config(measure_id, suite)
     if cfg is None:
         pytest.skip(f"{measure_id} not present in the discovered suite")
 
@@ -252,7 +281,11 @@ def test_generated_measure_sql_executes_on_strict_connection(measure_id):
             f"SELECT current_setting('{STRICT_SETTING}')"
         ).fetchone()[0]
         result = run_measure(
-            db.conn, cfg, load_test_suite(cfg), all_columns=False, audit=False
+            db.conn,
+            cfg,
+            load_test_suite(cfg),
+            all_columns=all_columns,
+            audit=False,
         )
     finally:
         db.conn.close()
