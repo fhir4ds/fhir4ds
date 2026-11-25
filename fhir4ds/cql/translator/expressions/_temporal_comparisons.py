@@ -1023,7 +1023,12 @@ class TemporalComparisonMixin:
         CQL semantics: "A within 60 days of B" → |A - B| <= 60 days
         SQL: B - 60 days <= A <= B + 60 days
         (i.e., A is within 60 days of B in either direction)
+
+        The `properly` form (FHIR4-46) is the strict reading, |A - B| < N:
+        the reference implementation builds Interval(B - Q, B + Q) with OPEN
+        bounds for `properly within`, where the plain form closes them.
         """
+        proper = bool(components.get("proper"))
         quantity_value_int = int(float(components["quantity_value"]))
         quantity_unit = components["quantity_unit"]
         interval_literal = SQLIntervalLiteral(value=quantity_value_int, unit=quantity_unit)
@@ -1043,8 +1048,9 @@ class TemporalComparisonMixin:
         upper = self._timestamp_arith_for_compare(
             SQLBinaryOp(operator="+", left=right_for_arithmetic, right=interval_literal))
 
+        comparison = "<" if proper else "<="
         return SQLBinaryOp(
             operator="AND",
-            left=SQLBinaryOp(operator="<=", left=lower, right=left_cmp),
-            right=SQLBinaryOp(operator="<=", left=left_cmp, right=upper),
+            left=SQLBinaryOp(operator=comparison, left=lower, right=left_cmp),
+            right=SQLBinaryOp(operator=comparison, left=left_cmp, right=upper),
         )

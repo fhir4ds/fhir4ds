@@ -5,6 +5,7 @@ interval overlap decomposition, and FHIR interval detection.
 """
 from __future__ import annotations
 
+import copy
 from typing import Any, Optional
 
 from ...parser.ast_nodes import (
@@ -228,6 +229,171 @@ class IntervalMixin:
             right=end_comparison,
         )
 
+    def _rebase_query_return_projection(
+        self, inner: SQLSelect, symbol
+    ) -> Optional[SQLExpression]:
+        """Bind a query's ``return`` expression to the enclosing row alias.
+
+        A query source ``( <source> X return <expr> ) Y`` iterates the ELEMENTS
+        of its own source, so inside the enclosing query ``Y`` denotes exactly
+        one of them.  References to ``Y`` therefore have to be answered from the
+        row the enclosing ``FROM ... AS Y`` already binds — i.e. ``<expr>`` with
+        ``X`` re-pointed at ``Y`` — and never by re-running the source query,
+        which returns every element (multi-row) and, because the re-materialised
+        select had no ``patient_id`` predicate, could also read another patient's
+        row (FHIR4-48).
+
+        The rebase is deliberately narrow.  It applies only when everything the
+        projection can depend on is the source alias itself:
+
+        * the symbol is a query alias bound to a row (``table_alias`` + ``cte_name``);
+        * the inner select reads exactly that CTE, with no joins, grouping,
+          ordering or DISTINCT;
+        * every qualified reference in the single projected column is that
+          source alias (so no outer/other alias, no lateral and no nested
+          subquery is silently rebound).
+
+        Any shape that fails those checks returns ``None`` and the caller keeps
+        its previous behaviour.  The inner ``WHERE`` is intentionally NOT
+        carried over: it selects which source rows become elements, which the
+        enclosing FROM has already applied, and it is not part of an element's
+        value.
+
+        Returns the rebased projection, or ``None`` when the shape does not
+        qualify.
+        """
+        from ...translator.types import SQLAlias
+
+        table_alias = getattr(symbol, "table_alias", None) if symbol else None
+        cte_name = getattr(symbol, "cte_name", None) if symbol else None
+        if not table_alias or not cte_name:
+            return None
+
+        if inner.joins or inner.group_by or inner.having or inner.order_by:
+            return None
+        if inner.distinct or getattr(inner, "distinct_on", None):
+            return None
+        if len(inner.columns or []) != 1:
+            return None
+
+        from_clause = inner.from_clause
+        if not isinstance(from_clause, SQLAlias):
+            return None
+        source_table = from_clause.expr
+        if not (
+            isinstance(source_table, SQLIdentifier)
+            and source_table.quoted
+            and source_table.name == cte_name
+        ):
+            return None
+        source_alias = from_clause.alias
+        if not source_alias:
+            return None
+
+        column = inner.columns[0]
+        projection = column.expr if isinstance(column, SQLAlias) else column
+
+        # Safety gate: the projection may only depend on the source row.  A
+        # qualified reference to anything else (an outer alias, a lateral, a
+        # sibling join alias) cannot be rebound onto `table_alias`, and a nested
+        # subquery may itself be multi-row.
+        free_aliases = self._projection_qualified_aliases(projection)
+        if free_aliases - {source_alias}:
+            return None
+        if self._projection_holds_subquery(projection):
+            return None
+
+        return self._replace_qualified_alias(
+            copy.deepcopy(projection), source_alias, table_alias
+        )
+
+    @staticmethod
+    def _projection_qualified_aliases(node) -> set:
+        """First parts of every qualified identifier in *node*."""
+        found: set = set()
+        stack = [node]
+        seen: set = set()
+        while stack:
+            current = stack.pop()
+            if current is None or isinstance(current, (str, int, float, bool)):
+                continue
+            if id(current) in seen:
+                continue
+            seen.add(id(current))
+            from ...translator.types import SQLQualifiedIdentifier
+
+            if isinstance(current, SQLQualifiedIdentifier):
+                if current.parts:
+                    found.add(current.parts[0])
+                continue
+            if isinstance(current, (list, tuple)):
+                stack.extend(current)
+                continue
+            if not hasattr(current, "__dataclass_fields__"):
+                continue
+            for field_name in current.__dataclass_fields__:
+                stack.append(getattr(current, field_name, None))
+        return found
+
+    @staticmethod
+    def _projection_holds_subquery(node) -> bool:
+        """True when *node* contains a nested subquery / EXISTS."""
+        from ...translator.types import SQLExists
+
+        stack = [node]
+        seen: set = set()
+        while stack:
+            current = stack.pop()
+            if current is None or isinstance(current, (str, int, float, bool)):
+                continue
+            if id(current) in seen:
+                continue
+            seen.add(id(current))
+            from ...translator.types import SQLSubquery
+
+            if isinstance(current, (SQLSubquery, SQLExists)):
+                return True
+            if isinstance(current, (list, tuple)):
+                stack.extend(current)
+                continue
+            if not hasattr(current, "__dataclass_fields__"):
+                continue
+            for field_name in current.__dataclass_fields__:
+                stack.append(getattr(current, field_name, None))
+        return False
+
+    @classmethod
+    def _replace_qualified_alias(cls, node, old_alias: str, new_alias: str):
+        """Return *node* with ``old_alias.x`` rewritten to ``new_alias.x``."""
+        from ...translator.types import SQLQualifiedIdentifier
+
+        if node is None or isinstance(node, (str, int, float, bool)):
+            return node
+        if isinstance(node, SQLQualifiedIdentifier):
+            if node.parts and node.parts[0] == old_alias:
+                return SQLQualifiedIdentifier(
+                    parts=[new_alias, *node.parts[1:]]
+                )
+            return node
+        if isinstance(node, list):
+            return [cls._replace_qualified_alias(item, old_alias, new_alias)
+                    for item in node]
+        if isinstance(node, tuple):
+            return type(node)(
+                cls._replace_qualified_alias(item, old_alias, new_alias)
+                for item in node
+            )
+        if not hasattr(node, "__dataclass_fields__"):
+            return node
+        for field_name in node.__dataclass_fields__:
+            value = getattr(node, field_name, None)
+            setattr(
+                node,
+                field_name,
+                cls._replace_qualified_alias(value, old_alias, new_alias),
+            )
+        return node
+
     def _ensure_resource_to_interval(
         self, sql_expr: SQLExpression, cql_expr
     ) -> SQLExpression:
@@ -272,6 +438,20 @@ class IntervalMixin:
                     for c in _cols
                 )
                 if not _is_row_shape:
+                    # FHIR4-48: re-point the projection onto the row alias the
+                    # enclosing query already binds instead of re-materialising
+                    # the whole source query.  `TotalHip` denotes ONE element of
+                    # `<source CTE>`, so the element's value is the projection
+                    # evaluated against the CURRENT row — not a fresh scan of
+                    # every row of the CTE (which is multi-row, and carried no
+                    # patient predicate: CMS56 Numerator and its five
+                    # "Has THA with Initial and Follow Up ... Assessments"
+                    # definitions raised "More than one row returned by a
+                    # subquery used as an expression" on every connection that
+                    # keeps DuckDB's default scalar-subquery rule).
+                    _rebased = self._rebase_query_return_projection(_inner, symbol)
+                    if _rebased is not None:
+                        return _rebased
                     return _ast
 
         resource_type = getattr(self.context, "_alias_resource_types", {}).get(

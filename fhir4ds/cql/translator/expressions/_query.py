@@ -4515,6 +4515,39 @@ class QueryMixin:
         """Handle IntervalTypeSpecifier - interval type references."""
         return SQLNull()
 
+    def _return_clause_is_distinct(self, node) -> bool:
+        """True when this query's ``return`` de-duplicates its tuples.
+
+        CQL 1.5 §Query: ``return all`` keeps duplicates, while ``return`` and
+        ``return distinct`` eliminate them.  The IMPLICIT default of a plain
+        ``return`` is only honoured at a definition ROOT, where the query
+        materialises into a CTE (``SELECT DISTINCT patient_id, value``): a
+        nested query select keeps its DISTINCT when its alias is inlined, and
+        that leaks into scalar property extractions —
+        ``intervalStart((SELECT DISTINCT …))`` over a multi-row set changes
+        shape and breaks ``with … such that`` correlation (CMS56 54/58, QI gate
+        46/47).  An EXPLICIT ``return distinct`` always de-duplicates, even
+        nested (CMS506 counts distinct opioid medications inside a where
+        clause).
+
+        Single source of truth for both the single-source and multi-source
+        query lowering paths.
+        """
+        return_clause = getattr(node, "return_clause", None)
+        if return_clause is None:
+            return False
+        if getattr(return_clause, "explicit_distinct", False):
+            return True
+        if not getattr(return_clause, "distinct", False):
+            return False
+        current_definition = getattr(self.context, "_current_definition", None)
+        root_ast = (
+            getattr(self.context, "_definition_cql_asts", {}).get(current_definition)
+            if current_definition
+            else None
+        )
+        return root_ast is node
+
     def _translate_query(self, node, usage: ExprUsage = ExprUsage.LIST) -> SQLExpression:
         """
         Handle CQL Query expressions:
@@ -4950,6 +4983,23 @@ class QueryMixin:
                             from_clause=_prim_from,
                             where=_full_cond,
                             joins=_all_joins if _all_joins else None,
+                            # FHIR4-48: CQL 1.5 §Query — `return` (without
+                            # `all`) ELIMINATES DUPLICATE TUPLE RESULTS. A
+                            # multi-source query yields one tuple per CROSS
+                            # JOIN combination, so `from E Encounter48Hours,
+                            # [Obs: Creatinine] Test ... return Encounter48Hours`
+                            # produced ONE ROW PER TEST for the same encounter.
+                            # Downstream that made the definition (and every
+                            # promoted function CTE derived from it) non-unique
+                            # on (patient_id, resource), so CMS832's
+                            # `(SELECT value FROM "fn" WHERE patient_id AND
+                            # _row_key)` lookups returned several rows and the
+                            # measure raised DuckDB's default
+                            # scalar-subquery error. `return all` and queries
+                            # with no return clause are untouched, and the
+                            # implicit default stays ROOT-scoped (a nested
+                            # DISTINCT leaks into scalar property extractions).
+                            distinct=self._return_clause_is_distinct(node),
                         )
                     elif _all_list_sources:
                         # No return clause + all list-literal sources: return
@@ -6585,33 +6635,11 @@ class QueryMixin:
 
             if not _did_list_transform:
                 return_expr = self.translate(node.return_clause, usage=ExprUsage.SCALAR)
-                # Only the definition ROOT query can apply return-distinct
-                # safely: it materialises into a CTE (`SELECT DISTINCT
-                # patient_id, value`). A nested query select keeps its DISTINCT
-                # when its alias is inlined, and that leaks into scalar property
-                # extractions — `intervalStart((SELECT DISTINCT …))` over a
-                # multi-row set changes shape and breaks `with … such that`
-                # correlation (CMS56 54/58, QI gate 46/47).
-                _cur_def = getattr(self.context, "_current_definition", None)
-                _root_ast = (
-                    getattr(self.context, "_definition_cql_asts", {}).get(_cur_def)
-                    if _cur_def
-                    else None
-                )
-                _is_def_root = _root_ast is node
-                # Explicit `return distinct` ALWAYS de-duplicates, even nested
-                # (CMS506 counts distinct opioid medications inside a where
-                # clause: suppressing it counted duplicates and flipped the
-                # numerator on). The IMPLICIT default of plain `return` is only
-                # applied at a definition root, where it materialises into a CTE
-                # and cannot leak DISTINCT into scalar property extractions
-                # (CMS56 54/58 otherwise).
-                _return_distinct = bool(
-                    getattr(node.return_clause, 'explicit_distinct', False)
-                ) or (
-                    bool(getattr(node.return_clause, 'distinct', False))
-                    and _is_def_root
-                )
+                # `return` de-duplicates unless spelled `return all`; the
+                # implicit default is root-scoped (see
+                # `_return_clause_is_distinct` for why a nested DISTINCT is
+                # unsafe).
+                _return_distinct = self._return_clause_is_distinct(node)
                 # When early_list_transform is active, result is a lambda
                 # parameter placeholder (e.g., _lt_DayNumber).  The return
                 # expression already references the parameter directly, so

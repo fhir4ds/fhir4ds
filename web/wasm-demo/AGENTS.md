@@ -108,12 +108,41 @@ npm run typecheck
 npm run build
 ```
 
-### Browser CQL Runtime Surface
+### Browser Client Runtime Surface
 
 The browser runs translated SQL in DuckDB-WASM and uses Pyodide only for CQL
 translation. Python fallback UDFs registered through the native `duckdb` Python
 package are not callable from DuckDB-WASM. Any UDF name emitted into browser SQL
 must therefore be available from the compiled C++ WASM extensions.
+
+### ValueSet membership needs a SEEDED cache (FHIR4-49)
+
+`in_valueset` / `fhirpath_in_valueset` never read the `resources` table. They
+read the C++ process-global `g_valueset_cache`, which only
+`cql_valueset_cache_add(...)` fills. An unseeded cache makes every valueset
+retrieve return SQL NULL, so populations silently read as EMPTY — a wrong
+answer with no error at all.
+
+- The seeding implementation is SHARED: `web/shared/valuesetBridge.ts`
+  (`valuesetToRows`, `seedValuesetCache`, `valuesetResourcesOf`,
+  `collectValuesetUrls`, `missingValuesetUrls`, `valuesetWarningMessage`).
+  Never fork it per app; `web/cql-cleanroom/src/lib/valuesetBridge.ts` is only a
+  re-export.
+- `src/hooks/useDuckDB.ts` seeds the cache from the dataset's `ValueSet`
+  resources at init. The demo ships `src/lib/sample-valuesets.ts` (keyed to
+  codes the synthetic cohort actually has) so `[Condition: "Demo Diabetes"]`
+  demonstrably matches.
+- LOUD FALLBACK: `App.tsx` diffs the ValueSet urls in the generated SQL against
+  the seeded urls and renders `[data-testid="valueset-cache-warning"]` plus a
+  console warning. Silence is the bug — never let an unseeded valueset present
+  as "no patients".
+- `tests/e2e/valueset-cache.spec.ts` pins both directions (seeded → matches,
+  unseeded → banner).
+
+> The pre-built CMS measure SQL in `public/data/*.sql` is unaffected: it has
+> `in_valueset` expanded into valueset CTEs at `scripts/prepare_cms_data.py`
+> time (0 occurrences remain). That inlining existed BECAUSE the browser cache
+> was never populated — do not remove it expecting the cache to cover it.
 
 If CQL extension registrations are changed in `extensions/cql/src/cql_extension.cpp`:
 - rebuild the native extension and run `./build/release/test/unittest "*cql*"`;

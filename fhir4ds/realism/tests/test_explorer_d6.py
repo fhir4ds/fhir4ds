@@ -12,7 +12,9 @@ probe battery (.temp/qa/d6_explorer_v0026/) before the fix:
   (QA-D6H-001 sibling paths).
 - QA-D6E-005 piqi_autocoding: tampered phase artifacts leaked raw
   JSONDecodeError/AttributeError; stale artifacts from a different
-  corpus silently contaminated the after scorecard.
+  corpus silently contaminated the after scorecard. SUPERSEDED by
+  FHIR4-25 — the phase artifacts no longer exist (single-pass run), so
+  the class now pins their absence.
 """
 
 from __future__ import annotations
@@ -184,7 +186,7 @@ class TestPiqiAutocodingIdToleranceD6E004(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             d = self._mixed_corpus(td)
             report = pa.run_benchmark(d, Path(td) / "out", num_patients=3,
-                                      skip_autocoding=True, phase="piqi")
+                                      skip_autocoding=True)
             # string-id patients dominate the slice; int id simply not keyed
             self.assertGreaterEqual(report["slice"]["resources"], 3)
 
@@ -213,19 +215,22 @@ class TestPiqiAutocodingIdToleranceD6E004(unittest.TestCase):
             pass  # the view's typed column guard — loud and attributed
 
 
-class _StubEndpoint:
-    def search_text(self, text, category, mode="hybrid"):
-        from fhir4ds.cql.terminology.types import SearchResult
-        return [SearchResult(system="http://snomed.info/sct",
-                             code="91302008", display="Sepsis", score=0.99,
-                             match_grade="certain", search_mode=mode,
-                             index_version="stub-1")]
+class TestNoInterphaseArtifactsD6E005(unittest.TestCase):
+    """QA-D6E-005, superseded by FHIR4-25.
 
-    def search_batch(self, pairs, mode="hybrid"):
-        return [self.search_text(None, None, mode) for _ in pairs]
+    The old benchmark passed state between three ``--phase`` invocations
+    through JSONL + partial-report artifacts; EXPLORER found that a
+    tampered or stale artifact leaked raw ``JSONDecodeError`` /
+    ``AttributeError`` and silently contaminated the AFTER scorecard. The
+    phase split is gone (medterm4ds 0.0.14 makes in-process the supported
+    pattern), so there is no cross-invocation state to tamper with: one
+    call computes every leg in memory and writes exactly one report.
 
+    The suite below is the surviving guarantee — a run leaves no
+    intermediate artifacts behind, and re-running is self-contained
+    rather than inheriting anything from a previous run.
+    """
 
-class TestPhaseArtifactTamperingD6E005(unittest.TestCase):
     def setUp(self):
         self.td = tempfile.mkdtemp()
         self.base = Path(self.td)
@@ -235,75 +240,34 @@ class TestPhaseArtifactTamperingD6E005(unittest.TestCase):
                 _cond("gc2", "g2"), _lab("go1", "g1")]
         (self.corpus / "p.ndjson").write_text(
             "".join(json.dumps(r) + "\n" for r in rows))
-        self.out = self.base / "out"
-        pa.run_benchmark(self.corpus, self.out, num_patients=2,
-                         skip_autocoding=True, phase="piqi")
 
     def tearDown(self):
         shutil.rmtree(self.td, ignore_errors=True)
 
-    def _copy(self, name):
-        dst = self.base / name
-        shutil.copytree(self.out, dst)
-        return dst
+    def test_run_leaves_only_the_final_report(self):
+        out = self.base / "out"
+        pa.run_benchmark(self.corpus, out, num_patients=2,
+                         skip_autocoding=True)
+        self.assertEqual([p.name for p in out.iterdir()],
+                         ["piqi_autocoding_report.json"])
 
-    def test_missing_partial_is_typed_with_remedy(self):
-        o = self._copy("a")
-        (o / "report.partial.json").unlink()
-        with self.assertRaises(ValueError) as ctx:
-            pa.run_benchmark(self.corpus, o, num_patients=2, phase="after")
-        self.assertIn("phase='piqi'", str(ctx.exception))
+    def test_a_stale_result_directory_cannot_influence_the_next_run(self):
+        out = self.base / "out"
+        first = pa.run_benchmark(self.corpus, out, num_patients=2,
+                                skip_autocoding=True)
+        # anything an old release might have dropped here is inert: with
+        # no artifact loader left, a second run recomputes from the corpus
+        (out / "report.partial.json").write_text("{not json")
+        (out / "augmented.jsonl").write_text('"just a string"\n')
+        second = pa.run_benchmark(self.corpus, out, num_patients=2,
+                                  skip_autocoding=True)
+        self.assertEqual(json.dumps(first, sort_keys=True),
+                         json.dumps(second, sort_keys=True))
 
-    def test_corrupt_partial_is_typed_not_raw_jsondecodeerror(self):
-        o = self._copy("b")
-        (o / "report.partial.json").write_text("{not json")
-        with self.assertRaises(ValueError) as ctx:
-            pa.run_benchmark(self.corpus, o, num_patients=2, phase="after")
-        self.assertIn("report.partial.json", str(ctx.exception))
-
-    def test_partial_missing_before_leg_is_typed_not_keyerror(self):
-        o = self._copy("c")
-        # remove augmented.jsonl so the leg guard is what fires
-        rep = json.loads((o / "report.partial.json").read_text())
-        del rep["before"]
-        (o / "report.partial.json").write_text(json.dumps(rep))
-        stripped = pa._load_jsonl(o / "stripped.jsonl")
-        (o / "augmented.jsonl").write_text(
-            "".join(json.dumps(r) + "\n" for r in stripped))
-        with self.assertRaises(ValueError) as ctx:
-            pa.run_benchmark(self.corpus, o, num_patients=2, phase="after")
-        self.assertIn("'before'", str(ctx.exception))
-
-    def test_non_dict_augmented_lines_are_typed_not_attributeerror(self):
-        o = self._copy("d")
-        stripped = pa._load_jsonl(o / "stripped.jsonl")
-        lines = [json.dumps(stripped[0]), '"just a string"', "[1, 2]"]
-        (o / "augmented.jsonl").write_text("\n".join(lines) + "\n")
-        with self.assertRaises(ValueError) as ctx:
-            pa.run_benchmark(self.corpus, o, num_patients=2, phase="after")
-        self.assertIn("augmented.jsonl", str(ctx.exception))
-
-    def test_stale_artifact_corpus_mismatch_is_rejected(self):
-        o = self._copy("e")
-        stripped = pa._load_jsonl(o / "stripped.jsonl")
-        (o / "augmented.jsonl").write_text(
-            "".join(json.dumps(r) + "\n" for r in stripped))
-        # tamper the recorded corpus path
-        rep = json.loads((o / "report.partial.json").read_text())
-        rep["corpus_path"] = str(self.base / "somewhere_else")
-        (o / "report.partial.json").write_text(json.dumps(rep))
-        with self.assertRaises(ValueError) as ctx:
-            pa.run_benchmark(self.corpus, o, num_patients=2, phase="after")
-        self.assertIn("somewhere_else", str(ctx.exception))
-
-    def test_untampered_phases_still_compose(self):
-        o = self._copy("f")
-        stripped = pa._load_jsonl(o / "stripped.jsonl")
-        (o / "augmented.jsonl").write_text(
-            "".join(json.dumps(r) + "\n" for r in stripped))
-        rep = pa.run_benchmark(self.corpus, o, num_patients=2,
-                               phase="after")
-        self.assertIn("recovery", rep)
+    def test_partial_leg_helpers_are_gone(self):
+        for name in ("_load_partial", "_require_partial_leg",
+                     "_load_jsonl", "_check_artifact_corpus"):
+            self.assertFalse(hasattr(pa, name), name)
 
 
 if __name__ == "__main__":

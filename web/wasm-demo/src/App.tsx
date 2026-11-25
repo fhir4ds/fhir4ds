@@ -13,6 +13,10 @@ import { PatientDataViewer } from "./components/PatientDataViewer";
 import { CQL_SAMPLES } from "./lib/sample-cql";
 import { useDuckDB } from "./hooks/useDuckDB";
 import { usePyodide } from "./hooks/usePyodide";
+import {
+  missingValuesetUrls,
+  valuesetWarningMessage,
+} from "../../shared/valuesetBridge";
 import { 
   clearAuth, 
   getStoredSession, 
@@ -136,6 +140,11 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
   const [metrics, setMetrics] = useState<Metrics>({});
   const [statusMessage, setStatusMessage] = useState("Ready");
   const [isStatusError, setIsStatusError] = useState(false);
+  // FHIR4-49: ValueSets the translated query needs but the engine cache was
+  // never seeded with. Non-empty means ValueSet membership answers UNKNOWN
+  // (SQL NULL), so populations can read as empty — surfaced LOUDLY, never
+  // silently reported as "no patients".
+  const [unseededValuesets, setUnseededValuesets] = useState<string[]>([]);
 
   // Global patient selection state for verification
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
@@ -148,7 +157,7 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
     scenario === "cql-sandbox" ||
     (scenario === "smart-flow" && smartAuthenticated);
 
-  const { ready: duckdbReady, error: duckdbError, extensionsLoaded, executeQuery, getConnection } = useDuckDB(wasmAppUrl, duckdbRequired);
+  const { ready: duckdbReady, error: duckdbError, extensionsLoaded, seededValuesetUrls, executeQuery, getConnection } = useDuckDB(wasmAppUrl, duckdbRequired);
   const { ready: pyodideReady, error: pyodideError, translate } = usePyodide(pyodideRequired);
 
   // Workspace pane visibility — persists across tab switches
@@ -209,11 +218,29 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
         setResult(null);
         setError(null);
         setMetrics({});
+        setUnseededValuesets([]);
         setStatusMessage(`Loaded: ${sample.label}`);
         setIsStatusError(false);
       }
     },
     [],
+  );
+
+  /**
+   * FHIR4-49: compare the ValueSet urls the generated SQL asks for against the
+   * urls seeded into the engine cache. Anything missing is a valueset the
+   * browser cannot evaluate — say so instead of returning "no patients".
+   */
+  const checkUnseededValuesets = useCallback(
+    (sql: string): string[] => {
+      const missing = missingValuesetUrls(sql, seededValuesetUrls);
+      setUnseededValuesets(missing);
+      if (missing.length) {
+        console.warn("[valueset-cache]", valuesetWarningMessage(missing));
+      }
+      return missing;
+    },
+    [seededValuesetUrls],
   );
 
   const handleTranslate = useCallback(async () => {
@@ -224,6 +251,7 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
     try {
       const { sql, timeMs } = await translate(cqlText);
       setSqlText(sql);
+      checkUnseededValuesets(sql);
       setMetrics((m) => ({ ...m, translationTimeMs: timeMs }));
       setStatusMessage("Translated successfully");
     } catch (e) {
@@ -234,7 +262,7 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
     } finally {
       setIsTranslating(false);
     }
-  }, [cqlText, translate]);
+  }, [cqlText, translate, checkUnseededValuesets]);
 
   const handleRun = useCallback(async () => {
     setIsExecuting(true);
@@ -244,14 +272,18 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
     try {
       const { sql, timeMs: transTime } = await translate(cqlText);
       setSqlText(sql);
+      const missing = checkUnseededValuesets(sql);
       setMetrics((m) => ({ ...m, translationTimeMs: transTime }));
 
       const queryResult = await executeQuery(sql);
       setResult(queryResult);
       setMetrics((m) => ({ ...m, executionTimeMs: queryResult.executionTimeMs }));
       setStatusMessage(
-        `Done — ${queryResult.rowCount} row${queryResult.rowCount !== 1 ? "s" : ""}`,
+        missing.length
+          ? `Done — ${queryResult.rowCount} row${queryResult.rowCount !== 1 ? "s" : ""} (${missing.length} ValueSet${missing.length === 1 ? "" : "s"} not loaded — results may be incomplete)`
+          : `Done — ${queryResult.rowCount} row${queryResult.rowCount !== 1 ? "s" : ""}`,
       );
+      if (missing.length) setIsStatusError(true);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
@@ -260,7 +292,7 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
     } finally {
       setIsExecuting(false);
     }
-  }, [cqlText, translate, executeQuery]);
+  }, [cqlText, translate, executeQuery, checkUnseededValuesets]);
 
   // Progressive disclosure: in smart-flow, only show Common Core samples
   const filteredCQLSamples = useMemo(() => {
@@ -355,6 +387,15 @@ export function App({ forceScenario, wasmAppUrl, smartRedirectUri }: AppProps = 
 
       {activeTab === "playground" && config.visibleTabs.includes("playground") && (
         <div className="app">
+          {unseededValuesets.length > 0 && (
+            <div
+              className="valueset-warning"
+              data-testid="valueset-cache-warning"
+              role="alert"
+            >
+              {valuesetWarningMessage(unseededValuesets)}
+            </div>
+          )}
           <Header
             selectedSample={selectedSample}
             onSampleChange={handleSampleChange}

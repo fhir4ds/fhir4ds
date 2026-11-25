@@ -7756,18 +7756,128 @@ site (static literals, one-hole f-strings, and the dynamic `op`/`operator`/
 reference anywhere under `fhir4ds/cql/translator/`, a documented prefix family
 (`after <prec> of`, `starts ...`, `within <N> <unit> of`, `on or after <prec> of`,
 ...), or a bare timing quantifier (`_parse_bare_temporal_operator` /
-`_parse_within_operator` in `_temporal_utils.py`). Current state: **82 distinct
-emitted specs, 0 unresolved**. The invariant is the CQL-19 doctrine — a
-parser-emitted operator string with no dispatch falls through to SQL pass-through
-and produces Binder/Parser exceptions at execution, so a new operator spelling
-must either get a dispatch site or be rejected where it is produced.
+`_parse_within_operator` in `_temporal_utils.py`). Re-run state after FHIR4-46:
+**69 distinct literal/template specs + 3 dynamic-variable families
+(`operator`, `op`, `full_operator`) + 1 fully-assembled template
+(`"{} {} {} {}"`, the bare timing quantifier), 0 unresolved.** An earlier
+note recorded "82 distinct emitted specs" from a per-SITE count; the
+re-runnable audit (`ast` over every `BinaryExpression(operator=...)` keyword
+plus operator strings assigned to the dynamic variables) reports 65 specs
+before FHIR4-46 and 69 after — same 0-unresolved verdict either way, so quote
+the method, not just the number. Two categories need explicit handling in any
+reimplementation, because they carry no literal fragment to grep for: the
+assembled `"{} {} {} {}"` (dispatched by `_parse_bare_temporal_operator` /
+`_translate_bare_temporal_operator`) and `full_operator`
+(`" ".join(operator_parts)`, dispatched by
+`_translate_complex_interval_temporal` / `_translate_simple_starts_ends_temporal`).
+The invariant is the CQL-19 doctrine — a parser-emitted operator string with no
+dispatch falls through to SQL pass-through and produces Binder/Parser exceptions
+at execution, so a new operator spelling must either get a dispatch site or be
+rejected where it is produced.
 
-Grammar-valid but still unsupported, and NOT defects (they fail loudly with a
-ParseError, no SQL leak): `properly between` and `properly within <N> <unit> of`.
+After FHIR4-46 there is **no grammar-valid `properly` spelling left
+unimplemented**: `properly between`, `properly within <N> <unit> of` (with the
+optional `starts` / `ends` / `occurs` prefix), `properly includes`,
+`properly included in` / `properly during` all parse AND dispatch.
 
 Gate after the change: CQL conformance 2036/2043 unchanged (`cql_report.json`
 byte-identical — no fixture uses the spelling), DQM qi-core-2025 47/47 and
 us-core-2025 73/73.
+
+## FHIR4-46 — `properly between` / `properly within ... of` (2026-11-24)
+
+The CQL grammar accepts `properly` on FOUR productions
+(https://cql.hl7.org/2019May/grammar.html, identical in 2.0):
+
+    expression 'properly'? 'between' expressionTerm 'and' expressionTerm        #betweenExpression
+    ('starts'|'ends'|'occurs')? 'properly'? 'within' quantity 'of'
+        ('start'|'end')?                                                       #withinIntervalOperatorPhrase
+    'properly'? 'includes' dateTimePrecisionSpecifier? ('start'|'end')?        #includesIntervalOperatorPhrase
+    ('starts'|'ends'|'occurs')? 'properly'? ('during'|'included in') ...       #includedInIntervalOperatorPhrase
+
+Before this card ONLY the last two were dispatched: the parser's `PROPERLY`
+branch restored its position otherwise, so `5 properly between 1 and 10` was a
+`ParseError: Unexpected trailing tokens ... PROPERLY 'properly'` and
+`@2014-01-01 properly within 3 days of @2014-01-03` the same (FHIR4-43 recorded
+them as "grammar-valid but still unsupported"). Both now parse and dispatch,
+including the `starts` / `ends` prefixed forms.
+
+**Semantics — Appendix B has no `Properly Between` / `Properly Within` section,
+so the operators these phrases lower to are the norm, and the HL7 reference
+implementation (`cqframework/clinical_quality_language`) is the authority for
+the lowering.** Everything below was read from source, not inferred:
+
+* `cql-to-elm` `Cql2ElmVisitor.visitBetweenExpression` — NON-interval first
+  argument: `And(Greater(first, second), Less(first, third))` for
+  `properly between`, `And(GreaterOrEqual, LessOrEqual)` for `between`;
+  `cql-to-elm/src/commonTest/kotlin/.../ProperlyBetweenTest.kt` pins exactly
+  that ("`between` should emit `And(GreaterOrEqual, LessOrEqual)`.
+  `properly between` should emit `And(Greater, Less)`"). **Both bounds
+  exclusive → boundary contact is FALSE.** (That test file exists because the
+  legacy translator read `ctx.getChild(0).text == "properly"` — child 0 is the
+  expression — so `isProper` was always false and `properly between` silently
+  behaved like `between`.)
+* `visitBetweenExpression` — INTERVAL first argument: `IncludedIn(first,
+  Interval[second, third])`, and `ProperIncludedIn` for the proper form. The
+  bound interval stays INCLUSIVE; the strictness is "first is strictly
+  smaller". Appendix B §Between agrees on the plain reading ("a synonym for the
+  during (or included in) operator, using the first argument and an inclusive
+  interval constructed from the second and third arguments"), and the ELM
+  schema pins `ProperIncludedIn(i1, i2) = IncludedIn(i1, i2) and i1 <> i2`, so
+  `Interval[1, 9] properly between 1 and 10` is **TRUE** (shares the low bound
+  but is strictly smaller) while `Interval[1, 10] properly between 1 and 10` is
+  FALSE.
+* `visitWithinIntervalOperatorPhrase` — `In(A, Interval(B - Q, B + Q))` where
+  the constructed bounds are CLOSED for `within` and OPEN for
+  `properly within` (`createInterval(lower, !isProper, upper, !isProper)`),
+  i.e. `|A - B| < Q` instead of `|A - B| <= Q`. **Boundary contact is FALSE.**
+  `starts` / `ends` extract `Start` / `End` of the left operand first; an
+  Interval right operand uses its `Start`/`End` (this engine's `within ... of`
+  still compares the right operand as a point — see the gap below).
+* ELM schema `ProperIn` documents the `T, Interval` overload as "greater than
+  the starting point, and less than the ending point"; `In` adds "for open
+  interval boundaries, exclusive comparison operators are used ... If the
+  second argument is null the result is false", and an OPEN NULL bound is an
+  unknown boundary (FHIR4-40/FHIR4-42) — so `A properly within Q of null`
+  is **null**. `A within Q of null` (plain) is null here too, while the
+  reference's extra `not IsNull(B)` conjunct would answer false; PRE-EXISTING,
+  unpinned by any fixture, and deliberately out of this card.
+
+**Lowering (no new UDFs, no extension rebuild).** `properly between` reuses
+`_translate_between_expression(expr, strict=True)`: point form re-uses the
+normal `>` / `<` translation (so DateTime precision-uncertainty, Quantity unit
+conversion and dynamic-FHIR dispatch are inherited — the reference's own
+`Greater`/`Less` semantics), interval form switches `intervalIncludedIn` →
+`intervalProperlyIncludedIn`. `properly within` is a `proper` flag on
+`_parse_within_operator` + a `<`/`<=` choice in `_translate_within_operator`.
+`properly between` keeps `between`'s null-argument guard (`CASE WHEN <any
+operand> IS NULL THEN NULL`), so the two forms stay consistent — note the
+reference's raw 3VL AND would answer false for `5 properly between null and 3`
+where this engine answers null (the same divergence `between` already has;
+unpinned by fixtures, engine-consistent by deliberate choice).
+
+Known fragile areas:
+
+* The parser parity is four separate code paths: the `PROPERLY` branch
+  (`between`, `within`) plus the `STARTS` and `ENDS` branches (their own
+  `properly within` arms, because `starts within` lives there). Adding a new
+  `properly <phrase>` means touching the branch that owns the phrase, not just
+  `PROPERLY`.
+* `_parse_within_operator` now returns a third key (`proper`); any new caller
+  must read it with `.get("proper")` so hand-built component dicts keep working.
+* PRE-EXISTING GAP (kept visible by an `xfail` in
+  `fhir4ds/cql/duckdb/tests/integration/test_properly_timing_phrases_parity.py`):
+  the `within N unit of` lowering casts both operands through `TIMESTAMP`, so a
+  TIME operand (`@T10:00 within 3 hours of @T12:00`) raises a DuckDB
+  ConversionException. It reproduces identically for the plain form, so
+  `properly` did not introduce it; fixing it means giving the whole
+  `within ... of` family a Time-aware comparison path.
+
+Coverage: `fhir4ds/cql/duckdb/tests/integration/test_properly_timing_phrases_parity.py`
+(parse + lowering shape + 39-case semantic matrix on py-fallback /
+native-loaded / no-Python + a population-WHERE-clause end-to-end case). Gate:
+CQL conformance 2036/2043 (delta 0, same 7 known cells), DQM qi-core-2025
+47/47 at 100%, us-core-2025 73/73 at 100%.
 
 ### FHIR4-42 — containment through an OPEN null bound is UNKNOWN, with 3VL (2026-11-24)
 
@@ -7863,3 +7973,66 @@ predicates (`intervalOverlapsPrecise`, `intervalBeforePrecise`,
 `intervalAfterPrecise`, `intervalOverlapsBefore/AfterPrecise`) still lack the
 open-null treatment on BOTH engines. Do not widen FHIR4-42's guard into them
 without doing the dual-engine pair and re-running both DQM suites.
+
+## FHIR4-48 — generated SQL must be single-row BY CONSTRUCTION (2026-11-25)
+
+DuckDB's default is `scalar_subquery_error_on_multiple_rows=true`: a scalar
+subquery that yields more than one row is an ERROR. The desktop DQM harness
+masks that (`fhir4ds/dqm/tests/conformance/database.py` sets it false), so a
+lowering emitting a multi-row scalar subquery ran green in the gate and raised
+"More than one row returned by a subquery used as an expression" on EVERY
+non-masked consumer — duckdb-wasm in all the web apps and any user connection.
+The wasm-parity lane found it; the gate could not. **A harness flag that hides a
+shape defect is part of the defect.** Two root causes and their fixes:
+
+- **A query-return alias referenced from a nested scope was re-materialised as
+  the whole source query.** `_temporal_intervals.py::_ensure_resource_to_interval`
+  returned `symbol.ast_expr` — `intervalStart((SELECT <expr> FROM "<cte>" AS
+  Inner))` — for any query-return alias whose source was a computed projection.
+  That is multi-row (one per element of the source) AND uncorrelated (no
+  `patient_id` predicate), so it could also answer from another patient's row.
+  A query source `( <source> X return <expr> ) Y` iterates ELEMENTS, so `Y` has
+  a value only for the CURRENT row: `_rebase_query_return_projection` re-points
+  `<expr>` from `X` onto the enclosing row alias `Y` (exactly what the enclosing
+  select projects). No aggregate and no LIMIT-1 "pick a row" guess is needed,
+  and correctness does not depend on row order. The rebase is narrow on
+  purpose — single column, no joins/grouping/ordering/DISTINCT, FROM must be a
+  quoted identifier naming the symbol's own CTE, no nested subquery, no
+  qualified reference to any OTHER alias — and returns None (previous shape)
+  otherwise. The inner WHERE is deliberately NOT carried: it selects which
+  source rows become elements, which the enclosing FROM already applied.
+  FIXED CMS56 (5 "Has THA with Initial and Follow Up … Assessments" + "Numerator").
+- **A multi-source query's `return` never de-duplicated.** CQL 1.5 §Query:
+  `return` (no `all`) ELIMINATES DUPLICATE TUPLE RESULTS. The single-source
+  path honoured it; the CROSS JOIN path did not, so `from A X, B Y … return X`
+  emitted one row per B. Any definition — and every promoted `_fn_…` CTE
+  derived from it — was then non-unique on `(patient_id, _row_key)`, and the
+  `(SELECT value FROM "_fn_…" WHERE patient_id AND _row_key)` lookups returned
+  several rows. FIXED CMS832 (10 CTEs incl. the three `_fn_` CTEs and
+  "Denominator Exclusion"). The rule now lives in ONE helper,
+  `_query.py::_return_clause_is_distinct`, used by BOTH lowering paths:
+  explicit `return distinct` always de-duplicates; the IMPLICIT default of a
+  plain `return` stays ROOT-scoped, because a nested DISTINCT leaks into scalar
+  property extractions (`intervalStart((SELECT DISTINCT …))`, CMS56 54/58 /
+  QI gate 46/47 history). `return all` and no-return-clause queries untouched.
+
+Effect to expect from the de-dup fix: duplicated entries inside NON-population
+list columns collapse (CMS832 "Qualifying Creatinine Lab Result by Time" lost
+582 duplicate elements, "Inpatient Encounter with Creatinine" 14). Every
+POPULATION column keeps identical patient membership — verified, and consistent
+with qi-core staying 100%.
+
+**Verification recipe (use it whenever you touch query/CTE lowering).** The gate
+cannot see this class, so measure it directly: compile each measure, `SET
+scalar_subquery_error_on_multiple_rows=true` on that connection, then (a)
+`{with-head} SELECT count(*) FROM "<each definition CTE>"` and (b) execute the
+FULL generated SQL. `all_columns=True` matters — column CTEs a population-only
+projection never touches still crash a web app that asks for them. Measured:
+qi-core-2025 **2/47 before → 0/47 after**; us-core-2025 **0/73 population
+columns clean for CMS56/CMS832** but `CMS145` and `CMS156` still raise on a
+strict connection (2 and 4 CTEs) — PRE-EXISTING (identical on the parent tree),
+out of FHIR4-48's scope, and the reason the harness flag is not flipped yet (see
+the recommendation in the FHIR4-48 report). Pinned for the fixed measures by
+`fhir4ds/dqm/tests/integration/test_strict_scalar_subqueries_fhir4_48.py`,
+whose synthetic case is built so a "just append LIMIT 1" non-correlated fix
+fails the opposite patient's assertion.

@@ -22,6 +22,29 @@ against any FHIR corpus (developed against the MIMIC-IV-FHIR demo):
    stripped originals' codings are the gold set, so we can measure
    exact (system,code) recovery, code-only recovery, and coverage.
 
+All five steps run from ONE command, with medterm4ds IN-PROCESS — no
+HTTP sidecar (medterm4ds PR #24 / FHIR4-23: the historical same-process
+segfaults were concurrent native inference, now serialized inside
+medterm4ds). The former ``--phase piqi|autocode|after`` split, its
+artifact files and its loaders are gone; those existed only to keep
+torch and the DuckDB native extension in separate processes, and they
+worked solely because they incidentally serialized inference.
+
+The auto-coding leg runs in a short-lived CHILD process by default (still
+using the in-process endpoint; ``--inline-autocoding`` runs it inline)
+because the native ML stack crashes intermittently in long-lived
+processes on some hosts. One retry in a fresh process is logged, never
+silent.
+
+Threading contract (medterm4ds ``docs/threading-and-embedding.md``):
+**one thread per DuckDB connection.** Each leg opens its own connection
+on the thread that uses it, and the in-process endpoint serializes engine
+calls on its own lock. Do not share a connection or an endpoint instance
+across threads — row-shape ``ValueError`` is the symptom. DuckDB's own
+executor is pinned to one thread by default (``--duckdb-threads``),
+because a multi-threaded executor co-resident with the ML runtime crashes
+on some hosts.
+
 Determinism: the patient slice is the first N patient ids in sorted
 order; stripping walks resources in (resourceType, id) order and caps
 per patient in that order. No RNG. Same corpus + arguments ->
@@ -32,8 +55,13 @@ CLI::
     python3 -m fhir4ds.realism.piqi_autocoding \
         --corpus tests/data/mimic-iv-fhir-demo/.../fhir \
         --output-dir /tmp/jm/piqi-autocoding \
-        [--num-patients 12] [--lab-cap 40] [--medicationrequest-cap 20]
-        [--skip-autocoding]   # corpus/PIQI legs without medterm4ds
+        [--num-patients 12]
+        [--min-match-grade certain|probable] [--search-mode hybrid]
+        [--no-strip]             # production path: autocode the RAW corpus
+        [--skip-autocoding]      # corpus/PIQI legs without medterm4ds
+        [--duckdb-threads N]     # default 1 (ML runtime shares the process)
+        [--inline-autocoding]    # skip the child-process hop for the leg
+        [--http-base-url URL]    # escape hatch: remote terminology server
 
 ``--skip-autocoding`` still builds and evaluates the BEFORE corpus; it
 only skips the augmentation (useful where the medterm4ds index is not
@@ -50,12 +78,67 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Optional, Union
 
+import logging
+
 from .corpus import load_corpus
+
+_logger = logging.getLogger(__name__)
 
 # ── deterministic experiment parameters ───────────────────────────────
 
 #: Patient slice size (first N patient ids, sorted).
 DEFAULT_NUM_PATIENTS = 12
+
+#: DuckDB executor threads for every connection the benchmark opens.
+#:
+#: FHIR4-25: the auto-coding leg runs the medterm4ds ML runtime (torch +
+#: faiss) IN THIS PROCESS, and DuckDB's multi-threaded executor co-resident
+#: with it segfaults on some hosts (`segfault at 0 ip 0000000000000000` — a
+#: call through a null pointer). Reproduced on WSL2 twice in the single-pass
+#: run and once in the pre-switch phase-isolated run; the identical workload
+#: is stable at one thread (PIQI leg + 400 autocoded resources, no crash).
+#: The PIQI legs are scoring steps, not the measurement, so pinning them
+#: costs a little wall clock and buys a run that finishes.
+#:
+#: Override with ``FHIR4DS_PIQI_DUCKDB_THREADS=<n>`` (or
+#: ``--duckdb-threads``) where the mix is known-good, e.g. a
+#: ``--skip-autocoding`` corpus/PIQI-only run.
+DEFAULT_DUCKDB_THREADS = 1
+
+#: Environment variable that overrides :data:`DEFAULT_DUCKDB_THREADS`.
+DUCKDB_THREADS_ENV = "FHIR4DS_PIQI_DUCKDB_THREADS"
+
+#: Attempts for the isolated auto-coding leg.
+#:
+#: The medterm4ds native stack (torch + faiss) crashes INTERMITTENTLY on
+#: some hosts — `segfault at 0 ip 0000000000000000` (a call through a null
+#: pointer), typically 2-5 minutes into a long search loop, roughly half
+#: the time. It is not input-dependent (the same texts succeed on other
+#: runs) and not caused by this pipeline (it hit the pre-switch
+#: ``--phase autocode`` process identically). One retry in a FRESH process
+#: is the documented mitigation, and it is logged at WARNING every time so
+#: a flaky host is never quietly papered over. Three attempts: the observed
+#: per-attempt failure rate here is 4 in 6, and a crashed attempt only costs
+#: the 2-5 minutes it survived.
+AUTOCODING_ATTEMPTS = 3
+
+
+def default_duckdb_threads() -> int:
+    """Executor threads for this run: env override, else 1 (FHIR4-25)."""
+    import os
+
+    raw = os.environ.get(DUCKDB_THREADS_ENV)
+    if raw is None or not raw.strip():
+        return DEFAULT_DUCKDB_THREADS
+    try:
+        value = int(raw)
+    except ValueError:
+        raise ValueError(
+            f"{DUCKDB_THREADS_ENV} must be an integer, got {raw!r}") from None
+    if value < 1:
+        raise ValueError(
+            f"{DUCKDB_THREADS_ENV} must be >= 1, got {value}")
+    return value
 
 #: CodeableConcept paths stripped per resource type and the per-patient
 #: cap applied in (id) order. VitalSign observations are deliberately
@@ -427,11 +510,20 @@ def append_invariants(originals: list[dict], augmented: list[dict],
 
 # ── evaluation ────────────────────────────────────────────────────────
 
-def _fresh_connection():
+def _fresh_connection(threads: Optional[int] = None):
+    """Open a fresh DuckDB connection for one PIQI leg.
+
+    ``threads`` pins DuckDB's executor (see
+    :data:`DEFAULT_DUCKDB_THREADS`): the auto-coding leg shares this
+    process with the ML runtime, and a multi-threaded executor next to it
+    crashes on some hosts.
+    """
     import duckdb
     from fhir4ds.fhirpath.duckdb import register_fhirpath
+    if threads is None:
+        threads = default_duckdb_threads()
     conn = duckdb.connect(
-        config={"allow_unsigned_extensions": True})
+        config={"allow_unsigned_extensions": True, "threads": int(threads)})
     native = bool(register_fhirpath(conn))
     return conn, native
 
@@ -445,16 +537,21 @@ def _load_resources_table(conn, resources: list[dict]) -> None:
                                       str(x.get("id", ""))))])
 
 
-def evaluate_slice(resources: list[dict], rubric) -> dict:
+def evaluate_slice(resources: list[dict], rubric,
+                   threads: Optional[int] = None) -> dict:
     """Evaluate the rubric over ``resources``; returns a JSON-safe
-    scorecard summary plus per-SAM fail counts."""
+    scorecard summary plus per-SAM fail counts.
+
+    ``threads`` is forwarded to :func:`_fresh_connection` (DuckDB executor
+    threads; see :data:`DEFAULT_DUCKDB_THREADS`).
+    """
     from fhir4ds.piqi.scorecard import evaluate_rubric
 
     if isinstance(rubric, tuple):
         _, criteria_meta = rubric
     else:
         criteria_meta = rubric.get("piqiCriteria") or []
-    conn, native = _fresh_connection()
+    conn, native = _fresh_connection(threads)
     try:
         _load_resources_table(conn, resources)
         card = evaluate_rubric(conn, rubric, source_table="resources",
@@ -507,22 +604,30 @@ def _autocoded_any(resource: dict) -> bool:
 def run_autocoder(stripped: list[dict], endpoint,
                   min_match_grade: str = "certain",
                   max_passes: int = 3,
-                  search_mode: str = "hybrid") -> dict:
+                  search_mode: str = "hybrid",
+                  threads: Optional[int] = None) -> dict:
     """Augment ``stripped`` in place via the AutoCoder and return engine
     stats. ``endpoint`` is any TerminologyEndpoint. ``min_match_grade``
     selects the strictness arm: 'certain' (shipped default) or e.g.
     'probable' (recall-oriented, FDD-documented trade-off).
 
     ``max_passes`` re-runs augmentation over resources that received NO
-    autocoding (the AutoCoder cache makes repeat passes cheap). This is
-    resilience against TRANSIENT endpoint failures — the medterm4ds
-    sidecar exhibits an intermittent native crash (SIGSEGV, 2026-11-20),
-    and a single failed search leaves that resource permanently uncoded
-    within one pass. A pass that adds nothing new stops the loop."""
+    autocoding (the AutoCoder cache makes repeat passes cheap). A pass
+    that adds nothing new stops the loop, so the default 3 is a bound,
+    not a fixed cost.
+
+    Threading (FHIR4-25): the AutoCoder's DuckDB cache connection is
+    created HERE and used only on the calling thread; the endpoint owns
+    its own separate connection and serializes engine calls. Nothing in
+    this function shares a connection across threads — keep it that way
+    (medterm4ds ``docs/threading-and-embedding.md``: one thread per DuckDB
+    connection)."""
     import duckdb  # cache table only; standalone connection
     from fhir4ds.cql.loader.auto_coder import AutoCoder, AutoCoderConfig
 
-    cache_conn = duckdb.connect()
+    if threads is None:
+        threads = default_duckdb_threads()
+    cache_conn = duckdb.connect(config={"threads": int(threads)})
     passes = []
     try:
         coder = AutoCoder(endpoint, cache_conn,
@@ -689,16 +794,17 @@ def unmapped_classes(resources: list[dict]) -> dict:
 # ── orchestration ─────────────────────────────────────────────────────
 
 def run_benchmark(corpus_path: Union[str, Path], output_dir: Union[str, Path],
-                   search_mode: str = "hybrid",
+                  search_mode: str = "hybrid",
                   *, num_patients: int = DEFAULT_NUM_PATIENTS,
                   stripping: Optional[dict] = None,
                   skip_autocoding: bool = False,
-                  phase: str = "all",
                   http_base_url: Optional[str] = None,
                   min_match_grade: str = "certain",
                   no_strip: bool = False,
+                  duckdb_threads: Optional[int] = None,
+                  isolate_autocoding: bool = True,
                   _test_endpoint=None) -> dict:
-    """Run one phase (or all phases) of the experiment.
+    """Run the whole experiment in ONE process: PIQI legs + auto-coding.
 
     Two modes: **strip** (default; the constructed-BEFORE experiment
     with exact-recovery gold) and **no-strip** (``no_strip=True`` /
@@ -708,27 +814,70 @@ def run_benchmark(corpus_path: Union[str, Path], output_dir: Union[str, Path],
     exists there — originals remain in place; quality evidence is the
     appended-not-replaced invariant plus spot-checks).
 
-    Phases exist because the medterm4ds inference stack (torch/SapBERT)
-    and the DuckDB native fhirpath extension do not coexist reliably in
-    one process (intermittent SIGSEGV, 2026-11-20 run) — the ``autocode``
-    phase must therefore run in a process that has NEVER registered the
-    native extension, and the ``after`` phase in one that never imports
-    medterm4ds:
+    Legs, in this order, all inside this call:
 
-    * ``piqi`` — slice, census, strip, baseline + before + ceiling
-      scorecards; writes ``report.partial.json`` + ``stripped.jsonl`` +
-      ``gold.jsonl`` into the output dir.
-    * ``autocode`` — loads the saved stripped corpus, augments it via
-      the in-process medterm4ds endpoint, writes ``augmented.jsonl`` and
-      the ``autocoding`` / ``gold_accuracy`` sections into the partial
-      report. Does NOT touch the native extension.
-    * ``after`` — recomputes the deterministic slice/strip, swaps in the
-      augmented resources, evaluates AFTER, builds the recovery table,
-      writes the final ``piqi_autocoding_report.json``.
-    * ``all`` — the original single-process path (safe only with
-      ``--skip-autocoding``; kept for tests/small corpora).
+    * baseline PIQI on the deterministic slice as shipped;
+    * strip mode only: BEFORE and CEILING scorecards — the ceiling
+      re-attaches the stripped originals, i.e. the maximum recoverable
+      index;
+    * auto-coding through :class:`~fhir4ds.cql.loader.auto_coder.AutoCoder`
+      with the IN-PROCESS medterm4ds engine by default (see
+      :func:`_make_endpoint`); ``http_base_url`` is the escape hatch for
+      a remote or deliberately isolated server;
+    * AFTER scorecard plus the per-SAM recovery table.
+
+    FHIR4-25: this used to be three ``--phase`` invocations with JSONL
+    plus partial-report artifacts carrying state between them, because
+    the medterm4ds inference stack (torch/SapBERT) and the DuckDB native
+    extension were believed not to coexist in one process. That belief
+    is retired (medterm4ds PR #24 / FHIR4-23): the historical
+    same-process segfaults were concurrent native inference — now
+    serialized inside medterm4ds 0.0.14 — and phase isolation only ever
+    worked because it incidentally serialized inference. In-process is
+    the SUPPORTED embedding pattern, so the benchmark is one call with no
+    phase flags and no inter-phase artifacts.
+
+    THREADING CONTRACT (medterm4ds ``docs/threading-and-embedding.md``):
+    **one thread per DuckDB connection.** Every leg runs on the CALLING
+    thread here: each PIQI leg opens its own connection
+    (:func:`evaluate_slice` -> :func:`_fresh_connection`) and
+    :func:`run_autocoder` opens its own cache connection, so no
+    connection is shared across threads. The in-process endpoint
+    serializes engine calls on its own lock because the medterm4ds engine
+    owns a single connection. If this is ever parallelised, each worker
+    needs its OWN cache connection and its OWN endpoint instance — never
+    share either across threads (the symptom of breaching this is
+    row-shape ValueErrors, not corruption).
+
+    ``isolate_autocoding`` (default True) runs the auto-coding leg in a
+    short-lived CHILD process that uses the same IN-PROCESS endpoint; pass
+    ``False`` (``--inline-autocoding``) to run it inline. The child hop
+    exists because the native ML stack crashes intermittently in a
+    long-lived process on some hosts (:data:`AUTOCODING_ATTEMPTS`), not
+    because anything needs an HTTP sidecar. The child opens its own
+    connections, so the one-thread-per-connection contract holds on both
+    sides.
+
+    ``duckdb_threads`` pins DuckDB's executor for every connection this
+    call opens (default :data:`DEFAULT_DUCKDB_THREADS`, overridable with
+    ``FHIR4DS_PIQI_DUCKDB_THREADS``). Keep it as is unless the mix is
+    known-good: the auto-coding leg shares the process with the ML runtime,
+    and a multi-threaded executor next to it crashes on some hosts
+    (FHIR4-25). It is recorded in the report so the numbers stay
+    self-describing.
+
+    Determinism: same corpus + arguments -> byte-identical JSON report
+    (no wall clock; floats rounded; one file written,
+    ``piqi_autocoding_report.json``).
     """
     stripping = stripping or DEFAULT_STRIPPING
+    if duckdb_threads is None:
+        duckdb_threads = default_duckdb_threads()
+    else:
+        duckdb_threads = int(duckdb_threads)
+        if duckdb_threads < 1:
+            raise ValueError(
+                f"duckdb_threads must be >= 1, got {duckdb_threads}")
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     corpus = load_corpus(corpus_path)
@@ -742,12 +891,6 @@ def run_benchmark(corpus_path: Union[str, Path], output_dir: Union[str, Path],
         stripped, gold = strip_codings(slice_resources, stripping)
     rubric = build_mimic_rubric()
 
-    # The PIQI evaluations register the DuckDB NATIVE fhirpath
-    # extension. The `autocode` phase must NEVER run them (see the
-    # run_benchmark docstring: torch + native extension = SIGSEGV), and
-    # the `after` phase only needs its own evaluation.
-    _runs_piqi_legs = phase in ("piqi", "all")
-
     _, rubric_criteria = rubric
     report: dict[str, Any] = {
         "experiment": "piqi-autocoding",
@@ -758,6 +901,7 @@ def run_benchmark(corpus_path: Union[str, Path], output_dir: Union[str, Path],
                    for c in rubric_criteria],
         "corpus_path": str(corpus_path),
         "num_patients": num_patients,
+        "duckdb_threads": duckdb_threads,
         "stripping_spec": {
             k: {"path": v["path"], "cap": v.get("cap"),
                 **({"category": v["category"]} if "category" in v else {}),
@@ -785,17 +929,73 @@ def run_benchmark(corpus_path: Union[str, Path], output_dir: Union[str, Path],
         "unmapped_classes": unmapped_classes(slice_resources),
     }
 
-    if _runs_piqi_legs:
-        report["baseline"] = evaluate_slice(slice_resources, rubric)
+    if no_strip:
+        # The auto-coding leg MUTATES the slice in place, so the baseline
+        # scorecard must be taken first.
+        report["baseline"] = evaluate_slice(slice_resources, rubric,
+                                            duckdb_threads)
+        report["gold_accuracy"] = None
+        # keep the raw slice for the appended-not-replaced evidence
+        originals = copy.deepcopy(slice_resources)
+        if skip_autocoding:
+            report["autocoding"] = None
+            report["augmentation"] = None
+            report["append_invariants"] = None
+            report["after"] = None
+            report["recovery"] = None
+        else:
+            slice_resources, report["autocoding"] = _autocoding_leg(
+                slice_resources,
+                http_base_url=http_base_url,
+                min_match_grade=min_match_grade,
+                search_mode=search_mode,
+                threads=duckdb_threads,
+                test_endpoint=_test_endpoint,
+                isolate=isolate_autocoding)
+            report["augmentation"] = augmentation_stats(slice_resources)
+            report["append_invariants"] = append_invariants(
+                originals, slice_resources)
+            report["after"] = evaluate_slice(slice_resources, rubric,
+                                             duckdb_threads)
+            report["recovery"] = recovery_table(report["baseline"],
+                                                report["after"])
+    else:
+        # ORDER MATTERS (FHIR4-25). Auto-coding runs BEFORE the heavy PIQI
+        # evaluations on purpose: on some hosts the ML runtime crashes when
+        # it starts AFTER several full PIQI legs have executed in the same
+        # process (three 86k-resource legs then torch = SIGSEGV at ip 0;
+        # one leg then torch = stable). Strip mode does not need the slice
+        # evaluated first — ``stripped`` holds deep COPIES of the stripped
+        # resources, so the as-shipped slice is untouched — and the BEFORE
+        # leg needs the PRE-augmentation snapshot.
+        pre_augmentation = copy.deepcopy(stripped)
+        if skip_autocoding:
+            report["autocoding"] = None
+            report["gold_accuracy"] = None
+        else:
+            stripped, report["autocoding"] = _autocoding_leg(
+                stripped,
+                http_base_url=http_base_url,
+                min_match_grade=min_match_grade,
+                search_mode=search_mode,
+                threads=duckdb_threads,
+                test_endpoint=_test_endpoint,
+                isolate=isolate_autocoding)
+            report["gold_accuracy"] = gold_accuracy(gold, stripped)
 
-    if _runs_piqi_legs and not no_strip:
-        # BEFORE = the slice with stripped resources REPLACING their
-        # originals
+        report["baseline"] = evaluate_slice(slice_resources, rubric,
+                                            duckdb_threads)
+
         stripped_keys = {(g["resourceType"], g["id"]) for g in gold}
-        before_corpus = [r for r in slice_resources
-                         if (r.get("resourceType"), r.get("id"))
-                         not in stripped_keys] + stripped
-        report["before"] = evaluate_slice(before_corpus, rubric)
+        untouched = [r for r in slice_resources
+                     if (r.get("resourceType"), r.get("id"))
+                     not in stripped_keys]
+
+        # BEFORE = the slice with the PRE-augmentation stripped resources
+        # REPLACING their originals
+        before_corpus = untouched + pre_augmentation
+        report["before"] = evaluate_slice(before_corpus, rubric,
+                                          duckdb_threads)
 
         # CEILING = the BEFORE corpus with the ORIGINAL codings
         # re-attached (text kept): the counterfactual fully-coded corpus
@@ -810,155 +1010,20 @@ def run_benchmark(corpus_path: Union[str, Path], output_dir: Union[str, Path],
                 cc = r.get(g["path"])
                 if isinstance(cc, dict):
                     cc["coding"] = copy.deepcopy(g["codings"])
-        report["ceiling"] = evaluate_slice(ceiling_corpus, rubric)
+        report["ceiling"] = evaluate_slice(ceiling_corpus, rubric,
+                                           duckdb_threads)
 
-    if no_strip:
-        if phase == "piqi":
-            report["gold_accuracy"] = None
-            _dump_jsonl(out / "nostrip_slice.jsonl", slice_resources)
-            (out / "report.partial.json").write_text(
-                json.dumps(report, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8")
-            return report
-
-        if phase == "autocode":
-            partial_path = out / "report.partial.json"
-            report = _load_partial(out)
-            working = _load_jsonl(out / "nostrip_slice.jsonl")
-            originals = copy.deepcopy(working)
-            endpoint = (_test_endpoint or _make_endpoint(
-                http_base_url, breaker_threshold=10 ** 9))
-            stats = run_autocoder(working, endpoint,
-                                  min_match_grade=min_match_grade,
-                                  search_mode=search_mode)
-            stats["endpoint"] = ("test_stub" if _test_endpoint else
-                                 (http_base_url or "in_process"))
-            report["autocoding"] = stats
-            report["gold_accuracy"] = None
-            report["augmentation"] = augmentation_stats(working)
-            report["append_invariants"] = append_invariants(
-                originals, working)
-            _dump_jsonl(out / "augmented.jsonl", working)
-            partial_path.write_text(
-                json.dumps(report, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8")
-            return report
-
-        if phase == "after":
-            report = _load_partial(out)
-            _check_artifact_corpus(report, corpus_path, num_patients, out)
-            augmented = _load_jsonl(out / "augmented.jsonl")
-            augmented_keys = {(r.get("resourceType"), r.get("id"))
-                              for r in augmented}
-            after_corpus = [
-                r for r in slice_resources
-                if (r.get("resourceType"), r.get("id"))
-                not in augmented_keys] + augmented
-            report["after"] = evaluate_slice(after_corpus, rubric)
-            report["recovery"] = recovery_table(
-                _require_partial_leg(report, out, "baseline"),
-                report["after"])
-            (out / "piqi_autocoding_report.json").write_text(
-                json.dumps(report, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8")
-            return report
-
-        # phase == "all" (no-strip): single-process path
-        if not skip_autocoding:
-            endpoint = (_test_endpoint or _make_endpoint(http_base_url))
-            stats = run_autocoder(slice_resources, endpoint,
-                                  min_match_grade=min_match_grade,
-                                  search_mode=search_mode)
-            report["autocoding"] = stats
-            report["gold_accuracy"] = None
-            report["augmentation"] = augmentation_stats(slice_resources)
-            report["after"] = evaluate_slice(slice_resources, rubric)
-            report["recovery"] = recovery_table(report["baseline"],
-                                                report["after"])
-        else:
-            report["autocoding"] = None
-            report["gold_accuracy"] = None
+        if skip_autocoding:
             report["after"] = None
             report["recovery"] = None
-        (out / "piqi_autocoding_report.json").write_text(
-            json.dumps(report, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8")
-        return report
-
-    if phase == "piqi":
-        _dump_jsonl(out / "stripped.jsonl", stripped)
-        _dump_jsonl(out / "gold.jsonl", gold)
-        (out / "report.partial.json").write_text(
-            json.dumps(report, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8")
-        return report
-
-    if phase == "autocode":
-        partial_path = out / "report.partial.json"
-        report = _load_partial(out)
-        stripped = _load_jsonl(out / "stripped.jsonl")
-        gold = _load_jsonl(out / "gold.jsonl")
-        endpoint = _make_endpoint(http_base_url,
-                                  breaker_threshold=10 ** 9)
-        stats = run_autocoder(stripped, endpoint,
-                              min_match_grade=min_match_grade,
-                              search_mode=search_mode)
-        stats["endpoint"] = (http_base_url or "in_process")
-        if not http_base_url:
-            from fhir4ds.cql.terminology.in_process_adapter import (
-                prefer_terminology_layout,
-            )
-            stats["medterm4ds_layout"] = prefer_terminology_layout()
-        report["autocoding"] = stats
-        report["gold_accuracy"] = gold_accuracy(gold, stripped)
-        _dump_jsonl(out / "augmented.jsonl", stripped)
-        partial_path.write_text(
-            json.dumps(report, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8")
-        return report
-
-    if phase == "after":
-        report = _load_partial(out)
-        _check_artifact_corpus(report, corpus_path, num_patients, out)
-        augmented = _load_jsonl(out / "augmented.jsonl")
-        stripped_keys = {(r.get("resourceType"), r.get("id"))
-                         for r in augmented}
-        before_corpus = [
-            r for r in slice_resources
-            if (r.get("resourceType"), r.get("id")) not in stripped_keys
-        ] + augmented
-        report["after"] = evaluate_slice(before_corpus, rubric)
-        report["recovery"] = recovery_table(
-            _require_partial_leg(report, out, "before"),
-            report["after"])
-        (out / "piqi_autocoding_report.json").write_text(
-            json.dumps(report, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8")
-        return report
-
-    # phase == "all": original single-process path
-    if not skip_autocoding:
-        from fhir4ds.cql.terminology.in_process_adapter import (
-            InProcessTerminologyEndpoint,
-            prefer_terminology_layout,
-        )
-        layout = prefer_terminology_layout()
-        endpoint = InProcessTerminologyEndpoint()
-        stats = run_autocoder(stripped, endpoint,
-                              min_match_grade=min_match_grade,
-                              search_mode=search_mode)
-        stats["medterm4ds_layout"] = layout
-        stats["endpoint"] = "in_process"
-        report["autocoding"] = stats
-        report["gold_accuracy"] = gold_accuracy(gold, stripped)
-        report["after"] = evaluate_slice(before_corpus, rubric)
-        report["recovery"] = recovery_table(report["before"],
-                                            report["after"])
-    else:
-        report["autocoding"] = None
-        report["gold_accuracy"] = None
-        report["after"] = None
-        report["recovery"] = None
+        else:
+            # AFTER = the same corpus with the AUGMENTED stripped
+            # resources (``stripped`` was mutated in place by the leg)
+            after_corpus = untouched + stripped
+            report["after"] = evaluate_slice(after_corpus, rubric,
+                                             duckdb_threads)
+            report["recovery"] = recovery_table(report["before"],
+                                                report["after"])
 
     (out / "piqi_autocoding_report.json").write_text(
         json.dumps(report, indent=2, sort_keys=True) + "\n",
@@ -966,118 +1031,152 @@ def run_benchmark(corpus_path: Union[str, Path], output_dir: Union[str, Path],
     return report
 
 
-def _make_endpoint(http_base_url: Optional[str],
-                   breaker_threshold: int = 5):
-    """Build the augmentation endpoint.
+def _autocoding_leg(resources: list[dict], *, http_base_url: Optional[str],
+                    min_match_grade: str, search_mode: str,
+                    threads: Optional[int] = None,
+                    test_endpoint=None,
+                    isolate: bool = True) -> tuple[list[dict], dict]:
+    """Augment ``resources`` and return ``(augmented_resources, stats)``.
 
-    Default is the in-process medterm4ds engine. ``http_base_url``
-    switches to the HTTP sidecar — REQUIRED on hosts where the
-    in-process engine (torch + DuckDB in one process) segfaults; run
-    ``MEDTERM4DS_DB=<lookup db> python3 -c "from
-    medterm4ds.apps.fhir_api import main; main()"`` and pass its FHIR
-    root (e.g. ``http://127.0.0.1:8012/fhir``). For benchmark runs the
-    breaker threshold is raised so an intermittent sidecar restart
-    (auto-restart wrapper) cannot poison the whole run.
+    The terminology endpoint is the IN-PROCESS medterm4ds adapter by
+    default (see :func:`_make_endpoint`); nothing here needs an HTTP
+    sidecar.
+
+    ``isolate`` runs the leg in a short-lived CHILD process (the default)
+    because the native ML stack crashes intermittently when it shares a
+    long-lived process with everything else on some hosts — see
+    :data:`AUTOCODING_ATTEMPTS`. The child uses the same in-process
+    endpoint; the parent keeps its own DuckDB connections closed, so the
+    one-thread-per-connection contract holds on both sides. Pass
+    ``isolate=False`` (``--inline-autocoding``) to run it inline.
+
+    The returned list is the augmented corpus: identical object identity
+    when inline, a fresh list when isolated.
+    """
+    kwargs = dict(http_base_url=http_base_url,
+                  min_match_grade=min_match_grade,
+                  search_mode=search_mode,
+                  threads=threads,
+                  test_endpoint=test_endpoint)
+    if not isolate or test_endpoint is not None:
+        return resources, _autocoding_leg_inline(resources, **kwargs)
+    return _autocoding_leg_isolated(resources, kwargs)
+
+
+def _autocoding_leg_inline(resources: list[dict], *,
+                           http_base_url: Optional[str],
+                           min_match_grade: str, search_mode: str,
+                           threads: Optional[int] = None,
+                           test_endpoint=None) -> dict:
+    """Run the auto-coding leg on the CALLING thread, in this process."""
+    endpoint = test_endpoint if test_endpoint is not None else _make_endpoint(
+        http_base_url)
+    stats = run_autocoder(resources, endpoint,
+                          min_match_grade=min_match_grade,
+                          search_mode=search_mode,
+                          threads=threads)
+    if test_endpoint is not None:
+        stats["endpoint"] = "test_stub"
+    elif http_base_url:
+        stats["endpoint"] = http_base_url
+    else:
+        from fhir4ds.cql.terminology.in_process_adapter import (
+            prefer_terminology_layout,
+        )
+        stats["endpoint"] = "in_process"
+        stats["medterm4ds_layout"] = prefer_terminology_layout()
+    return stats
+
+
+def _autocoding_child(conn, resources: list[dict], kwargs: dict) -> None:
+    """Child-process entry point for the isolated auto-coding leg."""
+    try:
+        stats = _autocoding_leg_inline(resources, **kwargs)
+    except BaseException as exc:  # noqa: BLE001 - serialized to the parent
+        try:
+            conn.send(("error", f"{type(exc).__name__}: {exc}"))
+        except Exception:  # pragma: no cover - parent already gone
+            pass
+        raise
+    conn.send(("ok", resources, stats))
+    conn.close()
+
+
+def _autocoding_leg_isolated(resources: list[dict], kwargs: dict,
+                             attempts: int = AUTOCODING_ATTEMPTS
+                             ) -> tuple[list[dict], dict]:
+    """Run the auto-coding leg in a fresh child process, retrying a crash.
+
+    A native crash (SIGSEGV in torch/faiss) kills the child before it can
+    answer; that is retried up to ``attempts`` times in a NEW process and
+    logged loudly. A Python exception raised inside the leg is NOT retried
+    — it is a real error and is re-raised here.
+    """
+    import multiprocessing as mp
+
+    ctx = mp.get_context("spawn")
+    last: Optional[str] = None
+    for attempt in range(1, max(1, attempts) + 1):
+        parent_conn, child_conn = ctx.Pipe(duplex=False)
+        proc = ctx.Process(target=_autocoding_child,
+                           args=(child_conn, copy.deepcopy(resources), kwargs),
+                           name="piqi-autocoding")
+        proc.start()
+        child_conn.close()
+        try:
+            message = parent_conn.recv()
+        except EOFError:
+            proc.join()
+            last = f"child exited with code {proc.exitcode}"
+            _logger.warning(
+                "auto-coding leg died in its child process (%s) on attempt "
+                "%d/%d — this is the intermittent native ML-stack crash, "
+                "not a pipeline error; retrying in a fresh process",
+                last, attempt, attempts)
+            parent_conn.close()
+            continue
+        parent_conn.close()
+        proc.join()
+        kind = message[0]
+        if kind == "error":
+            raise RuntimeError(
+                f"auto-coding leg failed: {message[1]}")
+        _, augmented, stats = message
+        return augmented, stats
+    raise RuntimeError(
+        "auto-coding leg crashed in its child process on every attempt "
+        f"({attempts}): {last}. The medterm4ds native ML stack is unstable "
+        "on this host; re-run later, use --inline-autocoding in a fresh "
+        "process, or point --http-base-url at a remote terminology server.")
+
+
+def _make_endpoint(http_base_url: Optional[str]):
+    """Build the auto-coding endpoint: IN-PROCESS medterm4ds by default.
+
+    The in-process engine is the supported default (FHIR4-25). It runs
+    medterm4ds in this process alongside the DuckDB native extension:
+    medterm4ds serializes its own native inference (``_infer_lock``,
+    0.0.14+) and :class:`InProcessTerminologyEndpoint` serializes engine
+    calls, so one process is safe — see that adapter's module docstring
+    and medterm4ds ``docs/threading-and-embedding.md``.
+
+    ``http_base_url`` is an ESCAPE HATCH for a remote or deliberately
+    isolated terminology server: point it at a medterm4ds FHIR root
+    (e.g. ``http://127.0.0.1:8012/fhir``) and the auto-coding leg talks
+    HTTP instead. Nothing in the default path requires it.
     """
     if http_base_url:
         from fhir4ds.cql.terminology.http_adapter import (
             HTTPTerminologyEndpoint,
         )
+        # A long benchmark against a restartable server must not let a few
+        # transient failures trip the breaker and poison the whole run.
         return HTTPTerminologyEndpoint(
-            http_base_url, breaker_threshold=breaker_threshold)
+            http_base_url, breaker_threshold=10 ** 9)
     from fhir4ds.cql.terminology.in_process_adapter import (
         InProcessTerminologyEndpoint,
     )
     return InProcessTerminologyEndpoint()
-
-
-def _dump_jsonl(path: Path, rows: list[dict]) -> None:
-    with path.open("w", encoding="utf-8") as fh:
-        for row in rows:
-            fh.write(json.dumps(row, sort_keys=True) + "\n")
-
-
-def _load_jsonl(path: Path) -> list[dict]:
-    """Load a phase artifact JSONL file with a typed, attributed error
-    contract (QA-D6E-005): corrupt JSON and non-object lines raise
-    ``ValueError`` naming the artifact and the remedy instead of leaking
-    raw ``JSONDecodeError`` / ``AttributeError`` from deep inside a
-    later phase."""
-    rows: list[dict] = []
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except FileNotFoundError:
-        raise ValueError(
-            f"phase artifact {path.name} not found; re-run the phase "
-            f"that produces it first") from None
-    for lineno, line in enumerate(lines, start=1):
-        if not line.strip():
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError as exc:
-            raise ValueError(
-                f"phase artifact {path.name}: malformed JSON on line "
-                f"{lineno} ({exc}); re-run the phase that produces "
-                f"{path.name} to regenerate it") from exc
-        if not isinstance(obj, dict):
-            raise ValueError(
-                f"phase artifact {path.name}: line {lineno} is not a "
-                f"JSON object; re-run the phase that produces "
-                f"{path.name} to regenerate it")
-        rows.append(obj)
-    return rows
-
-
-def _load_partial(out: Path) -> dict:
-    """Load ``report.partial.json`` with the QA-D6E-005 typed contract."""
-    partial_path = out / "report.partial.json"
-    try:
-        text = partial_path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        raise ValueError(
-            f"phase artifact report.partial.json not found in {out}; "
-            "run phase='piqi' first") from None
-    try:
-        report = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise ValueError(
-            f"phase artifact report.partial.json is corrupt ({exc}); "
-            "re-run phase='piqi' to regenerate it") from exc
-    if not isinstance(report, dict):
-        raise ValueError(
-            "phase artifact report.partial.json is not a JSON object; "
-            "re-run phase='piqi' to regenerate it")
-    return report
-
-
-def _require_partial_leg(report: dict, out: Path, key: str) -> dict:
-    leg = report.get(key)
-    if not isinstance(leg, dict):
-        raise ValueError(
-            f"phase artifact report.partial.json in {out} lacks the "
-            f"'{key}' leg (it was not produced by the piqi phase of "
-            "this experiment); re-run phase='piqi' first")
-    return leg
-
-
-def _check_artifact_corpus(report: dict, corpus_path, num_patients: int,
-                           out: Path) -> None:
-    """Refuse to merge phase artifacts produced against a DIFFERENT
-    corpus/slice (QA-D6E-005): the after-phase would otherwise silently
-    score a contaminated corpus and publish wrong recovery numbers."""
-    recorded = report.get("corpus_path")
-    if recorded is not None and recorded != str(corpus_path):
-        raise ValueError(
-            f"phase artifacts in {out} were produced against corpus "
-            f"{recorded!r}, but this run uses {str(corpus_path)!r}; "
-            "re-run the piqi/autocode phases for this corpus")
-    recorded_n = report.get("num_patients")
-    if recorded_n is not None and recorded_n != num_patients:
-        raise ValueError(
-            f"phase artifacts in {out} were produced with "
-            f"num_patients={recorded_n}, but this run uses "
-            f"{num_patients}; re-run the piqi/autocode phases")
 
 
 def summarize(report: dict) -> str:
@@ -1123,7 +1222,8 @@ def summarize(report: dict) -> str:
 
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        description="PIQI before/after auto-coding benchmark")
+        description=("PIQI before/after auto-coding benchmark (one pass: "
+                     "PIQI legs + in-process auto-coding)"))
     parser.add_argument("--corpus", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--num-patients", type=int,
@@ -1131,10 +1231,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--skip-autocoding", action="store_true")
     parser.add_argument(
         "--http-base-url", default=None,
-        help=("Use the medterm4ds HTTP sidecar at this FHIR root for the "
-              "autocode phase (e.g. http://127.0.0.1:8012/fhir) instead "
-              "of the in-process engine — required where torch+DuckDB "
-              "in one process segfaults."))
+        help=("ESCAPE HATCH: use a remote/isolated medterm4ds FHIR root "
+              "(e.g. http://127.0.0.1:8012/fhir) for the auto-coding leg "
+              "instead of the default IN-PROCESS engine. Not required — "
+              "in-process is the supported default."))
     parser.add_argument(
         "--min-match-grade", default="certain",
         choices=["certain", "exact", "probable", "possible", "broader"],
@@ -1148,30 +1248,37 @@ def main(argv: Optional[list[str]] = None) -> int:
               "matches the shipped AutoCoder default."))
     parser.add_argument(
         "--no-strip", action="store_true",
-        help=("Production-path mode: skip the strip phase entirely. Baseline "
+        help=("Production-path mode: skip the strip step entirely. Baseline "
               "PIQI on the AS-SHIPPED slice, autocode the RAW corpus with "
               "the DEFAULT system-aware AutoCoder (INV-4 skips only "
               "standard-coded concepts), then after PIQI. No "
               "exact-recovery gold (originals remain in place)."))
     parser.add_argument(
-        "--phase", choices=["all", "piqi", "autocode", "after"],
-        default="all",
-        help=("Phase isolation: medterm4ds (torch) and the DuckDB native "
-              "fhirpath extension do not coexist reliably in one process "
-              "(intermittent SIGSEGV) — run 'piqi', then 'autocode', then "
-              "'after' as separate invocations."))
+        "--duckdb-threads", type=int, default=None, metavar="N",
+        help=("DuckDB executor threads for every connection this run opens. "
+              "Default 1: the auto-coding leg shares the process with the "
+              "ML runtime and a multi-threaded executor next to it crashes "
+              "on some hosts (FHIR4-25). Raise it for --skip-autocoding "
+              "corpus/PIQI-only runs where the mix never happens. Also "
+              f"settable with {DUCKDB_THREADS_ENV}."))
+    parser.add_argument(
+        "--inline-autocoding", action="store_true",
+        help=("Run the auto-coding leg inline instead of in a short-lived "
+              "child process. The child uses the SAME in-process "
+              "terminology endpoint; it exists because the native ML stack "
+              "crashes intermittently in long-lived processes on some "
+              "hosts (FHIR4-25)."))
     args = parser.parse_args(argv)
-    skip = args.skip_autocoding or args.phase in ("piqi", "after")
     report = run_benchmark(args.corpus, args.output_dir,
                            num_patients=args.num_patients,
-                           skip_autocoding=skip,
-                           phase=args.phase,
+                           skip_autocoding=args.skip_autocoding,
                            http_base_url=args.http_base_url,
                            min_match_grade=args.min_match_grade,
                            search_mode=args.search_mode,
-                           no_strip=args.no_strip)
-    if args.phase != "autocode":
-        print(summarize(report))
+                           no_strip=args.no_strip,
+                           duckdb_threads=args.duckdb_threads,
+                           isolate_autocoding=not args.inline_autocoding)
+    print(summarize(report))
     return 0
 
 

@@ -1,6 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { clearStaleDuckDBStorage, createDuckDBConnection } from "../lib/duckdb-wasm";
 import { RESOLVE_MACRO_SQL } from "../lib/cql-macros";
+import {
+  seedValuesetCache,
+  valuesetResourcesOf,
+  valuesetToRows,
+} from "../../../shared/valuesetBridge";
 
 export interface QueryResult {
   columns: string[];
@@ -97,8 +102,9 @@ export function useDuckDB(wasmAppUrl?: string, enabled = true) {
     };
   }, [enabled, wasmAppUrl]);
 
-  /** Replace the contents of the resources table with a lesson's FHIR bundle. */
-  const loadFixtures = useCallback(async (resources: FHIRResource[]) => {
+  /** Replace the contents of the resources table with a lesson's FHIR bundle.
+   *  Returns the ValueSet urls seeded into the engine cache for this bundle. */
+  const loadFixtures = useCallback(async (resources: FHIRResource[]): Promise<string[]> => {
     const conn = connRef.current;
     if (!conn) throw new Error("DuckDB not initialized");
 
@@ -108,8 +114,28 @@ export function useDuckDB(wasmAppUrl?: string, enabled = true) {
       await stmt.query(res.id, res.resourceType, JSON.stringify(res), extractPatientRef(res));
     }
     await stmt.close();
+
+    // FHIR4-49: ValueSet membership is answered from the engine's in-process
+    // C++ cache, NOT from the resources table. Re-seed per lesson bundle so an
+    // edited query that adds a valueset retrieve still works, and so a lesson
+    // that ships no ValueSets leaves a KNOWN-EMPTY cache (deterministic) rather
+    // than whatever a previous lesson left behind.
+    const { rows: vsRows, warnings } = valuesetToRows(
+      valuesetResourcesOf(resources as Array<Record<string, unknown>>),
+    );
+    for (const w of warnings) console.warn("[valuesetBridge]", w);
+    await seedValuesetCache(vsRows, (sql) => conn.query(sql));
+    const seededUrls = [...new Set(vsRows.map((r) => r.url))];
+
     setFixtureCount(resources.length);
-    console.log("[DuckDB] Loaded", resources.length, "fixture resources");
+    console.log(
+      "[DuckDB] Loaded",
+      resources.length,
+      "fixture resources,",
+      vsRows.length,
+      "valueset codes",
+    );
+    return seededUrls;
   }, []);
 
   const executeQuery = useCallback(
