@@ -1,0 +1,25 @@
+{
+  "generator": "fhir4ds/operations/tests/wasm_parity/typed_examples.py",
+  "package": "hl7.fhir.r4.core#4.0.1",
+  "release": "4.0.1",
+  "sources": {
+    "codesystem-example.xml": "296e5fd12a22efa3fb3545b5b1684eb9aefb66fa20ba8167cb5e136f537c8332",
+    "condition-example.xml": "659f035652a0d139168e89a0b102b5c807dad1f6b5f629f61c12fa54f60418e3",
+    "list-example-long.xml": "7d2c12f55b2e999e5311cdf6b9bd0001fbcf5a4e3d8bd38773f50e047912c830",
+    "medicationdispenseexample8.xml": "8af8a6a085e4733c6b216c2c02cd87fd94d9b5d732a6a8cf90bc4ba13288d4e8",
+    "observation-decimal.xml": "42b2a285676eb54c61cc007fc9c4e95ab0d8c5e5b7381ed37b29e08b40fd1f78",
+    "observation-example-20minute-apgar-score.xml": "326a8a75f902e8d92ae1c6751dfacef3818bade4ae5bc26b632ad5e7c3b9264b",
+    "observation-example.xml": "8335e52062b414b4577e3ec56d5a188a8ec58afa9070019493ae4de6357ffa66",
+    "organization-1.xml": "94e2404898bf3b8cc9d88eafa67abc3575adf6c2463ae7e4cd74f6c2906efcba",
+    "parameters-example-decimals.xml": "bbc2db206494abc5abf29a7e7760ba70602d124009be2d992df88cb056078b48",
+    "parameters-example-quantities.xml": "9e8dcdd7d7796df4ed36343f93a1bc855213b3b25e3ae1da5a56708c675ef9cb",
+    "parameters-example-types.xml": "56a3531d3a254f8c2dff85c7cc83b9a53a8fdfbe4e5dd21e4851f51c55513275",
+    "parameters-quantity-unit-text.xml": "837a174a2bd809213a89396fd3e5a981143e1a6e217aaf97fef50ea47900766c",
+    "patient-example-period.xml": "3d16d8e4b58d44815eed56047bb2d69f9e19519949b780646e80753719b55205",
+    "patient-example-xds.xml": "e3cc4bae62f48a116e10c0b64dd10c759e653c3098538e24aaa0acf42af069b4",
+    "patient-example.xml": "606695d227a8669dc6ef2669957b1684990b2e127a82592008642c50359324fd",
+    "patient-glossy-example.xml": "189303770c35095ce5ab89d2cca20308bc36a066980f2e37a3fd05373b9b7b5e",
+    "questionnaire-example.xml": "a7a5ec63a7e31e8a63c627f27453e950f6e33b8bb12e939aec6b79427fae3354",
+    "valueset-example-expansion.xml": "b79926b8ea2d4e2f3babcac33939991af4e02ef0da9c92b9d2acf951c127ab00"
+  }
+}

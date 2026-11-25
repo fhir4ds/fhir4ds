@@ -131,3 +131,17 @@ def test_b5_whole_cql_corpus_on_the_real_engine(real_facts, wasm_desktop, wasm_r
     report.write_suite(result, violations, wasm_ledger, today=date.today(), stem="real_cql")
     problems = _check(result, wasm_ledger)
     assert problems == [], f"{result.counts()}\n" + "\n".join(problems)
+
+
+def test_b6_fhirpath_corpus_matches_desktop_on_the_real_engine(wasm_desktop, wasm_real, wasm_ledger):
+    """Every evaluable official FHIRPath R4 test: the real engine's UDF result is desktop's."""
+    result = tier_b.fhirpath_corpus(wasm_desktop, wasm_real)
+    assert len(result.cases) > 900, result.counts()
+    violations = judge(result, wasm_ledger, today=date.today(), gate="TIER_B")
+    report.write_suite(
+        result, violations, wasm_ledger, today=date.today(), stem="real_fhirpath"
+    )
+    assert not violations, "\n".join(
+        f"[{v.code}] {v.message}" for v in violations
+    )
+

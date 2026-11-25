@@ -1,0 +1,15 @@
+{
+  "resourceType": "CodeSystem",
+  "id": "example",
+  "status": "active",
+  "concept": [
+    {
+      "code": "code1",
+      "concept": [
+        {
+          "code": "code1"
+        }
+      ]
+    }
+  ]
+}

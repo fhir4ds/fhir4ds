@@ -460,3 +460,73 @@ def full_corpus(desktop: Any, real: Any, contract: Any) -> SuiteResult:
     from .evaluators import cql
 
     return dataclasses.replace(cql.run(desktop, RealConnection(real), contract), surface="real")
+
+
+# ----------------------------------------------------------------------------------------------
+# B6 FHIRPath R4 corpus on the real engine
+# ----------------------------------------------------------------------------------------------
+
+REAL_CHUNK = 250  # statements per browser boot
+
+
+def _sql_text(text: str) -> str:
+    return "'" + text.replace("'", "''") + "'"
+
+
+def _parity(case_id: str, run_d: tuple, run_b: tuple) -> CaseOutcome:
+    text_d, type_d, error_d = run_d
+    text_b, type_b, error_b = run_b
+    if error_d is not None and error_b is not None:
+        return CaseOutcome(
+            case_id, BOTH_FAIL, "error", "error",
+            f"both error: desktop={error_d!r} browser={error_b!r}", (), (),
+        )
+    if error_d is not None:
+        return CaseOutcome(case_id, BROWSER_ONLY_PASS, f"error: {error_d}", "ok", error_d, (), ())
+    if error_b is not None:
+        return CaseOutcome(case_id, PARITY_GAP, "ok", f"error: {error_b}", error_b, (), ())
+    if text_d == text_b and type_d == type_b:
+        return CaseOutcome(case_id, GREEN, "ok", "ok", "", (), ())
+    detail = (
+        f"type: desktop={type_d} browser={type_b}"
+        if text_d == text_b
+        else f"value: desktop={str(text_d)[:120]!r} browser={str(text_b)[:120]!r}"
+    )
+    return CaseOutcome(case_id, ENGINE_DIFF, "ok", "ok", detail, (), ())
+
+
+def fhirpath_corpus(desktop: Any, real: Any) -> SuiteResult:
+    """Every evaluable FHIRPath R4 test through the ``fhirpath`` UDF on the real engine.
+
+    One expression per test, compared on value AND type of the UDF's result between desktop
+    and the real engine. Whether that result is RIGHT is Tier A's question
+    (``evaluators.fhirpath``); this one asks only whether the browser engine is the desktop
+    engine.
+    """
+    from .evaluators import fhirpath
+
+    run_r4 = fhirpath.runner()
+    started = perf_counter()
+    seen: dict[str, int] = {}
+    case_ids: list[str] = []
+    expressions: list[str] = []
+    for test in run_r4.parse_test_xml(fhirpath.XML_FILE):
+        text = (
+            None
+            if fhirpath._gating_reason(run_r4, test) is not None
+            else fhirpath._input_text(run_r4, test)
+        )
+        if text is None:
+            continue
+        case_ids.append(fhirpath._case_id(seen, test))
+        expressions.append(f"fhirpath({_sql_text(text)}, {_sql_text(test.expression)})")
+    real_runs = []
+    for start in range(0, len(expressions), REAL_CHUNK):
+        real_runs.extend(real.typed(expressions[start : start + REAL_CHUNK]))
+    desktop_runs = _typed_desktop(desktop, expressions)
+    outcomes = tuple(
+        _parity(f"{SUITE}::fhirpath::{case_id}", run_d, run_b)
+        for case_id, run_d, run_b in zip(case_ids, desktop_runs, real_runs, strict=True)
+    )
+    return SuiteResult(SUITE, outcomes, 0, perf_counter() - started, "real")
+

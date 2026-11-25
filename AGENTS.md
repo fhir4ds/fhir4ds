@@ -6893,7 +6893,7 @@ gaps visible and expires every excuse; the infrastructure comes before fixing th
   (`fhir4ds/wasm_extension_bundles.json`, `scripts/build_wasm_extensions.py --verify`).
 - **Tier A** runs the official corpora through the official comparators on a *simulated*
   browser surface (x86 bundles + the reference macros) — CQL 2,037, ViewDefinition 144, OMOP
-  38, and FHIRPath R4 (only 3 tests evaluable until the XML examples are typed; see
+  38, and FHIRPath R4 (1,001 of 1,191 tests evaluable against typed JSON examples; see
   `fhir4ds/operations/AGENTS.md`).
 - **Tier B** boots real duckdb-wasm with the shipped wasm bundles in headless chromium. It is
   the only gate that sees the engine: binder, Arrow transport, bundle staleness. Both tiers

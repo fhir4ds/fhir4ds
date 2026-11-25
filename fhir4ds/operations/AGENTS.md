@@ -162,8 +162,8 @@ Code: `fhir4ds/operations/tests/wasm_parity/`. Plan:
   (`fhir4ds/wasm_extension_bundles.json`, `scripts/build_wasm_extensions.py --verify`).
 - **Tier A** `test_wasm_parity_tier_a.py`, one ratchet test per suite, each reusing the official
   runner's own comparator: CQL (2,043 at corpus `0a8f7d3`, vendored in git),
-  ViewDefinition (144), OMOP (38), and FHIRPath R4 —
-  where only 3 of 1,191 tests are evaluable today (see the fragile area on XML inputs).
+  ViewDefinition (144), OMOP (38), and FHIRPath R4 (1,001 of 1,191 tests evaluable; the
+  other 190 are gated with a reason — see the fragile area on XML inputs).
   Identical SQL runs on desktop and on the simulator; outcomes `GREEN`, `PARITY_GAP`,
   `BROWSER_ONLY_PASS`, `BOTH_FAIL`, `ENGINE_DIFF`, `TRANSLATE_DIFF` (must be zero, cannot be
   registered), `TRANSLATE_ERROR` (reported only).
@@ -233,15 +233,25 @@ missing" skips into failures (CI). A lane worktree has no `node_modules`: point
   `CREATE OR REPLACE MACRO`.
 - The official runners rewrite tracked `conformance/reports/*` when executed: restore them
   (`git checkout -- conformance/reports`) after a byte-identity check.
-- **The FHIRPath R4 suite on the native UDF surface is 3 tests, not 1,038.** 999 R4 tests use
-  XML example files; FHIR XML carries every value as a string attribute and the native
-  `fhirpath` UDF reads JSON types, so `Patient.active` arrives as `"true"` and
-  `Patient.active.is(boolean)` is false — the Python core passes because it coerces by
-  model type. The first run filed 119 of those as desktop defects; they were the harness.
-  The evaluator now holds them back and says why (`gated_reasons`), along with tests that
-  expect an error (the UDF surface is non-strict by doctrine). Unlocking them needs a typed
-  FHIR XML-to-JSON conversion for the examples (two are project fixtures with no upstream
-  JSON twin). Until then real FHIRPath coverage is Tier B's `fhirpath_udf` family.
+- **The FHIRPath R4 suite evaluates 1,001 of 1,191 tests on the native UDF; 190 are gated with a
+  reason** (153 official runner exclusions, 36 that expect an error — the UDF surface is
+  non-strict by doctrine — and 1 shadow-node case). The inputs are TYPED FHIR JSON. 999 R4
+  tests name an XML example, and FHIR XML carries every value as a string attribute
+  (`<active value="true"/>`), so a conversion by tag name hands the UDF `"true"` where FHIR
+  says a Boolean is, and `Patient.active.is(boolean)` is false. The first run filed 119 of
+  those as desktop defects; they were the harness. `wasm_parity/typed_examples.py` generates
+  `examples-typed/<name>.json` from the official R4 StructureDefinitions
+  (`~/.fhir/packages/hl7.fhir.r4.core#4.0.1`); decimals keep their authored digits (`9.5e2`
+  stays `9.5e2`) because the evaluator hands the file TEXT to the UDF — a Python round trip
+  would turn `9.5e2` into `950.0`. Input resolution is the official runner's
+  (`run_fhirpath_r4.load_resource_file`): a JSON twin with real content wins over an XML stub
+  (`questionnaire-example.xml` and `valueset-example-expansion.xml` are stubs). After the
+  corpus is re-synced, regenerate with
+  `python -m fhir4ds.operations.tests.wasm_parity.typed_examples`; the manifest records each
+  XML source's sha256 and `test_wasm_parity_typed_examples.py` fails on a stale or missing
+  conversion. The 12 tests where the native UDF disagrees with the Python core on typed
+  inputs are registered: high/lowBoundary with exponent decimals and offset DateTimes (9),
+  and `unescape('json')` (3).
 - Suite evaluators share one connection per surface: each owns its `resources` table shape
   (`CREATE OR REPLACE`). `conformance/scripts/*.py` import their siblings as top-level modules.
 

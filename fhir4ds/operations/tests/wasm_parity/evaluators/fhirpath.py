@@ -23,6 +23,7 @@ import sys
 import time
 from pathlib import Path
 
+from .. import typed_examples
 from ..reference_bundle import REPO_ROOT, EnvironmentInputMissing
 from . import BOTH_FAIL, BROWSER_ONLY_PASS, GREEN, PARITY_GAP, CaseOutcome, SuiteResult
 
@@ -118,20 +119,26 @@ def _expected_outputs(test) -> list:
     ]
 
 
-def _resource_json(run_r4, test) -> str | None:
-    """The test's input resource as JSON text.
+def _input_text(run_r4, test) -> str | None:
+    """The test's input resource as JSON TEXT, or None when an XML input has no conversion.
 
-    Example files may be XML (the core runner converts them with
-    ``parse_fhir_resource``); the UDF takes JSON only.
+    Input resolution is the official runner's (``load_resource_file``): a JSON twin with
+    real content wins over an XML stub. The text is handed to the UDF unread, because a
+    Python round trip turns the decimal ``9.5e2`` into ``950.0``. An XML example is read
+    from its generated conversion (``typed_examples``), never converted by tag name.
     """
-    raw = test.input_resource
-    if not raw:
-        raw = "{}" if not test.input_file else run_r4.load_resource_file(R4_DIR / "examples" / test.input_file)
+    if test.input_resource is not None:
+        raw = test.input_resource
+        return raw if isinstance(raw, str) else json.dumps(raw, default=str)
+    if not test.input_file:
+        return "{}"
+    raw = run_r4.load_resource_file(R4_DIR / "examples" / test.input_file)
     if raw is None:
         return None
-    parsed = run_r4.parse_fhir_resource(raw) if isinstance(raw, str) else raw
-    # ``parse_fhir_resource`` reads JSON numbers as ``Decimal`` (lossless).
-    return None if parsed is None else json.dumps(parsed, default=str)
+    if not raw.lstrip().startswith("<"):
+        return raw
+    typed = typed_examples.typed_path(R4_DIR, test.input_file)
+    return typed.read_text(encoding="utf-8") if typed is not None and typed.is_file() else None
 
 
 def _case_id(seen: dict[str, int], test) -> str:
@@ -149,11 +156,12 @@ def _gating_reason(run_r4, test) -> str | None:
     * the official runner's excluded groups (the gate evaluates the same tests);
     * tests that EXPECT an evaluation error: the ``fhirpath`` UDF surface is
       non-strict by doctrine (row resilience turns errors into empty or a value);
-    * XML example inputs: FHIR XML carries every value as a string attribute, and
-      the native UDF reads JSON types (``Patient.active`` arrives as ``"true"``,
-      not ``true``). The Python core coerces by model type, the UDF does not, so
-      an XML input would show up as a native defect that is really the harness's.
-      Widening this needs a typed FHIR XML-to-JSON conversion.
+    * an XML example without its typed JSON conversion: FHIR XML carries every value
+      as a string attribute and the native UDF reads JSON types (``Patient.active``
+      would arrive as ``"true"``, not ``true``). The Python core coerces by model
+      type, the UDF does not, so that difference would be the harness's, not the
+      engine's. ``typed_examples.py`` generates the conversion from the official
+      R4 StructureDefinitions; regenerate it when the corpus is re-synced.
     """
     if test.name.split("/", 1)[0] in run_r4.EXCLUDED_GROUPS:
         return "official runner exclusion"
@@ -161,10 +169,9 @@ def _gating_reason(run_r4, test) -> str | None:
         return UDF_SURFACE_EXCLUSIONS[test.name]
     if test.expected_error or test.error_type:
         return "expects an error (the UDF surface is non-strict by doctrine)"
-    if test.input_resource is None and not str(test.input_file or "").lower().endswith(
-        ".json"
-    ):
-        return "XML example (the native UDF needs typed FHIR JSON)"
+    typed = typed_examples.typed_path(R4_DIR, test.input_file or "")
+    if typed is not None and not typed.is_file():
+        return f"XML example without a typed JSON conversion ({test.input_file})"
     return None
 
 
@@ -185,7 +192,7 @@ def run(desktop, browser, contract, *, xml_file: Path | None = None) -> SuiteRes
             gated[reason] = gated.get(reason, 0) + 1
             continue
         case_id = _case_id(seen, test)
-        resource_json = _resource_json(run_r4, test)
+        resource_json = _input_text(run_r4, test)
         passed_d, reason_d = _verdict(run_r4, test, _evaluate(desktop, test.expression, resource_json))
         passed_b, reason_b = _verdict(run_r4, test, _evaluate(browser, test.expression, resource_json))
         if passed_d and passed_b:
