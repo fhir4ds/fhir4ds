@@ -331,7 +331,16 @@ class TestRubricAndUnmapped(unittest.TestCase):
         self.assertEqual(out["unmapped"], {"Encounter": 1, "Specimen": 1})
 
 
-class TestNoStripPhases(unittest.TestCase):
+class TestNoStripSinglePass(unittest.TestCase):
+    """FHIR4-25: the no-strip (production) path is ONE call.
+
+    It used to need ``--phase piqi`` then ``--phase autocode`` then
+    ``--phase after`` against JSONL artifacts because torch and the
+    DuckDB native extension were believed not to coexist in one process.
+    In-process is the supported pattern now, so the whole path runs in a
+    single ``run_benchmark`` call.
+    """
+
     def setUp(self):
         import json
         import tempfile
@@ -368,34 +377,26 @@ class TestNoStripPhases(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def _phase(self, phase, endpoint=StubEndpoint()):
-        return run_benchmark(self.corpus_path, self.out, phase=phase,
-                             no_strip=True, num_patients=1,
-                             _test_endpoint=endpoint)
+    def _run(self, endpoint=None):
+        return run_benchmark(self.corpus_path, self.out, no_strip=True,
+                             num_patients=1,
+                             _test_endpoint=endpoint or StubEndpoint())
 
-    def test_piqi_phase_scores_as_shipped_slice(self):
-        rep = self._phase("piqi")
+    def test_single_pass_scores_the_as_shipped_slice(self):
+        rep = self._run()
         self.assertEqual(rep["mode"], "no_strip")
         self.assertIn("baseline", rep)
         self.assertNotIn("before", rep)
         self.assertNotIn("ceiling", rep)
         self.assertIsNone(rep["gold_accuracy"])
         self.assertEqual(rep["stripped"]["total"], 0)
-        # the saved working corpus is the RAW slice: codings intact
-        rows = [json.loads(l) for l in
-                (self.out / "nostrip_slice.jsonl").read_text().splitlines()]
-        by_id = {r["id"]: r for r in rows}
-        self.assertEqual(
-            by_id["cm1"]["code"]["coding"][0]["system"],
-            "https://fhir.mimic.mit.edu/CodeSystem/mimic-diagnosis-icd9cm")
         # rubric composition documented in the report
         self.assertIn("rubric", rep)
         sams = {c["sam"] for c in rep["rubric"]}
         self.assertIn("condition-condition-hasrecognizedcodesystem", sams)
 
-    def test_autocode_phase_augments_raw_mimic_wrapped_only(self):
-        self._phase("piqi")
-        rep = self._phase("autocode")
+    def test_single_pass_augments_raw_mimic_wrapped_only(self):
+        rep = self._run()
         stats = rep["augmentation"]
         cond = stats["per_class"]["Condition"]
         self.assertEqual(cond["resources"], 2)
@@ -409,16 +410,17 @@ class TestNoStripPhases(unittest.TestCase):
         self.assertEqual(inv["appended_without_user_selected_false"], 0)
         self.assertEqual(inv["appended_without_provenance"], 0)
 
-    def test_after_phase_reports_recovery_vs_baseline(self):
-        self._phase("piqi")
-        self._phase("autocode")
-        rep = self._phase("after")
+    def test_single_pass_reports_recovery_vs_baseline(self):
+        rep = self._run()
         self.assertIn("after", rep)
         self.assertIn("recovery", rep)
         self.assertIsNotNone(rep["recovery"]["per_sam"])
         final = json.loads(
             (self.out / "piqi_autocoding_report.json").read_text())
         self.assertEqual(final["mode"], "no_strip")
+        # one pass, one artifact
+        self.assertEqual(sorted(p.name for p in self.out.iterdir()),
+                         ["corpus.jsonl", "piqi_autocoding_report.json"])
 
 
 class TestAugmentationHelpers(unittest.TestCase):

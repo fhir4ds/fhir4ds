@@ -15,7 +15,9 @@ crash on them with raw TypeError/KeyError):
   ``corpus._sorted``.
 * QA-D6H-002 — the strip-mode ``phase="all"`` single-process path of
   ``piqi_autocoding.run_benchmark`` dropped ``min_match_grade`` (the
-  CLI ``--min-match-grade`` arm silently always ran 'certain').
+  CLI ``--min-match-grade`` arm silently always ran 'certain'). The
+  ``phase`` parameter itself was removed in FHIR4-25 (the benchmark is
+  now a single-pass, in-process run); the propagation pin remains.
 """
 
 from __future__ import annotations
@@ -113,9 +115,9 @@ class TestHarnessToleratesLoaderToleratedShapes(unittest.TestCase):
 
 
 class TestMinMatchGradePropagation(unittest.TestCase):
-    """QA-D6H-002: every phase passes the requested strictness arm."""
+    """QA-D6H-002: the auto-coding leg passes the requested strictness arm."""
 
-    def test_strip_phase_all_passes_min_match_grade(self):
+    def test_autocoding_leg_passes_min_match_grade(self):
         import fhir4ds.realism.piqi_autocoding as pa
         import fhir4ds.cql.terminology.in_process_adapter as ipa_mod
 
@@ -147,7 +149,6 @@ class TestMinMatchGradePropagation(unittest.TestCase):
                 report = pa.run_benchmark(corp, td + "/out",
                                           num_patients=1,
                                           skip_autocoding=False,
-                                          phase="all",
                                           min_match_grade="probable")
         auto = report["autocoding"]
         self.assertEqual(auto["min_match_grade"], "probable")
