@@ -15,6 +15,7 @@ report is written to ``tests/output/wasm-parity/step0.{json,md}``.
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 
 from fhir4ds.operations.tests.wasm_parity import contract, report, shipped_bundles, surfaces
 
@@ -47,3 +48,29 @@ def test_t7_shipped_wasm_bundles_are_one_known_set(wasm_ledger):
     violations = contract.evaluate_files(wasm_ledger, observed, today=date.today())
     report.write_files(observed, violations, wasm_ledger, today=date.today())
     assert not violations, report.failure_text("Step 0, T7 (shipped WASM bundles)", violations)
+
+def test_t7_untracked_build_output_is_not_a_shipped_copy(tmp_path: Path) -> None:
+    """A developer's gitignored build output must not register as drift.
+
+    ``web/website/build/`` is gitignored docusaurus output that carries copies
+    of the wasm bundles and cql-macros.ts. Walking it made every dev who had
+    built the site see ~18 phantom WASM_COPY_DRIFT entries, so the scan is
+    scoped to git-tracked files; this pins that scope.
+    """
+    repo = tmp_path / "repo"
+    (repo / "web" / "app" / "dist").mkdir(parents=True)
+    (repo / "web" / "website" / "build" / "assets").mkdir(parents=True)
+    tracked = repo / "web" / "app" / "dist" / "cql.duckdb_extension.wasm"
+    untracked = repo / "web" / "website" / "build" / "assets" / "cql.duckdb_extension.wasm"
+    tracked.write_bytes(b"tracked")
+    untracked.write_bytes(b"untracked")
+
+    import subprocess
+
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "web/app/dist/cql.duckdb_extension.wasm"], cwd=repo, check=True)
+
+    found = shipped_bundles._tracked_bundles(repo)
+
+    assert tracked in found
+    assert untracked not in found
