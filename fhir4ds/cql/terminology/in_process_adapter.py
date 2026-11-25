@@ -14,14 +14,33 @@ Circuit breaker:
     ``[]``) for ``breaker_cooldown_seconds``. The in_process adapter
     catches underlying exceptions and returns ``[]`` by contract; the
     breaker is fed via an internal instrumented call wrapper so failure
-    counting still works. The breaker is NOT thread-safe — assume
-    single-threaded use. Multiple threads sharing one endpoint instance
-    need an external lock.
+    counting still works.
+
+Concurrency (FHIR4-25):
+    medterm4ds' threading guide (``docs/threading-and-embedding.md``, PR
+    #24) states the contract the HOST must enforce: **one thread per
+    DuckDB connection** — the DuckDB Python connection is not thread-safe
+    under concurrent use, and breaching it surfaces row-shape errors
+    (``ValueError: not enough values to unpack``). The engine this adapter
+    owns holds exactly one such connection, so every engine-touching
+    method (``expand``, ``expand_intensional``, ``search_text``) runs
+    under ONE re-entrant lock: concurrent callers queue instead of
+    sharing the connection. That is the guide's documented remedy ("an
+    external lock around engine calls that share a connection"), applied
+    inside the adapter so no host has to remember it. The circuit-breaker
+    counters ride the same lock, so they are race-free too.
+
+    medterm4ds also serializes its own native inference (``_infer_lock``,
+    0.0.14+), which is why torch and DuckDB now coexist in one process —
+    in-process embedding is the SUPPORTED pattern. The HTTP sidecar
+    remains useful for process isolation and independent scaling, not for
+    correctness.
 """
 
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from typing import Any, Optional
 
@@ -120,7 +139,7 @@ class InProcessTerminologyEndpoint:
         search_index_dir: Optional directory of prebuilt search indexes.
         breaker_threshold: Consecutive failures before the circuit breaker
             trips. Once tripped, protocol methods short-circuit to ``[]``
-            for ``breaker_cooldown_seconds``. Defaults to 5. NOT thread-safe.
+            for ``breaker_cooldown_seconds``. Defaults to 5.
         breaker_cooldown_seconds: Seconds the breaker stays tripped before
             a half-open probe call is permitted. Defaults to 60.0.
 
@@ -130,9 +149,12 @@ class InProcessTerminologyEndpoint:
             here for callers that construct the adapter directly.
 
     Thread safety:
-        The circuit breaker state is mutable and unprotected. Assume
-        single-threaded use. Multiple threads sharing one instance need
-        an external lock.
+        Safe for concurrent use. All engine-touching methods are
+        serialized through one re-entrant lock because the medterm4ds
+        engine owns a single DuckDB connection (the one-thread-per-
+        connection contract in medterm4ds ``docs/threading-and-
+        embedding.md``). Concurrent callers queue; throughput is bounded
+        by that connection, not by this class.
     """
 
     def __init__(
@@ -175,9 +197,14 @@ class InProcessTerminologyEndpoint:
         self._search_index_dir = search_index_dir
         self._breaker_threshold = int(breaker_threshold)
         self._breaker_cooldown_seconds = float(breaker_cooldown_seconds)
-        # Breaker state — single-threaded only (see class docstring).
+        # Breaker state — mutated only while ``_engine_lock`` is held.
         self._consecutive_failures: int = 0
         self._tripped_until: float = 0.0
+        # FHIR4-25: the engine below owns ONE DuckDB connection, which is
+        # not thread-safe (medterm4ds threading guide). Every engine call
+        # is serialized through this lock. Re-entrant so a protocol method
+        # may call a sibling helper without deadlocking.
+        self._engine_lock = threading.RLock()
 
         # Construct the shared engine. The published medterm4ds wheel
         # exposes ``connect(db_path=...)`` as the stable public entry
@@ -369,6 +396,13 @@ class InProcessTerminologyEndpoint:
         from .endpoint import require_str_arg
 
         require_str_arg(valueset_url, "valueset_url")  # QA-D8H-002
+        # FHIR4-25: serialized with every other engine call on this
+        # endpoint — the engine owns ONE DuckDB connection (module
+        # docstring, medterm4ds threading guide).
+        with self._engine_lock:
+            return self._expand_locked(valueset_url)
+
+    def _expand_locked(self, valueset_url: str) -> list[CodeRef]:
         now = time.monotonic()
         if self._is_breaker_open(now):
             _logger.warning(
@@ -517,6 +551,12 @@ class InProcessTerminologyEndpoint:
         from .endpoint import require_dict_arg
 
         require_dict_arg(value_set, "value_set")  # QA-D8E-001
+        # FHIR4-25: serialized with every other engine call (one DuckDB
+        # connection — module docstring).
+        with self._engine_lock:
+            return self._expand_intensional_locked(value_set)
+
+    def _expand_intensional_locked(self, value_set: dict) -> list[CodeRef]:
         now = time.monotonic()
         if self._is_breaker_open(now):
             _logger.warning(
@@ -736,6 +776,20 @@ class InProcessTerminologyEndpoint:
 
         require_str_arg(query, "query")  # QA-D8H-002
         require_str_arg(category, "category")
+        # FHIR4-25: serialized with every other engine call on this
+        # endpoint. The search index ALSO carries medterm4ds' own
+        # ``_infer_lock`` for native inference; this outer lock additionally
+        # covers the engine's DuckDB connection (one thread per connection).
+        with self._engine_lock:
+            return self._search_text_locked(query, category, mode=mode)
+
+    def _search_text_locked(
+        self,
+        query: str,
+        category: str,
+        *,
+        mode: str = "hybrid",
+    ) -> list[SearchResult]:
         now = time.monotonic()
         if self._is_breaker_open(now):
             _logger.warning(

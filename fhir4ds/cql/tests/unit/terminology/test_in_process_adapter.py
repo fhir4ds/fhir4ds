@@ -852,3 +852,138 @@ def test_qa_d12e002_search_hostile_score_string_degrades(
     results = adapter.search_text("diabetes", "condition", mode="hybrid")
     assert len(results) == 1 and results[0].score == 0.0
     assert adapter._consecutive_failures == 0
+
+
+# ---------------------------------------------------------------------------
+# FHIR4-25: one thread per DuckDB connection contract
+# ---------------------------------------------------------------------------
+#
+# medterm4ds' own threading guide (docs/threading-and-embedding.md, PR #24)
+# states the contract the host must enforce: "One thread per DuckDB
+# connection. The DuckDB Python connection is not thread-safe under
+# concurrent use ... an in-process adapter must do the same (one DB thread,
+# or an external lock around engine calls that share a connection).
+# Violating this produces row-shape errors (ValueError: not enough values to
+# unpack), not corruption - but it is unsupported."
+#
+# The adapter owns ONE medterm4ds engine, and that engine owns ONE DuckDB
+# connection. Since in-process is now the supported default embedding (the
+# phase-isolated benchmark path this replaced existed only to serialize
+# inference incidentally), the adapter itself must serialize engine calls.
+
+
+def _install_concurrency_probe_service(monkeypatch: pytest.MonkeyPatch) -> dict:
+    """Install a search service that records in-flight concurrency."""
+    import threading
+    import time
+
+    state = {"inflight": 0, "max_inflight": 0, "calls": 0}
+    lock = threading.Lock()
+
+    def _search(query, *, mode, sources, count, engine):
+        with lock:
+            state["inflight"] += 1
+            state["calls"] += 1
+            state["max_inflight"] = max(state["max_inflight"],
+                                        state["inflight"])
+        time.sleep(0.05)  # hold the "engine" long enough to collide
+        with lock:
+            state["inflight"] -= 1
+        return []
+
+    service = MagicMock(name="SearchService")
+    service.ensure_lexical = MagicMock(return_value=True)
+    service.ensure_semantic = MagicMock(return_value=True)
+    service.lexical_available = True
+    service.semantic_available = True
+    service.search = MagicMock(side_effect=_search)
+    search_mod = types.ModuleType("medterm4ds.services.search")
+    search_mod.get_search_service = MagicMock(return_value=service)
+    services_pkg = sys.modules["medterm4ds.services"]
+    monkeypatch.setitem(sys.modules, "medterm4ds.services.search", search_mod)
+    services_pkg.search = search_mod
+    return state
+
+
+def test_search_text_serializes_engine_calls_across_threads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FHIR4-25: concurrent callers sharing one endpoint must not enter the
+    engine (one DuckDB connection) concurrently."""
+    import threading
+
+    _install_medterm4ds_stub(monkeypatch)
+    state = _install_concurrency_probe_service(monkeypatch)
+
+    from fhir4ds.cql.terminology.in_process_adapter import (
+        InProcessTerminologyEndpoint,
+    )
+
+    adapter = InProcessTerminologyEndpoint()
+    errors: list[BaseException] = []
+
+    def _worker() -> None:
+        try:
+            adapter.search_text("diabetes", "condition", mode="hybrid")
+        except BaseException as exc:  # noqa: BLE001 - surface in the assert
+            errors.append(exc)
+
+    threads = [threading.Thread(target=_worker) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
+
+    assert errors == []
+    assert state["calls"] == 4
+    assert state["max_inflight"] == 1, (
+        "engine calls must serialize on the endpoint's connection lock; "
+        f"observed {state['max_inflight']} concurrent calls"
+    )
+
+
+def test_expand_serializes_with_search_on_the_same_engine(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The lock must span every engine-touching method, not just search."""
+    import threading
+    import time
+
+    engine = _install_medterm4ds_stub(monkeypatch)
+    state = _install_concurrency_probe_service(monkeypatch)
+    lock = threading.Lock()
+    overlap = {"seen": 0}
+
+    def _expand_url_pattern(engine_arg, url, **kwargs):
+        with lock:
+            state["inflight"] += 1
+            overlap["seen"] = max(overlap["seen"], state["inflight"])
+        time.sleep(0.05)
+        with lock:
+            state["inflight"] -= 1
+        return {"expansion": {"contains": []}}
+
+    import medterm4ds.apps.fhir_api as fhir_api_mod
+
+    monkeypatch.setattr(fhir_api_mod, "expand_url_pattern",
+                        _expand_url_pattern)
+
+    from fhir4ds.cql.terminology.in_process_adapter import (
+        InProcessTerminologyEndpoint,
+    )
+
+    adapter = InProcessTerminologyEndpoint()
+    threads = [
+        threading.Thread(target=lambda: adapter.search_text(
+            "diabetes", "condition", mode="hybrid")),
+        threading.Thread(target=lambda: adapter.expand(
+            "http://snomed.info/sct?fhir_vs=isa/73211009")),
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
+    assert overlap["seen"] == 1, (
+        "expand() and search_text() share the engine's DuckDB connection and "
+        f"must serialize; observed {overlap['seen']} concurrent calls"
+    )
