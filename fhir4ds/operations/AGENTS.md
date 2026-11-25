@@ -280,14 +280,21 @@ measures ran, 24 byte-identical, 19 equal apart from list order / instant spelli
   rows. The desktop DQM harness only survives because
   `fhir4ds/dqm/tests/conformance/database.py` sets
   `scalar_subquery_error_on_multiple_rows=false`; no web app does. Decision (fhir4ds lane):
-  fix the lowering, never set the flag.
+  fix the lowering, never set the flag. **FIXED on dev 2026-11-25** (the lowering now emits
+  single-row scalar subqueries): the next Tier C run on the merge found desktop and the real
+  engine in agreement for both measures, flagged the two registrations STALE, and they were
+  deleted. That flip is the gate doing its job: a registration is a claim about today, not a
+  record of history.
 - **ValueSet membership is EMPTY in three of the four apps (FHIR4-49).** Cold,
   `in_valueset(resource, path, url)` returns NULL for every row and every valueset-filtered
   retrieve is empty, with no error: the native function reads an in-process cache that only
-  `cql_valueset_cache_add` fills. The desktop loader fills it; `web/cql-cleanroom` fills it
-  (`src/lib/valuesetBridge.ts`); wasm-demo, cql-clinic and viewing-room never do. With the cache
+  `cql_valueset_cache_add` fills. The desktop loader fills it; at the time only
+  `web/cql-cleanroom` did (`src/lib/valuesetBridge.ts`). With the cache
   filled CMS159 gives 66 of 67 patients byte-identical to desktop (the 67th differs only in the
-  order of an evidence list).
+  order of an evidence list). **FIXED on dev 2026-11-25**: all four apps seed the cache through
+  the shared `web/shared/valuesetBridge.ts` and banner an unseeded url (root `AGENTS.md`,
+  "Browser ValueSet cache"). The gate still warms the cache itself, so it measures the engine,
+  not the app wiring.
 - **DuckDB prunes an unused scalar projection.** `SELECT count(*) FROM (SELECT
   cql_valueset_cache_add(...) FROM valueset_codes)` NEVER runs the function, because nothing
   reads its result. Any app code that loads ValueSets through an unread projection silently

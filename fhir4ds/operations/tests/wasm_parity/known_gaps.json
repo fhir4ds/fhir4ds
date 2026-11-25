@@ -342,28 +342,6 @@
       "surface": "real"
     },
     {
-      "id": "tierc-cms56-multi-row-scalar-subquery",
-      "kind": "PARITY_GAP",
-      "target": "CMS56",
-      "reason": "Tier C: the generated SQL evaluates scalar subqueries that return several rows. DuckDB's default rule raises 'More than one row returned by a subquery used as an expression'; only the desktop DQM harness switches it off (SET scalar_subquery_error_on_multiple_rows=false) and no web app does, so the measure crashes in every browser. Removes when the FHIR4-48 lowering is single-row (decision recorded: fix the lowering, do not set the flag).",
-      "owner": "fhir4ds lane (FHIR4-48)",
-      "since": "2026-11-24",
-      "expires": "2026-12-24",
-      "suite": "qi-core-2025",
-      "surface": "real"
-    },
-    {
-      "id": "tierc-cms832-multi-row-scalar-subquery",
-      "kind": "PARITY_GAP",
-      "target": "CMS832",
-      "reason": "Tier C: same defect as tierc-cms56-multi-row-scalar-subquery (multi-row scalar subqueries in the generated SQL; eGFR and creatinine column CTEs), so the measure crashes in every browser. Removes with the same FHIR4-48 lowering fix.",
-      "owner": "fhir4ds lane (FHIR4-48)",
-      "since": "2026-11-24",
-      "expires": "2026-12-24",
-      "suite": "qi-core-2025",
-      "surface": "real"
-    },
-    {
       "id": "tierc-cms986-tied-encounter-pick",
       "kind": "PARITY_GAP",
       "target": "CMS986",
