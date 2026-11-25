@@ -22,20 +22,28 @@ against any FHIR corpus (developed against the MIMIC-IV-FHIR demo):
    stripped originals' codings are the gold set, so we can measure
    exact (system,code) recovery, code-only recovery, and coverage.
 
-All five steps run in ONE process: medterm4ds in-process alongside the
-DuckDB native fhirpath extension is the SUPPORTED embedding pattern
-(medterm4ds PR #24 / FHIR4-23 — the historical same-process segfaults
-were concurrent native inference, now serialized inside medterm4ds).
-The former ``--phase piqi|autocode|after`` split existed only to keep
-torch and the native extension in separate processes; it also worked
-solely because it incidentally serialized inference, and it has been
-removed.
+All five steps run from ONE command, with medterm4ds IN-PROCESS — no
+HTTP sidecar (medterm4ds PR #24 / FHIR4-23: the historical same-process
+segfaults were concurrent native inference, now serialized inside
+medterm4ds). The former ``--phase piqi|autocode|after`` split, its
+artifact files and its loaders are gone; those existed only to keep
+torch and the DuckDB native extension in separate processes, and they
+worked solely because they incidentally serialized inference.
+
+The auto-coding leg runs in a short-lived CHILD process by default (still
+using the in-process endpoint; ``--inline-autocoding`` runs it inline)
+because the native ML stack crashes intermittently in long-lived
+processes on some hosts. One retry in a fresh process is logged, never
+silent.
 
 Threading contract (medterm4ds ``docs/threading-and-embedding.md``):
-**one thread per DuckDB connection.** Every leg runs on the calling
-thread and opens its own connection; the in-process endpoint serializes
-engine calls on its own lock. Do not share a connection or an endpoint
-instance across threads — row-shape ``ValueError`` is the symptom.
+**one thread per DuckDB connection.** Each leg opens its own connection
+on the thread that uses it, and the in-process endpoint serializes engine
+calls on its own lock. Do not share a connection or an endpoint instance
+across threads — row-shape ``ValueError`` is the symptom. DuckDB's own
+executor is pinned to one thread by default (``--duckdb-threads``),
+because a multi-threaded executor co-resident with the ML runtime crashes
+on some hosts.
 
 Determinism: the patient slice is the first N patient ids in sorted
 order; stripping walks resources in (resourceType, id) order and caps
@@ -47,11 +55,13 @@ CLI::
     python3 -m fhir4ds.realism.piqi_autocoding \
         --corpus tests/data/mimic-iv-fhir-demo/.../fhir \
         --output-dir /tmp/jm/piqi-autocoding \
-        [--num-patients 12] [--lab-cap 40] [--medicationrequest-cap 20]
+        [--num-patients 12]
         [--min-match-grade certain|probable] [--search-mode hybrid]
-        [--no-strip]            # production path: autocode the RAW corpus
-        [--skip-autocoding]     # corpus/PIQI legs without medterm4ds
-        [--http-base-url URL]   # escape hatch: remote terminology server
+        [--no-strip]             # production path: autocode the RAW corpus
+        [--skip-autocoding]      # corpus/PIQI legs without medterm4ds
+        [--duckdb-threads N]     # default 1 (ML runtime shares the process)
+        [--inline-autocoding]    # skip the child-process hop for the leg
+        [--http-base-url URL]    # escape hatch: remote terminology server
 
 ``--skip-autocoding`` still builds and evaluates the BEFORE corpus; it
 only skips the augmentation (useful where the medterm4ds index is not
