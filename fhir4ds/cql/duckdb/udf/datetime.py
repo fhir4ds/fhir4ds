@@ -99,6 +99,32 @@ _ABOVE_SECONDS_UNITS = frozenset((
     "hour", "hours", "h",
     "minute", "minutes", "min",
 ))
+
+# Sub-day Time-arithmetic units mapped onto the CQL precision ladder, plus the
+# conversion factors between adjacent ladder levels. Used to truncate a
+# quantity to the INPUT precision before shifting a Time value (CQL §8.1/§8.15:
+# "Arithmetic is performed at the precision of the input").
+_TIME_UNIT_PRECISION_INDEX = {
+    "hour": 3, "hours": 3, "h": 3,
+    "minute": 4, "minutes": 4, "min": 4,
+    "second": 5, "seconds": 5, "s": 5,
+    "millisecond": 6, "milliseconds": 6, "ms": 6,
+}
+#: Canonical plural unit name per Time precision ladder level.
+_TIME_PRECISION_UNIT = {
+    3: "hours",
+    4: "minutes",
+    5: "seconds",
+    6: "milliseconds",
+}
+_PRECISION_CONVERSION = {
+    2: 24,    # 1 day = 24 hours
+    3: 60,    # 1 hour = 60 minutes
+    4: 60,    # 1 minute = 60 seconds
+    5: 1000,  # 1 second = 1000 ms
+}
+
+
 def _parse_date(value: str) -> date | None:
     """Parse date from ISO 8601 string.
 
@@ -1543,6 +1569,25 @@ def dateAddQuantity(date_val: str | None, quantity_json: str | None) -> str | No
                 return None
             ref_dt = _dt_class(2000, 1, 1, t.hour, t.minute, t.second, t.microsecond)
             if unit_lower in _TIMEDELTA_UNITS:
+                # CQL 1.5 §8.1/§8.15: "Arithmetic is performed at the precision
+                # of the input" — a quantity FINER than the input precision is
+                # truncated to the input unit BEFORE the shift (30 seconds on a
+                # minute-precision Time is 0 minutes). Truncating the RESULT
+                # instead floors across the boundary: 12:00 - 30s produced
+                # 'T11:59' while the C++ extension and the reference engine
+                # (AddEvaluator's truncateValueToTargetPrecision) both answer
+                # 'T12:00'. FHIR4-50 found this via the `within ... of` Time
+                # path, which compares Time bounds produced here.
+                time_prec_idx = _PRECISION_INDEX.get(_infer_precision(str(date_val)), 6)
+                unit_prec_idx = _TIME_UNIT_PRECISION_INDEX[unit_lower]
+                if unit_prec_idx > time_prec_idx:
+                    divisor = 1
+                    for level in range(time_prec_idx, unit_prec_idx):
+                        divisor *= _PRECISION_CONVERSION[level]
+                    value = int(value / divisor)
+                    # Restate the truncated amount in the input-precision unit:
+                    # 1500 ms at second precision is 1 second (not 1 ms).
+                    unit_lower = _TIME_PRECISION_UNIT[time_prec_idx]
                 result_dt = ref_dt + timedelta(**{_TIMEDELTA_UNITS[unit_lower]: value})
                 return _format_time_result_at_input_precision(result_dt, str(date_val))
             return None
