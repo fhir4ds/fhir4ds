@@ -5,12 +5,15 @@ truncation, date casting, interval detection, operator string parsing, etc.
 """
 from __future__ import annotations
 
+import re
+
 from ...parser.ast_nodes import (
     BinaryExpression,
     DateTimeLiteral,
     FunctionRef,
     UnaryExpression,
 )
+from ...translator.type_map import static_source_cql_type
 from ...translator.types import (
     SQLBinaryOp,
     SQLCase,
@@ -36,6 +39,15 @@ BINARY_OPERATOR_MAP = {
     ">": ">",
     ">=": ">=",
 }
+
+# A Time-of-day literal/value shape. CQL Time values are ``T``-prefixed clock
+# strings ('T10:00' / 'T10:00:00.000'); FHIR ``time`` elements are bare
+# 'HH:MM:SS'. Date and DateTime literals never match: they begin with a
+# four-digit year, so neither the ``T`` alternative nor the ``\d{2}:``
+# alternative (anchored at the third character) can match '2014-01-01'.
+_TIME_SHAPED_LITERAL_RE = re.compile(
+    r"^(?:T\d{2}(?::\d{2}(?::\d{2}(?:\.\d{1,6})?)?)?|\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?)$"
+)
 
 
 class TemporalUtilsMixin:
@@ -161,8 +173,116 @@ class TemporalUtilsMixin:
         operands are plain Date values DuckDB promotes them to midnight
         TIMESTAMP which keeps day-level semantics intact, while DateTime
         operands retain their time component for correct comparisons.
+
+        NOTE: a CQL Time value is NOT expressible as a TIMESTAMP (see
+        ``_within_operand_is_time``); operators that can receive Time operands
+        must branch to a Time-aware comparison before reaching this cast.
         """
         return "TIMESTAMP"
+
+    # ------------------------------------------------------------------
+    # Time-operand detection (FHIR4-50)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _cql_type_is_time_like(cql_type: str | None) -> bool:
+        """True for the CQL type names whose VALUES are Time points.
+
+        ``Interval<Time>`` is included because the ``starts/ends within``
+        forms reduce their interval operand to a Time boundary before the
+        offset comparison.
+        """
+        if not cql_type:
+            return False
+        normalized = str(cql_type).replace(" ", "")
+        return normalized in ("Time", "Interval<Time>", "Interval<System.Time>")
+
+    @staticmethod
+    def _cql_type_is_interval(cql_type: str | None) -> bool:
+        """True when a CQL type name is an Interval type (any point type)."""
+        return bool(cql_type) and str(cql_type).replace(" ", "").startswith("Interval<")
+
+    def _static_cql_type_is_interval_operand(self, node) -> bool:
+        """True when a CQL AST operand is an Interval (not a point) value."""
+        if node is None:
+            return False
+        if type(node).__name__ == "Interval":
+            return True
+        if type(node).__name__ in ("Identifier", "QualifiedIdentifier"):
+            parts = getattr(node, "parts", None)
+            name = parts[-1] if parts else getattr(node, "name", None)
+            meta = self.context.definition_meta.get(name) if name else None
+            return meta is not None and self._cql_type_is_interval(
+                getattr(meta, "cql_type", None)
+            )
+        return False
+
+    def _static_cql_type_is_time(self, node, *, allow_interval: bool = True) -> bool:
+        """Static Time-ness of a CQL AST operand.
+
+        Covers the spellings that can reach a timing phrase: ``@T12:00``
+        literals, ``Time(...)`` constructors, ``ToTime(...)``, ``x as Time``,
+        declares whose inferred CQL type is Time/Interval<Time>, and interval
+        literals with Time bounds.
+
+        ``allow_interval=False`` stops the recursion at an Interval operand (see
+        ``_within_operand_is_time``).
+        """
+        if node is None:
+            return False
+        if static_source_cql_type(node) == "Time":
+            return True
+        node_type = type(node).__name__
+        if node_type == "FunctionRef":
+            return (getattr(node, "name", "") or "").lower() == "time"
+        if node_type == "BinaryExpression":
+            if (getattr(node, "operator", "") or "") in ("as", "convert to"):
+                spec = getattr(node, "right", None)
+                spec_name = (getattr(spec, "name", "") or "").split(".")[-1]
+                if spec_name == "Time":
+                    return True
+            return self._static_cql_type_is_time(
+                getattr(node, "left", None), allow_interval=allow_interval
+            )
+        if node_type in ("Identifier", "QualifiedIdentifier"):
+            parts = getattr(node, "parts", None)
+            name = parts[-1] if parts else getattr(node, "name", None)
+            meta = self.context.definition_meta.get(name) if name else None
+            if meta is None:
+                return False
+            cql_type = getattr(meta, "cql_type", None)
+            if not allow_interval and self._cql_type_is_interval(cql_type):
+                return False
+            return self._cql_type_is_time_like(cql_type)
+        if node_type == "Interval":
+            if not allow_interval:
+                return False
+            return self._static_cql_type_is_time(getattr(node, "low", None))
+        return False
+
+
+    def _within_operand_is_time(
+        self, ast_node, sql_expr: SQLExpression | None = None, *, allow_interval: bool = False
+    ) -> bool:
+        """True when a ``within ... of`` operand is statically a Time value.
+
+        The AST check covers literals/declares/constructors; the SQL literal
+        check catches defines that the translator has already inlined to their
+        literal spelling (``define T1: @T10:00`` referenced as ``T1`` lowers to
+        the literal ``'T10:00'``).
+
+        ``allow_interval`` admits ``Interval<Time>`` / Time-bounded interval
+        literals.  Only the ``starts/ends within`` forms set it: they reduce the
+        interval to a Time boundary FIRST.  A bare ``Interval within Q of X``
+        is not defined by CQL (``In`` takes a point), so it must keep whatever
+        behaviour it already has rather than silently becoming a point compare.
+        """
+        if self._static_cql_type_is_time(ast_node, allow_interval=allow_interval):
+            return True
+        if isinstance(sql_expr, SQLLiteral) and isinstance(getattr(sql_expr, "value", None), str):
+            return bool(_TIME_SHAPED_LITERAL_RE.match(sql_expr.value.strip()))
+        return False
+
 
     @staticmethod
     def _infer_cast_type_for_comparison(left: SQLExpression, right: SQLExpression) -> str:

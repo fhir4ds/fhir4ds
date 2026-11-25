@@ -377,29 +377,31 @@ def test_cql_properly_timing_phrases_work_in_population_where_clauses() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Pre-existing gap kept VISIBLE (not introduced by FHIR4-46)
+# Former gap, now fixed by FHIR4-50
 # ---------------------------------------------------------------------------
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=duckdb.ConversionException,
-    reason=(
-        "PRE-EXISTING (not FHIR4-46): the `within N unit of` lowering casts both "
-        "operands through TIMESTAMP, so a TIME operand ('T12:00') is rejected by "
-        "DuckDB. Reproduces identically for the plain form, so the `properly` "
-        "modifier did not introduce it; fixing it means giving `within ... of` a "
-        "Time-aware comparison path, which changes the plain form too."
-    ),
-)
-def test_cql_within_offset_time_operands_are_a_pre_existing_gap() -> None:
-    """Both `within ... of` forms currently fail on Time-only operands."""
-    for expression in (
-        "@T10:00 properly within 3 hours of @T12:00",
-        "@T10:00 within 3 hours of @T12:00",
-    ):
-        sql = _translate_defines({"WithinTimeGap": expression})["WithinTimeGap"]
-        con = _python_only_connection()
-        try:
-            con.execute(f"SELECT {sql}").fetchone()
-        finally:
-            con.close()
+
+def test_cql_within_offset_time_operands_evaluate() -> None:
+    """Both `within ... of` forms evaluate on Time operands (was FHIR4-50's gap).
+
+    FHIR4-46 kept this as a strict xfail: the lowering cast both operands
+    through TIMESTAMP, so a Time value ('T12:00') raised
+    ``ConversionException`` at bind time — for the plain form as well, so the
+    ``properly`` modifier did not introduce it. FHIR4-50 gives the family a
+    Time-aware path (``dateAddQuantity``/``dateSubtractQuantity`` bounds plus
+    the precision-aware ``cqlSameOrAfter``/``cqlSameOrBefore`` family); the
+    full matrix lives in ``test_within_time_operands_parity.py``.
+    """
+    cases = {
+        "@T10:00 properly within 3 hours of @T12:00": (True,),
+        "@T10:00 within 3 hours of @T12:00": (True,),
+    }
+    translated = _translate_defines({f"WithinTimeGap{i}": e for i, e in enumerate(cases)})
+    con = _python_only_connection()
+    try:
+        for index, (expression, expected) in enumerate(cases.items()):
+            sql = translated[f"WithinTimeGap{index}"]
+            assert "AS TIMESTAMP" not in sql, (expression, sql)
+            assert con.execute(f"SELECT {sql}").fetchone() == expected, expression
+    finally:
+        con.close()
