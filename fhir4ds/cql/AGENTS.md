@@ -8037,6 +8037,63 @@ the recommendation in the FHIR4-48 report). Pinned for the fixed measures by
 whose synthetic case is built so a "just append LIMIT 1" non-correlated fix
 fails the opposite patient's assertion.
 
+## FHIR4-53 — the other two multi-row shapes, and the flag is now ON (2026-11-25)
+
+FHIR4-48 fixed two shapes and left the harness flag permissive because us-core
+still failed 2 of 73. Those two are fixed, the survey reads 0/N on BOTH suites,
+and `fhir4ds/dqm/tests/conformance/database.py` now sets
+`scalar_subquery_error_on_multiple_rows=true` explicitly — **the gate no longer
+masks this class**. Two more shapes, both about *how many rows a construct may
+contribute*, neither about "pick a row":
+
+- **A fluent overload resolved by its RECEIVER chose the wrong SHAPE.**
+  `X.f(y)` resolves on the receiver's resource type. When that type names no
+  declared receiver — CMS145: `HypotensionDiagnosis` is a union of two
+  US-QUALITY-CORE Condition profiles, whose shared base type is plain
+  `Condition`, while both `overlapsDayOfEncounter` overloads declare
+  `ConditionProblemsHealthConcerns` — `get_function` answered with
+  `_functions[name]`, the LAST-DECLARED overload. That is a blind guess: the
+  single-`Encounter` shape won for a `List<Encounter>` argument and its body
+  (`TheEncounter Visit where … return …`) made the whole list an inline query
+  source, one row per element. Fixed by routing the tie through the existing
+  conservative policy (`overload_call.choose_call_overload(..., fluent=True)`):
+  only a UNIQUE least-converting candidate among the parameters AFTER the
+  receiver wins; a tie / unknown argument type / unreadable parameter keeps
+  today's answer. **A fluent family whose shapes differ only in their arguments
+  must be resolved by the arguments — "last declared" is not a resolution.**
+  The `No overload … using the last-declared overload` warning now fires only
+  when nothing could decide, and says the arguments were tried.
+- **A promoted `let` CTE over a FLUENT-CALL source lost its row key.** Lets
+  referenced ≥3× promote to `_let_<define>_<name>` CTEs correlated by
+  `(patient_id, _row_key)`; the key is added only when the promotion proves the
+  alias iterates resource rows (`definition_meta[cte].has_resource` or
+  `_alias_resource_types[alias]`). A query source that is a fluent call over a
+  retrieve (`([MedicationRequest: VS]).moreThanOneOrder() AntiInfectives`)
+  iterates the SAME rows but is a `MethodInvocation`, so
+  `_extract_query_source_resource_type` names no type and the CTE claimed to be
+  patient-scoped. The sibling let that consumes it (`timing: dosage.timing`)
+  then lowered to `(SELECT value FROM "_let_…_dosage" WHERE patient_id =
+  <alias>.patient_id)` — one row per order. Fixed by recovering the resource
+  type from the bound CTE name (`"<ResourceType>: <terminology>"`), which also
+  pins `_resource_row_key_expr` to ONE branch (`id`) for the CTE column and
+  every later lookup: the two branches render different keys (`Type/id` vs
+  `id`), and a mismatch NULLs the value silently instead of raising.
+
+Verification recipe (unchanged from FHIR4-48, one addition): compile the
+measure, keep DuckDB's default strictness, then (a) execute the FULL generated
+SQL and (b) scan every CTE with `SELECT *` — `count(*)` lets the optimizer prune
+the very projection that raises, which is why a `count(*)` survey misses
+CMS145's shape. Both suites: `qi-core-2025 0/47`, `us-core-2025 0/73`.
+`all_columns=True` still matters. Dead CTEs are the one false positive: CMS832
+(`_fn_FirstSerumCreatinineIn48Hours_…`) in both suites and CMS1028
+("SDE SOC Procedure Detail") in us-core still contain a multi-row subquery, are
+referenced from nowhere, are pre-existing, and are pruned by DuckDB — do not
+"fix" a CTE no consumer reads, but do not let a `SELECT *` scan report it as a
+measure failure either. The 3 us-core measures that fail to BIND at all
+(CMS986 `value` ordering, NHSNAcuteCare/NHSNGlycemicControl
+`str_split(VARCHAR[], …)`) are a separate pre-existing family, identical before
+and after this card, and unaffected by the flag.
+
 ## `within N unit of` is Time-aware (FHIR4-50)
 
 The whole family (`within`, `properly within`, `starts/ends [properly] within`)
