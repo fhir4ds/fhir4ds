@@ -5,6 +5,7 @@ and complex interval temporal comparisons with quantity offsets.
 """
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 from ...translator.context import ExprUsage
@@ -1015,23 +1016,51 @@ class TemporalComparisonMixin:
                 return SQLBinaryOp(operator=">=", left=left_cmp, right=threshold)
 
     def _translate_within_operator(
-        self, components: dict, left: SQLExpression, right: SQLExpression
+        self,
+        components: dict,
+        left: SQLExpression,
+        right: SQLExpression,
+        left_ast: object = None,
+        right_ast: object = None,
+        left_is_interval_boundary: bool = False,
     ) -> SQLExpression:
         """
         Translate CQL "within N unit of" to SQL.
 
         CQL semantics: "A within 60 days of B" → |A - B| <= 60 days
         SQL: B - 60 days <= A <= B + 60 days
-        (i.e., A is within 60 days of B in either direction)
+        (i.e. A is within 60 days of B in either direction)
 
         The `properly` form (FHIR4-46) is the strict reading, |A - B| < N:
         the reference implementation builds Interval(B - Q, B + Q) with OPEN
         bounds for `properly within`, where the plain form closes them.
+
+        TIME operands (FHIR4-50) cannot be cast to TIMESTAMP (a CQL Time value
+        is a 'T'-prefixed clock string and the cast raises ConversionException
+        at bind time), so they take a dedicated precision-aware path — see
+        :meth:`_translate_within_time_offsets`.
         """
         proper = bool(components.get("proper"))
         quantity_value_int = int(float(components["quantity_value"]))
         quantity_unit = components["quantity_unit"]
         interval_literal = SQLIntervalLiteral(value=quantity_value_int, unit=quantity_unit)
+
+        left_is_time = self._within_operand_is_time(
+            left_ast, left, allow_interval=left_is_interval_boundary
+        )
+        right_is_time = self._within_operand_is_time(right_ast, right)
+        # `Interval within Q of point` is not a CQL signature (In takes a
+        # point); keep its historical lowering instead of silently comparing an
+        # interval JSON as if it were a Time.
+        left_is_interval = self._static_cql_type_is_interval_operand(left_ast)
+        if (left_is_time or right_is_time) and (left_is_interval_boundary or not left_is_interval):
+            return self._translate_within_time_offsets(
+                proper=proper,
+                quantity_value=quantity_value_int,
+                quantity_unit=quantity_unit,
+                left=left,
+                right=right,
+            )
 
         cast_type = self._temporal_target_type(quantity_unit)
         left_cmp = self._ensure_date_cast(left, cast_type)
@@ -1053,4 +1082,71 @@ class TemporalComparisonMixin:
             operator="AND",
             left=SQLBinaryOp(operator=comparison, left=lower, right=left_cmp),
             right=SQLBinaryOp(operator=comparison, left=left_cmp, right=upper),
+        )
+
+    def _translate_within_time_offsets(
+        self,
+        *,
+        proper: bool,
+        quantity_value: int,
+        quantity_unit: str,
+        left: SQLExpression,
+        right: SQLExpression,
+    ) -> SQLExpression:
+        """``A within Q of B`` for TIME operands (FHIR4-50).
+
+        Composition of existing Time-aware primitives instead of a new
+        TIMESTAMP cast or a new UDF:
+
+        * ``dateSubtractQuantity`` / ``dateAddQuantity`` build the offset bounds
+          on the 24-hour clock (CQL 1.5 §8.1/§8.15 Time ± sub-day Quantity) —
+          the same modulo-midnight wrap the reference engine gets from
+          ``java.time.LocalTime.plus`` in ``AddEvaluator``/``SubtractEvaluator``.
+        * ``cqlSameOrAfter`` / ``cqlSameOrBefore`` (plain) and
+          ``cqlAfter`` / ``cqlBefore`` (``properly``) are the precision-aware
+          temporal comparisons — Time is compared with the combined
+          seconds/milliseconds rule and is never routed through DateTime
+          timezone normalization (AMUX-171; the CQL Time model has no timezone).
+
+        Reference lowering (cqframework cql-to-elm
+        ``Cql2ElmVisitor.visitWithinIntervalOperatorPhrase``):
+        ``In(left, Interval(right - Q, right + Q))`` with the bounds CLOSED for
+        the plain form and OPEN for ``properly within``, and ``InEvaluator``
+        comparing the point with ``SameAs``/``Before``/``After`` then
+        ``SameOrAfter(start) and SameOrBefore(end)``.  Because the comparison
+        interval is NOT wrapped while the arithmetic IS, a bound pair that
+        crosses midnight answers FALSE for points outside the wrapped range —
+        e.g. ``@T23:30 within 1 hour of @T00:15`` → bounds [T23:15, T01:15] →
+        FALSE.  This lowering reproduces that: wrapping arithmetic builds the
+        bounds, then a directional clock comparison reads them.
+
+        Known boundary: a day-level unit (``within 3 days of`` on Time) leaves
+        the bounds unknown — CQL 1.5 §8.1/§8.15 allow only
+        hours/minutes/seconds/milliseconds for Time — so the result is NULL.
+        """
+        quantity_json = SQLLiteral(
+            value=json.dumps(
+                {
+                    "value": quantity_value,
+                    "unit": quantity_unit,
+                    "system": "http://unitsofmeasure.org",
+                }
+            )
+        )
+        right_varchar = (
+            right if isinstance(right, SQLLiteral) else self._ensure_interval_varchar(right)
+        )
+        left_varchar = (
+            left if isinstance(left, SQLLiteral) else self._ensure_interval_varchar(left)
+        )
+
+        lower = SQLFunctionCall(name="dateSubtractQuantity", args=[right_varchar, quantity_json])
+        upper = SQLFunctionCall(name="dateAddQuantity", args=[right_varchar, quantity_json])
+
+        low_comparison = "cqlAfter" if proper else "cqlSameOrAfter"
+        high_comparison = "cqlBefore" if proper else "cqlSameOrBefore"
+        return SQLBinaryOp(
+            operator="AND",
+            left=SQLFunctionCall(name=low_comparison, args=[left_varchar, lower]),
+            right=SQLFunctionCall(name=high_comparison, args=[left_varchar, upper]),
         )

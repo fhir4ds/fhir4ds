@@ -9349,7 +9349,17 @@ class OperatorsMixin:
                 )
                 if within_components is not None:
                     boundary_expr = SQLFunctionCall(name=_boundary_fn, args=[left])
-                    return self._translate_within_operator(within_components, boundary_expr, right)
+                    return self._translate_within_operator(
+                        within_components,
+                        boundary_expr,
+                        right,
+                        left_ast=getattr(expr, "left", None),
+                        right_ast=getattr(expr, "right", None),
+                        # `starts/ends within` reduces an Interval<Time> to its
+                        # Time boundary first, so an interval operand is
+                        # Time-valued for this form only.
+                        left_is_interval_boundary=True,
+                    )
 
         # Complex temporal operators with quantity: "starts 1 day or less on or after day of", etc.
         # Pattern: <starts|ends> <quantity> <or less|or more> <on or before|on or after> [<precision> of]
@@ -9438,7 +9448,13 @@ class OperatorsMixin:
         # e.g. "within 60 days of", "within 3 months of"
         within_temporal = self._parse_within_operator(operator)
         if within_temporal is not None:
-            return self._translate_within_operator(within_temporal, left, right)
+            return self._translate_within_operator(
+                within_temporal,
+                left,
+                right,
+                left_ast=getattr(expr, "left", None),
+                right_ast=getattr(expr, "right", None),
+            )
 
         # CQL §22.21: Arithmetic on DurationBetween results (which may be
         # uncertainty intervals as VARCHAR). Use uncertainty-aware UDFs.
