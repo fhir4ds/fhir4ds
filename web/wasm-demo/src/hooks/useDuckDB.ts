@@ -1,11 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { QueryResult } from "../components/ResultsTable";
 import { clearStaleDuckDBStorage, createDuckDBConnection } from "../lib/duckdb-wasm";
+import {
+  seedValuesetCache,
+  valuesetResourcesOf,
+  valuesetToRows,
+} from "../../../shared/valuesetBridge";
 
 export function useDuckDB(wasmAppUrl?: string, enabled = true) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [extensionsLoaded, setExtensionsLoaded] = useState(false);
+  /** ValueSet urls seeded into the engine's in-process cache (FHIR4-49). */
+  const [seededValuesetUrls, setSeededValuesetUrls] = useState<string[]>([]);
   const dbRef = useRef<any>(null);
   const connRef = useRef<any>(null);
 
@@ -44,23 +51,41 @@ export function useDuckDB(wasmAppUrl?: string, enabled = true) {
         `);
 
         const { SAMPLE_RESOURCES } = await import("../lib/sample-data");
+        const { SAMPLE_VALUESETS } = await import("../lib/sample-valuesets");
+        // ValueSets are data too — patients never reference them, but keeping
+        // them in `resources` lets the Patient Data pane show what was loaded.
+        const loaded = [...(SAMPLE_RESOURCES as any[]), ...SAMPLE_VALUESETS];
         const stmt = await conn.prepare("INSERT INTO resources VALUES (?, ?, ?, ?)");
-        for (const res of SAMPLE_RESOURCES as any[]) {
+        for (const res of loaded) {
           await stmt.query(res.id, res.resourceType, JSON.stringify(res), extractPatientRef(res));
         }
         await stmt.close();
+
+        // FHIR4-49: the browser engine answers ValueSet membership from the
+        // C++ in-process cache (`in_valueset`), NOT from this table. Seed it
+        // from the dataset's ValueSet resources or every valueset retrieve
+        // silently returns empty populations.
+        const { rows: vsRows, warnings } = valuesetToRows(
+          valuesetResourcesOf(loaded as Array<Record<string, unknown>>),
+        );
+        for (const w of warnings) console.warn("[valuesetBridge]", w);
+        await seedValuesetCache(vsRows, (sql) => conn.query(sql));
+        const seededUrls = [...new Set(vsRows.map((r) => r.url))];
 
         if (!cancelled) {
           dbRef.current = db;
           connRef.current = conn;
           (window as any).duckdbConn = conn; // Expose for Playwright extraction
           setExtensionsLoaded(cppExtLoaded);
+          setSeededValuesetUrls(seededUrls);
           setReady(true);
           setError(null);
           console.log(
             "[DuckDB] Ready —",
-            (SAMPLE_RESOURCES as any[]).length,
-            "resources, C++ UDFs active",
+            loaded.length,
+            "resources,",
+            seededUrls.length,
+            "valuesets seeded, C++ UDFs active",
           );
         }
       } catch (err) {
@@ -81,6 +106,7 @@ export function useDuckDB(wasmAppUrl?: string, enabled = true) {
       dbRef.current = null;
       setReady(false);
       setExtensionsLoaded(false);
+      setSeededValuesetUrls([]);
     };
   }, [enabled, wasmAppUrl]);
 
@@ -139,7 +165,7 @@ export function useDuckDB(wasmAppUrl?: string, enabled = true) {
 
   const getConnection = useCallback(() => connRef.current, []);
 
-  return { ready, error, extensionsLoaded, executeQuery, getConnection };
+  return { ready, error, extensionsLoaded, seededValuesetUrls, executeQuery, getConnection };
 }
 
 function extractPatientRef(resource: any): string | null {
