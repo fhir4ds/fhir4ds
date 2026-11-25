@@ -475,7 +475,9 @@ define "Initial Population":
         )
 
         sql = compiled.groups[0].sql
-        assert '"Matching Statuses" AS MATERIALIZED (\nSELECT Status1.patient_id' in sql
+        # `return` (no `all`) de-duplicates its tuples per CQL 1.5 §Query, so
+        # the multi-source select carries DISTINCT — FHIR4-48.
+        assert '"Matching Statuses" AS MATERIALIZED (\nSELECT DISTINCT Status1.patient_id' in sql
         assert 'AS value FROM "Encounter Statuses" AS Status1' in sql
         assert 'SELECT sub.resource FROM "Matching Statuses"' not in sql
 
@@ -530,7 +532,9 @@ define "Initial Population":
         )
 
         sql = compiled.groups[0].sql
-        assert '"Score Differences" AS MATERIALIZED (\nSELECT FirstScore.patient_id' in sql
+        # `return` (no `all`) de-duplicates its tuples per CQL 1.5 §Query, so
+        # the multi-source select carries DISTINCT — FHIR4-48.
+        assert '"Score Differences" AS MATERIALIZED (\nSELECT DISTINCT FirstScore.patient_id' in sql
         assert 'AS value FROM "Observation" AS FirstScore' in sql
         assert "Score.value" in sql
 
