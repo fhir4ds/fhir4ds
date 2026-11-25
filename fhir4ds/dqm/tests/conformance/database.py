@@ -69,9 +69,27 @@ class BenchmarkDatabase:
         self.conn = duckdb.connect(db_path, config={'allow_unsigned_extensions': 'true'})
         self._setup_timings: dict[str, float] = {}
 
-        # CQL semantics use singleton promotion/demotion, so scalar subqueries
-        # may legitimately return multiple rows in certain patterns
-        self.conn.execute("SET scalar_subquery_error_on_multiple_rows=false")
+        # DuckDB's DEFAULT scalar-subquery rule is what every non-masked
+        # consumer runs (duckdb-wasm in every web app, any user connection):
+        # a scalar subquery that yields more than one row is an ERROR.
+        #
+        # This harness used to turn that rule OFF, so a lowering defect that
+        # emitted a multi-row scalar subquery ran green here and raised on
+        # every real consumer (FHIR4-48 found it from the wasm lane). A gate
+        # flag that hides a shape defect is part of the defect: the flag is ON
+        # now, so the generated SQL must be single-row BY CONSTRUCTION.
+        #
+        # Nothing here is merely "masked": FHIR4-48 fixed the query-return
+        # alias re-materialisation and the missing multi-source `return`
+        # de-duplication (CMS56, CMS832); FHIR4-53 fixed the fluent overload
+        # that inlined a single-Encounter body over a List argument (CMS145)
+        # and the promoted-let CTE that looked its value up by patient alone
+        # (CMS156). Survey after both cards: 0/47 qi-core-2025 and 0/73
+        # us-core-2025 measures raise the rule on a strict connection.
+        #
+        # Set explicitly rather than left to the default, so a future DuckDB
+        # default change cannot silently re-open the blind spot.
+        self.conn.execute("SET scalar_subquery_error_on_multiple_rows=true")
 
         # Register all FHIR4DS UDFs through the package's own entry point.
         #
