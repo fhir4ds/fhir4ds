@@ -161,7 +161,8 @@ Code: `fhir4ds/operations/tests/wasm_parity/`. Plan:
   or natively provided; app bundles identical; shipped `.wasm` copies are one known set
   (`fhir4ds/wasm_extension_bundles.json`, `scripts/build_wasm_extensions.py --verify`).
 - **Tier A** `test_wasm_parity_tier_a.py`, one ratchet test per suite, each reusing the official
-  runner's own comparator: CQL (2,037), ViewDefinition (144), OMOP (38), and FHIRPath R4 —
+  runner's own comparator: CQL (2,043 at corpus `0a8f7d3`, vendored in git),
+  ViewDefinition (144), OMOP (38), and FHIRPath R4 —
   where only 3 of 1,191 tests are evaluable today (see the fragile area on XML inputs).
   Identical SQL runs on desktop and on the simulator; outcomes `GREEN`, `PARITY_GAP`,
   `BROWSER_ONLY_PASS`, `BOTH_FAIL`, `ENGINE_DIFF`, `TRANSLATE_DIFF` (must be zero, cannot be
@@ -325,6 +326,11 @@ every failure is now fixed in the script, and each is a trap for anyone rebuildi
 - AFTER the 2026-11-24 rebuild (both bundles, from dev `80a826eca2d`): the staleness list
   is empty and real duckdb-wasm gives exactly the simulator's numbers on the whole CQL
   corpus (1,816 GREEN, 126 PARITY_GAP, 60 ENGINE_DIFF, 8 BOTH_FAIL). No real-only gap is left.
+- Re-triaged after the merge that vendored the corpus (`0a8f7d3`, 2,043 tests) and the rebuild
+  from `9e67030c688`: simulator and real duckdb-wasm both give 1,816 GREEN, 128 PARITY_GAP,
+  64 ENGINE_DIFF, 7 BOTH_FAIL, 23 TRANSLATE_ERROR, 5 gated. `CoalesceMoreThanFiveArgs` left the
+  desktop-defect list there (FHIR4-44 made it a translation error) — the gate reported it as a
+  stale registration, which is that rule working.
 - Four reference macros are **broken everywhere**, simulator included: `AllTrue`, `AnyTrue`,
   `AllFalse`, `AnyFalse` call `system.bool_and(list)` / `bool_or(list)`, overloads no DuckDB
   1.5.x has (Binder Error).

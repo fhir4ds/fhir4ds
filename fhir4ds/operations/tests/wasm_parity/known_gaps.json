@@ -281,10 +281,9 @@
         "CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse2",
         "CqlComparisonOperatorsTest.xml::NotEquivalentNullNull",
         "CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainInterval",
-        "CqlDateTimeOperatorsTest.xml::TimeDurationBetweenHourDiffPrecision2",
-        "CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs"
+        "CqlDateTimeOperatorsTest.xml::TimeDurationBetweenHourDiffPrecision2"
       ],
-      "reason": "Fail on BOTH surfaces against corpus f724ee4: desktop conformance defects, not parity gaps (the official runner reports 2031/2037). In flight with the fhir4ds test fixes (Joel, 2026-11-24).",
+      "reason": "Fail on BOTH surfaces against the official corpus (first seen at f724ee4, re-triaged at 0a8f7d3): desktop conformance defects, not parity gaps. In flight with the fhir4ds test fixes (Joel, 2026-11-24). CoalesceMoreThanFiveArgs left this list when FHIR4-44 made it a translation error.",
       "owner": "fhir4ds lane",
       "since": "2026-11-24",
       "expires": "2026-12-24"
@@ -299,7 +298,7 @@
         "web/website/static/bulk-publisher-app/extensions/fhirpath.duckdb_extension.wasm",
         "web/website/static/bulk-publisher-app/workers/fhirpath.duckdb_extension.wasm"
       ],
-      "reason": "BulkPublishDemo (web/website/src/components/BulkPublishDemo, in the built snapshot web/website/static/bulk-publisher-app) ships its own cql and fhirpath wasm binaries and pins a different @duckdb/duckdb-wasm version (^1.33.1-dev41.0) than the other apps (1.33.1-dev64.0). Not overwritten by the wasm rebuild: the rebuilt bundles target the v1.5.5 core of the other apps and may not load under this app's pin. Owner: web apps \u2014 unify the pin, then let scripts/build_wasm_extensions.py install into its directories too.",
+      "reason": "BulkPublishDemo (web/website/src/components/BulkPublishDemo, in the built snapshot web/website/static/bulk-publisher-app) ships its own cql and fhirpath wasm binaries and pins a different @duckdb/duckdb-wasm version (^1.33.1-dev41.0) than the other apps (1.33.1-dev64.0). Not overwritten by the wasm rebuild: the rebuilt bundles target the v1.5.5 core of the other apps and may not load under this app's pin. Owner: web apps — unify the pin, then let scripts/build_wasm_extensions.py install into its directories too.",
       "owner": "web apps",
       "since": "2026-11-24",
       "expires": "2027-02-22"

@@ -46,8 +46,8 @@ def run(desktop, browser, contract, *, corpus_dir: Path | None = None) -> SuiteR
     directory = Path(corpus_dir) if corpus_dir is not None else Path(run_cql.default_corpus_dir())
     if not directory.exists():
         raise EnvironmentInputMissing(
-            f"CQL corpus not checked out at {directory} (pinned gitlink; clone "
-            "cqframework/cql-tests there)"
+            f"CQL corpus not found at {directory} (vendored in git under "
+            "fhir4ds/cql/tests/official/cql-tests)"
         )
     for con in (desktop, browser):
         con.execute("CREATE TABLE IF NOT EXISTS resources (resource VARCHAR, patient_id VARCHAR)")

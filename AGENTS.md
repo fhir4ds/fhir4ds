@@ -6784,11 +6784,13 @@ six functions the desktop bundles provide (`RoundQuantity`, `RoundQuantityTo`, `
 and predated the AMUX-171 Time rules, and `web/wasm-demo` and `web/cql-clinic` still ship
 their own diverged `cql-macros.ts`.
 
-**The wasm bundles were rebuilt on 2026-11-24** with `scripts/build_wasm_extensions.py` from
-dev `80a826eca2d`, and `fhir4ds/wasm_extension_bundles.json` records their provenance. On the
-2,010 runnable official CQL tests real duckdb-wasm now gives exactly the simulator's numbers
-(1,816 green, 126 parity gaps from missing macros and body drift, 60 representation
-differences): no real-only gap is left. So every C++ change needs that rebuild, or the browser
+**The wasm bundles were rebuilt on 2026-11-24** with `scripts/build_wasm_extensions.py`, last
+from `9e67030c688` (which contains dev `a9845673e87`), and `fhir4ds/wasm_extension_bundles.json`
+records their provenance. On the official CQL corpus vendored at `0a8f7d3` (2,043 tests, 2,015
+of which execute on both surfaces) real duckdb-wasm gives exactly the simulator's numbers
+(1,816 green, 128 parity gaps from missing macros and body drift, 64 representation
+differences, 7 that fail on both): no real-only gap is left. So every C++ change needs that
+rebuild, or the browser
 silently runs an older engine than desktop. The script's first real run failed four times
 before it built; the causes are recorded in `fhir4ds/operations/AGENTS.md`.
 

@@ -7,8 +7,8 @@
     {
       "extension": "cql",
       "path": "web/cql-cleanroom/public/extensions/cql.duckdb_extension.wasm",
-      "sha256": "11ecffa04e08a43de86293ebd811061acb3012f96e5b9b761260330f82b27bcf",
-      "size": 980352,
+      "sha256": "721a986fbb8aec990671cf9e2c064be3727ee30b23ccdd2cbd3f47c13e4c39d7",
+      "size": 984740,
       "install": [
         "web/cql-cleanroom/public/extensions",
         "web/cql-clinic/public/extensions",
@@ -23,18 +23,18 @@
         "web/website/static/wasm-app/extensions"
       ],
       "source": {
-        "commit": "80a826eca2d71ee505cb847f53e66448cd69c232",
-        "cql_source": "fda741c8dc1ecaf50ca3f4e334808bb1fff14fe8",
+        "commit": "9e67030c6889f1635b1d8df6093cdf5f4710a2da",
+        "cql_source": "c9236b061969f393478eaddba805164f0db0b46d",
         "common_source": "06b99a1cc19d0ae1e2eee11101fc401b7c0c96e1",
         "duckdb_tag": "v1.5.5",
         "emsdk": "emsdk-3.1.71",
-        "built_at": "2026-11-24T23:43:25+00:00"
+        "built_at": "2026-11-25T01:32:56+00:00"
       }
     },
     {
       "extension": "fhirpath",
       "path": "web/cql-cleanroom/public/extensions/fhirpath.duckdb_extension.wasm",
-      "sha256": "5a3b523245f89c5924b222a128e4d6c2e7164d0c7ba95a7953926b5e70d140b3",
+      "sha256": "24a03e42bba60ad417ac68ba9054390fb3b11452c555725930ddc51dd1612ff2",
       "size": 806664,
       "install": [
         "web/cql-cleanroom/public/extensions",
@@ -53,12 +53,12 @@
         "web/website/static/viewing-room-app/extensions"
       ],
       "source": {
-        "commit": "80a826eca2d71ee505cb847f53e66448cd69c232",
+        "commit": "9e67030c6889f1635b1d8df6093cdf5f4710a2da",
         "fhirpath_source": "0f89f73f4d2899124be9816c4f70092e2f4139a3",
         "common_source": "06b99a1cc19d0ae1e2eee11101fc401b7c0c96e1",
         "duckdb_tag": "v1.5.5",
         "emsdk": "emsdk-3.1.71",
-        "built_at": "2026-11-24T23:46:25+00:00"
+        "built_at": "2026-11-25T01:33:09+00:00"
       }
     }
   ]
