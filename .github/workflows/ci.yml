@@ -49,9 +49,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           # jsonschema: the official ViewDefinition runner validates its report with it
-          # serve, mcp: fhir4ds/operations/tests exercises them (the public API surface
-          # contract freezes both packages)
-          python -m pip install -e ".[dev,measures,serve,mcp]" jsonschema
+          # serve: fhir4ds/operations/tests exercises it (the public API surface contract
+          # freezes fhir4ds.serve). mcp is deliberately NOT installed here: its tests skip
+          # without it, and see fhir4ds/operations/AGENTS.md for why installing it fails.
+          python -m pip install -e ".[dev,measures,serve]" jsonschema
 
       - name: Ruff cleaned packages
         run: >
@@ -65,10 +66,11 @@ jobs:
 
       # The WASM parity gates live in fhir4ds/operations/tests (Step 0 + Tier A here; Tier B
       # and Tier C need the real engine and run in the cleanroom job), so the whole directory
-      # runs. The optional serve/mcp extras are installed above because the public API surface
-      # contract freezes those packages; without an extra its tests skip with the reason.
+      # runs. The optional serve extra is installed above because the public API surface
+      # contract freezes fhir4ds.serve; without it that test skips with the reason.
       # With FHIR4DS_REQUIRE_WASM_PARITY=1 a missing input (node, corpus, bundles) fails
-      # instead of skipping; Tier B/C skip here because FHIR4DS_REQUIRE_WASM_REAL is unset.
+      # instead of skipping. Tier B/C are governed by FHIR4DS_REQUIRE_WASM_REAL alone, so they
+      # skip in this job (no node_modules, no chromium).
       - name: Pytest
         env:
           FHIR4DS_REQUIRE_WASM_PARITY: "1"
