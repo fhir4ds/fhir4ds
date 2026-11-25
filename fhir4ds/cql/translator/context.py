@@ -1453,21 +1453,80 @@ class SQLTranslationContext:
             self._function_overloads[func.name] = []
         self._function_overloads[func.name].append(func)
 
-    def get_function(self, name: str, resource_type: Optional[str] = None) -> Optional[FunctionInfo]:
+    def get_function(
+        self,
+        name: str,
+        resource_type: Optional[str] = None,
+        argument_nodes: Optional[List[Any]] = None,
+    ) -> Optional[FunctionInfo]:
         """Get a function from the current library.
 
         If resource_type is provided, attempts to find the correct overload
         by matching the first parameter's name or type against the resource type.
+
+        ``argument_nodes`` are the call's argument ASTs, EXCLUDING a fluent
+        receiver. They are consulted only when the receiver heuristics above
+        cannot choose (see :meth:`_match_overload_by_arguments`); passing them
+        keeps the blind last-declared answer from winning a family whose
+        shapes are discriminated by their arguments.
         """
+        overloads = self._function_overloads.get(name, [])
         if resource_type:
-            overloads = self._function_overloads.get(name, [])
             match = _match_overload(overloads, resource_type)
             if match:
                 return match
             match = self._rescue_overload(overloads, resource_type, name)
             if match:
                 return match
+            match = self._match_overload_by_arguments(name, argument_nodes)
+            if match:
+                return match
+            if len(overloads) > 1:
+                # Nothing could place this call: not one declared receiver type
+                # name, not the subtype rescue, not the arguments. The by-name
+                # answer below is the last-declared overload, so say so.
+                warn_once(
+                    (name, resource_type),
+                    f"No overload of function '{name}' takes a receiver of type "
+                    f"'{resource_type}' (declared receiver types: "
+                    f"{', '.join(_receiver_types(overloads))}) and the arguments do "
+                    "not pick one either; using the last-declared overload.",
+                )
+        elif len(overloads) > 1 and argument_nodes is not None:
+            match = self._match_overload_by_arguments(name, argument_nodes)
+            if match:
+                return match
         return self._functions.get(name)
+
+    def _match_overload_by_arguments(
+        self, name: str, argument_nodes: Optional[List[Any]]
+    ) -> Optional[FunctionInfo]:
+        """Ask the call's arguments which overload the receiver could not name.
+
+        A fluent call resolves by its RECEIVER. When that type names no
+        declared receiver the by-name answer is the LAST-DECLARED overload — a
+        blind guess that CMS145 turned into a lowering defect:
+        ``HypotensionDiagnosis`` is a union of two US-QUALITY-CORE Condition
+        profiles, whose shared base type is plain ``Condition``, while both
+        ``overlapsDayOfEncounter`` overloads declare
+        ``ConditionProblemsHealthConcerns``. The guess took the
+        single-Encounter shape, so a ``List<Encounter>`` argument was inlined
+        into ``TheEncounter Visit where … return …`` — the whole list became the
+        iteration source, one row per element, rejected as a multi-row scalar
+        subquery by every strict connection.
+
+        The arguments discriminate here (``List<Encounter>`` vs ``Encounter``),
+        so this delegates to the same policy non-fluent calls already use
+        (``overload_call.choose_call_overload``, AMUX-167): only a UNIQUE
+        least-converting candidate wins; a tie, an unknown argument type or an
+        unreadable parameter returns ``None`` and today's answer stands.
+        """
+        if not argument_nodes:
+            return None
+        from .overload_call import choose_call_overload
+
+        chosen = choose_call_overload(self, name, list(argument_nodes), fluent=True)
+        return chosen.function if chosen is not None else None
 
     def _rescue_overload(
         self, overloads: List[Any], resource_type: str, label: str
@@ -1477,20 +1536,15 @@ class SQLTranslationContext:
         Only a family of several overloads needs it: with one candidate the
         last-declared fallback already is that candidate. A receiver that is a
         subtype of exactly one declared receiver type selects that overload;
-        otherwise the caller keeps the last-declared overload, which is logged
-        because nothing shows that it is the right one.
+        otherwise the caller falls through to the argument-based tie-break and
+        only then to the last-declared overload, which it logs because nothing
+        shows that it is the right one.
         """
         if len(overloads) < 2:
             return None
         match = _match_overload_by_conversion(TypeModel(self), overloads, resource_type)
         if match is not None:
             return match
-        warn_once(
-            (label, resource_type),
-            f"No overload of function '{label}' takes a receiver of type "
-            f"'{resource_type}' (declared receiver types: {', '.join(_receiver_types(overloads))}); "
-            "using the last-declared overload.",
-        )
         return None
 
     def get_all_functions(self) -> Dict[str, FunctionInfo]:

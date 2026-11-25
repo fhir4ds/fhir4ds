@@ -486,3 +486,104 @@ def test_type_specifier_formatting_is_lossless():
     ) == "Tuple{a: Integer}"
     assert ov.format_type_specifier(None) is None
     assert ov.format_type_specifier("Integer") == "Integer"
+
+
+# ---------------------------------------------------------------------------
+# FHIR4-53: a fluent family whose RECEIVER cannot be placed is broken by the
+# ---------------------------------------------------------------------------
+
+
+def _fluent_two_params(name: str, first_name: str, first_type: str,
+                       second_name: str, second_type: str, second_is_list: bool):
+    from fhir4ds.cql.parser.ast_nodes import (
+        ListTypeSpecifier,
+        Literal,
+        NamedTypeSpecifier,
+        ParameterDefinition,
+    )
+    from fhir4ds.cql.translator.context import FunctionInfo
+
+    second = NamedTypeSpecifier(name=second_type)
+    return FunctionInfo(
+        name=name,
+        parameters=[
+            ParameterDefinition(
+                name=first_name,
+                type=NamedTypeSpecifier(name=first_type),
+            ),
+            ParameterDefinition(
+                name=second_name,
+                type=ListTypeSpecifier(element_type=second) if second_is_list else second,
+            ),
+        ],
+        # Argument-based resolution only considers overloads with a body: a
+        # stub has nothing to inline, so the fill does not exist for it.
+        expression=Literal(value=True),
+        is_fluent=True,
+    )
+
+
+def _overlaps_family() -> SQLTranslationContext:
+    """CMS145's ``overlapsDayOfEncounter`` pair, declared in source order."""
+    context = SQLTranslationContext()
+    context.define_function(_fluent_two_params(
+        "overlapsDayOfEncounter",
+        "Diagnosis", "ConditionProblemsHealthConcerns",
+        "EncounterList", "Encounter", True,
+    ))
+    context.define_function(_fluent_two_params(
+        "overlapsDayOfEncounter",
+        "Diagnosis", "ConditionProblemsHealthConcerns",
+        "TheEncounter", "Encounter", False,
+    ))
+    return context
+
+
+def test_fluent_receiver_miss_is_broken_by_the_arguments():
+    # A union of two US-QUALITY-CORE Condition profiles resolves to the base
+    # type `Condition`, which names NO declared receiver, so both overloads are
+    # equally uncalled-for. The by-name answer would be the LAST-DECLARED one
+    # ("TheEncounter" — a SINGLE Encounter); inlining that shape over a
+    # List<Encounter> argument turns the whole list into the iteration source,
+    # one row per element, which every strict connection rejects.
+    from fhir4ds.cql.parser.ast_nodes import Retrieve
+
+    context = _overlaps_family()
+    chosen = context.get_function(
+        "overlapsDayOfEncounter",
+        resource_type="Condition",
+        argument_nodes=[Retrieve(type="Encounter")],
+    )
+    assert chosen.parameters[1].name == "EncounterList"
+
+
+def test_fluent_receiver_miss_without_discriminating_arguments_keeps_last_declared(caplog):
+    context = _overlaps_family()
+    ov._WARNED.clear()
+    with caplog.at_level(logging.WARNING, logger="fhir4ds.cql.translator.overload"):
+        # No arguments to discriminate with: today's answer stands, and the
+        # warning now names the arguments as the reason nothing could decide.
+        chosen = context.get_function("overlapsDayOfEncounter", resource_type="Condition")
+    assert chosen.parameters[1].name == "TheEncounter"
+    assert "do not pick one either" in caplog.text
+
+
+def test_fluent_arguments_that_tie_do_not_pick_a_side():
+    # Identical declared signatures: the arguments cannot discriminate, so the
+    # tie must NOT be resolved by argument order (a changed answer on an
+    # ambiguous call would be a regression, not a fix).
+    from fhir4ds.cql.parser.ast_nodes import Retrieve
+
+    context = SQLTranslationContext()
+    context.define_function(_fluent_two_params(
+        "pick", "Diagnosis", "ConditionProblemsHealthConcerns",
+        "One", "Encounter", True,
+    ))
+    context.define_function(_fluent_two_params(
+        "pick", "Diagnosis", "ConditionProblemsHealthConcerns",
+        "Two", "Encounter", True,
+    ))
+    chosen = context.get_function(
+        "pick", resource_type="Condition", argument_nodes=[Retrieve(type="Encounter")]
+    )
+    assert chosen.parameters[1].name == "Two"

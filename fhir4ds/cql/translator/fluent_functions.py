@@ -363,6 +363,7 @@ class FluentFunctionTranslator:
         context: SQLTranslationContext,
         library_prefix: Optional[str] = None,
         resource_type: Optional[str] = None,
+        argument_asts: Optional[List[Any]] = None,
     ) -> SQLExpression:
         """
         Translate a fluent function call to SQL.
@@ -376,6 +377,10 @@ class FluentFunctionTranslator:
             args: Additional arguments to the function (excluding receiver).
             context: The translation context.
             library_prefix: Optional library prefix for qualified calls.
+            argument_asts: The call's argument ASTs (excluding the receiver),
+                when the caller has them. They break a tie between overloads
+                whose receivers are indistinguishable — see
+                ``SQLTranslationContext.get_function``.
             resource_type: The FHIR resource type (if known).
 
         Returns:
@@ -419,7 +424,11 @@ class FluentFunctionTranslator:
         if func_def is None or func_def.is_stub:
             # Stub entries are registry-only placeholders; fall through to CQL context lookup
             # Check for CQL-defined fluent function in context
-            cql_func = context.get_function(function_name, resource_type=resource_type)
+            cql_func = context.get_function(
+                function_name,
+                resource_type=resource_type,
+                argument_nodes=argument_asts,
+            )
 
             # Also check included libraries if not found directly
             found_lib_alias = None

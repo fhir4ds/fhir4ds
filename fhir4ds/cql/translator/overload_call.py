@@ -18,9 +18,13 @@ ambiguous call is not. Calls inside inlined library bodies typically have
 arguments of unknown type (a parameter placeholder, a nested navigation the
 model cannot type), and those keep today's declaration-order answer.
 
-Only non-fluent calls are resolved here. A fluent call (``X.f(y)``) has a
-receiver, which the fluent translator resolves from the receiver's resource
-type (:meth:`SQLTranslationContext.get_function`); it is untouched.
+Only non-fluent calls are resolved here by default. A fluent call (``X.f(y)``)
+has a receiver, which the fluent translator resolves from the receiver's
+resource type (:meth:`SQLTranslationContext.get_function`). ``fluent=True``
+covers the case that resolution cannot: a receiver whose static type names NO
+declared receiver (a base type where every overload declares a profile). The
+by-name fallback there is the LAST-DECLARED overload, so the arguments are
+asked instead — under the same conservative policy.
 """
 
 from __future__ import annotations
@@ -75,23 +79,36 @@ def _declared_overloads(
 
 
 def choose_call_overload(
-    context: "SQLTranslationContext", name: str, arguments: Sequence[Any]
+    context: "SQLTranslationContext",
+    name: str,
+    arguments: Sequence[Any],
+    *,
+    fluent: bool = False,
 ) -> Optional[ResolvedOverload]:
     """The one overload this call resolves to, or ``None`` to keep today's answer.
 
     ``arguments`` are the call's argument expressions, whose static types are
     read with :func:`argument_types.argument_types`.
+
+    ``fluent`` selects the fluent family (``X.f(y)``): the receiver is not part
+    of ``arguments``, so a candidate's parameter list is one longer than the
+    argument list and only the parameters AFTER the receiver are ranked. The
+    receiver's own type is not consulted — a caller that had a usable receiver
+    type would have resolved the call by it already, and a fluent family whose
+    receivers differ only ranks a tie here (so the answer stays ``None``).
     """
     overloads, library_name = _declared_overloads(context, name)
     if len(overloads) < 2:
         # Nothing to choose: the by-name lookup already is the only candidate.
         return None
+    _extra = 1 if fluent else 0
     candidates = [
         function
         for function in overloads
-        if not getattr(function, "is_fluent", False)
+        if bool(getattr(function, "is_fluent", False)) == fluent
         and getattr(function, "expression", None) is not None
-        and len(getattr(function, "parameters", None) or []) == len(arguments)
+        and len(getattr(function, "parameters", None) or [])
+        == len(arguments) + _extra
     ]
     if len(candidates) < 2:
         # Either one candidate is left (nothing to choose) or the call's arity
@@ -105,7 +122,7 @@ def choose_call_overload(
         # artefact of what this translator knows, not a property of the call.
         return None
 
-    declared = [declared_parameter_types(function) for function in candidates]
+    declared = [declared_parameter_types(function)[_extra:] for function in candidates]
     if any(
         declared_type is None
         for parameter_types in declared
