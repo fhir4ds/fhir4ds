@@ -19,7 +19,10 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))  # repo root
+# parents[4] is the repo root; parents[3] is the `fhir4ds` PACKAGE directory. Putting that
+# first on sys.path makes `import mcp` resolve to fhir4ds/mcp (not the MCP SDK) for every
+# test that runs later in the same pytest process.
+sys.path.insert(0, str(Path(__file__).resolve().parents[4]))  # repo root
 
 from fhir4ds.cql.parser import parse_cql
 from fhir4ds.cql.parser.ast_nodes import Definition

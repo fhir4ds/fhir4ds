@@ -50,9 +50,8 @@ jobs:
           python -m pip install --upgrade pip
           # jsonschema: the official ViewDefinition runner validates its report with it
           # serve: fhir4ds/operations/tests exercises it (the public API surface contract
-          # freezes fhir4ds.serve). mcp is deliberately NOT installed here: its tests skip
-          # without it, and see fhir4ds/operations/AGENTS.md for why installing it fails.
-          python -m pip install -e ".[dev,measures,serve]" jsonschema
+          # freezes fhir4ds.serve). mcp: the MCP capability legs only run with it installed.
+          python -m pip install -e ".[dev,measures,serve,mcp]" jsonschema
 
       - name: Ruff cleaned packages
         run: >

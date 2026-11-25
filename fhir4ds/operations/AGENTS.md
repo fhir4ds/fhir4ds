@@ -220,15 +220,19 @@ missing" skips into failures (CI). A lane worktree has no `node_modules`: point
   the real engine, and it is the ONLY flag that governs the Tier B / Tier C fixtures: the
   python job has no `node_modules` and no chromium, so those tests skip there. The first WP-4
   CI run had the fixtures fail on either flag and 19 Tier B/C tests errored in the python job.
-- **The `mcp` extra is deliberately NOT installed in CI.** Its four tests skip without it.
-  Installing it (pip resolves `mcp` 1.30.0 for `mcp>=1.2,<2`) made
-  `fhir4ds/mcp/server.py::_require_mcp` fail with
-  `ModuleNotFoundError: No module named 'mcp.server.fastmcp'; 'mcp.server' is not a package`
-  (5 tests failed). That does NOT reproduce in a local venv with the same install set, where
-  `import mcp.server.fastmcp` works on 1.30.0, so something earlier in the CI pytest command
-  (which runs `fhir4ds/cli/tests`, `fhir4ds/dqm`, `fhir4ds/sources`, `fhir4ds/cql/tests/unit`
-  and `fhir4ds/viewdef` before `fhir4ds/operations/tests`) breaks the import. Root cause open;
-  until it is found those MCP tests never run in CI.
+- **CI installs the `mcp` extra, so the MCP tests RUN.** The first two WP-4 CI runs failed
+  them with `ModuleNotFoundError: No module named 'mcp.server.fastmcp'; 'mcp.server' is not a
+  package` (extra installed) or an `ImportError` for the missing extra (not installed). Root
+  cause, from the CI log: `fhir4ds/dqm/tests/unit/test_iter7_qa_regression.py` put
+  `Path(__file__).parents[3]` first on `sys.path`. That is the `fhir4ds` PACKAGE directory, not
+  the repo root, so for every test that ran later in the same process `import mcp` resolved to
+  `fhir4ds/mcp`, whose `server` is a module and not a package. It now uses `parents[4]`. The
+  same pass fixed `test_evol_v0026_d9_explorer.py`, which put `~/src/fhir4ds` (a developer's
+  main checkout) first on `sys.path`, so in any worktree every later import came from another
+  tree. RULE: a test never puts the package directory or a home-directory checkout on
+  `sys.path`; from `fhir4ds/<pkg>/tests/<dir>/` the repo root is `parents[4]`. Know the symptom
+  class: `pytest.importorskip("mcp")` PASSES on the shadow and the failure appears inside the
+  code under test.
 - **Chromium and the memory cap.** `scripts/capped.sh` sets `RLIMIT_AS`; chromium's V8 sandbox
   reservation then fails with SIGTRAP. The engine detects a capped address space and reports an
   environment input (run Tier B uncapped). The hard limit cannot be lifted for a child.
