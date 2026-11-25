@@ -52,9 +52,9 @@ jobs:
   # Tier B real-browser audit with the whole CQL corpus on real duckdb-wasm. The per-PR
   # gate (ci.yml, cleanroom job) runs the curated families only; this scheduled job adds B5.
   wasm-parity:
-    name: WASM parity - whole CQL corpus on real duckdb-wasm
+    name: WASM parity - whole CQL corpus + QI-Core measures on real duckdb-wasm
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -73,7 +73,7 @@ jobs:
       - name: Install package
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
+          python -m pip install -e ".[dev,measures]"
 
       - name: Install web deps and chromium
         working-directory: web/cql-cleanroom
@@ -87,6 +87,18 @@ jobs:
           FHIR4DS_REQUIRE_WASM_REAL: "1"
           FHIR4DS_WASM_FULL_CORPUS: "1"
         run: python -m pytest fhir4ds/operations/tests/test_wasm_parity_tier_b.py -q -p no:cacheprovider
+
+      # Tier C: every QI-Core 2025 measure's real population SQL on real duckdb-wasm. The whole
+      # suite is too slow for a PR; the PR job (ci.yml) runs the curated set.
+      - name: Checkout DQM conformance fixtures (Tier C)
+        run: git submodule update --init tests/data/ecqm-content-qicore-2025
+
+      - name: Tier C (whole QI-Core 2025 suite on the real engine)
+        env:
+          FHIR4DS_REQUIRE_WASM_PARITY: "1"
+          FHIR4DS_REQUIRE_WASM_REAL: "1"
+          FHIR4DS_WASM_TIER_C_SUITE: "qi-core-2025"
+        run: python -m pytest fhir4ds/operations/tests/test_wasm_parity_tier_c.py -q -p no:cacheprovider
 
       - name: Upload WASM parity reports
         if: always()

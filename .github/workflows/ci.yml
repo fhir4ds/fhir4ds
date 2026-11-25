@@ -115,7 +115,7 @@ jobs:
           fhir4ds/viewdef
 
   cleanroom:
-    name: CQL Cleanroom (cell parity + units + WASM parity Tier B)
+    name: CQL Cleanroom (cell parity + units + WASM parity Tier B + C)
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -147,10 +147,10 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install package (WASM parity Tier B)
+      - name: Install package (WASM parity Tier B + C)
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
+          python -m pip install -e ".[dev,measures]"
 
       - name: Install chromium (WASM parity Tier B)
         working-directory: web/cql-cleanroom
@@ -161,3 +161,14 @@ jobs:
           FHIR4DS_REQUIRE_WASM_PARITY: "1"
           FHIR4DS_REQUIRE_WASM_REAL: "1"
         run: python -m pytest fhir4ds/operations/tests/test_wasm_parity_tier_b.py -q -p no:cacheprovider
+
+      # WASM parity Tier C: real measure population SQL on real duckdb-wasm, curated measures
+      # (the whole suite runs in the scheduled job, conformance.yml).
+      - name: Checkout DQM conformance fixtures (WASM parity Tier C)
+        run: git submodule update --init tests/data/ecqm-content-qicore-2025
+
+      - name: WASM parity Tier C (real measures on real duckdb-wasm)
+        env:
+          FHIR4DS_REQUIRE_WASM_PARITY: "1"
+          FHIR4DS_REQUIRE_WASM_REAL: "1"
+        run: python -m pytest fhir4ds/operations/tests/test_wasm_parity_tier_c.py -q -p no:cacheprovider

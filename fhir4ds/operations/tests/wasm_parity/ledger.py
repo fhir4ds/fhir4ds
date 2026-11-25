@@ -30,7 +30,7 @@ LEDGER_PATH = Path(__file__).with_name("known_gaps.json")
 
 DEFAULT_EXPIRY_DAYS = 90
 SHORT_EXPIRY_DAYS = 30
-SUITES = ("cql", "fhirpath", "viewdef", "omop", "real")
+SUITES = ("cql", "fhirpath", "viewdef", "omop", "real", "qi-core-2025", "us-core-2025")
 # A case-level registration names the surface it was observed on (None = every surface).
 # The simulator (x86 bundles + reference macros) and the real engine (duckdb-wasm + the
 # shipped wasm bundles) fail different cases: a real-only gap is GREEN on the simulator.

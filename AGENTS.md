@@ -6770,6 +6770,9 @@ gaps visible and expires every excuse; the infrastructure comes before fixing th
 - **Tier B** boots real duckdb-wasm with the shipped wasm bundles in headless chromium. It is
   the only gate that sees the engine: binder, Arrow transport, bundle staleness. Both tiers
   run per PR; Step 0 and Tier A must stay green even if Tier B is demoted to the scheduled job.
+- **Tier C** runs real DQM measure population SQL on real duckdb-wasm — a curated set per
+  PR, the whole QI-Core suite on the schedule. It is the referee for C++ *behaviour* fixes,
+  which add no function name and so are invisible to the staleness check.
 - **Every gap is registered or fixed, never ignored** (`wasm_parity/known_gaps.json`): a
   registration carries a reason, an owner and an expiry (90 days; 30 for principle kinds and
   in-flight desktop defects); a registration whose gap no longer reproduces fails the gate;
@@ -6794,14 +6797,17 @@ rebuild, or the browser
 silently runs an older engine than desktop. The script's first real run failed four times
 before it built; the causes are recorded in `fhir4ds/operations/AGENTS.md`.
 
-**Tier C (real measure SQL on real duckdb-wasm) is not a gate yet; a one-measure spike
-(2026-11-24) says it should be.** CMS159's full population SQL binds and runs on real
-duckdb-wasm, so the bind failure that motivated FHIR4-15/16 does not reproduce. But the
-measure reports an EMPTY population there, silently: `in_valueset` reads an in-process cache
-that only `cql_valueset_cache_add` fills, the Python loader does that on desktop, and nothing
-does it in a browser. With the cache filled, 66 of 67 patients are byte-identical to desktop.
-Note that DuckDB never executes a scalar call whose result nothing reads — a cache load in an
-unread projection is a silent no-op. Details: `fhir4ds/operations/AGENTS.md`.
+**Tier C (real measure SQL on real duckdb-wasm) is a gate since 2026-11-24.** The CMS159 bind
+failure that motivated FHIR4-15/16 does not reproduce — the full population SQL binds and runs
+on real duckdb-wasm. The first suite-wide run (QI-Core 2025, 45 measures) found what no
+expression-level gate can: CMS75 gives a wrong answer in every browser (a native
+`intervalOverlaps` NULL where the Python UDF says TRUE; FHIR4-47), CMS56 and CMS832 crash on
+multi-row scalar subqueries that only the desktop DQM harness tolerates (FHIR4-48), and
+`in_valueset` reads an in-process ValueSet cache that three of the four web apps never fill, so
+those apps report EMPTY populations with no error (FHIR4-49). Note that DuckDB never executes a
+scalar call whose result nothing reads — a cache load in an unread projection is a silent
+no-op. A curated set of measures runs per PR in the cleanroom CI job; the whole suite runs on
+the schedule. Details: `fhir4ds/operations/AGENTS.md`.
 
 **Rules for anyone touching this surface**
 
@@ -6811,7 +6817,8 @@ unread projection is a silent no-op. Details: `fhir4ds/operations/AGENTS.md`.
   (`scripts/build_wasm_extensions.py --build --extension <name>`), or the browser silently
   runs last month's engine. Tier B turns that into an exact list instead of a suspicion, and
   the ledger forces the now-stale registrations to be deleted.
-- Tier B cannot run under `scripts/capped.sh` (chromium cannot start with a capped address
-  space); it is light and runs uncapped. Everything else stays capped.
+- Tier B and Tier C cannot run under `scripts/capped.sh` (chromium cannot start with a capped
+  address space); they are light and run uncapped, and Tier C caps each desktop translation
+  itself. Everything else stays capped.
 - Values cross to the browser as VARCHAR: under the apps' `castBigIntToDouble` flag Arrow
   rounds BIGINT beyond 2^53 and delivers DECIMAL/HUGEINT unscaled.

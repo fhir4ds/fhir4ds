@@ -245,40 +245,57 @@ missing" skips into failures (CI). A lane worktree has no `node_modules`: point
 - Suite evaluators share one connection per surface: each owns its `resources` table shape
   (`CREATE OR REPLACE`). `conformance/scripts/*.py` import their siblings as top-level modules.
 
-### Tier C spike — a real measure's population SQL on real duckdb-wasm (2026-11-24, not a gate yet)
+### Tier C — real measure population SQL on real duckdb-wasm (2026-11-24, now a gate)
 
-Method: generate the measure's population SQL with the DQM machinery on desktop, export the
-relations it names (`resources`, `valueset_codes`) as plain tables, then in ONE real-engine
-boot create them, insert the rows, and run the identical SQL. Compare per patient as text.
-Measure CMS159 (QI-Core 2025: 100 KB SQL, 67 patients, 429 resources, 98k ValueSet codes;
-US-Core 2025 variant: 180 KB, 270k codes).
+`wasm_parity/tier_c.py` + `test_wasm_parity_tier_c.py`. Per measure: translate and run it on
+desktop through the DQM conformance harness (in a CAPPED child process — one process per
+measure bounds the loader's memory), export every table the SQL reads plus the ValueSet codes,
+and in ONE real-engine job create them, insert the rows, fill the native ValueSet cache the way
+the loader and the cleanroom app do, and run the IDENTICAL SQL. Compare per patient and column
+as text: a boolean column that differs, a different patient set or a different value is a gap;
+another list order or another instant spelling (`2025-10-01 08:00:00+00:00` vs
+`2025-10-01T08:00:00.000Z`) is not. A failing measure must be registered in `known_gaps.json`
+as a case-kind entry with `suite` (`qi-core-2025`, `us-core-2025`) and `surface: "real"`; a
+fixed measure makes its registration STALE and the gate refuses until it is deleted.
 
-- **The CMS159 bind failure does not reproduce.** The full population SQL binds and executes
-  on real duckdb-wasm with the shipped bundles and the reference macros (67 rows, ~5–9 s
-  including the data load). The lateral-dedup portability fix closed that class for this
-  measure.
-- **NEW, silent, and the worst finding of the campaign: ValueSet membership is never populated
-  in a browser engine.** Cold, `in_valueset(resource, path, url)` returns NULL for every row,
-  so every valueset-filtered retrieve is empty and CMS159 reports an empty population:
-  Initial Population 0 (desktop 60 of 67), Numerator 0 (desktop 36). No error is raised. The
-  native function reads an in-process cache, not a table: on desktop the Python loader fills it
-  through `cql_valueset_cache_add` (81,104 entries); nothing does that in a browser. With the
-  cache filled from `valueset_codes`, **66 of 67 patients are byte-identical to desktop and
-  every population column matches**; the 67th differs only in the order of an evidence list
-  (row order across engines is unspecified).
-- **DuckDB prunes an unused scalar projection.** A "load the cache" statement such as
-  `SELECT count(*) FROM (SELECT cql_valueset_cache_add(...) FROM valueset_codes)` NEVER runs
-  the function, because nothing reads its result. The call's result must be consumed (e.g.
-  `sum(CASE WHEN cql_valueset_cache_add(...) IS NOT NULL THEN 1 ELSE 0 END)`). Any app code
-  that loads ValueSets through an unread projection silently loads nothing.
-- `cql_valueset_cache_size()` reports 0 on the shipped wasm bundle even after a successful
-  fill (it works on desktop), so it cannot be used to verify a browser-side load.
-- Cost: INSERT literals carried 19 MB (98k codes) in ~5 s and 51 MB (270k codes) in ~9 s. Fine
-  for a handful of measures; a whole suite needs a bulk path (register a file buffer and
-  `read_json`).
-- Not checked: whether the web apps' dataset loading reaches `cql_valueset_cache_add` at all
-  (if it does through an unread projection it is a silent no-op). Not run: a negative control
-  with the pre-fix translator.
+- **Per PR** (cleanroom job in `ci.yml`): the curated set `tier_c.CURATED` — small fast measures,
+  CMS159 (the FHIR4-15 repro) and the three measures that carry a known real-only defect, so a
+  fix flips them and the ledger flags the registration.
+- **Scheduled** (`conformance.yml`, `wasm-parity` job): `FHIR4DS_WASM_TIER_C_SUITE=qi-core-2025`
+  runs all 47 measures (~210 s on the real engine here, plus one desktop translation each).
+- Tier C is the referee for defects the name-level gates cannot see: a C++ BEHAVIOUR fix adds no
+  function name, so Tier B's staleness check stays green while the browser still runs the old
+  logic until the wasm bundles are rebuilt.
+
+What the first suite-wide run found (QI-Core 2025, dev `a9845673e87` + rebuilt bundles; 45
+measures ran, 24 byte-identical, 19 equal apart from list order / instant spelling):
+
+- **CMS75 is WRONG in every browser (FHIR4-47).** Patient `f076026e-…` is in the Numerator on
+  desktop and not on real duckdb-wasm (2 vs 1). A zero-width prevalence interval with a `Z`
+  suffix sits exactly on the Measurement Period start; the Python `intervalOverlaps` says TRUE,
+  the native one (x86 AND wasm) says NULL for a Z-suffixed bound against an offset-less peer.
+  Browsers have no Python, so they are wrong.
+- **CMS56 and CMS832 CRASH in every browser (FHIR4-48).** `More than one row returned by a
+  subquery used as an expression`: the generated SQL has scalar subqueries that return several
+  rows. The desktop DQM harness only survives because
+  `fhir4ds/dqm/tests/conformance/database.py` sets
+  `scalar_subquery_error_on_multiple_rows=false`; no web app does. Decision (fhir4ds lane):
+  fix the lowering, never set the flag.
+- **ValueSet membership is EMPTY in three of the four apps (FHIR4-49).** Cold,
+  `in_valueset(resource, path, url)` returns NULL for every row and every valueset-filtered
+  retrieve is empty, with no error: the native function reads an in-process cache that only
+  `cql_valueset_cache_add` fills. The desktop loader fills it; `web/cql-cleanroom` fills it
+  (`src/lib/valuesetBridge.ts`); wasm-demo, cql-clinic and viewing-room never do. With the cache
+  filled CMS159 gives 66 of 67 patients byte-identical to desktop (the 67th differs only in the
+  order of an evidence list).
+- **DuckDB prunes an unused scalar projection.** `SELECT count(*) FROM (SELECT
+  cql_valueset_cache_add(...) FROM valueset_codes)` NEVER runs the function, because nothing
+  reads its result. Any app code that loads ValueSets through an unread projection silently
+  loads nothing.
+- The CMS159 bind failure that motivated FHIR4-15/16 does not reproduce: the full population
+  SQL binds and runs on real duckdb-wasm.
+- Cost: INSERT literals carry ~98k codes in a few seconds; fine for a suite run. A bulk path
+  (register a file buffer and `read_json`) only matters if the payloads grow.
 
 ### Rebuilding the wasm bundles — what the first real run taught (2026-11-24)
 

@@ -329,6 +329,50 @@
       "owner": "fhir4ds lane",
       "since": "2026-11-24",
       "expires": "2026-12-24"
+    },
+    {
+      "id": "tierc-cms75-degenerate-interval-overlap",
+      "kind": "PARITY_GAP",
+      "target": "CMS75",
+      "reason": "Tier C: real duckdb-wasm (and the x86 native engine) evaluate intervalOverlaps as NULL for a zero-width, Z-suffixed prevalence interval that sits on the Measurement Period start, where the Python UDF says TRUE; patient f076026e-a9df-4c3c-acc9-8c3af6845543 drops out of the Numerator (desktop 2, browser 1). AMUX-165's assumed evaluation-request offset is applied in the native cqlTimezoneOffset but not in the interval boundary comparison. Removes when the FHIR4-47 C++ fix lands AND the wasm bundles are rebuilt with scripts/build_wasm_extensions.py (the name-level staleness check cannot see a behaviour-only fix).",
+      "owner": "fhir4ds lane (FHIR4-47)",
+      "since": "2026-11-24",
+      "expires": "2026-12-24",
+      "suite": "qi-core-2025",
+      "surface": "real"
+    },
+    {
+      "id": "tierc-cms56-multi-row-scalar-subquery",
+      "kind": "PARITY_GAP",
+      "target": "CMS56",
+      "reason": "Tier C: the generated SQL evaluates scalar subqueries that return several rows. DuckDB's default rule raises 'More than one row returned by a subquery used as an expression'; only the desktop DQM harness switches it off (SET scalar_subquery_error_on_multiple_rows=false) and no web app does, so the measure crashes in every browser. Removes when the FHIR4-48 lowering is single-row (decision recorded: fix the lowering, do not set the flag).",
+      "owner": "fhir4ds lane (FHIR4-48)",
+      "since": "2026-11-24",
+      "expires": "2026-12-24",
+      "suite": "qi-core-2025",
+      "surface": "real"
+    },
+    {
+      "id": "tierc-cms832-multi-row-scalar-subquery",
+      "kind": "PARITY_GAP",
+      "target": "CMS832",
+      "reason": "Tier C: same defect as tierc-cms56-multi-row-scalar-subquery (multi-row scalar subqueries in the generated SQL; eGFR and creatinine column CTEs), so the measure crashes in every browser. Removes with the same FHIR4-48 lowering fix.",
+      "owner": "fhir4ds lane (FHIR4-48)",
+      "since": "2026-11-24",
+      "expires": "2026-12-24",
+      "suite": "qi-core-2025",
+      "surface": "real"
+    },
+    {
+      "id": "tierc-cms986-tied-encounter-pick",
+      "kind": "PARITY_GAP",
+      "target": "CMS986",
+      "reason": "Tier C: every population boolean equals desktop, but two 'which encounter' columns (Encounter with Malnutrition Risk Screening or with Dietitian Referral; ... At Risk or with Dietitian Referral) name a DIFFERENT single encounter for 7 patients: the SQL picks one row among ties and row order is unspecified across engines, so desktop and duckdb-wasm pick different members of the same qualifying set. Removes when the lowering orders the pick deterministically.",
+      "owner": "fhir4ds lane",
+      "since": "2026-11-24",
+      "expires": "2027-02-22",
+      "suite": "qi-core-2025",
+      "surface": "real"
     }
   ]
 }
