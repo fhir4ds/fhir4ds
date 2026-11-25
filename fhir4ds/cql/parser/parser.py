@@ -1168,9 +1168,6 @@ class CQLParser:
             elif self.match_and_advance(TokenType.CONTAINS):
                 right = self.parse_type_expression()
                 left = BinaryExpression(operator="contains", left=left, right=right)
-            elif self.match_and_advance(TokenType.PROPER_CONTAINS):
-                right = self.parse_type_expression()
-                left = BinaryExpression(operator="properly contains", left=left, right=right)
             elif self.match_and_advance(TokenType.PROPER_IN):
                 right = self.parse_type_expression()
                 left = BinaryExpression(operator="properly included in", left=left, right=right)
@@ -1404,9 +1401,6 @@ class CQLParser:
             elif self.match_and_advance(TokenType.PROPER_INCLUDES):
                 right = self.parse_type_expression()
                 left = BinaryExpression(operator="properly includes", left=left, right=right)
-            elif self.match_and_advance(TokenType.PROPER_CONTAINS):
-                right = self.parse_type_expression()
-                left = BinaryExpression(operator="properly contains", left=left, right=right)
             elif self.match_and_advance(TokenType.PROPER_IN):
                 right = self.parse_type_expression()
                 left = BinaryExpression(operator="properly included in", left=left, right=right)
@@ -1422,15 +1416,34 @@ class CQLParser:
                 if self.match_and_advance(TokenType.INCLUDES):
                     right = self.parse_type_expression()
                     left = BinaryExpression(operator="properly includes", left=left, right=right)
-                elif self.match_and_advance(TokenType.CONTAINS):
-                    right = self.parse_type_expression()
-                    left = BinaryExpression(operator="properly contains", left=left, right=right)
+                elif self.match(TokenType.CONTAINS) or self.match(TokenType.IN):
+                    # FHIR4-43: `properly contains` / `properly in` are NOT
+                    # CQL. The CQL grammar (cql.hl7.org 1.5 `expression` /
+                    # `intervalOperatorPhrase`, cql.hl7.org 2.0, and the
+                    # reference implementation's grammar/cql.g4) lets
+                    # `properly` qualify only `between`, `includes`,
+                    # `during`/`included in`, and `within ... of`; Appendix B
+                    # §9.22/§9.23 spell the point reads as
+                    #   properly includes (left Interval<T>, right T)
+                    #   properly included in (left T, right Interval<T>)
+                    # The parser used to accept both rejected spellings and
+                    # emit operator strings with no translator dispatch, so
+                    # the raw text reached DuckDB (`... properly contains 5`)
+                    # and raised a ParserException at execution. Reject at
+                    # the grammar boundary instead, naming the valid forms.
+                    _bad = self.current()
+                    raise ParseError(
+                        f"'{_bad.value}' cannot be used with 'properly': CQL "
+                        f"defines no 'properly {_bad.value}' operator. The "
+                        f"point-in-interval reads are spelled 'A properly "
+                        f"includes B' (interval on the left) or 'B properly "
+                        f"included in A' (interval on the right, or 'properly "
+                        f"during').",
+                        position=(_bad.line, _bad.column),
+                    )
                 elif self.match_and_advance(TokenType.INCLUDED_IN):
                     right = self.parse_type_expression()
                     left = BinaryExpression(operator="properly included in", left=left, right=right)
-                elif self.match_and_advance(TokenType.IN):
-                    right = self.parse_type_expression()
-                    left = BinaryExpression(operator="properly in", left=left, right=right)
                 elif self.match_and_advance(TokenType.DURING):
                     # CQL §9.17: "properly during" is a synonym for "properly included in"
                     right = self.parse_type_expression()

@@ -10,7 +10,7 @@ from fhir4ds.cql.parser import parse_expression
 from fhir4ds.cql.parser.ast_nodes import BinaryExpression, FunctionRef, UnaryExpression
 from fhir4ds.cql.translator import translate_cql
 
-from .wasm_runtime_helpers import no_python_connection
+from .wasm_runtime_helpers import assert_no_python_result, no_python_connection
 
 
 def _python_only_connection() -> duckdb.DuckDBPyConnection:
@@ -64,7 +64,12 @@ def test_cql_interval_part3_expressions_parse_and_translate() -> None:
     assert "cqlSameOrBeforeP" in str(translated["SameBefore"])
     assert "interval_size" in str(translated["SizeCheck"])
     assert "intervalStart" in str(translated["StartCheck"])
-    assert "intervalStart" in str(translated["StartsPrecision"])
+    # FHIR4-41: the precision-qualified form routes Start/End through the
+    # peer-aware helpers so an all-null operand can infer the shared Interval<T>
+    # point type (FHIR4-38 covered the unqualified form).
+    assert "intervalStartWithPeer" in str(translated["StartsPrecision"])
+    assert "intervalEndWithPeer" in str(translated["StartsPrecision"])
+    assert "cqlSameAsP" in str(translated["StartsPrecision"])
     assert "intervalUnion" in str(translated["UnionCheck"])
     assert "intervalWidth" in str(translated["WidthCheck"])
     assert "intervalStart" in str(translated["DecimalOpenStart"])
@@ -155,9 +160,10 @@ def test_cql_interval_part3_translated_sql_matches_cpp_registration() -> None:
                 sql = f"SELECT {expr.to_sql()}"
                 py_result = py.execute(sql).fetchone()
                 cpp_result = cpp.execute(sql).fetchone()
-                no_py_result = no_py.execute(sql).fetchone()
                 assert cpp_result == py_result, name
-                assert no_py_result == py_result, name
+                # FHIR4-41 peer-aware Start/End are not in the bundled C++ yet;
+                # the helper pins that rebuild window (see wasm_runtime_helpers).
+                assert_no_python_result(no_py, sql, py_result, label=name)
                 if name in expected:
                     assert py_result == expected[name], name
     finally:
@@ -1038,17 +1044,14 @@ define DecimalStartsTrue: Interval[4.0, 10.0] starts Interval[4.0, 15.0]
 define QuantityEndsTrue: Interval[5.0 'g', 10.0 'g'] ends Interval[1.0 'g', 10.0 'g']
 define DateTimeStartsTrue: Interval[DateTime(2012, 1, 5), DateTime(2012, 1, 25)] starts Interval[DateTime(2012, 1, 5), DateTime(2012, 1, 27)]
 define TimeEndsFalse: Interval[@T05:59:59.999, @T10:59:59.999] ends Interval[@T01:59:59.999, @T11:59:59.999]
-// Precision-qualified variants. NOT part of the FHIR4-38 fix: the precision
-// form lowers to cqlSameAsP(cqlSameOrBeforeP)(intervalStart(...),
-// intervalStart(...), precision), and intervalStart cannot infer a point type
-// from a single all-null interval, so the closed-null bound is unknown at that
-// seam (same behaviour for a NON-null Integer interval, e.g.
-// Interval[1, 10] starts day of Interval[1, 15] -> null, because the precision
-// qualifier is only defined for Date/DateTime/Time point types). Resolving it
-// needs a peer-aware Start/End arity that the bundled C++ surface does not
-// implement; pinned here so the gap is visible rather than silent.
-define MaxStartsPrecisionGapNull: Interval[null, null] starts day of Interval[1, 10]
-define MaxEndsPrecisionGapNull: Interval[1, 10] ends day of Interval[null, null]
+// Precision-qualified variants. FHIR4-38 pinned these as `*PrecisionGapNull`
+// because `intervalStart`/`intervalEnd` could not infer a point type from a
+// single all-null interval; FHIR4-41 closes that by supplying the PEER operand
+// (Interval<T> is shared) and by comparing exactly for non-temporal point types
+// (§19.30/§19.13 make the precision qualifier conditional on Date/DateTime/
+// Time — see test_cql_interval_part3_precision_starts_ends_peer_point_type_fhir4_41).
+define MaxStartsPrecisionGapFalse: Interval[null, null] starts day of Interval[1, 10]
+define MaxEndsPrecisionGapFalse: Interval[1, 10] ends day of Interval[null, null]
 """
 
 
@@ -1091,9 +1094,12 @@ def test_cql_interval_part3_closed_null_bound_starts_ends_fhir4_38() -> None:
         "QuantityEndsTrue": True,
         "DateTimeStartsTrue": True,
         "TimeEndsFalse": False,
-        # Precision-qualified gap (see the library comment).
-        "MaxStartsPrecisionGapNull": None,
-        "MaxEndsPrecisionGapNull": None,
+        # Precision-qualified, non-temporal point type: FHIR4-41 adjudicates
+        # the qualifier as a no-op for Integer (reference StartsEvaluator /
+        # EndsEvaluator compare exactly outside the Date/DateTime/Time branch),
+        # so these are DETERMINED, not null.
+        "MaxStartsPrecisionGapFalse": False,
+        "MaxEndsPrecisionGapFalse": False,
     }
 
     # REBUILD REQUIRED (no-Python / browser surface): the bundled
@@ -1166,6 +1172,331 @@ def test_cql_interval_part3_closed_null_bound_direct_udf_surface() -> None:
             cpp_result = cpp.execute(sql, args).fetchone()
             assert cpp_result == py_result, f"{func}{tuple(args)}: cpp/py mismatch"
             assert py_result == (want,), f"{func}{tuple(args)}: got {py_result}, expected {(want,)}"
+    finally:
+        py.close()
+        cpp.close()
+
+
+# ---------------------------------------------------------------------------
+# FHIR4-43 — `properly contains` is not CQL and must not reach SQL
+# ---------------------------------------------------------------------------
+
+#: Every behaviourally-meaningful shape of the rejected spelling: all seven
+#: point types, the list form, the interval-interval form, and the
+#: parenthesised/negated wrappers that keep the inner binary expression.
+_FHIR4_43_REJECTED_SPELLINGS = [
+    "Interval[1, 10] properly contains 5",
+    "Interval[1, 10] properly contains 10",
+    "Interval[1, 1] properly contains 1",
+    "Interval(1, 10] properly contains 2",
+    "Interval[1.0, 10.0] properly contains 5.5",
+    "Interval[@2024-01-01, @2024-12-31] properly contains @2024-06-15",
+    "Interval[@2024-01-01T00:00:00, @2024-06-01T00:00:00] properly contains @2024-03-01T00:00:00",
+    "Interval[@T08:00:00, @T18:00:00] properly contains @T12:00:00",
+    "Interval[1 'g', 10 'g'] properly contains 5 'g'",
+    "{'a', 'b', 'c'} properly contains 'b'",
+    "Interval[1, 10] properly contains Interval[2, 3]",
+    "(Interval[1, 10]) properly contains 5",
+    "not (Interval[1, 10] properly contains 5)",
+    # Same defect class, one line away in the old parser: `properly` never
+    # qualifies `in` in the CQL grammar either.
+    "5 properly in Interval[1, 10]",
+]
+
+
+def test_cql_properly_contains_rejected_at_parse_fhir4_43() -> None:
+    """FHIR4-43: `properly contains` / `properly in` are not CQL operators.
+
+    The CQL grammar lets ``properly`` qualify only ``between``, ``includes``,
+    ``during`` / ``included in`` and ``within ... of`` — verified against
+    https://cql.hl7.org/2019May/grammar.html (1.5.3 ``expression`` /
+    ``intervalOperatorPhrase``), https://cql.hl7.org/grammar.html (2.0), and
+    the reference implementation's ``grammar/cql.g4``.  Appendix B has no
+    ``properly contains`` entry in 1.5.3 or 2.0; the point-in-interval reads
+    are spelled ``properly includes (left Interval<T>, right T)`` (§9.22) and
+    ``properly included in (left T, right Interval<T>)`` (§9.23).
+
+    Before the fix the lexer pre-tokenized ``properly contains`` into a
+    dedicated token, the parser accepted it, and the translator had no
+    dispatch for the resulting operator string — so the raw text
+    ``... properly contains 5`` was emitted into the generated SQL and DuckDB
+    raised a ``ParserException`` at execution for every point type.
+    """
+    import pytest  # local import to match this module's convention
+
+    from fhir4ds.cql.errors import ParseError
+
+    for expression in _FHIR4_43_REJECTED_SPELLINGS:
+        with pytest.raises(ParseError) as excinfo:
+            parse_expression(expression)
+        message = str(excinfo.value)
+        # The error must name the offending spelling AND point at the valid
+        # CQL reads, so an author can fix it without consulting the spec.
+        assert "cannot be used with 'properly'" in message, message
+        assert "properly includes" in message, message
+        assert "properly included in" in message, message
+
+
+def test_cql_properly_contains_never_reaches_generated_sql_fhir4_43() -> None:
+    """FHIR4-43: translation must fail loudly, never emit the raw operator text.
+
+    Guards the CQL-19 doctrine ("a parser-emitted operator string with no
+    translator dispatch falls through to SQL pass-through and produces
+    Binder/Parser exceptions at execution") for this spelling: the failure
+    has to happen at parse/translate time with a typed error, and no
+    generated SQL may ever contain ``properly contains``.
+    """
+    import pytest  # local import to match this module's convention
+
+    from fhir4ds.cql.errors import ParseError
+
+    library = (
+        "library ProperlyContains version '1.0.0'\n"
+        "using FHIR version '4.0.1'\n"
+        "context Patient\n"
+        "define Ctl: Interval[1, 10] properly includes 5\n"
+        "define Bad: Interval[1, 10] properly contains 5\n"
+    )
+    with pytest.raises(ParseError) as excinfo:
+        translate_cql(library)
+    assert "properly contains" in str(excinfo.value)
+
+    # Control: without the rejected define the same library translates, and
+    # the valid spelling lowers through the interval UDF family.
+    ok_library = library.replace("define Bad: Interval[1, 10] properly contains 5\n", "")
+    translated = translate_cql(ok_library)
+    emitted = translated["Ctl"].to_sql()
+    assert "properly contains" not in emitted, emitted
+    assert "intervalProperlyContains" in emitted, emitted
+
+
+def test_cql_properly_includes_point_family_translates_and_executes_fhir4_43() -> None:
+    """FHIR4-43 control: the supported spellings still cover every point type.
+
+    The rejected keyword is the *only* gap in this family: ``properly
+    includes`` (interval left) and ``properly included in`` (interval right,
+    plus the ``properly during`` synonym) lower to ``intervalProperlyContains``
+    and ``intervalProperlyIncludes`` and execute correctly across
+    Integer / Decimal / Date / DateTime / Time / Quantity / String points and
+    the interval-interval overload.
+    """
+    library = """library ProperlyPointFamily version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define IntPoint: Interval[1, 10] properly includes 5
+define IntEndPoint: Interval[1, 10] properly includes 10
+define IntUnit: Interval[1, 1] properly includes 1
+define IntOpenLow: Interval(1, 10] properly includes 2
+define DecimalPoint: Interval[1.0, 10.0] properly includes 5.5
+define DatePoint: Interval[@2024-01-01, @2024-12-31] properly includes @2024-06-15
+define DateTimePoint: Interval[@2024-01-01T00:00:00, @2024-06-01T00:00:00] properly includes @2024-03-01T00:00:00
+define TimePoint: Interval[@T08:00:00, @T18:00:00] properly includes @T12:00:00
+define QuantityPoint: Interval[1 'g', 10 'g'] properly includes 5 'g'
+define IntervalOverload: Interval[1, 10] properly includes Interval[2, 3]
+define MirrorPoint: 5 properly included in Interval[1, 10]
+define MirrorDuring: Interval[2, 3] properly during Interval[1, 10]
+"""
+    expected = {
+        "IntPoint": True,
+        "IntEndPoint": False,  # equal to the closed high bound
+        "IntUnit": False,  # unit interval containing only the point
+        "IntOpenLow": True,  # effective start of Interval(1, 10] is 2
+        "DecimalPoint": True,
+        "DatePoint": True,
+        "DateTimePoint": True,
+        "TimePoint": True,
+        "QuantityPoint": True,
+        "IntervalOverload": True,
+        "MirrorPoint": True,
+        "MirrorDuring": True,
+    }
+
+    translated = translate_cql(library)
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, want in expected.items():
+            sql = translated[name].to_sql()
+            assert "properly" not in sql, f"{name}: raw operator text leaked: {sql}"
+            if name == "IntervalOverload":
+                assert "intervalProperlyIncludes" in sql, f"{name}: {sql}"
+            elif name == "MirrorDuring":
+                # `properly during` is the §9.23 synonym of `properly included in`.
+                assert "intervalProperlyIncludedIn" in sql, f"{name}: {sql}"
+            else:
+                assert "intervalProperlyContains" in sql, f"{name}: {sql}"
+            py_result = py.execute(f"SELECT {sql}").fetchone()
+            cpp_result = cpp.execute(f"SELECT {sql}").fetchone()
+            assert py_result == (want,), f"{name}: py got {py_result}, expected {(want,)}"
+            assert cpp_result == py_result, f"{name}: cpp/py mismatch {cpp_result} vs {py_result}"
+    finally:
+        py.close()
+        cpp.close()
+
+
+# ---------------------------------------------------------------------------
+# FHIR4-41 — the PRECISION-qualified form infers the point type from the PEER
+# ---------------------------------------------------------------------------
+#
+# FHIR4-38 closed the UNQUALIFIED form (`intervalStartsSame` / `intervalEndsSame`
+# resolve a CLOSED null bound to the §9.14/§9.15 point-type extremum, inferred
+# from the operand's own opposite bound and then from the peer interval) and
+# pinned the precision-qualified form as `*PrecisionGapNull`: it lowers to
+# `cqlSameAsP(intervalStart(X), intervalStart(Y), precision)`, and a single
+# all-null interval cannot infer its point type on its own.
+#
+# CQL 1.5 §19.30 Starts / §19.13 Ends: "This operator uses the semantics
+# described in the Start and End operators to determine interval boundaries,
+# particularly when those boundaries are null."  Interval<T> is satisfied by
+# BOTH operands, so the point type is available from the peer interval — which
+# is exactly what the FHIR4-38 peer-aware sentinels already do.
+#
+# The precision qualifier itself is conditional in the spec: "If precision is
+# specified AND the point type is a Date, DateTime, or Time type, comparisons
+# used in the operation are performed at the specified precision."  For a
+# non-temporal point type the reference implementation therefore IGNORES the
+# qualifier and compares exactly
+# (cqframework/clinical_quality_language engine/src/commonMain/kotlin/
+#  .../elm/executing/StartsEvaluator.kt and EndsEvaluator.kt: the
+#  `leftStart is BaseTemporal && rightStart is BaseTemporal` branch selects the
+#  precision-aware comparison, the else branch is Equal + LessOrEqual /
+#  GreaterOrEqual + Equal).  Those cells are pinned below as the adjudicated
+#  non-temporal outcome, NOT as a "gap".
+# ---------------------------------------------------------------------------
+
+_INTERVAL_PART3_PRECISION_PEER_LIBRARY = """library PrecisionPeerStartsEnds version '1.0'
+using FHIR version '4.0.1'
+context Patient
+
+// (a) all-null closed bounds: the point type comes from the PEER interval.
+define DateStartsFalse: Interval[null, null] starts day of Interval[@2024-01-01, @2024-12-31]
+define DateStartsTrue: Interval[null, null] starts day of Interval[@0001-01-01, null]
+define DateEndsFalse: Interval[@2024-01-01, @2024-12-31] ends day of Interval[null, null]
+define DateEndsTrue: Interval[@0001-01-01, null] ends day of Interval[null, null]
+define DateTimeStartsFalse: Interval[null, null] starts day of Interval[@2024-01-01T10:00:00, @2024-12-31T10:00:00]
+define DateTimeStartsTrue: Interval[null, null] starts day of Interval[@0001-01-01T00:00:00, null]
+define TimeStartsFalse: Interval[null, null] starts hour of Interval[@T10:00:00.000, @T12:00:00.000]
+define TimeEndsTrue: Interval[null, @T23:59:59.999] ends hour of Interval[null, null]
+// Open null bounds are UNKNOWN boundaries (§2), never an extremum.
+define OpenNullStartsNull: Interval(null, null) starts day of Interval[@2024-01-01, @2024-12-31]
+define OpenNullEndsNull: Interval[@2024-01-01, @2024-12-31] ends day of Interval(null, null)
+// Neither operand can infer a point type (Interval<Any>) -> null.
+define UninferrableStartsNull: Interval[null, null] starts day of Interval[null, null]
+define UninferrableEndsNull: Interval[null, null] ends day of Interval[null, null]
+// (b) NON-temporal point types: the reference implementation ignores the
+// precision qualifier and compares exactly (Equal + LessOrEqual /
+// GreaterOrEqual + Equal) — a DEFINITE answer, not null.
+define IntegerStartsTrue: Interval[1, 10] starts day of Interval[1, 15]
+define IntegerStartsFalse: Interval[1, 10] starts day of Interval[2, 15]
+define IntegerAllNullStartsFalse: Interval[null, null] starts day of Interval[1, 15]
+define IntegerEndsTrue: Interval[5, 15] ends day of Interval[1, 15]
+define IntegerEndsFalse: Interval[1, 10] ends day of Interval[1, 15]
+define DecimalStartsTrue: Interval[1.0, 10.0] starts day of Interval[1.0, 15.0]
+define QuantityStartsTrue: Interval[1.0 'g', 10.0 'g'] starts day of Interval[1.0 'g', 15.0 'g']
+"""
+
+
+def test_cql_interval_part3_precision_starts_ends_peer_point_type_fhir4_41() -> None:
+    """FHIR4-41: `starts <prec> of` / `ends <prec> of` infer the peer point type.
+
+    §19.30/§19.13 route boundary determination through §9.14 Start / §9.15 End,
+    so an all-null CLOSED interval takes the point-type extremum of the SHARED
+    Interval<T> — supplied by the peer operand, exactly as the FHIR4-38
+    unqualified fix does.  The non-temporal cells record the adjudicated
+    reference-implementation behaviour (precision ignored, exact comparison).
+    """
+    expected = {
+        # (a) peer-inferred point type -> determined results.
+        "DateStartsFalse": False,
+        "DateStartsTrue": True,
+        "DateEndsFalse": False,
+        "DateEndsTrue": True,
+        "DateTimeStartsFalse": False,
+        "DateTimeStartsTrue": True,
+        "TimeStartsFalse": False,
+        "TimeEndsTrue": True,
+        # Open null bounds stay unknown.
+        "OpenNullStartsNull": None,
+        "OpenNullEndsNull": None,
+        # No point type available on either side.
+        "UninferrableStartsNull": None,
+        "UninferrableEndsNull": None,
+        # (b) non-temporal point types compare exactly (precision ignored).
+        "IntegerStartsTrue": True,
+        "IntegerStartsFalse": False,
+        "IntegerAllNullStartsFalse": False,
+        "IntegerEndsTrue": True,
+        "IntegerEndsFalse": False,
+        "DecimalStartsTrue": True,
+        "QuantityStartsTrue": True,
+    }
+
+    translated = translate_cql(_INTERVAL_PART3_PRECISION_PEER_LIBRARY)
+    # Lowering contract: temporal (or statically unknown) point types keep the
+    # precision comparison and take Start/End from the peer-aware helpers;
+    # statically non-temporal point types drop the qualifier and compare exactly.
+    assert "intervalStartWithPeer" in translated["DateStartsFalse"].to_sql()
+    assert "intervalEndWithPeer" in translated["DateEndsFalse"].to_sql()
+    assert "intervalStartsSame" in translated["IntegerStartsTrue"].to_sql()
+    assert "intervalEndsSame" in translated["IntegerEndsTrue"].to_sql()
+    assert "cqlSameAsP" not in translated["IntegerStartsTrue"].to_sql()
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for name, want in expected.items():
+                sql = f"SELECT {translated[name].to_sql()}"
+                py_result = py.execute(sql).fetchone()
+                cpp_result = cpp.execute(sql).fetchone()
+                assert py_result == (want,), f"{name}: py got {py_result}, expected {(want,)}"
+                assert cpp_result == py_result, f"{name}: cpp/py mismatch"
+                assert_no_python_result(no_py, sql, py_result, label=name)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_interval_part3_precision_starts_ends_direct_udf_peer_surface() -> None:
+    """FHIR4-41: the peer-aware Start/End UDFs and the non-temporal exact path.
+
+    `intervalStartWithPeer` / `intervalEndWithPeer` are the runtime seam the
+    translator uses; they must return exactly what the 1-arg forms return when
+    the operand can infer its own point type, and the §9.14/§9.15 extremum when
+    only the peer can.
+    """
+    closed_null = '{"low": null, "high": null, "lowClosed": true, "highClosed": true}'
+    open_null = '{"low": null, "high": null, "lowClosed": false, "highClosed": false}'
+    int_1_15 = '{"low":"1","high":"15","lowClosed":true,"highClosed":true}'
+    date_year = '{"low":"2024-01-01","high":"2024-12-31","lowClosed":true,"highClosed":true}'
+    date_null = '{"low":null,"high":null,"lowClosed":true,"highClosed":true}'
+
+    cases = [
+        # Peer supplies the point type for an all-null CLOSED interval.
+        ("intervalStartWithPeer", [closed_null, int_1_15], "-2147483648"),
+        ("intervalEndWithPeer", [closed_null, int_1_15], "2147483647"),
+        ("intervalStartWithPeer", [closed_null, date_year], "0001-01-01"),
+        ("intervalEndWithPeer", [closed_null, date_year], "9999-12-31"),
+        # Own bound still wins when it can infer the type itself.
+        ("intervalStartWithPeer", [int_1_15, closed_null], "1"),
+        ("intervalEndWithPeer", [int_1_15, closed_null], "15"),
+        # 1-arg behaviour is unchanged (no peer inference).
+        ("intervalStart", [closed_null], None),
+        ("intervalEnd", [closed_null], None),
+    ]
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for func, args, want in cases:
+            placeholders = ", ".join("?" for _ in args)
+            sql = f"SELECT {func}({placeholders})"
+            py_result = py.execute(sql, args).fetchone()
+            cpp_result = cpp.execute(sql, args).fetchone()
+            assert cpp_result == py_result, f"{func}{tuple(args)}: cpp/py mismatch"
+            assert py_result == (want,), f"{func}{tuple(args)}: got {py_result}, expected {(want,)}"
+        # An OPEN null bound is still unknown, with or without a peer.
+        for func in ("intervalStartWithPeer", "intervalEndWithPeer"):
+            assert py.execute(f"SELECT {func}(?, ?)", [open_null, date_null]).fetchone() == (None,)
     finally:
         py.close()
         cpp.close()

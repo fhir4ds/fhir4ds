@@ -1989,6 +1989,42 @@
         }
       },
       {
+        "name": "TruncateMaxIntegerAsDecimal",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TruncateMaxIntegerAsDecimalWhereDecimalIsNonZero",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TruncateDecimalGreaterThanMaxInteger",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TruncateMinIntegerAsDecimal",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TruncateMinIntegerAsDecimalWhereDecimalIsNonZero",
+        "result": {
+          "passed": true
+        }
+      },
+      {
+        "name": "TruncateDecimalLessThanMinInteger",
+        "result": {
+          "passed": true
+        }
+      },
+      {
         "name": "TruncatedDivideNull",
         "result": {
           "passed": true
@@ -4820,7 +4856,8 @@
       {
         "name": "DateTimeDurationBetweenUncertainInterval",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected {'start': 17, 'end': 44, 'lowClosed': True, 'highClosed': True} (dict), got {\"start\":16,\"end\":44,\"lowClosed\":true,\"highClosed\":true} (str)"
         }
       },
       {
@@ -4832,22 +4869,19 @@
       {
         "name": "DateTimeDurationBetweenUncertainAdd",
         "result": {
-          "passed": false,
-          "error": "Expected {'start': 32, 'end': 88, 'lowClosed': True, 'highClosed': True} (dict), got {\"start\":34,\"end\":88,\"lowClosed\":true,\"highClosed\":true} (str)"
+          "passed": true
         }
       },
       {
         "name": "DateTimeDurationBetweenUncertainSubtract",
         "result": {
-          "passed": false,
-          "error": "Expected {'start': 0, 'end': 40, 'lowClosed': True, 'highClosed': True} (dict), got {\"start\":1,\"end\":40,\"lowClosed\":true,\"highClosed\":true} (str)"
+          "passed": true
         }
       },
       {
         "name": "DateTimeDurationBetweenUncertainMultiply",
         "result": {
-          "passed": false,
-          "error": "Expected {'start': 256, 'end': 1936, 'lowClosed': True, 'highClosed': True} (dict), got {\"start\":289,\"end\":1936,\"lowClosed\":true,\"highClosed\":true} (str)"
+          "passed": true
         }
       },
       {
@@ -4949,7 +4983,8 @@
       {
         "name": "TimeDurationBetweenHourDiffPrecision2",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected 1 (int), got {\"start\":0,\"end\":1,\"lowClosed\":true,\"highClosed\":true} (str)"
         }
       },
       {
@@ -7903,7 +7938,8 @@
       {
         "name": "TimeProperContainsNull",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected None (NoneType), got False (bool) [Boolean comparison: a false result is not null]"
         }
       },
       {
@@ -7939,7 +7975,8 @@
       {
         "name": "TimeProperInNull",
         "result": {
-          "passed": true
+          "passed": false,
+          "error": "Expected None (NoneType), got False (bool) [Boolean comparison: a false result is not null]"
         }
       },
       {
@@ -10411,8 +10448,7 @@
       {
         "name": "CoalesceMoreThanFiveArgs",
         "result": {
-          "passed": false,
-          "error": "Expected error or NULL per CQL \u00a716, got 15"
+          "passed": true
         }
       },
       {
@@ -11712,8 +11748,7 @@
       {
         "name": "DateTimeUncertain",
         "result": {
-          "passed": false,
-          "error": "Expected {'start': 18, 'end': 49, 'lowClosed': True, 'highClosed': True} (dict), got {\"start\":19,\"end\":49,\"lowClosed\":true,\"highClosed\":true} (str)"
+          "passed": true
         }
       },
       {

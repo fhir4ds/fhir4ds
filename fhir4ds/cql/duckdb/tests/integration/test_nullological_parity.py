@@ -306,24 +306,100 @@ context Patient
         with pytest.raises(TranslationError, match="implicitly castable"):
             translate_cql(cql)
 
-    # CQL 1.5 §Coalesce: scalar invocation is variadic with no upper bound.
+    # CQL §Coalesce: the scalar overload set is closed at five arguments
+    # (FHIR4-44 — see test_cql_coalesce_scalar_arity_capped_at_five_fhir4_44);
+    # only the single List<T> overload is unbounded.
     valid_cql = """library GoodCoalesce version '1.0.0'
 using FHIR version '4.0.1'
 context Patient
 define EmptyList: Coalesce({})
 define ListValue: Coalesce({null, 'x'})
 define FiveScalar: Coalesce(null, null, null, null, 'y')
-define SixScalar: Coalesce(null, null, null, null, null, 1)
-define NineScalar: Coalesce(null, null, null, null, null, null, null, null, 2)
+define SixList: Coalesce({null, null, null, null, null, 1})
+define NineList: Coalesce({null, null, null, null, null, null, null, null, 2})
 """
     translated = translate_cql(valid_cql)
     expected = {
         "EmptyList": (None,),
         "ListValue": ("x",),
         "FiveScalar": ("y",),
-        "SixScalar": (1,),
-        "NineScalar": (2,),
+        "SixList": (1,),
+        "NineList": (2,),
     }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_result in expected.items():
+            sql = translated[name].to_sql()
+            assert py.execute(f"SELECT {sql}").fetchone() == expected_result, name
+            assert cpp.execute(f"SELECT {sql}").fetchone() == expected_result, name
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_coalesce_scalar_arity_capped_at_five_fhir4_44() -> None:
+    """FHIR4-44: Coalesce has no scalar overload beyond five arguments.
+
+    CQL 1.5 (https://cql.hl7.org/2019May/09-b-cqlreference.html §4.1) and the
+    current 2.0 Appendix B enumerate EXACTLY four scalar overloads — 2, 3, 4
+    and 5 arguments — plus ONE unbounded ``Coalesce<T>(arguments List<T>) T``
+    overload, and the spec's own example pins the consequence:
+
+        define CoalesceError: Coalesce(null, 15, null, null, null, null)
+        // more than 5 inputs must be represented as list
+
+    The official fixture
+    ``CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs`` marks that
+    call ``invalid="semantic"``. A sixth SCALAR argument therefore matches no
+    signature: it is a translation error, never a silent 15 (which the former
+    "variadic, no upper bound" doctrine produced).
+
+    Invariants the cap must NOT break:
+      * the single-list overload stays unbounded (6, 9, ... elements);
+      * ONE CQL list argument that expands to six SQL COALESCE arguments is
+        the List<T> overload, not a six-scalar call;
+      * fewer than two scalar arguments still rejects.
+    """
+    header = (
+        "library CoalesceArity version '1.0.0'\n"
+        "using FHIR version '4.0.1'\n"
+        "context Patient\n"
+    )
+    rejected = [
+        # The spec's own CoalesceError example.
+        "Coalesce(null, 15, null, null, null, null)",
+        # Arity is what is rejected — all-null operand types are irrelevant.
+        "Coalesce(null, null, null, null, null, null)",
+        "Coalesce(1, 2, 3, 4, 5, 6)",
+        # A dynamic FHIR operand does not buy a sixth scalar slot.
+        "Coalesce(Patient.active, null, null, null, null, false)",
+        # Nor does a nine-argument call.
+        "Coalesce(null, null, null, null, null, null, null, null, 2)",
+    ]
+    for body in rejected:
+        with pytest.raises(TranslationError, match="more than 5 inputs"):
+            translate_cql(header + f"define X: {body}\n")
+
+    accepted = {
+        # Widest scalar overload: five arguments.
+        "FiveScalar": "Coalesce(null, null, null, null, 'y')",
+        # List<T> overload: six elements (unbounded).
+        "SixList": "Coalesce({null, null, null, null, null, 'x'})",
+        # List<T> overload: nine elements.
+        "NineList": "Coalesce({null, null, null, null, null, null, null, null, 'z'})",
+    }
+    translated = translate_cql(
+        header + "\n".join(f"define {name}: {body}" for name, body in accepted.items())
+    )
+    expected = {"FiveScalar": ("y",), "SixList": ("x",), "NineList": ("z",)}
+
+    # ONE CQL list argument lowers to six SQL COALESCE arguments; that is the
+    # list overload and must never be re-checked against the scalar cap.
+    six_list_sql = translated["SixList"].to_sql()
+    assert six_list_sql.upper().startswith("COALESCE("), six_list_sql
+    assert six_list_sql.count(",") == 5, six_list_sql
+
     py = _python_only_connection()
     cpp = _cpp_connection()
     try:
@@ -376,8 +452,15 @@ def test_cql_direct_coalesce_rejects_invalid_scalar_arities() -> None:
             assert con.execute('SELECT "Coalesce"([NULL, 5])').fetchone() == (5,)
             assert con.execute('SELECT "Coalesce"(NULL, NULL)').fetchone() == (None,)
             assert con.execute('SELECT "Coalesce"(NULL, NULL, NULL, NULL, 5)').fetchone() == (5,)
-            # Variadic scalar overload has no upper bound (CQL 1.5 §Coalesce).
-            assert con.execute('SELECT "Coalesce"(NULL, NULL, NULL, NULL, NULL, 6)').fetchone() == (6,)
+            # The scalar overload set is closed at five arguments (FHIR4-44);
+            # the single-list overload carries the unbounded case.
+            with pytest.raises(Exception, match="more than 5 inputs"):
+                con.execute(
+                    'SELECT "Coalesce"(NULL, NULL, NULL, NULL, NULL, 6)'
+                ).fetchone()
+            assert con.execute(
+                'SELECT "Coalesce"([NULL, NULL, NULL, NULL, NULL, 6])'
+            ).fetchone() == (6,)
     finally:
         py.close()
         cpp.close()
@@ -510,18 +593,26 @@ define StrInfixIsNotNull: StrAlias is not null
 
 
 def test_cql_coalesce_variadic_over_fhir_boolean_defaults_cql08() -> None:
-    """CQL-08 SKEPTIC (2026-08-20): the scalar Coalesce overload is variadic
-    with no upper bound (CQL 1.5 §Coalesce — "first non-null expression among
-    two or more"). A six-argument Coalesce over a dynamic FHIR Boolean field
-    with a static null tail must translate (population context) and the static
-    tail must execute on both backends.
+    """CQL-08 SKEPTIC (2026-08-20) value, amended by FHIR4-44: Coalesce over a
+    dynamic FHIR Boolean field with a static null tail must translate
+    (population context) and the static tail must execute on both backends —
+    at the spec's widest SCALAR arity, five arguments.
+
+    The original spelling of this test used six scalar arguments and asserted
+    the "variadic, no upper bound" doctrine. CQL §Coalesce contradicts that
+    reading ("more than 5 inputs must be represented as list"; official
+    fixture CoalesceMoreThanFiveArgs is invalid="semantic"), so the sixth
+    scalar slot is now a typed TranslationError and the default-tail case is
+    expressed with five arguments.
     """
-    cql = """library VariadicCoalesce version '1.0.0'
-using FHIR version '4.0.1'
-context Patient
-define ActiveDefault: Coalesce(Patient.active, null, null, null, null, false)
-define AllNullTail: Coalesce(null, null, null, null, null, null)
-define NumericSix: Coalesce(null, null, null, null, null, 7)
+    header = (
+        "library VariadicCoalesce version '1.0.0'\n"
+        "using FHIR version '4.0.1'\n"
+        "context Patient\n"
+    )
+    cql = header + """define ActiveDefault: Coalesce(Patient.active, null, null, null, false)
+define AllNullTail: Coalesce(null, null, null, null, null)
+define NumericFive: Coalesce(null, null, null, null, 7)
 """
     translated = translate_cql(cql)
     active_sql = translated["ActiveDefault"].to_sql()
@@ -533,12 +624,20 @@ define NumericSix: Coalesce(null, null, null, null, null, 7)
     try:
         for con in (py, cpp):
             null_sql = translated["AllNullTail"].to_sql()
-            numeric_sql = translated["NumericSix"].to_sql()
+            numeric_sql = translated["NumericFive"].to_sql()
             assert con.execute(f"SELECT {null_sql}").fetchone() == (None,)
             assert con.execute(f"SELECT {numeric_sql}").fetchone() == (7,)
     finally:
         py.close()
         cpp.close()
+
+    # The six-scalar spellings of the same shapes are arity errors (FHIR4-44).
+    for body in (
+        "Coalesce(Patient.active, null, null, null, null, false)",
+        "Coalesce(null, null, null, null, null, null)",
+    ):
+        with pytest.raises(TranslationError, match="more than 5 inputs"):
+            translate_cql(header + f"define Bad: {body}\n")
 
 
 def test_cql_coalesce_nested_static_type_guard_cql08_historian() -> None:

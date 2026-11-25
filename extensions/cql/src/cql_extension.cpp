@@ -844,11 +844,74 @@ static std::string MaximumForIntervalPointType(const cql::Interval &iv) {
 	return "";
 }
 
-static void IntervalStartFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+// FHIR4-41: peer-aware interval bound (Start/End).
+//
+// CQL 1.5 §19.30 Starts / §19.13 Ends route boundary determination through
+// §9.14 Start / §9.15 End, and `Interval<T>` is satisfied by BOTH operands — so
+// an operand whose own bounds are ALL null (a closed `Interval[null, null]`)
+// still resolves to the point-type extremum, with `T` supplied by the PEER
+// interval. Registered twice per direction:
+//   intervalStart(interval)                  — own bounds only (unchanged)
+//   intervalStartWithPeer(interval, peer)    — peer infers the point type
+// Mirrors fhir4ds/cql/duckdb/udf/interval.py::intervalStartWithPeer /
+// intervalEndWithPeer, which remain the desktop conformance authority (both
+// names are in `_PYTHON_PREFERRED_CPP_CONFLICTS`).
+// Point-type inference from the PEER interval (FHIR4-41).
+//
+// An `Interval<T>` type argument is satisfied by BOTH operands of
+// `starts`/`ends`, so an operand whose OWN bounds are all null
+// (`Interval[null, null]`) still has a point type — the peer's. Returns
+// empty when there is nothing to infer from (no peer, or an all-null peer,
+// i.e. Interval<Any>).
+static std::string SentinelFromPeer(const cql::Interval *peer, bool want_start) {
+	if (peer == nullptr || (!peer->low && !peer->high)) {
+		return std::string();
+	}
+	// Match the Python authority's sample preference (LOW before HIGH in
+	// `_peer_point_type_sample`) so both engines derive the point type from the
+	// same bound. `Minimum/MaximumForIntervalPointType` read the OPPOSITE bound
+	// of the interval they are given (PeerBoundForSentinel prefers `high`), so
+	// the sample is planted in `high` for both directions.
+	cql::Interval sample;
+	sample.bound_type = peer->bound_type;
+	if (peer->low) {
+		sample.high = peer->low;
+	} else {
+		sample.low = peer->high;
+	}
+	return want_start ? MinimumForIntervalPointType(sample) : MaximumForIntervalPointType(sample);
+}
+
+static std::string SentinelForNullBound(const cql::Interval &iv, const cql::Interval *peer,
+                                        bool want_start) {
+	// Both bounds null: this operand carries no point type of its own, so the
+	// type comes from the peer (FHIR4-41). Before that card this returned
+	// empty unconditionally, which made the no-Python surface answer NULL where
+	// the Python authority answers the point-type extremum.
+	if (want_start ? !iv.high : !iv.low) {
+		return SentinelFromPeer(peer, want_start);
+	}
+	std::string sentinel = want_start ? MinimumForIntervalPointType(iv) : MaximumForIntervalPointType(iv);
+	if (!sentinel.empty() || peer == nullptr) {
+		return sentinel;
+	}
+	// The peer must carry a real bound: an all-null peer has no point type
+	// either (Interval<Any>), so the result stays unknown.
+	return SentinelFromPeer(peer, want_start);
+}
+
+static void IntervalBoundFunc(DataChunk &args, ExpressionState &state, Vector &result, bool want_start) {
 	idx_t count = args.size();
+	const bool has_peer = args.ColumnCount() > 1;
 	UnifiedVectorFormat iv_data;
 	args.data[0].ToUnifiedFormat(count, iv_data);
 	auto intervals = UnifiedVectorFormat::GetData<string_t>(iv_data);
+	UnifiedVectorFormat peer_data;
+	const string_t *peers = nullptr;
+	if (has_peer) {
+		args.data[1].ToUnifiedFormat(count, peer_data);
+		peers = UnifiedVectorFormat::GetData<string_t>(peer_data);
+	}
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
 	auto result_data = fhir4ds_compat::data<string_t>(result);
@@ -863,57 +926,54 @@ static void IntervalStartFunc(DataChunk &args, ExpressionState &state, Vector &r
 		auto iv = cql::Interval::parse(intervals[idx].GetString());
 		if (!iv) {
 			result_mask.SetInvalid(i);
-		} else if (!iv->low) {
-			if (iv->low_closed && iv->high) {
-				auto minimum = MinimumForIntervalPointType(*iv);
-				if (minimum.empty()) {
-					result_mask.SetInvalid(i);
-				} else {
-					result_data[i] = StringVector::AddString(result, minimum);
-				}
-			} else {
-				result_mask.SetInvalid(i);
+			continue;
+		}
+		const bool bound_missing = want_start ? !iv->low : !iv->high;
+		if (!bound_missing) {
+			result_data[i] =
+			    StringVector::AddString(result, want_start ? iv->start_string() : iv->end_string());
+			continue;
+		}
+		const bool closed = want_start ? iv->low_closed : iv->high_closed;
+		if (!closed) {
+			// An OPEN null bound is an unknown boundary (§2), never an extremum.
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		cql::Optional<cql::Interval> peer_iv;
+		if (has_peer) {
+			auto peer_idx = peer_data.sel->get_index(i);
+			if (peer_data.validity.RowIsValid(peer_idx)) {
+				peer_iv = cql::Interval::parse(peers[peer_idx].GetString());
 			}
+		}
+		const cql::Interval *peer_ptr = nullptr;
+		if (peer_iv) {
+			peer_ptr = &*peer_iv;
+		}
+		auto sentinel = SentinelForNullBound(*iv, peer_ptr, want_start);
+		if (sentinel.empty()) {
+			result_mask.SetInvalid(i);
 		} else {
-			result_data[i] = StringVector::AddString(result, iv->start_string());
+			result_data[i] = StringVector::AddString(result, sentinel);
 		}
 	}
 }
 
+static void IntervalStartFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	IntervalBoundFunc(args, state, result, true);
+}
+
+static void IntervalStartWithPeerFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	IntervalBoundFunc(args, state, result, true);
+}
+
 static void IntervalEndFunc(DataChunk &args, ExpressionState &state, Vector &result) {
-	idx_t count = args.size();
-	UnifiedVectorFormat iv_data;
-	args.data[0].ToUnifiedFormat(count, iv_data);
-	auto intervals = UnifiedVectorFormat::GetData<string_t>(iv_data);
+	IntervalBoundFunc(args, state, result, false);
+}
 
-	result.SetVectorType(VectorType::FLAT_VECTOR);
-	auto result_data = fhir4ds_compat::data<string_t>(result);
-	auto &result_mask = fhir4ds_compat::validity(result);
-
-	for (idx_t i = 0; i < count; i++) {
-		auto idx = iv_data.sel->get_index(i);
-		if (!iv_data.validity.RowIsValid(idx)) {
-			result_mask.SetInvalid(i);
-			continue;
-		}
-		auto iv = cql::Interval::parse(intervals[idx].GetString());
-		if (!iv) {
-			result_mask.SetInvalid(i);
-		} else if (!iv->high) {
-			if (iv->high_closed && iv->low) {
-				auto maximum = MaximumForIntervalPointType(*iv);
-				if (maximum.empty()) {
-					result_mask.SetInvalid(i);
-				} else {
-					result_data[i] = StringVector::AddString(result, maximum);
-				}
-			} else {
-				result_mask.SetInvalid(i);
-			}
-		} else {
-			result_data[i] = StringVector::AddString(result, iv->end_string());
-		}
-	}
+static void IntervalEndWithPeerFunc(DataChunk &args, ExpressionState &state, Vector &result) {
+	IntervalBoundFunc(args, state, result, false);
 }
 
 static void IntervalWidthFunc(DataChunk &args, ExpressionState &state, Vector &result) {
@@ -1109,6 +1169,8 @@ static bool IntervalIncludesQuantityUnknown(const cql::Interval &container, cons
 	       IncomparableQuantityEndpoint(container.high, contained.high);
 }
 
+static bool interval_open_null_uncertain(const cql::Interval &iv);
+
 static void IntervalContainsFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
 	UnifiedVectorFormat a_data, b_data;
@@ -1143,6 +1205,14 @@ static void IntervalContainsFunc(DataChunk &args, ExpressionState &state, Vector
 		}
 		if (cql::is_json_interval(b_str)) {
 			auto other = cql::Interval::parse(b_str);
+			// FHIR4-42: an OPEN null bound is an UNKNOWN boundary (§9.14/§9.15
+			// Start/End return null for it), so containment is uncertain — the
+			// guard every sibling relationship predicate carries. A CLOSED null
+			// bound is the point-type extremum and stays determined.
+			if (other && (interval_open_null_uncertain(*iv) || interval_open_null_uncertain(*other))) {
+				result_mask.SetInvalid(i);
+				continue;
+			}
 			if (other && IntervalIncludesQuantityUnknown(*iv, *other)) {
 				result_mask.SetInvalid(i);
 				continue;
@@ -1152,6 +1222,17 @@ static void IntervalContainsFunc(DataChunk &args, ExpressionState &state, Vector
 			auto point = cql::parse_point_value(b_str);
 			if (point && IntervalContainsPointQuantityUnknown(*iv, *point)) {
 				result_mask.SetInvalid(i);
+				continue;
+			}
+			if (point && interval_open_null_uncertain(*iv)) {
+				// Three-valued AND: the OPEN null bound contributes UNKNOWN, so a
+				// determinate FALSE on the remaining side still decides (mirrors
+				// the Python `_and3` composition).
+				if (!iv->contains_point(*point)) {
+					result_data[i] = false;
+				} else {
+					result_mask.SetInvalid(i);
+				}
 				continue;
 			}
 			result_data[i] = point ? iv->contains_point(*point) : false;
@@ -1679,7 +1760,12 @@ static bool PrecisionIntervalUncertainFor(const char *func_name, const cql::Inte
 	return false;
 }
 
-#define DEFINE_PREC_INTERVAL_UDF(FuncName, method_call)                                                                  \
+// FHIR4-42: `guard_open_null` instances answer the three-valued containment
+// semantics of CQL §In (Interval): an OPEN null bound in the CONTAINER is an
+// UNKNOWN boundary, so a determinate FALSE still decides while a would-be TRUE
+// becomes SQL NULL. Only the includes pair needs it (their Python counterparts
+// delegate their bound checks to `intervalContainsPrecise`).
+#define DEFINE_PREC_INTERVAL_UDF(FuncName, method_call, guard_open_null)                                                 \
 	static void FuncName(DataChunk &args, ExpressionState &state, Vector &result) {                                      \
 		idx_t count = args.size();                                                                                       \
 		UnifiedVectorFormat a_data, b_data, p_data;                                                                      \
@@ -1709,16 +1795,20 @@ static bool PrecisionIntervalUncertainFor(const char *func_name, const cql::Inte
 				result_mask.SetInvalid(i);                                                                               \
 				continue;                                                                                                \
 			}                                                                                                            \
+			if (guard_open_null && iv1 && iv2 && interval_open_null_uncertain(*iv1) && method_call) {                    \
+				result_mask.SetInvalid(i);                                                                               \
+				continue;                                                                                                \
+			}                                                                                                            \
 			result_data[i] = (iv1 && iv2) ? method_call : false;                                                         \
 		}                                                                                                                \
 	}
 
-DEFINE_PREC_INTERVAL_UDF(IntervalOverlapsPreciseFunc, iv1->overlaps(*iv2, *prec))
-DEFINE_PREC_INTERVAL_UDF(IntervalBeforePreciseFunc, iv1->before(*iv2, *prec))
-DEFINE_PREC_INTERVAL_UDF(IntervalAfterPreciseFunc, iv1->after(*iv2, *prec))
-DEFINE_PREC_INTERVAL_UDF(IntervalIncludesPreciseFunc, iv1->includes(*iv2, *prec))
-DEFINE_PREC_INTERVAL_UDF(IntervalOverlapsBeforePreciseFunc, iv1->overlaps_before(*iv2, *prec))
-DEFINE_PREC_INTERVAL_UDF(IntervalOverlapsAfterPreciseFunc, iv1->overlaps_after(*iv2, *prec))
+DEFINE_PREC_INTERVAL_UDF(IntervalOverlapsPreciseFunc, iv1->overlaps(*iv2, *prec), false)
+DEFINE_PREC_INTERVAL_UDF(IntervalBeforePreciseFunc, iv1->before(*iv2, *prec), false)
+DEFINE_PREC_INTERVAL_UDF(IntervalAfterPreciseFunc, iv1->after(*iv2, *prec), false)
+DEFINE_PREC_INTERVAL_UDF(IntervalIncludesPreciseFunc, iv1->includes(*iv2, *prec), true)
+DEFINE_PREC_INTERVAL_UDF(IntervalOverlapsBeforePreciseFunc, iv1->overlaps_before(*iv2, *prec), false)
+DEFINE_PREC_INTERVAL_UDF(IntervalOverlapsAfterPreciseFunc, iv1->overlaps_after(*iv2, *prec), false)
 
 static void IntervalIncludedInPreciseFunc(DataChunk &args, ExpressionState &state, Vector &result) {
 	idx_t count = args.size();
@@ -1749,6 +1839,13 @@ static void IntervalIncludedInPreciseFunc(DataChunk &args, ExpressionState &stat
 			continue;
 		}
 		if (IntervalIncludesUncertain(*iv2, *iv1, *prec)) {
+			result_mask.SetInvalid(i);
+			continue;
+		}
+		// FHIR4-42: `iv2` is the CONTAINER for `included in`; its OPEN null bound
+		// is UNKNOWN, so a determinate FALSE still decides (see the Python
+		// intervalIncludesPrecise delegation to intervalContainsPrecise).
+		if (interval_open_null_uncertain(*iv2) && iv2->includes(*iv1, *prec)) {
 			result_mask.SetInvalid(i);
 			continue;
 		}
@@ -1800,20 +1897,44 @@ static void IntervalContainsPreciseFunc(DataChunk &args, ExpressionState &state,
 		auto iv = cql::Interval::parse(iv_vals[iv_idx].GetString());
 		if (!iv) { result_mask.SetInvalid(i); continue; }
 		std::string pt_str = pt_vals[pt_idx].GetString();
+		// FHIR4-42: an OPEN null bound is an UNKNOWN boundary at EVERY precision
+		// (§9.14/§9.15 Start/End return null for it) while a CLOSED null bound is
+		// the point-type extremum. Three-valued AND: the UNKNOWN operand lets a
+		// determinate FALSE on the remaining side still decide (mirrors the
+		// Python `_and3` composition).
+		auto open_null_container = interval_open_null_uncertain(*iv);
 		if (cql::is_json_interval(pt_str)) {
 			auto pt_iv = cql::Interval::parse(pt_str);
 			if (pt_iv && IntervalIncludesUncertain(*iv, *pt_iv, *prec)) {
 				result_mask.SetInvalid(i);
 				continue;
 			}
-			result_data[i] = pt_iv ? iv->contains_interval(*pt_iv, *prec) : false;
+			if (!pt_iv) {
+				result_data[i] = false;
+				continue;
+			}
+			bool contained = iv->contains_interval(*pt_iv, *prec);
+			if (open_null_container && contained) {
+				result_mask.SetInvalid(i);
+				continue;
+			}
+			result_data[i] = contained;
 		} else {
 			auto pt = ParsePointValueForPrecision(pt_str);
 			if (pt && IntervalContainsUncertain(*iv, *pt, *prec)) {
 				result_mask.SetInvalid(i);
 				continue;
 			}
-			result_data[i] = pt ? iv->contains_point(*pt, *prec) : false;
+			if (!pt) {
+				result_data[i] = false;
+				continue;
+			}
+			bool contained = iv->contains_point(*pt, *prec);
+			if (open_null_container && contained) {
+				result_mask.SetInvalid(i);
+				continue;
+			}
+			result_data[i] = contained;
 		}
 	}
 }
@@ -9766,6 +9887,12 @@ static void LoadInternal(ExtensionLoader &loader) {
 	// the native C++ test path instead of being hidden by Python fallback UDFs.
 	RegisterSpecialScalar(loader, "intervalStart", {LogicalType::VARCHAR}, LogicalType::VARCHAR, IntervalStartFunc);
 	RegisterSpecialScalar(loader, "intervalEnd", {LogicalType::VARCHAR}, LogicalType::VARCHAR, IntervalEndFunc);
+	// FHIR4-41: peer-aware Start/End for the precision-qualified starts/ends
+	// lowering (the peer operand supplies the shared Interval<T> point type).
+	RegisterSpecialScalar(loader, "intervalStartWithPeer", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, IntervalStartWithPeerFunc);
+	RegisterSpecialScalar(loader, "intervalEndWithPeer", {LogicalType::VARCHAR, LogicalType::VARCHAR},
+	                      LogicalType::VARCHAR, IntervalEndWithPeerFunc);
 	RegisterSpecialScalar(loader, "intervalWidth", {LogicalType::VARCHAR}, LogicalType::VARCHAR, IntervalWidthFunc);
 	RegisterSpecialScalar(loader, "intervalContains", {LogicalType::VARCHAR, LogicalType::VARCHAR},
 	                      LogicalType::BOOLEAN, IntervalContainsFunc);

@@ -10,6 +10,8 @@ from pathlib import Path
 import duckdb
 import pytest
 
+from .wasm_runtime_helpers import FHIR4_41_NO_PYTHON_STALE
+
 
 FHIRPATH_REQUIRED = {
     "fhirpath",
@@ -62,6 +64,12 @@ CQL_REQUIRED = {
     "intervalExcept",
     "intervalOnOrAfter",
     "intervalOnOrBefore",
+    # FHIR4-41 peer-aware Start/End. REBUILD REQUIRED: the C++ mirrors are in
+    # extensions/cql/src/cql_extension.cpp but not in the shipped bundles yet,
+    # so `test_browser_required_functions_exist_without_python_fallback`
+    # subtracts `FHIR4_41_PENDING_CQL` while the flag is set.
+    "intervalStartWithPeer",
+    "intervalEndWithPeer",
     "cqlSameAsP",
     "cqlSameOrAfterP",
     "cqlSameOrBeforeP",
@@ -83,33 +91,27 @@ def _repo_root() -> Path:
 
 @pytest.fixture
 def cpp_only_con():
-    root = _repo_root()
-    extension_paths = [
-        root
-        / "extensions"
-        / "fhirpath"
-        / "build"
-        / "release"
-        / "extension"
-        / "fhirpath"
-        / "fhirpath.duckdb_extension",
-        root
-        / "extensions"
-        / "cql"
-        / "build"
-        / "release"
-        / "extension"
-        / "cql"
-        / "cql.duckdb_extension",
-    ]
-    missing = [str(path) for path in extension_paths if not path.exists()]
-    if missing:
-        pytest.skip(f"C++ extensions are not built: {missing}")
+    # Prefer the ABI-matched PACKAGED bundle (same selector the no-Python harness
+    # uses): the build tree keeps whatever variant was configured there last, so
+    # a build-tree path silently exercises a stale binary.
+    from .wasm_runtime_helpers import extension_paths as _bundle_paths
+
+    try:
+        extension_paths = _bundle_paths()
+    except FileNotFoundError:
+        pytest.skip("C++ extension bundles are not built")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         con = duckdb.connect(":memory:", config={"allow_unsigned_extensions": "true"})
         for src in extension_paths:
-            load_path = Path(tmpdir) / src.name
+            # DuckDB only LOADs `*.duckdb_extension`, so an ABI-suffixed bundle
+            # must be copied under the canonical basename.
+            name = src.name
+            for sfx in (".duckdb2_extension", ".duckdb156_extension"):
+                if name.endswith(sfx):
+                    name = name[: -len(sfx)] + ".duckdb_extension"
+                    break
+            load_path = Path(tmpdir) / name
             shutil.copy2(src, load_path)
             con.execute(f"LOAD '{load_path}'")
         try:
@@ -127,13 +129,18 @@ def _catalog_names(con: duckdb.DuckDBPyConnection) -> set[str]:
     }
 
 
+#: REBUILD REQUIRED (FHIR4-41): mirrored in the C++ source but not in the
+#: shipped bundles yet — see wasm_runtime_helpers.FHIR4_41_NO_PYTHON_STALE.
+# Bundles rebuilt with the FHIR4-41 peer-aware helpers, so nothing is pending.
+FHIR4_41_PENDING_CQL: set[str] = set()
+
+
 def test_browser_required_functions_exist_without_python_fallback(cpp_only_con) -> None:
     names = {name.lower() for name in _catalog_names(cpp_only_con)}
-    missing = {
-        name
-        for name in FHIRPATH_REQUIRED | CQL_REQUIRED
-        if name.lower() not in names
-    }
+    required = FHIRPATH_REQUIRED | CQL_REQUIRED
+    if FHIR4_41_NO_PYTHON_STALE:
+        required = required - FHIR4_41_PENDING_CQL
+    missing = {name for name in required if name.lower() not in names}
     assert missing == set()
 
 

@@ -2,47 +2,155 @@
 
 This directory contains the official CQL (Clinical Quality Language) test suite cloned from [cqframework/cql-tests](https://github.com/cqframework/cql-tests).
 
-## How it is checked out
+## Provenance / Pin
 
-The corpus is a git submodule of this directory (`.gitmodules` entry
-`fhir4ds/cql/tests/official/cql-tests`):
+- **Repository**: https://github.com/cqframework/cql-tests
+- **Pinned commit**: `0a8f7d32809cd1b8f595b89e415bcfc855913b28`
+- **Commit date**: 2026-11-21
+- **Subject**: `Merge pull request #186 from bryantaustin13/truncate-integer-range-tests`
+- **Previous pin**: `316c4939be3a513fa775d78a97c31c6eae018b7a` (2026-11-16)
+
+How this directory is vendored: **as plain files committed to this repository**
+(vendored snapshot). There is no submodule and no `.gitmodules` entry for it.
+
+### Why vendored and not a submodule (FHIR4-45, 2026-11-24)
+
+Until this card the `cql-tests` entry was a bare **gitlink** with no
+`.gitmodules` entry. A gitlink with no module declaration cannot be
+materialised: `git worktree add` and a fresh CI checkout both leave an EMPTY
+directory, and `git submodule update --init` cannot help because git has no URL
+to fetch. `run_cql.py` then printed "CQL tests directory not found", exited
+**0**, and left the previously committed `conformance/reports/cql_report.json`
+untouched — so `run_all.py`/CI read the previous run's numbers and reported
+them as a pass. The gate could be green while testing nothing.
+
+Precedent considered:
+
+| corpus | wiring | why |
+|---|---|---|
+| `fhir4ds/viewdef/tests/spec_tests/` | **vendored** (22 JSON fixtures) | official third-party corpus for the ViewDefinition gate — the closest analogue of this directory |
+| `tests/data/ecqm-content-qicore-2025/` | **vendored** (~43k files) | measure content for the DQM gate |
+| `tests/data/dqm-content-qicore-2026/`, `tests/data/dqm-content-cms-2025/` | **submodules**, declared in `.gitmodules` | the only submodule-wired corpora; both have a module entry so `git submodule update` can materialise them |
+
+Submodule was rejected because it would not have fixed the observed failure:
+
+- `git worktree add` (this project's campaign workflow) does not materialise
+  submodules either, so the empty-directory failure would persist.
+- No CI workflow runs `git submodule update` for this path
+  (`.github/workflows/conformance.yml` initialises only
+  `tests/data/ecqm-content-qicore-2025`), so CI would still have been empty.
+
+Vendoring makes the corpus present in every checkout by construction, which is
+the property a gate needs. It is affordable: the snapshot is ~536 KB across
+16 XML files. The upstream commit pin is recorded in
+[`corpus_manifest.json`](corpus_manifest.json) and in this note.
+
+Snapshot contents: `tests/cql/*.xml` (the corpus, verbatim),
+`tests/testSchema.xsd`, `LICENSE`, `CHANGE_MANAGEMENT.md`, `README.md`.
+Upstream's `.git` and `.github/` are deliberately not vendored.
+
+### Gate integrity contract (FHIR4-45)
+
+`conformance/scripts/run_cql.py` treats corpus problems as gate failures, and
+`conformance/scripts/run_all.py` treats a suite that could not run as a master
+failure. `corpus_manifest.json` is the single source of truth for the expected
+size; update it in the same commit as any corpus refresh.
+
+| condition | exit code | report | master runner |
+|---|---|---|---|
+| corpus directory **absent** (empty checkout / stale worktree) | **2** | stale report deleted, explicit `__corpus_integrity__` failure written | suite reported NOT RUN, gate exits **1** |
+| corpus present but **empty** (no `*.xml`) | **2** | same | same |
+| corpus **partial** (fewer XML files than the manifest pin) | **2** | same | same |
+| corpus present, but **fewer test cases** collected than the pin | **2** | real per-file numbers kept **plus** a failing `corpus_test_count_shortfall` sentinel | gate exits **1** |
+| a corpus XML file **cannot be parsed** | 0 if counts still match, else 2 | that file recorded as a failed test (never silently dropped) | per-case failure |
+| corpus **larger** than the pin | 0 | runs every file present | loud `WARNING`: the pin note is stale |
+| **normal** run | 0 | fresh report | normal summary |
+
+Two further rules in `run_all.py`, because reading whatever report is on disk is
+how a stale pass leaks into CI (AGENTS.md records the same pattern reporting a
+stale `dqm_report.json` as 47/47):
+
+1. A child's non-zero exit is never swallowed — the suite is reported as
+   NOT RUN and contributes no numbers to the totals.
+2. A child that exits **0 without rewriting its report** is a failure. Each
+   report's `(mtime_ns, size)` is captured before the child runs and verified
+   after; an unchanged fingerprint means the suite tested nothing. A report
+   containing **0 tests** is a failure too.
+
+A run where every suite executed and some individual *cells* fail still exits 0
+with an `INCOMPLETE` banner: the pinned corpus carries a handful of cells whose
+upstream fixture PRs are still open (see below), so a rate-based non-zero exit
+would keep the gate permanently red and train readers to ignore it.
+
+### Refreshing the pin
+
+Both halves of the pin must move together — the vendored files and
+`corpus_manifest.json` (commit, date, subject, counts):
 
 ```bash
-git submodule update --init fhir4ds/cql/tests/official/cql-tests
+git clone https://github.com/cqframework/cql-tests /tmp/cql-tests
+cd /tmp/cql-tests && git checkout --detach <upstream-main-sha>
+rsync -a --delete \
+  --exclude '.git' --exclude '.github' \
+  /tmp/cql-tests/ ~/src/fhir4ds/fhir4ds/cql/tests/official/cql-tests/
+cd ~/src/fhir4ds
+# update corpus_manifest.json (pin, pin_date, pin_subject, xml_file_count, test_count)
+# and the counts table below, then:
+./scripts/capped.sh 20 8 python3 conformance/scripts/run_cql.py
 ```
 
-The pinned commit is `f724ee4` (2026-11-16): **2,037** `<test>` elements in 16 XML files. It is
-what `conformance/scripts/run_cql.py` gates and what the WASM parity Tier A gate evaluates
-(`fhir4ds/operations/tests/wasm_parity/evaluators/cql.py`). The counts in the table below
-describe the original 1,718-test snapshot and are kept as history.
+Do **not** hand-edit the vendored XML to silence a failure — the pin is
+upstream's content, and the failures are the honest inventory.
+
+### Upstream PRs NOT yet in this pin
+
+Two open cqframework/cql-tests PRs correct fixtures whose oracles this pin
+still carries; the engine already answers the corrected values, so these cells
+fail until the PRs merge and the pin moves past them:
+
+- **#183** (`Count duration uncertainties from the end of an imprecise start`)
+  — `CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainInterval`
+  (expects 17, spec/reference arithmetic gives 16) and
+  `::TimeDurationBetweenHourDiffPrecision2` (expects 1, gives `[0, 1]`).
+  See the AMUX-169 entry in `fhir4ds/cql/AGENTS.md`.
+- **#184** (`Time ms-null`) — `CqlIntervalOperatorsTest.xml::TimeProperContainsNull`
+  and `::TimeProperInNull` still pin `null` at `version="1.0"`; #184 caps those
+  at `versionTo="1.5.2"` and adds the 1.5.3 `false` pins. See the AMUX-171
+  entry in `fhir4ds/cql/AGENTS.md`.
+
+Do **not** hand-edit the vendored XML to silence them — the pin is upstream's
+content, and the failures are the honest inventory.
 
 ## Overview
 
-- **Repository**: https://github.com/cqframework/cql-tests
-- **Total Test Cases**: 1,718 at first import; 2,037 at the pinned commit (see above)
+Counted at the pinned commit (the CQL gate runs every `<test>` element; the
+`versionTo`-superseded cells are counted too, as skips/superseded passes):
+
+- **Total Test Cases**: 2,043
 - **Test Files**: 16 XML files
-- **Total Lines**: 9,317
+- **Groups**: 210
+- **Total Lines**: 11,082
 
 ## Test Categories
 
 | Category | File | Test Cases | Groups | Lines |
 |----------|------|------------|--------|-------|
-| **Interval Operators** | CqlIntervalOperatorsTest.xml | 412 | 30 | 2,183 |
-| **Date/Time Operators** | CqlDateTimeOperatorsTest.xml | 318 | 17 | 1,796 |
-| **Arithmetic Functions** | CqlArithmeticFunctionsTest.xml | 212 | 23 | 996 |
-| **Comparison Operators** | CqlComparisonOperatorsTest.xml | 198 | 8 | 856 |
-| **List Operators** | CqlListOperatorsTest.xml | 212 | 29 | 1,159 |
-| **String Operators** | CqlStringOperatorsTest.xml | 81 | 15 | 463 |
-| **Value Literals & Selectors** | ValueLiteralsAndSelectors.xml | 66 | 14 | 433 |
-| **Aggregate Functions** | CqlAggregateFunctionsTest.xml | 50 | 14 | 313 |
+| **Interval Operators** | CqlIntervalOperatorsTest.xml | 429 | 35 | 2,282 |
+| **Date/Time Operators** | CqlDateTimeOperatorsTest.xml | 322 | 17 | 1,825 |
+| **Comparison Operators** | CqlComparisonOperatorsTest.xml | 281 | 10 | 1,221 |
+| **List Operators** | CqlListOperatorsTest.xml | 268 | 32 | 1,470 |
+| **Arithmetic Functions** | CqlArithmeticFunctionsTest.xml | 261 | 23 | 1,231 |
+| **String Operators** | CqlStringOperatorsTest.xml | 98 | 17 | 569 |
+| **Aggregate Functions** | CqlAggregateFunctionsTest.xml | 84 | 15 | 473 |
+| **Value Literals & Selectors** | ValueLiteralsAndSelectors.xml | 78 | 14 | 491 |
+| **Type Operators** | CqlTypeOperatorsTest.xml | 59 | 14 | 362 |
 | **Logical Operators** | CqlLogicalOperatorsTest.xml | 39 | 5 | 216 |
-| **Types** | CqlTypesTest.xml | 39 | 10 | 227 |
-| **Type Operators** | CqlTypeOperatorsTest.xml | 35 | 11 | 218 |
-| **Nullological Operators** | CqlNullologicalOperatorsTest.xml | 22 | 4 | 127 |
-| **Query Tests** | CqlQueryTests.xml | 12 | 3 | 74 |
-| **Conditional Operators** | CqlConditionalOperatorsTest.xml | 9 | 3 | 121 |
-| **Aggregate Test** | CqlAggregateTest.xml | 9 | 1 | 107 |
-| **Errors & Messaging** | CqlErrorsAndMessagingOperatorsTest.xml | 4 | 1 | 28 |
+| **Types** | CqlTypesTest.xml | 36 | 11 | 283 |
+| **Nullological Operators** | CqlNullologicalOperatorsTest.xml | 35 | 4 | 204 |
+| **Query Tests** | CqlQueryTests.xml | 20 | 8 | 137 |
+| **Conditional Operators** | CqlConditionalOperatorsTest.xml | 14 | 3 | 145 |
+| **Aggregate Test** | CqlAggregateTest.xml | 12 | 1 | 127 |
+| **Errors & Messaging** | CqlErrorsAndMessagingOperatorsTest.xml | 7 | 1 | 46 |
 
 ## Test Structure
 

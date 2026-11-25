@@ -7170,12 +7170,14 @@ into an interval-boundary change):
    all can only assert "empty"), so both fixtures are visible failures in the
    new 2022/2037 baseline and the external cql-tests-runner is no longer the
    only referee for null-vs-false.
-2. **`<point> in <Interval>` with literal Time bounds** lowers to raw SQL
+2. ~~**`<point> in <Interval>` with literal Time bounds** lowers to raw SQL
    `BETWEEN` in `_translate_in_op` (lexicographic string compare), so
    `@T12:00:00 in Interval[@T12:00:00.000, @T21:59:59.999]` is FALSE where
-   the combined-precision rule requires TRUE. Routing that block through
-   `intervalContains` is a translator change with DQM blast radius
-   (`during`/`in` over measurement periods rides the same shape).
+   the combined-precision rule requires TRUE.~~ **RESOLVED by FHIR4-35
+   (2026-11-24)** — see "FHIR4-35 — Time point-in-literal-Interval" below.
+   The reroute is gated on a provably-certain operand set, so the DQM blast
+   radius the note warned about is empty (79 `in Interval[` sites across the
+   qi-core + us-core corpora contain ZERO `@T` Time literals).
 
 REBUILD REQUIRED for the no-Python/WASM surface:
 `extensions/cql/src/cql/interval.cpp`
@@ -7283,9 +7285,8 @@ precision)` per operand, and a single all-null interval cannot infer its point
 type, so the closed-null cells stay null there. The same seam also returns null
 for a NON-null Integer interval (`Interval[1, 10] starts day of Interval[1, 15]`)
 because the precision qualifier is defined only for Date/DateTime/Time point
-types. Closing it needs a peer-aware Start/End arity that the bundled C++
-surface does not implement; pinned in the regression test as
-`*PrecisionGapNull`.
+types. **CLOSED by FHIR4-41 — see below; the `*PrecisionGapNull` pins are now
+determined booleans.**
 
 
 ### FHIR4-40 — point `in` an OPEN-null-bound interval is UNKNOWN (2026-11-24)
@@ -7339,11 +7340,82 @@ boilerplate: real DQM data carries open-null bounds —
 CMS645/CMS133 one-sided-Period doctrine), and `intervalContains` answers true
 for a point inside it. Adding the guard therefore changes measure SQL wherever a
 point or interval is tested against such a period, and it needs a C++
-`IntervalContains*Func` mirror plus an extension rebuild. Give it its own card.
+`IntervalContains*Func` mirror plus an extension rebuild.
+**CLOSED by FHIR4-42 — see below.**
+
+
+### FHIR4-41 — the PRECISION-qualified `starts`/`ends` infer the point type from the PEER (2026-11-24)
+
+FHIR4-38 fixed the unqualified form and pinned the precision-qualified one as a
+gap: `starts day of` lowered to
+`cqlSameAsP(intervalStart(X), intervalStart(Y), precision)` plus the end
+conjunct, and `intervalStart` cannot infer a point type from a single all-null
+interval. Two distinct shapes were both NULL:
+
+1. **All-null closed operand, temporal point type** — `Interval[null, null]
+   starts day of Interval[@2024-01-01, @2024-12-31]`. CQL 1.5 §19.30 Starts /
+   §19.13 Ends: *"This operator uses the semantics described in the Start and
+   End operators to determine interval boundaries, particularly when those
+   boundaries are null."* §9.14/§9.15 make a CLOSED null bound the point-type
+   extremum, and `Interval<T>` is satisfied by BOTH operands — so the type comes
+   from the PEER, exactly as FHIR4-38's peer-aware sentinels do. New UDFs
+   `intervalStartWithPeer(interval, peer)` / `intervalEndWithPeer(interval,
+   peer)` (`fhir4ds/cql/duckdb/udf/interval.py`, thin wrappers over the shared
+   `_interval_start`/`_interval_end` bodies, so 1-arg behaviour and bound
+   formatting are byte-identical) supply it; the translator emits them in the
+   precision branches of `_translate_starts_op` / `_translate_ends_op`.
+   OPEN null bounds still return null (`Interval(null, null)`), and a pair where
+   NEITHER side carries a bound (`Interval[null, null] ... Interval[null,
+   null]`) stays null (`Interval<Any>`).
+
+2. **Non-temporal point type with a precision qualifier** — ADJUDICATED, not a
+   gap. §19.13/§19.30: *"If precision is specified **and the point type is a
+   Date, DateTime, or Time type**, comparisons used in the operation are
+   performed at the specified precision."* The qualifier is CONDITIONAL, and the
+   reference implementation ignores it outside that branch:
+   `StartsEvaluator`/`EndsEvaluator`
+   (cqframework/clinical_quality_language,
+   `engine/src/commonMain/kotlin/.../elm/executing/`) select the precision-aware
+   comparison only under `leftStart is BaseTemporal && rightStart is
+   BaseTemporal`; the else branch is `Equal + LessOrEqual` (starts) /
+   `GreaterOrEqual + Equal` (ends). So `Interval[1, 10] starts day of
+   Interval[1, 15]` is **TRUE**, not null, and
+   `Interval[null, null] starts day of Interval[1, 10]` is **FALSE**.
+   `_precision_qualifier_is_noop` (translator `_operators.py`) drops the
+   qualifier and emits `intervalStartsSame`/`intervalEndsSame` when every
+   STATICALLY KNOWN point type is non-temporal. Residual (documented, not
+   pinned): a non-temporal interval whose point type is only known at runtime
+   (static type `Any`) still takes the precision form and returns null — the
+   static check is conservative on purpose, and CQL's own typing knows `T` here.
+
+Lowering contract pinned in `test_interval_part3_parity.py`: temporal/unknown
+point types emit `intervalStartWithPeer`, statically non-temporal ones emit
+`intervalStartsSame` and no `cqlSameAsP`.
+
+Official gate unchanged at 2036/2043 (A/B on a pristine `dev` worktree: the
+same 7 pre-existing failures, no starts/ends fixture exercises an all-null
+bound); DQM qi-core 47/47 and us-core 73/73 unchanged. Pinned by
+`test_interval_part3_parity.py::
+test_cql_interval_part3_precision_starts_ends_peer_point_type_fhir4_41`
+(Date/DateTime/Time across `starts`/`ends`, plus the open-null and uninferrable
+null controls, plus the Integer/Decimal/Quantity adjudication) and the
+direct-UDF sibling.
+
+**REBUILD REQUIRED** for the no-Python/WASM surface: the C++ mirrors
+(`IntervalStartWithPeerFunc`/`IntervalEndWithPeerFunc` in
+`extensions/cql/src/cql_extension.cpp`, sharing `SentinelForNullBound` with the
+1-arg forms) are in the source but not in the shipped bundles. Until
+`scripts/build_extension_bundles.py --build --abi <slot>` runs, translated SQL
+that uses those two names raises a Catalog Error there.
+`wasm_runtime_helpers.FHIR4_41_NO_PYTHON_STALE` pins the window (and
+`test_wasm_cpp_surface.CQL_REQUIRED` subtracts the two pending names); set it to
+False after the rebuild and the same tests assert real parity. Desktop is
+unaffected — both names are in `_PYTHON_PREFERRED_CPP_CONFLICTS`, so the Python
+UDFs are the conformance authority on py-fallback and native-loaded
+connections alike.
 
 
 ## AMUX-169 — duration-uncertainty minimum uses the first comparand's LATEST possible value (2026-11-24)
-
 CQL 1.5 Language Semantics "Determining Difference and Duration": *"The lower
 bound of that range is found by determining the duration between the maximum
 possible value of the first comparand and the minimum possible value of the
@@ -7474,3 +7546,320 @@ Successor+Predecessor groups at `Build.CqlVersion=1.5` went 14 pass / 8 fail
 a pre-existing runner-side Long rendering artifact (`PredecessorOf1L` /
 `SuccessorOf1L` compare `0L`/`2L` as text and fail identically in BOTH modes —
 the internal conformance gate passes both).
+
+## FHIR4-35 — Time point-in-literal-`Interval` compares instants, not text (2026-11-24)
+
+CQL 1.5 §Time: "seconds and milliseconds are combined and represented as a
+Decimal for the purposes of comparison ... When milliseconds are null, they are
+combined as .0 ... This is true of all comparison operations for time values
+... or when comparison is performed as part of other operations". So
+`@T12:00:00` and `@T12:00:00.000` are the SAME instant.
+
+The literal-`Interval` branch of `_translate_in_op` lowered closed/bounded
+membership to a raw SQL `BETWEEN`, which compares the VARCHAR spellings
+LEXICOGRAPHICALLY: `'T12:00:00' < 'T12:00:00.000'`, so the point fell below its
+own closed low bound. The mirror operators (`contains`, `during`) and every
+sibling interval predicate already dispatched to `intervalContains`; only the
+point-in-interval form was lexicographic.
+
+    'T12:00:00' BETWEEN 'T12:00:00.000' AND 'T21:59:59.999'        -- FALSE
+    intervalContains(intervalFromBounds('T12:00:00.000', 'T21:59:59.999',
+                     TRUE, TRUE), CAST('T12:00:00' AS VARCHAR))    -- TRUE
+
+THE NARROWING RULE (why this is not a broad reroute). A new
+`_is_engine_routed_time_interval_membership` gate fires ONLY when the point AND
+both bounds are statically Time-valued at second-or-finer (and no finer than
+millisecond) precision, with both bounds closed — i.e. exactly the set where
+§Time makes every comparison CERTAIN. `_static_time_operand_rank` accepts
+`@T..` `TimeLiteral`s, `T`-prefixed literals, `Time(...)` with all-literal
+components, and `TimeOfDay()` (second precision). Everything else keeps its
+existing lowering, deliberately:
+
+* **Date/DateTime operands** — a second-vs-millisecond mismatch at a
+  DATE/TIME BOUNDARY is UNCERTAIN per the official fixture
+  `CqlIntervalOperatorsTest.xml::DateTimeIncludedInNull` (the AMUX-171 /
+  CQL-03 doctrine). `intervalContains` does not model that uncertainty, so
+  routing DateTime through it would manufacture a definitive TRUE the fixtures
+  forbid. `@2012-01-01T12:00:00 in Interval[@2012-01-01T12:00:00.000, ...]`
+  therefore still returns FALSE (the `contains` mirror says TRUE — a
+  pre-existing inconsistency between the two spellings, NOT this card).
+* **hour/minute-precision Time operands** — the CQL verdict there is
+  *uncertain*, not lexicographic; that is an orthogonal, still-unpinned gap
+  (`@T12 in Interval[@T12:00:00.000, ...]` stays FALSE).
+* **dynamic operands** (`Observation.effective`, `Encounter.period`, `.value`)
+  and **numeric / String / Quantity** operands — the raw comparison is what
+  those paths were introduced for; the `in`/`during` over measurement periods
+  shape is untouched.
+
+Evidence that the blast radius is empty: 79 `in Interval[` sites exist across
+the qi-core-2025 and us-core-2025 CQL corpora and NOT ONE contains a `@T` Time
+literal, so the gate cannot fire in any measure. Confirmed empirically — every
+qi-core (47) and us-core (73) measure's `sql_size_bytes` is BYTE-IDENTICAL to
+the pre-change report, and a pristine `git archive dev` snapshot generates the
+same sizes for the four sentinels: CMS0334 766,779 / CMS1218 1,180,020 /
+CMS190 146,248 / CMS2 135,193 bytes (delta 0 on each).
+
+Gate: official CQL conformance stays 2029/2037 with ZERO cells moving (no
+official fixture covers Time literal `in`); DQM qi-core 47/47 and us-core 73/73
+unchanged. Pinned by
+`duckdb/tests/integration/test_interval_part1_parity.py::
+test_cql_interval_part1_time_point_in_literal_interval_match_no_python_cpp`
+(11 Time cells on py-fallback / native-loaded / no-Python engines + a dispatch
+assertion that the emitted SQL uses `intervalContains` and no `BETWEEN`) and
+`::test_cql_interval_part1_dynamic_point_in_literal_interval_keeps_between_fast_path`
+(the narrowing guard: dynamic FHIR, numeric, String, Quantity, Age-uncertainty,
+hour-precision Time and DateTime operands all keep `BETWEEN`).
+
+No C++ change and NO REBUILD: `intervalContains`/`intervalFromBounds` already
+exist natively and the no-Python engine answers the Time cells correctly (the
+parity test asserts all three engines).
+
+SEPARATE PRE-EXISTING BUG found while probing the operator family (verified
+identically on the pristine `dev` snapshot, out of this card's scope): the
+`properly contains` KEYWORD spelling is not translated for ANY point type —
+`Interval[1, 10] properly contains 5` emits the raw text
+`intervalFromBounds(CAST(1 AS VARCHAR), CAST(10 AS VARCHAR), TRUE, TRUE)
+properly contains 5` and raises a DuckDB ParserException at execution
+(`properly included in` and `Interval properly contains Interval` are fine).
+Give it its own card.
+
+## cql-tests corpus pin + official-gate failure ledger (FHIR4-37, 2026-11-24)
+
+**Pin**: upstream `cqframework/cql-tests` **0a8f7d3** (2026-11-21, "Merge pull
+request #186 … truncate-integer-range-tests"), previous `316c493` (2026-11-16).
+Both halves of the pin must agree: the `cql-tests` entry is a **gitlink**
+in the fhir4ds index AND a working clone. They had drifted (gitlink `f724ee4`
+vs tree `316c493`); a local `diff.ignoresubmodules=all` in this repo HIDES the
+bump from `git diff`/`git show --stat`, so verify with
+`git ls-tree HEAD fhir4ds/cql/tests/official/cql-tests` and
+`git -C fhir4ds/cql/tests/official/cql-tests rev-parse HEAD` (both must equal
+the pin). Refresh procedure + per-file counts: `official/CQL_TESTS_README.md`.
+
+**Gate**: official CQL 2029/2037 -> **2035/2043** (+6 Truncate range-edge cells
+from upstream #186, 0 newly failing). The 4 re-pinned expressions (#178
+`System.Quantity`/`System.Ratio` qualification, #179 `ToBoolean(null as
+String)`) already passed. The same 8 cells fail before and after — their
+ledger, so nobody re-triages them as regressions:
+
+| cell | class | why the engine is not wrong |
+|---|---|---|
+| `CqlDateTimeOperatorsTest.xml::DateTimeDurationBetweenUncertainInterval` | stale oracle (open upstream #183) | expects 17; **16** is the spec answer. Language Semantics "Determining Difference and Duration": the low bound is the duration from the first comparand's MAXIMUM possible value — `DateTime(2014,1,15)` is a day-precision datetime, i.e. `[…T23:59:59.999]` -> 16 days (AMUX-169 entry in the root AGENTS.md). |
+| `CqlDateTimeOperatorsTest.xml::TimeDurationBetweenHourDiffPrecision2` | stale oracle (open upstream #183) | expects 1; `hours between @T06 and @T07:00:00` is `[0,1]` — an operand whose precision IS the requested unit still has unknown finer components (same normative sentence as above). |
+| `CqlIntervalOperatorsTest.xml::TimeProperContainsNull` / `::TimeProperInNull` | stale oracle (open upstream #184) | pin `null` at `version="1.0"`; CQL §Time combines seconds+milliseconds as one decimal (".0 when milliseconds are null") for ALL comparison operations, so the 1.5.3 answer is **false** (AMUX-171). |
+| `CqlComparisonOperatorsTest.xml::EquivTupleJohnJohnFalse` / `::…False2` | fixture asserts a STATIC error (`invalid="true"`), engine evaluates | §Equivalent: "two tuple values are equivalent if and only if the tuples are of the same type, and the values for all elements by name are equivalent" — different element sets are **false**, which is what the engine returns. Only a static type checker would reject the expression. |
+| `CqlComparisonOperatorsTest.xml::NotEquivalentNullNull` | fixture asserts `invalid="semantic"` for the untyped `null` (`null !~ null`) | §Equivalent: "returns true if the arguments are equivalent in value, **or if they are both null**; and false otherwise" -> `!~` is false. Same untyped-null ambiguity class upstream #179 just fixed for `ToBoolean(null)`. |
+| `CqlNullologicalOperatorsTest.xml::CoalesceMoreThanFiveArgs` | **FIXED by FHIR4-44 (2026-11-24)** — see below | fixture is RIGHT; the former "variadic, no upper bound" doctrine was wrong. |
+
+**COALESCE DOCTRINE CORRECTION (supersedes the CQL-08 "variadic, no upper
+bound" note; ARITY GUARD LANDED as FHIR4-44).** The spec's own Coalesce
+examples carry
+`define CoalesceError: Coalesce(null, 15, null, null, null, null) // more than 5
+inputs must be represented as list` — present verbatim in BOTH
+`https://cql.hl7.org/2019May/09-b-cqlreference.html` (1.5.3) and the current
+`https://cql.hl7.org/09-b-cqlreference.html`, alongside a CLOSED signature list
+of four scalar overloads (2..5 args) plus one unbounded `Coalesce<T>(arguments
+List<T>) T`. FHIR4-44 restored the cap on BOTH surfaces —
+`_functions.py::_validate_coalesce_scalar_arity` (translator choke point +
+`_translate_function_ref` pre-check, constant `_COALESCE_MAX_SCALAR_ARITY = 5`)
+and `udf/logical.py::Coalesce` — measured on the AUTHORED CQL argument count so
+the single-list overload stays unbounded and one list argument expanding to six
+SQL `COALESCE` arguments is still the list overload. Gate 2035/2043 ->
+**2036/2043** (exactly this cell), DQM qi-core 47/47 / us-core 73/73 unchanged
+(no 6+ scalar `Coalesce` in either corpus). Do not re-assert the old "no upper
+bound" doctrine without re-reading the signature list AND the example.
+
+**`versionTo` gating caveat (`conformance/scripts/run_cql.py`).** A cell capped
+at `versionTo < 2.0` is treated as a superseded pass ONLY when a sibling with
+`version >= 2.0` and the BYTE-IDENTICAL expression exists; otherwise the
+1.5-era cell still runs and fails. The five `SuccessorOf*/PredecessorOf*` rows
+resolve that way today. When the pin moves past upstream #184 (which re-pins
+the two Time cells at 1.5.3 and caps the null ones at 1.5.2), re-check that the
+gate recognises the new pairing — a 1.5.2 cap with a 1.5.3 (not 2.0) sibling
+would keep running the capped cell and keep failing.
+
+**CLEAN-CHECKOUT HOLE — RESOLVED by FHIR4-45 (2026-11-24).** The `cql-tests`
+gitlink had NO `.gitmodules` entry, so `git submodule update --init` could not
+materialise it and the CI conformance job only checks out
+`tests/data/ecqm-content-qicore-2025`. In a fresh `git worktree add … dev` the
+directory was EMPTY; `run_cql.py` then printed "CQL tests directory not found"
+and returned WITHOUT rewriting the TRACKED `conformance/reports/cql_report.json`
+(exit 0), so `run_all.py`/CI reported the previously committed numbers as a
+pass. Reproduced on this card: fresh `dev` worktree -> 0 XML files, exit 0,
+report md5 unchanged (548f7c57), `run_all.get_summary` -> 2035/2043.
+
+Two-part fix (both parts are load-bearing):
+
+1. **The corpus is VENDORED** (plain tracked files, gitlink deleted) — precedent
+   `fhir4ds/viewdef/tests/spec_tests/` and `tests/data/ecqm-content-qicore-2025/`.
+   A `.gitmodules` entry was rejected because it does not fix the observed
+   failure: linked worktrees do not materialise submodules either, and the CI
+   step names a different path (verified: `git submodule update --init
+   tests/data/ecqm-content-qicore-2025` exits 0 as a no-op because that path is
+   itself vendored). Fresh worktree now has all 16 XML files.
+2. **`run_cql.py` hard-fails on corpus problems**: absent / empty / fewer XML
+   files than the pin -> exit **2**, stale report DELETED then replaced by an
+   explicit `__corpus_integrity__` failure; fewer test cases collected than the
+   pin -> exit 2 with the real numbers plus a shortfall sentinel; an unparseable
+   corpus XML is a failed cell instead of a silently-dropped file; more files
+   than the pin -> loud WARNING. `fhir4ds/cql/tests/official/corpus_manifest.json`
+   (pin + 16 files + 2043 cases) is the single source of truth.
+3. **`run_all.py` can no longer be fooled**: it keeps each child's outcome
+   (a failed child is printed as NOT RUN and contributes nothing to the totals),
+   verifies the report was REWRITTEN this run by `(mtime_ns, size)` fingerprint,
+   rejects a 0-test report, and exits 1 on any of those. This closes the DQM
+   "stale report summarized as 47/47" pattern for every suite, not just CQL.
+   Rate-based failures (the 8 known cells above) still exit 0 with the
+   INCOMPLETE banner, so those honest fixtures do not make the gate
+   permanently red.
+
+Doctrine for future corpora: a conformance corpus must either be vendored or be
+a REAL submodule with a checkout step in the workflow that runs the gate — and
+either way the runner must hard-fail when its input is missing. A runner that
+prints an error and returns has no referee.
+
+## `properly contains` is not CQL (FHIR4-43, 2026-11-24)
+
+There is no `properly contains` operator. In CQL 1.5.3
+(https://cql.hl7.org/2019May/grammar.html) and 2.0
+(https://cql.hl7.org/grammar.html) the `properly` modifier is accepted only by
+`between`, `includes`, `during` / `included in`, and `within ... of`; the
+reference implementation's `grammar/cql.g4` agrees, and Appendix B has zero
+`properly contains` entries in either version. The point-in-interval reads are
+spelled
+
+    properly includes      (left Interval<T>, right T)      -- §9.22
+    properly included in   (left T, right Interval<T>)      -- §9.23 (also `properly during`)
+
+The lexer used to pre-tokenize `properly contains` into a dedicated
+`PROPER_CONTAINS` token, so the parser produced an operator string that no
+translator dispatch site handled: `SQLBinaryOp` then carried the raw text
+(`intervalFromBounds(...) properly contains 5`) into the generated SQL and
+DuckDB raised a `ParserException` at execution — for every point type, the
+list form and the interval-interval form. `properly in` was the same defect.
+Both are now rejected in the parser's `PROPERLY` branch with a typed
+`ParseError` naming the valid spellings; `BINARY_OPERATOR_MAP` no longer
+carries the stale `"properly contains": None  # Handled specially` entry, which
+no site ever handled.
+
+**Do not "fix" this by adding a dispatch entry.** Translating a spelling the
+language does not have would extend CQL silently (invisible to conformance)
+and would require inventing the interval-interval reading too — CQL `contains`
+over an interval only takes a point (§9.4). Rejecting it is also this branch's
+established behaviour: an unrecognised `properly` combination already surfaced
+as a trailing-token error rather than being silently accepted.
+
+### Operator-string audit (repeat after parser changes)
+
+`ast`-walk `fhir4ds/cql/parser/parser.py` for every `BinaryExpression(operator=...)`
+site (static literals, one-hole f-strings, and the dynamic `op`/`operator`/
+`full_operator` variables), then resolve each against the translator: a literal
+reference anywhere under `fhir4ds/cql/translator/`, a documented prefix family
+(`after <prec> of`, `starts ...`, `within <N> <unit> of`, `on or after <prec> of`,
+...), or a bare timing quantifier (`_parse_bare_temporal_operator` /
+`_parse_within_operator` in `_temporal_utils.py`). Current state: **82 distinct
+emitted specs, 0 unresolved**. The invariant is the CQL-19 doctrine — a
+parser-emitted operator string with no dispatch falls through to SQL pass-through
+and produces Binder/Parser exceptions at execution, so a new operator spelling
+must either get a dispatch site or be rejected where it is produced.
+
+Grammar-valid but still unsupported, and NOT defects (they fail loudly with a
+ParseError, no SQL leak): `properly between` and `properly within <N> <unit> of`.
+
+Gate after the change: CQL conformance 2036/2043 unchanged (`cql_report.json`
+byte-identical — no fixture uses the spelling), DQM qi-core-2025 47/47 and
+us-core-2025 73/73.
+
+### FHIR4-42 — containment through an OPEN null bound is UNKNOWN, with 3VL (2026-11-24)
+
+`intervalContains` / `intervalContainsPrecise` treated EVERY null bound as
+unbounded, so an OPEN null bound produced a definite verdict. Every sibling
+relationship predicate (`intervalOverlaps`, `intervalIncludes`,
+`intervalProperlyContains`, `intervalMeets`, `intervalStartsSame`, …) already
+carried `_open_null_bound_uncertain`. CQL 1.5.3 §In (Interval) is the whole
+rule and it is asymmetric:
+
+> "For open interval boundaries, exclusive comparison operators are used. For
+> closed interval boundaries, if the interval boundary is null, the result of
+> the boundary comparison is considered true."
+
+So a CLOSED null bound drops out of the conjunction (the point-type extremum via
+§9.14/§9.15 Start/End) while an OPEN null bound is an exclusive comparison
+against an UNKNOWN value — the boundary comparison is NULL and three-valued AND
+decides. Containment therefore does NOT hard-bail on open nulls the way the
+one-sided sibling predicates do; it contributes an UNKNOWN operand
+(`_and3` in `fhir4ds/cql/duckdb/udf/interval.py`):
+
+| expression | before | after |
+|---|---|---|
+| `5 in day of Interval(null, null)` | false | **null** |
+| `5 in day of Interval(null, 10]` | true | **null** (`NULL AND TRUE`) |
+| `500 in day of Interval(null, 10]` | false | false (`NULL AND FALSE`) |
+| `5 in day of Interval[0, null)` | true | **null** |
+| `500 in day of Interval[0, null)` | true | **null** (`TRUE AND NULL`) |
+| `5 in day of Interval[null, null]` / `Interval[null, 10]` / `Interval[0, null]` | true | true (closed) |
+| `null in day of Interval(null, null)` | null | null (§In point-null) |
+
+Both shapes reach the UDF through different routes and BOTH needed a fix:
+
+1. **One-sided open null bounds** arrive as interval JSON (a null bound with its
+   open flag) — `intervalFromBounds(NULL, 10, FALSE, TRUE)` works. The UDF
+   three-valued bounds handle them (`intervalContains`,
+   `intervalContainsPrecise`). Because `intervalIncludesPrecise` /
+   `intervalIncludedInPrecise` delegate their bound checks to
+   `intervalContainsPrecise`, they inherit it and finally agree with plain
+   `intervalIncludes` (which already answered null for the same container).
+2. **BOTH bounds untyped-null with at least one open bracket** never reach the
+   UDF at all: both bounds are SQL NULL, `intervalFromBounds` returns NULL, and
+   §19.3's first-argument-null rule then answers FALSE. That is why
+   `5 in day of Interval(null, null)` was false even before the UDF question.
+   `_translate_in_op`'s precision branch now short-circuits that authored shape
+   to `NULL` (`Unknown AND <extra>` when the parser's AND-inside-precision
+   workaround supplies a second condition). Note `Interval[null, null]` is
+   unaffected: closed null bounds go through the `__null__` sentinel and render
+   real interval JSON.
+
+**DOCTRINE — the one-sided FHIR Period decision (option A: guard in general).**
+`collapse_intervals` maps a Period with only `end` onto an OPEN null low
+("the start is UNKNOWN": `start of` is null, Min/Max ignore it — CMS645) and a
+Period with only `start` onto a CLOSED null high ("the period is ongoing": the
+point-type maximum, so `overlaps` stays determined — CMS145). Only the OPEN half
+moves: an unknown start cannot be claimed to contain a point, while an ongoing
+period genuinely does extend past its start, which the spec's closed-null clause
+sanctions. Making containment agree with `intervalOverlaps` /
+`intervalProperlyContains` (both already returned null for the same one-sided
+shape) is the coherence argument; DQM is the referee and it agrees —
+instrumenting both gated corpora with the guard in place found **ZERO**
+containment calls whose container carried an open null bound, so no measure
+relies on the definite verdict (qi-core-2025 47/47, us-core-2025 73/73
+unchanged). The `end`-only → unknown / `start`-only → ongoing asymmetry is
+pinned by `test_cql_interval_contains_one_sided_period_doctrine_fhir4_42`.
+
+Gate: CQL conformance 2036/2043 with ZERO cells moving (no official fixture
+covers the precision form); DQM qi-core-2025 47/47, us-core-2025 73/73. Pinned
+by `test_interval_part2_parity.py::
+test_cql_interval_contains_open_null_bound_is_unknown_fhir4_42` and
+`::test_cql_interval_contains_one_sided_period_doctrine_fhir4_42` (py-fallback
+== native-loaded == no-Python, plus a dispatch assertion on the one-sided
+Period shapes `collapse_intervals` emits and on the
+`intervalIncludesPrecise` → `intervalIncludes` agreement).
+
+**REBUILD REQUIRED** for the no-Python/WASM surface. The C++ mirrors
+(`IntervalContainsFunc`, `IntervalContainsPreciseFunc`, plus the
+`guard_open_null` instance of `DEFINE_PREC_INTERVAL_UDF` for
+`IntervalIncludesPreciseFunc` and the container guard in
+`IntervalIncludedInPreciseFunc`, all in
+`extensions/cql/src/cql_extension.cpp`) are in the source and compile-check
+clean with production flags, but the shipped bundles predate them.
+`_FHIR4_42_NO_PYTHON_STALE` / `_FHIR4_42_ONE_SIDED_NO_PYTHON_STALE` in
+`test_interval_part2_parity.py` pin the window and flip automatically
+(`_fh42_native_guard_current` probes the loaded binary); delete both maps and
+their branches after `python3 scripts/build_extension_bundles.py --build --abi
+<slot>`. Desktop is unaffected on both connections — `intervalContains` and
+`intervalContainsPrecise` are `_PYTHON_PREFERRED_CPP_CONFLICTS` members, so the
+Python UDFs are the conformance authority.
+
+KNOWN SIBLING GAP (out of this card): the other precision-qualified relationship
+predicates (`intervalOverlapsPrecise`, `intervalBeforePrecise`,
+`intervalAfterPrecise`, `intervalOverlapsBefore/AfterPrecise`) still lack the
+open-null treatment on BOTH engines. Do not widen FHIR4-42's guard into them
+without doing the dual-engine pair and re-running both DQM suites.

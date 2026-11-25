@@ -2,9 +2,9 @@
 CQL Logical Function UDFs
 
 Most logical operators are implemented as SQL macros in macros/logical.py for
-zero Python overhead. Coalesce is kept here because CQL exposes variadic and
-single-list overloads that cannot be represented by one type-preserving DuckDB
-macro.
+zero Python overhead. Coalesce is kept here because CQL exposes a two-to-five
+scalar overload family plus a single-list overload that cannot be represented
+by one type-preserving DuckDB macro.
 """
 from __future__ import annotations
 import json
@@ -27,6 +27,14 @@ if TYPE_CHECKING:
 
 _COALESCE_RETURN_TYPE = "VARCHAR" if sqltypes is None else getattr(sqltypes, "VARIANT", "VARCHAR")
 
+# CQL §Coalesce: four scalar signatures (2..5 arguments) plus one unbounded
+# List<T> signature. "More than 5 inputs must be represented as list"
+# (FHIR4-44) — see Coalesce() below. Lockstep: the translator enforces the
+# same cap in `_functions.py::_validate_coalesce_scalar_arity`; the C++
+# extension registers only the legacy `logicalCoalesce`, so this UDF is the
+# authority on BOTH connections.
+_COALESCE_MAX_SCALAR_ARITY = 5
+
 
 def _coalesce_return_value(value: Any) -> Any:
     if isinstance(value, datetime):
@@ -37,7 +45,14 @@ def _coalesce_return_value(value: Any) -> Any:
 
 
 def Coalesce(*args: Any) -> Any:
-    """CQL Coalesce(a, b, ...) and Coalesce(List<T>) - first non-null value."""
+    """CQL Coalesce(a, b, ...) and Coalesce(List<T>) - first non-null value.
+
+    CQL §Coalesce declares four scalar overloads (2, 3, 4 and 5 arguments)
+    plus ONE unbounded ``Coalesce<T>(arguments List<T>) T``; the spec's own
+    example — ``Coalesce(null, 15, null, null, null, null) // more than 5
+    inputs must be represented as list`` — makes a sixth SCALAR argument an
+    error. The list overload has no upper bound (FHIR4-44).
+    """
     if len(args) == 1 and isinstance(args[0], list):
         for value in args[0]:
             if value is not None:
@@ -47,6 +62,12 @@ def Coalesce(*args: Any) -> Any:
         raise ValueError(
             "Coalesce scalar overload requires 2 or more arguments; "
             "use Coalesce([ ... ]) for list input"
+        )
+    if len(args) > _COALESCE_MAX_SCALAR_ARITY:
+        raise ValueError(
+            f"Coalesce has no scalar overload with more than 5 inputs "
+            f"(got {len(args)}): 2..5 scalar arguments plus a single list "
+            "argument are defined — represent more than 5 inputs as a list"
         )
     for arg in args:
         if arg is not None:

@@ -256,7 +256,6 @@ class TokenType(Enum):
     UNION = auto()
     CONTAINS = auto()
     PROPERLY = auto()
-    PROPER_CONTAINS = auto()
     PROPER_IN = auto()
     PROPER_INCLUDES = auto()
     EXPAND = auto()
@@ -725,9 +724,16 @@ MULTI_WORD_KEYWORDS: list[tuple[list[str], TokenType]] = [
     (["is", "true"], TokenType.IS_TRUE),
     (["is", "false"], TokenType.IS_FALSE),
     # List operators - properly variants (longer first)
+    # NOTE: there is no `properly contains` production in the CQL grammar
+    # (cql.hl7.org 1.5 and 2.0 `expression` / `intervalOperatorPhrase`,
+    # and the reference implementation's `grammar/cql.g4`): `properly`
+    # qualifies only `between`, `includes`, `during`/`included in`, and
+    # `within ... of`. Pre-tokenizing `properly contains` into a dedicated
+    # token made the parser accept a non-existent spelling, which then had
+    # no translator dispatch and reached DuckDB as raw SQL text
+    # (FHIR4-43). The parser now rejects it via the `PROPERLY` branch.
     (["properly", "included", "in"], TokenType.PROPER_IN),
     (["properly", "includes"], TokenType.PROPER_INCLUDES),
-    (["properly", "contains"], TokenType.PROPER_CONTAINS),
     # List operators - included in
     (["included", "in"], TokenType.INCLUDED_IN),
     # Singleton from operator

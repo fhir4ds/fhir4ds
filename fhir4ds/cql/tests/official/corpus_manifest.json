@@ -1,0 +1,10 @@
+{
+  "upstream": "https://github.com/cqframework/cql-tests",
+  "pin": "0a8f7d32809cd1b8f595b89e415bcfc855913b28",
+  "pin_date": "2026-11-21",
+  "pin_subject": "Merge pull request #186 from bryantaustin13/truncate-integer-range-tests",
+  "corpus_dir": "fhir4ds/cql/tests/official/cql-tests/tests/cql",
+  "xml_file_count": 16,
+  "test_count": 2043,
+  "note": "Single source of truth for the vendored CQL corpus size. conformance/scripts/run_cql.py fails when fewer XML files or fewer test cases are present than these counts, and warns when there are more. Update BOTH this file and CQL_TESTS_README.md in the same commit as any corpus refresh."
+}

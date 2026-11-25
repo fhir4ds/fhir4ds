@@ -2213,6 +2213,89 @@ class OperatorsMixin:
             return {0: 4, 1: 5, 2: 6}.get(colons), False
         return None
 
+    def _static_time_operand_rank(self, node) -> Optional[int]:
+        """Precision rank of a statically TIME-valued operand (6=second, 7=ms).
+
+        Returns ``None`` for anything that is not provably a Time value at
+        second-or-finer (but no finer than millisecond) precision:
+
+        * Date / DateTime operands — a second-vs-millisecond precision
+          mismatch at a DATE/TIME BOUNDARY is *uncertain* per the official
+          fixture ``CqlIntervalOperatorsTest.xml::DateTimeIncludedInNull``
+          (CQL-16/CQL-03 doctrine), which ``intervalContains`` does not model.
+        * hour/minute-precision Time operands — the CQL comparison of those is
+          *uncertain* (precision mismatch), not a lexicographic verdict; that
+          is an orthogonal, still-unpinned gap.
+        * dynamic expressions whose precision is only known at runtime.
+
+        Within the eligible set every comparison is CERTAIN (CQL 1.5 §Time:
+        "seconds and milliseconds are combined and represented as a Decimal
+        for the purposes of comparison ... When milliseconds are null, they
+        are combined as .0"), which is what makes it safe to hand the
+        comparison to the interval engine.
+        """
+        if isinstance(node, FunctionRef):
+            name = node.name.lower()
+            if name == "timeofday":
+                # CQL-14 SKEPTIC: TimeOfDay() is a second-precision Time.
+                return 6
+            if name != "time":
+                return None
+        elif isinstance(node, DateTimeLiteral):
+            # Only the ``T``-prefixed (time-only) literal form is a Time
+            # value; a plain date/dateTime literal is a Date/DateTime.
+            text = str(node.value or "")
+            if not text.startswith("T"):
+                return None
+            time_text = text[1:]
+            if "." in time_text and len(time_text.split(".", 1)[1].rstrip("Z")) > 3:
+                return None
+        elif isinstance(node, TimeLiteral):
+            text = node.value[1:] if node.value.startswith("T") else node.value
+            if "." in text and len(text.split(".", 1)[1]) > 3:
+                return None
+        else:
+            return None
+        info = self._static_temporal_precision_info(node)
+        if info is None:
+            return None
+        rank, date_only = info
+        if date_only or rank not in (6, 7):
+            return None
+        return rank
+
+    def _is_engine_routed_time_interval_membership(self, point_ast, interval_ast) -> bool:
+        """True when ``point in Interval[..]`` must be answered by the interval engine.
+
+        FHIR4-35: the literal-``Interval`` branch of ``_translate_in_op`` lowers
+        a closed/bounded membership to a raw SQL ``BETWEEN``, which compares the
+        Time spellings LEXICOGRAPHICALLY. ``'T12:00:00' < 'T12:00:00.000'``, so
+        ``@T12:00:00 in Interval[@T12:00:00.000, @T21:59:59.999]`` fell below
+        its own closed low bound and returned FALSE where the combined
+        seconds/milliseconds precision rule (§Time) requires TRUE. The mirror
+        operators (``contains``, ``during``) and every sibling interval
+        predicate already dispatch to ``intervalContains``; only the
+        point-in-interval form was lexicographic.
+
+        The reroute is deliberately narrow: it fires only when the point AND
+        both bounds are statically Time-valued at second-or-finer precision
+        and both bounds are closed (the only shape that reaches the ``BETWEEN``
+        fast path). Numeric/String/dynamic-FHIR operands, Age and Duration
+        uncertainty operands (handled above), Quantity bounds (already
+        engine-routed above), Date/DateTime operands, and hour/minute-precision
+        Time operands keep their existing lowering.
+        """
+        if not isinstance(interval_ast, Interval):
+            return False
+        if not (interval_ast.low_closed and interval_ast.high_closed):
+            return False
+        if interval_ast.low is None or interval_ast.high is None:
+            return False
+        for operand in (point_ast, interval_ast.low, interval_ast.high):
+            if self._static_time_operand_rank(operand) is None:
+                return False
+        return True
+
     def _is_definite_uncertainty_interval_expr(self, node, _depth: int = 0) -> bool:
         """Return true when static duration/difference math is known interval-valued."""
         if _depth > 4:
@@ -4857,6 +4940,17 @@ class OperatorsMixin:
                 return _is_definitely_null_operand(node.left, translated)
             return False
 
+        def _is_untyped_null_bound(node: Any) -> bool:
+            """True for an untyped ``null`` interval bound (``Interval(null, …)``).
+
+            ``null as Integer`` parses to ``BinaryExpression(as, …)`` and is a
+            TYPED null bound: ``_translate_interval`` passes it as the
+            ``__null__`` sentinel so ``intervalFromBounds`` renders a real
+            interval JSON with the authored closedness, and the UDF decides.
+            Only the untyped form collapses to a SQL NULL bound.
+            """
+            return isinstance(node, Literal) and node.value is None
+
         # CQL interval/list `in`: a null container/list argument returns false.
         if self._definitely_null_operand(expr.right, right):
             return SQLLiteral(value=False)
@@ -4912,6 +5006,37 @@ class OperatorsMixin:
                     extra_condition_ast = BinaryExpression(operator="and", left=extra_condition_ast, right=cond)
 
             interval_expr = self.translate(actual_interval_ast, usage=ExprUsage.SCALAR)
+            # FHIR4-42 (CQL 1.5.3 §In (Interval), applied to the precision form
+            # by the same rule FHIR4-40 used for the unqualified form): "For
+            # open interval boundaries, exclusive comparison operators are
+            # used. For closed interval boundaries, if the interval boundary is
+            # null, the result of the boundary comparison is considered true."
+            # §9.14/§9.15 Start/End return NULL (not the point-type extremum)
+            # for a null OPEN bound, so that comparison is UNKNOWN at EVERY
+            # precision — the qualifier cannot make it determinate. An authored
+            # interval whose BOTH bounds are untyped null with at least one
+            # open bracket therefore evaluates to NULL for any point:
+            # `intervalFromBounds` cannot represent it (two SQL-NULL bounds
+            # collapse to a NULL interval, and §19.3's first-arg-null rule then
+            # answers FALSE). One-sided open null bounds DO reach the UDF as
+            # JSON (a null bound with its open flag), where the UDF's
+            # three-valued bound comparison turns them into an UNKNOWN operand.
+            if (
+                isinstance(actual_interval_ast, Interval)
+                and _is_untyped_null_bound(actual_interval_ast.low)
+                and _is_untyped_null_bound(actual_interval_ast.high)
+                and not (
+                    actual_interval_ast.low_closed
+                    and actual_interval_ast.high_closed
+                )
+            ):
+                unknown_membership = SQLNull()
+                if extra_condition_ast:
+                    extra_sql = self.translate(extra_condition_ast, boolean_context=True)
+                    unknown_membership = SQLBinaryOp(
+                        operator="AND", left=unknown_membership, right=extra_sql
+                    )
+                return unknown_membership
             # CQL §19.11 In precision: dispatch to intervalContainsPrecise
             # when the interval is a recognized interval expression so that
             # partial-precision Date/DateTime/Time bounds propagate
@@ -5242,6 +5367,29 @@ class OperatorsMixin:
                             ),
                         ]
                         return SQLBinaryOp(operator="AND", left=conditions[0], right=conditions[1])
+                    # FHIR4-35 (CQL 1.5 §Time combined seconds/milliseconds
+                    # precision): a raw SQL BETWEEN compares Time spellings
+                    # lexicographically, so `@T12:00:00` fell below its own
+                    # closed `@T12:00:00.000` low bound. Hand statically-typed
+                    # Time membership to the same engine path the mirror
+                    # operators (contains/during) already use. Every other
+                    # operand shape keeps the fast path below.
+                    if self._is_engine_routed_time_interval_membership(
+                        expr.left, expr.right
+                    ):
+                        time_interval = SQLFunctionCall(
+                            name="intervalFromBounds",
+                            args=[
+                                low_sql,
+                                high_sql,
+                                SQLLiteral(value=True),
+                                SQLLiteral(value=True),
+                            ],
+                        )
+                        return SQLFunctionCall(
+                            name="intervalContains",
+                            args=[time_interval, self._ensure_interval_varchar(left)],
+                        )
                     # [a, b] -> x BETWEEN a AND b
                     return SQLBinaryOp(
                         operator="BETWEEN",
@@ -6843,6 +6991,64 @@ class OperatorsMixin:
             return expr.expression
         return expr
 
+    #: CQL point types for which a `<precision> of` qualifier changes the
+    #: comparison precision — CQL 1.5 §19.13 Ends / §19.30 Starts: "If precision
+    #: is specified and the point type is a Date, DateTime, or Time type,
+    #: comparisons used in the operation are performed at the specified
+    #: precision."
+    _PRECISION_QUALIFIED_TEMPORAL_POINT_TYPES = frozenset({"date", "datetime", "time"})
+
+    def _static_interval_point_type(self, node: Any) -> Optional[str]:
+        """Point type ``T`` of ``Interval<T>`` when it is statically known."""
+        name = self._static_structural_type_name(node)
+        if not name or not name.startswith("Interval<") or not name.endswith(">"):
+            return None
+        point_type = name[len("Interval<"):-1].strip()
+        if not point_type or point_type == "Any":
+            return None
+        return point_type
+
+    def _precision_qualifier_is_noop(self, *nodes: Any) -> bool:
+        """True when every statically known operand point type is non-temporal.
+
+        FHIR4-41: the precision qualifier is CONDITIONAL on the point type
+        (§19.13/§19.30, quoted above). For every other point type the
+        reference implementation ignores the qualifier and compares exactly —
+        `StartsEvaluator`/`EndsEvaluator`
+        (cqframework/clinical_quality_language
+        engine/src/commonMain/kotlin/org/opencds/cqf/cql/engine/elm/executing/):
+        only the ``leftStart is BaseTemporal && rightStart is BaseTemporal``
+        branch selects the precision-aware comparison; the else branch is
+        Equal + LessOrEqual (starts) / GreaterOrEqual + Equal (ends). Those
+        cells therefore have a DETERMINED answer, not null.
+        """
+        known_types = [
+            point_type
+            for point_type in (self._static_interval_point_type(node) for node in nodes)
+            if point_type
+        ]
+        if not known_types:
+            return False
+        return all(
+            point_type.split(".")[-1].lower()
+            not in self._PRECISION_QUALIFIED_TEMPORAL_POINT_TYPES
+            for point_type in known_types
+        )
+
+    @staticmethod
+    def _boundary_at_precision_with_peer(
+        function_name: str,
+        interval: SQLExpression,
+        peer_interval: SQLExpression,
+    ) -> SQLCast:
+        """Peer-aware Start/End of `interval` (`function_name` selects which)."""
+        return SQLCast(
+            expression=SQLFunctionCall(
+                name=function_name, args=[interval, peer_interval]
+            ),
+            target_type="VARCHAR",
+        )
+
     @staticmethod
     def _point_as_interval(point: SQLExpression) -> SQLExpression:
         """Wrap a point value as a degenerate interval [point, point].
@@ -7209,16 +7415,21 @@ class OperatorsMixin:
                     if self._is_fhir_interval_expression(right_translated) or isinstance(right_translated, SQLInterval)
                     else self._point_as_interval(right_translated)
                 )
+                if self._precision_qualifier_is_noop(expr.left, inner_expr):
+                    # FHIR4-41 (b): the point type is non-temporal, so the
+                    # precision qualifier is a no-op and §19.30 reduces to the
+                    # exact comparison (Equal + LessOrEqual).
+                    return SQLFunctionCall(
+                        name="intervalStartsSame", args=[left_interval, right_interval]
+                    )
                 starts_same = SQLFunctionCall(
                     name="cqlSameAsP",
                     args=[
-                        SQLCast(
-                            expression=SQLFunctionCall(name="intervalStart", args=[left_interval]),
-                            target_type="VARCHAR",
+                        self._boundary_at_precision_with_peer(
+                            "intervalStartWithPeer", left_interval, right_interval
                         ),
-                        SQLCast(
-                            expression=SQLFunctionCall(name="intervalStart", args=[right_interval]),
-                            target_type="VARCHAR",
+                        self._boundary_at_precision_with_peer(
+                            "intervalStartWithPeer", right_interval, left_interval
                         ),
                         SQLLiteral(value=precision_str),
                     ],
@@ -7226,13 +7437,11 @@ class OperatorsMixin:
                 ends_within = SQLFunctionCall(
                     name="cqlSameOrBeforeP",
                     args=[
-                        SQLCast(
-                            expression=SQLFunctionCall(name="intervalEnd", args=[left_interval]),
-                            target_type="VARCHAR",
+                        self._boundary_at_precision_with_peer(
+                            "intervalEndWithPeer", left_interval, right_interval
                         ),
-                        SQLCast(
-                            expression=SQLFunctionCall(name="intervalEnd", args=[right_interval]),
-                            target_type="VARCHAR",
+                        self._boundary_at_precision_with_peer(
+                            "intervalEndWithPeer", right_interval, left_interval
                         ),
                         SQLLiteral(value=precision_str),
                     ],
@@ -7531,16 +7740,46 @@ class OperatorsMixin:
                 if isinstance(precision_str, str):
                     precision_str = precision_str.lower()
                 inner_expr = expr.right.right
-                interval_end = SQLFunctionCall(name="intervalEnd", args=[left])
-                interval_start = SQLFunctionCall(name="intervalStart", args=[left])
                 right_translated = self.translate(inner_expr, usage=ExprUsage.SCALAR)
-                if self._is_fhir_interval_expression(right_translated) or isinstance(right_translated, SQLInterval):
+                right_is_interval = (
+                    self._is_fhir_interval_expression(right_translated)
+                    or isinstance(right_translated, SQLInterval)
+                )
+                # FHIR4-41: operand forms promoted to intervals for the peer
+                # (Interval<T> is shared by both operands, so it also supplies
+                # the point type for an all-null CLOSED interval).
+                left_interval = (
+                    left
+                    if self._is_fhir_interval_expression(left) or isinstance(left, SQLInterval)
+                    else self._point_as_interval(left)
+                )
+                right_interval = (
+                    right_translated if right_is_interval else self._point_as_interval(right_translated)
+                )
+                if self._precision_qualifier_is_noop(expr.left, inner_expr):
+                    # FHIR4-41 (b): non-temporal point type — the qualifier is a
+                    # no-op, so §19.13 reduces to the exact comparison
+                    # (GreaterOrEqual + Equal).
+                    return SQLFunctionCall(
+                        name="intervalEndsSame", args=[left_interval, right_interval]
+                    )
+                interval_end = SQLFunctionCall(
+                    name="intervalEndWithPeer", args=[left, right_interval]
+                )
+                interval_start = SQLFunctionCall(
+                    name="intervalStartWithPeer", args=[left, right_interval]
+                )
+                if right_is_interval:
                     # CQL 1.5 §9 Ends: start(left) >= start(right) AND
                     # end(left) == end(right), both at the given precision.
                     # Point operands promote to degenerate intervals [p, p],
                     # so the start conjunct compares against the point itself.
-                    right_start = SQLFunctionCall(name="intervalStart", args=[right_translated])
-                    right_end = SQLFunctionCall(name="intervalEnd", args=[right_translated])
+                    right_start = SQLFunctionCall(
+                        name="intervalStartWithPeer", args=[right_translated, left_interval]
+                    )
+                    right_end = SQLFunctionCall(
+                        name="intervalEndWithPeer", args=[right_translated, left_interval]
+                    )
                 else:
                     right_start = right_translated
                     right_end = right_translated

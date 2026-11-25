@@ -4,19 +4,38 @@ Master runner for all Spec Conformance suites.
 
 Executes ViewDefinition, FHIRPath, and CQL conformance scripts
 and displays a unified summary of the results.
+
+FHIR4-45 gate integrity - two rules this runner now enforces:
+
+1. A child's failure is never swallowed. ``run_script`` returns a
+   ``SuiteOutcome``; the master status is FAIL when any suite could not run.
+2. A report must be REWRITTEN by the child that ran. Reading whatever was on
+   disk let a suite that tested nothing (missing corpus) surface the
+   previously committed report as a pass - the same pattern AGENTS.md records
+   for DQM ("printed the suite error but summarized a STALE dqm_report.json as
+   47/47"). Each report's (mtime, size) is captured before the child runs and
+   verified after.
+
+Exit codes: 1 when any suite could not run (infrastructure failure: crashed,
+left a stale report, or collected no tests). A run where every suite executed
+and some CELLS fail still exits 0 with an "INCOMPLETE" banner: the official CQL
+corpus pins a handful of cells whose upstream fixture PRs are still open (see
+fhir4ds/cql/tests/official/CQL_TESTS_README.md), so a rate-based non-zero exit
+would make the gate permanently red and train readers to ignore it.
 """
 
 import json
 import subprocess
 import sys
 import warnings
+from dataclasses import dataclass
 from pathlib import Path
 
 # Suppress UserWarnings (like unresolved CQL definition fallbacks) to prevent I/O spam
 warnings.simplefilter("ignore", UserWarning)
 
 sys.path.insert(0, str(Path(__file__).parent))
-from conformance_log import _collect_stats  # noqa: E402
+from conformance_log import _collect_stats, log_file  # noqa: E402
 
 # Configuration: (name, script, report, extra script args).
 # Every entry here is part of the release gate. The DQM runner is invoked once
@@ -32,9 +51,33 @@ SCRIPTS = [
     ("OMOP Mapping", "conformance/scripts/run_omop.py", "conformance/reports/omop_report.json", ()),
 ]
 
-def run_script(name, path, extra_args=()):
-    """Run a conformance script and handle output."""
+@dataclass
+class SuiteOutcome:
+    """Result of running one conformance suite."""
+
+    name: str
+    ok: bool
+    reason: str | None = None
+
+
+def report_fingerprint(report_path: Path) -> tuple[int, int] | None:
+    """(mtime_ns, size) of a report, or None when it does not exist."""
+    try:
+        stat = report_path.stat()
+    except OSError:
+        return None
+    return (stat.st_mtime_ns, stat.st_size)
+
+
+def run_script(name, path, report_path=None, extra_args=()) -> SuiteOutcome:
+    """Run a conformance script and verify it produced a FRESH report.
+
+    ``report_path`` may be None for callers that only care about exit status.
+    """
     print(f"\n>>> Running {name} conformance suite...")
+    report = Path(report_path) if report_path is not None else None
+    before = report_fingerprint(report) if report is not None else None
+
     # SOF-VD-11 EXPLORER QA-002: on WSL/drvfs the working directory can
     # become momentarily unreadable under heavy IO, which makes a relative
     # script path crash the child at its first stdlib import (FileNotFoundError
@@ -45,6 +88,8 @@ def run_script(name, path, extra_args=()):
         absolute = str(Path(path).resolve())
     except FileNotFoundError:
         absolute = str(Path(__file__).resolve().parent / Path(path).name)
+
+    return_code: int | None = None
     for attempt in (1, 2):
         try:
             subprocess.run(
@@ -52,14 +97,43 @@ def run_script(name, path, extra_args=()):
                 check=True,
                 capture_output=False,
             )
-            return True
+            return_code = 0
+            break
         except subprocess.CalledProcessError as e:
             if attempt == 1 and e.returncode == 1:
                 print("  Transient child failure (drvfs cwd flake) — retrying once...")
                 continue
-            print(f"  Error: {name} suite failed with exit code {e.returncode}")
-            return False
-    return False
+            return_code = e.returncode
+            break
+
+    if return_code != 0:
+        print(f"  Error: {name} suite failed with exit code {return_code}")
+        return SuiteOutcome(name, False, f"exited with code {return_code}")
+
+    if report is None:
+        return SuiteOutcome(name, True)
+
+    # The child exited 0. Did it actually produce THIS run's numbers?
+    after = report_fingerprint(report)
+    if after is None:
+        reason = f"exited 0 but wrote no report at {report}"
+        print(f"  Error: {name} {reason}")
+        return SuiteOutcome(name, False, reason)
+    if after == before:
+        reason = (
+            f"exited 0 but did not rewrite its report at {report}: stale report, "
+            "so this suite tested nothing this run"
+        )
+        print(f"  Error: {name} {reason}")
+        return SuiteOutcome(name, False, reason)
+
+    _passed, total, _failures = _collect_stats(report)
+    if total == 0:
+        reason = f"exited 0 but its report at {report} contains 0 tests (empty suite)"
+        print(f"  Error: {name} {reason}")
+        return SuiteOutcome(name, False, reason)
+
+    return SuiteOutcome(name, True)
 
 def get_summary(report_path):
     """Parse a JSON report and return (passed, total, rate)."""
@@ -87,9 +161,12 @@ def main():
     print("         fhir4ds SPEC CONFORMANCE MASTER RUNNER")
     print("=" * 60)
 
-    # Run all scripts
-    for name, path, _report, extra_args in SCRIPTS:
-        run_script(name, path, extra_args)
+    # Run all scripts, keeping each child's outcome. FHIR4-45: the result used
+    # to be discarded, so a suite that never ran still produced a green table
+    # built from a stale report.
+    outcomes: list[SuiteOutcome] = []
+    for name, path, report_path, extra_args in SCRIPTS:
+        outcomes.append(run_script(name, path, report_path, extra_args))
 
     # Display Summary Table
     print("\n" + "=" * 60)
@@ -99,7 +176,14 @@ def main():
     grand_total = 0
     grand_passed = 0
 
+    failed_suites = [outcome for outcome in outcomes if not outcome.ok]
+    failed_names = {outcome.name for outcome in failed_suites}
+
     for name, _path, report_path, _args in SCRIPTS:
+        if name in failed_names:
+            # Never print numbers for a suite that did not produce them.
+            print(f"{name:<25} | {'NOT RUN':<8} | {'-':<8} | {'-':>6}")
+            continue
         p, t, r = get_summary(report_path)
         print(f"{name:<25} | {p:<8} | {t:<8} | {r:>6.1f}%")
         grand_total += t
@@ -110,6 +194,15 @@ def main():
     print(f"{'OVERALL COMPLIANCE':<25} | {grand_passed:<8} | {grand_total:<8} | {grand_rate:>6.1f}%")
     print("=" * 60)
 
+    if failed_suites:
+        print(f"\nSUITES THAT COULD NOT RUN ({len(failed_suites)}):")
+        for outcome in failed_suites:
+            print(f"  - {outcome.name}: {outcome.reason}")
+        print(
+            "  These suites contributed NO tests to the totals above. A missing or empty "
+            "corpus is an environment failure, not a conformance result."
+        )
+
     # Build a synthetic combined report for the master log entry
     all_failures = []
     for _name, _path, report_path, _args in SCRIPTS:
@@ -117,34 +210,45 @@ def main():
         all_failures.extend(failures)
 
     from datetime import datetime, timezone
-    from pathlib import Path as _P
-    LOG_FILE = _P("conformance/reports/conformance.log")
-    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     ts = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
-    status = "PASS" if not all_failures else "FAIL"
+    status = "PASS" if (not all_failures and not failed_suites) else "FAIL"
     lines = [
         "=" * 80,
         f"[{ts}]  ALL SUITES (master run)  |  {grand_passed}/{grand_total} ({grand_rate:.1f}%)  |  {status}",
     ]
+    for outcome in failed_suites:
+        lines.append(f"  SUITE DID NOT RUN: {outcome.name}")
+        lines.append(f"    {outcome.reason}")
     if all_failures:
         lines.append(f"  Failures ({len(all_failures)}):")
         for name, error in all_failures:
             lines.append(f"    - {name}")
             if error and error != "no detail":
                 lines.append(f"      {error}")
-    else:
+    elif not failed_suites:
         lines.append("  Failures: none")
-    with open(LOG_FILE, "a") as f:
+    destination = log_file()
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with open(destination, "a") as f:
         f.write("\n".join(lines) + "\n")
 
     # Final result
+    if failed_suites:
+        print(
+            f"\nGATE FAILED: {len(failed_suites)} suite(s) could not run, so the "
+            "compliance totals above are incomplete."
+        )
+        sys.exit(1)
     if grand_rate == 100:
         print("\nSUCCESS: 100% Spec Conformance Achieved!")
         sys.exit(0)
     else:
         print(f"\nINCOMPLETE: {grand_total - grand_passed} tests remaining for full compliance.")
-        # We don't exit with non-zero here because we expect some failures during development
+        # Every suite ran and produced numbers; the remaining failures are
+        # known open cells (upstream fixture PRs). Exit 0 is deliberate and
+        # documented in the module docstring.
         sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

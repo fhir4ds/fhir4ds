@@ -1048,6 +1048,13 @@ def cqlTimezoneOffset(value) -> float | None:
             return None
         sign = 1 if m.group(1) == '+' else -1
         return float(sign * (int(m.group(2)) + int(m.group(3)) / 60.0))
+    # A '+'/'-' inside the TIME portion is an OFFSET ATTEMPT: if it is not a
+    # valid +HH:MM / -HH:MM offset the value is INVALID (null). It must never
+    # fall through to the assumed evaluation-request offset below, which is
+    # reserved for values carrying no offset text at all (+aa:bb, +99:99 and
+    # +14:01 each used to answer the assumed offset here).
+    if 'T' in s and any(ch in s.split('T', 1)[1] for ch in ('+', '-')):
+        return None
     # Offset-less DateTime (a 'T' preceded by a date digit — a Time value's
     # leading 'T' does not qualify): assume the evaluation-request offset.
     # Date-only and Time strings keep NULL.

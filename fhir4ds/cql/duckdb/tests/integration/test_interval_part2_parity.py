@@ -919,13 +919,11 @@ def test_cql_point_in_interval_open_null_bound_is_unknown_fhir4_40() -> None:
     FALSE when both bounds were open, so the fixture got false instead of
     null.
 
-    NOTE (residual, NOT pinned here): the precision-qualified form
-    (``5 in day of Interval(null, null)``) delegates to the
-    ``intervalContainsPrecise`` UDF, which still lacks the
-    ``_open_null_bound_uncertain`` guard that its sibling relationship
-    predicates carry. Widening it is a dual-engine (C++ mirror + rebuild)
-    change with DQM blast radius through Period-derived open-null intervals,
-    so it is tracked separately from this translator-side fix.
+    The precision-qualified form (``5 in day of Interval(null, null)``) used
+    to fall through to the ``intervalContainsPrecise`` UDF, which lacked the
+    ``_open_null_bound_uncertain`` guard its sibling relationship predicates
+    carry. FHIR4-42 closed that gap; see
+    ``test_cql_interval_contains_open_null_bound_is_unknown_fhir4_42``.
     """
     cql = """library FHIR4_40 version '1.0.0'
 using FHIR version '4.0.1'
@@ -988,6 +986,229 @@ define OrdinaryOpenInterval: 5 in Interval(1, 5]
                     no_py_result,
                 )
                 assert py_result == expected[name], (name, sql, py_result)
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_interval_contains_open_null_bound_is_unknown_fhir4_42() -> None:
+    """FHIR4-42: containment through an OPEN-null-bound interval is UNKNOWN.
+
+    ``intervalContains`` / ``intervalContainsPrecise`` treated a null bound as
+    unconditionally unbounded, so an OPEN null bound answered a definite
+    true/false. Every sibling relationship predicate (``intervalOverlaps``,
+    ``intervalIncludes``, ``intervalProperlyContains``, ``intervalMeets``,
+    ``intervalStartsSame``, ...) already carried
+    ``_open_null_bound_uncertain``, and CQL 1.5.3 §In (Interval) scopes the
+    "a null boundary counts as true" escape hatch to CLOSED boundaries only:
+
+        "For open interval boundaries, exclusive comparison operators are
+        used. For closed interval boundaries, if the interval boundary is
+        null, the result of the boundary comparison is considered true."
+
+    A CLOSED null bound is the point-type extremum (§9.14/§9.15), so it stays
+    determined (``5 in day of Interval[null, null]`` is still true). An OPEN
+    null bound is an exclusive comparison against an unknown value, so the
+    boundary comparison is NULL and three-valued AND decides:
+
+        NULL AND TRUE  -> null   (5 in day of Interval(null, 10])
+        NULL AND FALSE -> false  (500 in day of Interval(null, 10])
+
+    DOCTRINE (one-sided FHIR Periods). ``collapse_intervals`` maps a Period
+    with only ``end`` onto an OPEN null low ("the start is UNKNOWN": ``start
+    of`` is null and Min/Max ignore it) and a Period with only ``start`` onto
+    a CLOSED null high ("the period is ongoing": ``end of`` is the point-type
+    maximum, so ``overlaps`` stays determined, CMS145). Only the OPEN half
+    becomes UNKNOWN: an unknown start cannot be claimed to contain a point,
+    while an ongoing period genuinely does extend past its start. That
+    keeps the asymmetric-Period doctrine intact in both directions and makes
+    containment agree with ``intervalOverlaps``/``intervalProperlyContains``,
+    which already returned null for the same one-sided shape.
+
+    DQM is the referee for the one-sided-Period family: qi-core-2025 47/47 and
+    us-core-2025 73/73 are unchanged, and an instrumentation pass over both
+    suites found ZERO containment calls whose container carried an open null
+    bound in either corpus.
+    """
+    cql = """library FHIR4_42 version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define OpenBothNullPrecise: 5 in day of Interval(null, null)
+define OpenBothNullPlain: 5 in Interval(null, null)
+define ClosedBothNullPrecise: 5 in day of Interval[null, null]
+define ClosedBothNullPlain: 5 in Interval[null, null]
+define OrdinaryClosed: 5 in day of Interval[1, 5]
+define OrdinaryOpenBounded: 5 in day of Interval(1, 5]
+define OpenLowNullPrecise: 5 in day of Interval(null, 10]
+define PointOutsideOpenLowNull: 500 in day of Interval(null, 10]
+define OpenHighNullPrecise: 5 in day of Interval[0, null)
+define PointInsideOpenHighNull: 500 in day of Interval[0, null)
+define ClosedLowNull: 5 in day of Interval[null, 10]
+define ClosedHighNull: 5 in day of Interval[0, null]
+define NullPointOpenBothNull: null in day of Interval(null, null)
+define TemporalTypedNullOpenHigh: @2024-06-15 in day of Interval[null as Date, null as Date)
+define TemporalClosedHighNull: @2024-06-15 in day of Interval[null as Date, null as Date]
+define TemporalOpenBothBounded: @2024-06-15 in day of Interval(@2024-01-01, @2024-12-31)
+"""
+    translated = translate_cql(cql)
+    expected = {
+        # The headline cell: both bounds open + null -> unknown.
+        "OpenBothNullPrecise": (None,),
+        # FHIR4-40's cell, unchanged: closed null bounds are the maximum
+        # interval, so a non-null point IS contained.
+        "OpenBothNullPlain": (None,),
+        "ClosedBothNullPrecise": (True,),
+        "ClosedBothNullPlain": (True,),
+        # Unaffected controls.
+        "OrdinaryClosed": (True,),
+        "OrdinaryOpenBounded": (True,),
+        # NULL AND (5 <= 10) -> unknown.
+        "OpenLowNullPrecise": (None,),
+        # NULL AND FALSE -> false.
+        "PointOutsideOpenLowNull": (False,),
+        # (5 >= 0) AND NULL -> unknown.
+        "OpenHighNullPrecise": (None,),
+        # (500 >= 0) AND NULL -> unknown, not false.
+        "PointInsideOpenHighNull": (None,),
+        # Closed null bounds stay determined.
+        "ClosedLowNull": (True,),
+        "ClosedHighNull": (True,),
+        # §In: a null point -> null, checked before the boundary rule.
+        "NullPointOpenBothNull": (None,),
+        # Temporal point types follow the same open/closed split.
+        "TemporalTypedNullOpenHigh": (None,),
+        "TemporalClosedHighNull": (True,),
+        "TemporalOpenBothBounded": (True,),
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for name, expr in translated.items():
+                sql = f"SELECT {expr.to_sql()}"
+                py_result = py.execute(sql).fetchone()
+                cpp_result = cpp.execute(sql).fetchone()
+                no_py_result = no_py.execute(sql).fetchone()
+                assert py_result == cpp_result, (name, sql, py_result, cpp_result)
+                assert py_result == expected[name], (name, sql, py_result)
+                assert no_py_result == expected[name], (name, sql, no_py_result)
+    finally:
+        py.close()
+        cpp.close()
+
+
+
+
+def _fh42_native_guard_current(con: duckdb.DuckDBPyConnection) -> bool:
+    """True when the loaded cql extension implements the FHIR4-42 guard."""
+    row = con.execute(
+        "SELECT intervalContainsPrecise("
+        "'{\"low\":null,\"high\":\"2024-06-01\",\"lowClosed\":false,"
+        "\"highClosed\":true}', '2024-01-01', 'day')"
+    ).fetchone()[0]
+    return row is None
+
+
+#: One-sided FHIR Period shapes, exactly as ``collapse_intervals`` renders them
+#: from ``raw`` period JSON. ``end``-only keeps an OPEN null low (unknown
+#: start); ``start``-only keeps a CLOSED null high (ongoing) - the asymmetric
+#: root-AGENTS.md doctrine pinned by CMS645 (unknown start / Min-Max) and
+#: CMS145 (ongoing high / overlaps).
+_FHIR4_42_ONE_SIDED_PERIOD_CASES: dict[str, tuple[str, str, bool | None, bool | None]] = {
+    # label: (collapsed interval JSON, point, contains, containsPrecise(day))
+    "endOnlyOpenLowBefore": (
+        '{"low":null,"high":"2024-06-01","lowClosed":false,"highClosed":true}',
+        "2024-01-01",
+        None,
+        None,
+    ),
+    "endOnlyOpenLowAfter": (
+        '{"low":null,"high":"2024-06-01","lowClosed":false,"highClosed":true}',
+        "2024-12-01",
+        False,
+        False,
+    ),
+    "startOnlyClosedHighAfter": (
+        '{"low":"2024-06-01","high":null,"lowClosed":true,"highClosed":true}',
+        "2024-12-01",
+        True,
+        True,
+    ),
+    "startOnlyClosedHighBefore": (
+        '{"low":"2024-06-01","high":null,"lowClosed":true,"highClosed":true}',
+        "2024-01-01",
+        False,
+        False,
+    ),
+}
+
+#: Stale no-Python values for the one-sided cases the guard changes.
+
+def test_cql_interval_contains_one_sided_period_doctrine_fhir4_42() -> None:
+    """FHIR4-42: one-sided FHIR Periods through containment (the doctrine pin).
+
+    ``collapse_intervals`` is what turns real FHIR Periods into interval JSON,
+    and it applies the asymmetric one-sided-Period doctrine: a missing ``end``
+    is ONGOING (closed null high) while a missing ``start`` is UNKNOWN (open
+    null low). Containment must honour that asymmetry rather than flattening
+    both to "unbounded":
+
+    * ``{"end": X}`` -> open null low -> unknown start -> containment UNKNOWN.
+    * ``{"start": X}`` -> closed null high -> ongoing -> containment DEFINED.
+
+    The second half is load-bearing (CMS145 active-beta-blocker intervals), so
+    this pins that the guard does NOT leak into the closed-null shape.
+    """
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for label, (iv, point, expected, expected_precise) in (
+                _FHIR4_42_ONE_SIDED_PERIOD_CASES.items()
+            ):
+                for fn, prec, want in (
+                    ("intervalContains", None, expected),
+                    ("intervalContainsPrecise", "day", expected_precise),
+                ):
+                    call = (
+                        f"{fn}('{iv}', '{point}')"
+                        if prec is None
+                        else f"{fn}('{iv}', '{point}', '{prec}')"
+                    )
+                    sql = f"SELECT {call}"
+                    py_row = py.execute(sql).fetchone()
+                    cpp_row = cpp.execute(sql).fetchone()
+                    no_py_row = no_py.execute(sql).fetchone()
+                    assert py_row == cpp_row == (want,), (label, fn, py_row, cpp_row, want)
+                    assert no_py_row == (want,), (label, fn, no_py_row, want)
+
+            # The doctrine is produced by collapse_intervals itself: prove the
+            # two one-sided shapes it emits are the ones pinned above.
+            end_only = py.execute(
+                "SELECT collapse_intervals('[{\"end\":\"2024-06-01\"}]')"
+            ).fetchone()[0]
+            start_only = py.execute(
+                "SELECT collapse_intervals('[{\"start\":\"2024-06-01\"}]')"
+            ).fetchone()[0]
+            assert json.loads(end_only)[0]["lowClosed"] is False, end_only
+            assert json.loads(end_only)[0]["low"] is None, end_only
+            assert json.loads(start_only)[0]["highClosed"] is True, start_only
+            assert json.loads(start_only)[0]["high"] is None, start_only
+
+            # includes-precise delegates to contains-precise, so it now agrees
+            # with plain intervalIncludes (which already answered null for the
+            # same open-null container). That internal inconsistency is part of
+            # the fix; it is NOT an expansion of the guard's scope.
+            other = '{"low":"2024-01-01","high":"2024-01-02","lowClosed":true,"highClosed":true}'
+            end_only_iv = '{"low":null,"high":"2024-06-01","lowClosed":false,"highClosed":true}'
+            includes_sql = f"SELECT intervalIncludes('{end_only_iv}', '{other}')"
+            includes_precise_sql = (
+                f"SELECT intervalIncludesPrecise('{end_only_iv}', '{other}', 'day')"
+            )
+            assert py.execute(includes_sql).fetchone() == (None,)
+            assert py.execute(includes_precise_sql).fetchone() == (None,)
+            assert cpp.execute(includes_precise_sql).fetchone() == (None,)
+            assert no_py.execute(includes_precise_sql).fetchone() == (None,)
     finally:
         py.close()
         cpp.close()

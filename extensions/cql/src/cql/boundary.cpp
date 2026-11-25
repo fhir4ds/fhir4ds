@@ -931,17 +931,30 @@ Optional<double> cql_timezone_offset(const std::string &value) {
 		return Optional<double>(0.0);
 	}
 
-	// Search for +HH:MM or -HH:MM at end
-	for (int i = static_cast<int>(value.size()) - 1; i >= 0; i--) {
-		if (value[i] == '+' || value[i] == '-') {
-			std::string suffix = value.substr(i);
-			if (valid_timezone_suffix(suffix)) {
+	// A '+'/'-' inside the TIME portion is an OFFSET ATTEMPT: it must be a
+	// valid offset (`Z`, `+HH:MM`, `-HH:MM` within +/-14:00) or the value is
+	// invalid (null). It must never fall through to the assumed
+	// evaluation-request offset below — that is reserved for values that carry
+	// no offset text at all (verified divergences: `+99:99`, `+14:01` and
+	// `+aa:bb` each answered the assumed offset where the Python authority
+	// answers null).
+	const size_t time_t = value.find('T');
+	if (time_t != std::string::npos) {
+		const std::string time_part = value.substr(time_t + 1);
+		if (time_part.find('+') != std::string::npos ||
+		    time_part.find('-') != std::string::npos) {
+			for (int i = static_cast<int>(value.size()) - 1; i >= static_cast<int>(time_t); i--) {
+				if (value[i] != '+' && value[i] != '-') continue;
+				const std::string suffix = value.substr(i);
+				if (!valid_timezone_suffix(suffix)) {
+					return NullOpt<double>();
+				}
 				int sign = (value[i] == '+') ? 1 : -1;
 				int hours = std::atoi(value.substr(i + 1, 2).c_str());
 				int mins = std::atoi(value.substr(i + 4, 2).c_str());
 				return Optional<double>(sign * (hours + mins / 60.0));
 			}
-			break;
+			return NullOpt<double>();
 		}
 	}
 	// CQL #datetime-2 (cql-tests #88/#185): an offset-less DateTime assumes

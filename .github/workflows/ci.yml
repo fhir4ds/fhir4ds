@@ -34,9 +34,6 @@ jobs:
       - name: Checkout DQM conformance fixtures
         run: git submodule update --init tests/data/ecqm-content-qicore-2025
 
-      - name: Checkout the official CQL test corpus
-        run: git submodule update --init fhir4ds/cql/tests/official/cql-tests
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:

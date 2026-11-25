@@ -537,7 +537,11 @@ BINARY_OPERATOR_MAP = {
     "meets": None,  # Handled specially
     "properly included in": None,
     "included in": None,
-    "properly contains": None,
+    # NOTE (FHIR4-43): there is deliberately no "properly contains" entry.
+    # CQL has no such operator (the point reads are `properly includes` /
+    # `properly included in`), and listing it here as "handled specially"
+    # was false — no dispatch site handled it, so the raw text reached
+    # DuckDB. The parser now rejects the spelling outright.
     "meets before": None,
     "meets after": None,
     "overlaps before": None,

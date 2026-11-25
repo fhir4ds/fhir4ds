@@ -43,7 +43,7 @@ def runner():
 def run(desktop, browser, contract, *, corpus_dir: Path | None = None) -> SuiteResult:
     """Evaluate the CQL corpus on both surfaces."""
     run_cql = runner()
-    directory = Path(corpus_dir) if corpus_dir is not None else Path(run_cql.CQL_TESTS_DIR)
+    directory = Path(corpus_dir) if corpus_dir is not None else Path(run_cql.default_corpus_dir())
     if not directory.exists():
         raise EnvironmentInputMissing(
             f"CQL corpus not checked out at {directory} (pinned gitlink; clone "
