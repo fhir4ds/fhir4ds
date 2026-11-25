@@ -1,4 +1,5 @@
 #include "cql/interval.hpp"
+#include "cql/boundary.hpp"
 #include "cql/quantity.hpp"
 #include "yyjson.hpp"
 
@@ -474,33 +475,114 @@ static DateTimeValue::Precision interval_precision_from_rank(int rank) {
 	}
 }
 
-static Optional<int> compare_interval_order_nullable(const BoundValue &left, const BoundValue &right) {
+// A Date value carries no time component, so its precision is Day and
+// has_time is false. DateTime values keep has_time true even at day precision
+// (`DateTime(2012, 1, 5)` renders as "2012-01-05T"), which is what makes the
+// Date-vs-DateTime promotion below distinguishable from a precision mismatch.
+static bool bound_is_date_value(const BoundValue &bound) {
+	return bound.dt_val && !bound.dt_val->has_time &&
+	       bound.dt_val->precision == DateTimeValue::Precision::Day;
+}
+
+// The Python authority's interval comparison pulls a trailing 'Z' designator
+// off a bound before comparing (udf/interval.py::_normalize_datetime_str), so a
+// Z-suffixed bound behaves exactly like an OFFSET-LESS one — including taking
+// the assumed evaluation-request offset when its peer carries a real offset.
+// Only an explicit ±hh:mm suffix counts as "carries an offset" here.
+static DateTimeValue strip_utc_designator(const BoundValue &bound, const DateTimeValue &value) {
+	if (bound.raw_str.empty() || bound.raw_str[bound.raw_str.size() - 1] != 'Z') {
+		return value;
+	}
+	DateTimeValue stripped = value;
+	stripped.has_tz = false;
+	stripped.tz_offset_minutes = 0;
+	return stripped;
+}
+
+Optional<int> compare_bounds_nullable(const BoundValue &left, const BoundValue &right) {
 	if ((left.type == BoundType::DateTime || left.type == BoundType::Time) &&
 	    left.type == right.type && left.dt_val && right.dt_val) {
-		int left_rank = interval_precision_rank(left.dt_val->precision);
-		int right_rank = interval_precision_rank(right.dt_val->precision);
-		DateTimeValue::Precision coarsest = interval_precision_from_rank(std::min(left_rank, right_rank));
-		int cmp = left.dt_val->compare_at_precision(*right.dt_val, coarsest);
+		DateTimeValue left_value = strip_utc_designator(left, *left.dt_val);
+		DateTimeValue right_value = strip_utc_designator(right, *right.dt_val);
+		const int left_rank = interval_precision_rank(left_value.precision);
+		const int right_rank = interval_precision_rank(right_value.precision);
+
+		if (left_rank == right_rank) {
+			// Same precision: compare the authored components. Timezone offsets
+			// are NOT normalized here — the Python authority only normalizes on
+			// the mixed-precision path (see below), and matching it exactly is
+			// what keeps both engines in step.
+			return Optional<int>(
+			    left_value.compare_at_precision(right_value, left_value.precision));
+		}
+
+		// Mixed precision. CQL #datetime-2 (cql-tests #88) makes an offset-less
+		// DateTime assume the timezone offset of the evaluation request for
+		// hour-or-finer comparisons, so a pair where at least one bound carries
+		// an explicit offset compares as INSTANTS rather than wall clocks
+		// ('2025-12-31T19Z' and '2026-01-01T00:00+05:00' are the same instant).
+		// The Python authority applies exactly that gate in
+		// udf/datetime.py::_compare_at_min_precision, reached from
+		// udf/interval.py::_precision_aware_compare. FHIR4-47.
+		const int hour_rank = interval_precision_rank(DateTimeValue::Precision::Hour);
+		const int millisecond_rank = interval_precision_rank(DateTimeValue::Precision::Millisecond);
+		auto normalize_pair = [&](int precision_rank) {
+			if (left.type != BoundType::DateTime || precision_rank < hour_rank) {
+				return;
+			}
+			if (!left_value.has_tz && !right_value.has_tz) {
+				return;
+			}
+			const int32_t assumed_offset = evaluation_request_offset_minutes();
+			left_value = normalize_for_temporal_compare(left_value, assumed_offset);
+			right_value = normalize_for_temporal_compare(right_value, assumed_offset);
+		};
+
+		const int coarse_rank = std::min(left_rank, right_rank);
+		normalize_pair(coarse_rank);
+		int cmp = left_value.compare_at_precision(right_value, interval_precision_from_rank(coarse_rank));
 		if (cmp != 0) {
 			return Optional<int>(cmp);
 		}
-		if (left_rank != right_rank) {
-			// CQL §Time (AMUX-171): "seconds and milliseconds are combined ...
-			// When milliseconds are null, they are combined as .0 ... This is
-			// true of all comparison operations for time values ... or when
-			// comparison is performed as part of other operations such as
-			// interval meets and overlaps."  A TIME bound therefore compares
-			// at millisecond precision with a null millisecond read as 0, so
-			// the result is DETERMINED rather than uncertain.  DATE/DATETIME
-			// keep the uncertainty pinned by CqlIntervalOperatorsTest.xml
-			// DateTimeIncludedInNull (fixtures outrank prose).
-			if (left.type == BoundType::Time) {
-				return Optional<int>(left.dt_val->compare_at_precision(
-				    *right.dt_val, DateTimeValue::Precision::Millisecond));
-			}
-			return NullOpt<int>();
+
+		// CQL §Time (AMUX-171): "seconds and milliseconds are combined ...
+		// When milliseconds are null, they are combined as .0 ... This is true
+		// of all comparison operations for time values ... or when comparison is
+		// performed as part of other operations such as interval meets and
+		// overlaps."  A TIME bound therefore compares at millisecond precision
+		// with a null millisecond read as 0, so the result is DETERMINED rather
+		// than uncertain.  DATE/DATETIME keep the uncertainty pinned by
+		// CqlIntervalOperatorsTest.xml DateTimeIncludedInNull (fixtures outrank
+		// prose).
+		if (left.type == BoundType::Time) {
+			return Optional<int>(
+			    left_value.compare_at_precision(right_value, DateTimeValue::Precision::Millisecond));
 		}
-		return Optional<int>(0);
+
+		// A full Date against a DateTime that has time components promotes the
+		// Date to midnight at millisecond precision (CQL 1.5 §Equal: a Date is
+		// comparable to a DateTime as the start of that day; the Python
+		// authority does this under promote_date_to_datetime). Without it an
+		// interval whose bound is a FHIR `date` can never be compared to one
+		// built from a TIMESTAMP parameter, and `overlaps` answers NULL where
+		// the value is determinate. Every OTHER mixed-precision DATE/DATETIME
+		// pair stays uncertain.
+		const bool left_is_date = bound_is_date_value(left);
+		const bool right_is_date = bound_is_date_value(right);
+		if (left_is_date != right_is_date && (left_is_date ? right_value.has_time : left_value.has_time)) {
+			DateTimeValue &promoted = left_is_date ? left_value : right_value;
+			promoted.has_time = true;
+			promoted.precision = DateTimeValue::Precision::Millisecond;
+			promoted.hour = 0;
+			promoted.minute = 0;
+			promoted.second = 0;
+			promoted.millisecond = 0;
+			const int fine_rank = std::min(millisecond_rank, left_is_date ? right_rank : left_rank);
+			normalize_pair(fine_rank);
+			return Optional<int>(
+			    left_value.compare_at_precision(right_value, interval_precision_from_rank(fine_rank)));
+		}
+		return NullOpt<int>();
 	}
 
 	int cmp = left.compare(right);
@@ -910,7 +992,7 @@ static bool interval_definitely_after(const Interval &left, const Interval &righ
 	if (!left_start || !right_end) {
 		return false;
 	}
-	auto cmp = compare_interval_order_nullable(*left_start, *right_end);
+	auto cmp = compare_bounds_nullable(*left_start, *right_end);
 	return cmp && *cmp > 0;
 }
 
@@ -1211,7 +1293,7 @@ return other.meets_before(*this);
 
 Optional<bool> Interval::properly_contains_point_nullable(const BoundValue &point) const {
 	if (low) {
-		auto cmp = compare_interval_order_nullable(*low, point);
+		auto cmp = compare_bounds_nullable(*low, point);
 		if (!cmp) {
 			return NullOpt<bool>();
 		}
@@ -1220,7 +1302,7 @@ Optional<bool> Interval::properly_contains_point_nullable(const BoundValue &poin
 		}
 	}
 	if (high) {
-		auto cmp = compare_interval_order_nullable(point, *high);
+		auto cmp = compare_bounds_nullable(point, *high);
 		if (!cmp) {
 			return NullOpt<bool>();
 		}
@@ -1247,7 +1329,7 @@ Optional<bool> Interval::meets_before_nullable(const Interval &other) const {
 		// intervals cannot meet (reference isMax guard returns false).
 		return Optional<bool>(false);
 	}
-	auto cmp = compare_interval_order_nullable(*successor, *other_start);
+	auto cmp = compare_bounds_nullable(*successor, *other_start);
 	if (!cmp) {
 		return NullOpt<bool>();
 	}
@@ -1600,7 +1682,7 @@ Optional<bool> Interval::on_or_after(const Interval &a, const Interval &b) {
 	auto a_start = sentinel_start_bound(a);
 	auto b_end = sentinel_end_bound(b);
 	if (!a_start || !b_end) return NullOpt<bool>();
-	auto cmp = compare_interval_order_nullable(*a_start, *b_end);
+	auto cmp = compare_bounds_nullable(*a_start, *b_end);
 	if (!cmp) return NullOpt<bool>();
 	return Optional<bool>(*cmp >= 0);
 }
@@ -1609,7 +1691,7 @@ Optional<bool> Interval::on_or_before(const Interval &a, const Interval &b) {
 	auto a_end = sentinel_end_bound(a);
 	auto b_start = sentinel_start_bound(b);
 	if (!a_end || !b_start) return NullOpt<bool>();
-	auto cmp = compare_interval_order_nullable(*a_end, *b_start);
+	auto cmp = compare_bounds_nullable(*a_end, *b_start);
 	if (!cmp) return NullOpt<bool>();
 	return Optional<bool>(*cmp <= 0);
 }

@@ -1043,103 +1043,82 @@ static cql::Optional<cql::BoundValue> ParseIntervalBoundWithPeer(const std::stri
 	return cql::BoundValue::from_string(value);
 }
 
-static cql::DateTimeValue DateTimeHighBoundary(cql::DateTimeValue value) {
-	switch (value.precision) {
-	case cql::DateTimeValue::Precision::Year:
-		value.month = 12;
-		value.day = 31;
-		value.hour = 23;
-		value.minute = 59;
-		value.second = 59;
-		value.millisecond = 999;
-		value.has_time = true;
-		break;
-	case cql::DateTimeValue::Precision::Month:
-		value.day = CqlDaysInMonth(value.year, value.month);
-		value.hour = 23;
-		value.minute = 59;
-		value.second = 59;
-		value.millisecond = 999;
-		value.has_time = true;
-		break;
-	case cql::DateTimeValue::Precision::Day:
-		value.hour = 23;
-		value.minute = 59;
-		value.second = 59;
-		value.millisecond = 999;
-		value.has_time = true;
-		break;
-	case cql::DateTimeValue::Precision::Hour:
-		value.minute = 59;
-		value.second = 59;
-		value.millisecond = 999;
-		value.has_time = true;
-		break;
-	case cql::DateTimeValue::Precision::Minute:
-		value.second = 59;
-		value.millisecond = 999;
-		value.has_time = true;
-		break;
-	case cql::DateTimeValue::Precision::Second:
-		value.millisecond = 999;
-		value.has_time = true;
-		break;
-	case cql::DateTimeValue::Precision::Millisecond:
-		break;
+// DuckDB renders CAST(<TIMESTAMP> AS VARCHAR) space-separated with trailing
+// fractional zeros dropped ('2026-01-01 00:00:00'), so an interval bound built
+// from a TIMESTAMP parameter silently reads as SECOND precision even though the
+// value carries milliseconds. The space separator is a reliable marker of that
+// rendering (CQL never writes it), and the Python authority restores the
+// authored form at interval construction
+// (fhir4ds/cql/duckdb/udf/interval.py::_normalize_timestamp_bound), so the
+// two engines build the same interval from the same bound. Without this every
+// TIMESTAMP-derived bound compares as a second against a millisecond peer and
+// the overlap lands in the uncertainty branch (FHIR4-47).
+static std::string NormalizeTimestampBoundText(const std::string &value) {
+	if (value.find(' ') == std::string::npos || value.find('T') != std::string::npos) {
+		return value;
 	}
-	return value;
-}
-
-struct DateTimeBoundRange {
-	int64_t low_ms;
-	int64_t high_ms;
-};
-
-static cql::Optional<DateTimeBoundRange> DateTimeRangeForBound(const cql::BoundValue &bound) {
-	if (bound.type != cql::BoundType::DateTime || !bound.dt_val) {
-		return cql::NullOpt<DateTimeBoundRange>();
+	std::string out = value;
+	std::replace(out.begin(), out.end(), ' ', 'T');
+	if (out.find('.') == std::string::npos) {
+		out += ".000";
 	}
-	DateTimeBoundRange range;
-	range.low_ms = bound.dt_val->to_epoch_millis();
-	range.high_ms = DateTimeHighBoundary(*bound.dt_val).to_epoch_millis();
-	return cql::Optional<DateTimeBoundRange>(range);
+	return out;
 }
 
 enum class CqlTriBool { KnownFalse, KnownTrue, Unknown, NotApplicable };
 
-static CqlTriBool RangeLessOrEqual(const DateTimeBoundRange &left, const DateTimeBoundRange &right) {
-	if (left.high_ms <= right.low_ms) {
-		return CqlTriBool::KnownTrue;
-	}
-	if (left.low_ms > right.high_ms) {
-		return CqlTriBool::KnownFalse;
-	}
-	return CqlTriBool::Unknown;
-}
-
+// CQL §19.22 Overlaps: neither interval ends before the other starts. Evaluated
+// with the SAME precision- and offset-aware bound ordering the rest of the
+// interval family uses (cql::compare_bounds_nullable), which is also what the
+// Python authority does (udf/interval.py::intervalOverlaps ->
+// _precision_aware_compare):
+//
+//   overlap = (high(left) cmp low(right) per closedness) AND
+//             (high(right) cmp low(left) per closedness)
+//
+// This replaces a per-bound uncertainty-RANGE model that expanded each bound to
+// [value, high-boundary-of-its-precision] and asked whether the ranges provably
+// touched. That model reported NULL whenever two SAME-precision bounds landed on
+// the same day/month/year — `Interval[@2026-01-01, @2026-01-01] overlaps
+// Interval[@2026-01-01, @2026-12-31]` is plainly TRUE, but every point of the
+// left interval could be anywhere in Jan 1, so the range test could never prove
+// it (FHIR4-47). The pairwise test collapses to the authored values at their
+// shared precision, and mixed precision keeps the fixture-pinned uncertainty
+// (CqlIntervalOperatorsTest.xml::DateTimeIncludedInNull) because
+// compare_bounds_nullable returns NULL for it. TIME bounds never reach here
+// (they are not DateTime bounds) and keep the §Time AMUX-171 semantics in
+// Interval::overlaps.
 static CqlTriBool DateTimeOverlapsTriState(const cql::Interval &left, const cql::Interval &right) {
 	if (!left.low || !left.high || !right.low || !right.high) {
 		return CqlTriBool::NotApplicable;
 	}
-	auto left_low = DateTimeRangeForBound(*left.low);
-	auto left_high = DateTimeRangeForBound(*left.high);
-	auto right_low = DateTimeRangeForBound(*right.low);
-	auto right_high = DateTimeRangeForBound(*right.high);
-	if (!left_low || !left_high || !right_low || !right_high) {
+	if (left.low->type != cql::BoundType::DateTime || left.high->type != cql::BoundType::DateTime ||
+	    right.low->type != cql::BoundType::DateTime || right.high->type != cql::BoundType::DateTime) {
 		return CqlTriBool::NotApplicable;
 	}
 
-	auto left_starts_before_right_ends = RangeLessOrEqual(*left_low, *right_high);
-	auto right_starts_before_left_ends = RangeLessOrEqual(*right_low, *left_high);
-	if (left_starts_before_right_ends == CqlTriBool::KnownFalse ||
-	    right_starts_before_left_ends == CqlTriBool::KnownFalse) {
+	auto left_ends_at_or_after_right_start = cql::compare_bounds_nullable(*left.high, *right.low);
+	auto right_ends_at_or_after_left_start = cql::compare_bounds_nullable(*right.high, *left.low);
+	// Like the Python authority, ANY uncertain bound pair makes the whole
+	// relationship uncertain — a known-false side does NOT short-circuit a
+	// still-undecided one (udf/interval.py::intervalOverlaps computes both
+	// comparisons before combining them).
+	if (!left_ends_at_or_after_right_start || !right_ends_at_or_after_left_start) {
+		return CqlTriBool::Unknown;
+	}
+	const int left_end_cmp = *left_ends_at_or_after_right_start;
+	const bool left_overlaps_forward =
+	    left.high_closed && right.low_closed ? left_end_cmp >= 0 : left_end_cmp > 0;
+	if (!left_overlaps_forward) {
 		return CqlTriBool::KnownFalse;
 	}
-	if (left_starts_before_right_ends == CqlTriBool::KnownTrue &&
-	    right_starts_before_left_ends == CqlTriBool::KnownTrue) {
-		return CqlTriBool::KnownTrue;
+	const int right_end_cmp = *right_ends_at_or_after_left_start;
+	const bool right_overlaps_backward =
+	    right.high_closed && left.low_closed ? right_end_cmp >= 0 : right_end_cmp > 0;
+	if (!right_overlaps_backward) {
+		return CqlTriBool::KnownFalse;
 	}
-	return CqlTriBool::Unknown;
+	return CqlTriBool::KnownTrue;
 }
 
 static bool IncomparableQuantityEndpoint(const cql::Optional<cql::BoundValue> &left,
@@ -2000,8 +1979,8 @@ static void IntervalFromBoundsFunc(DataChunk &args, ExpressionState &state, Vect
 			continue;
 		}
 
-		std::string low_raw = low_supplied ? lows[l_idx].GetString() : "";
-		std::string high_raw = high_supplied ? highs[h_idx].GetString() : "";
+		std::string low_raw = low_supplied ? NormalizeTimestampBoundText(lows[l_idx].GetString()) : "";
+		std::string high_raw = high_supplied ? NormalizeTimestampBoundText(highs[h_idx].GetString()) : "";
 		bool low_datetime_like = low_supplied && LooksDateTimeLikeBound(low_raw);
 		bool high_datetime_like = high_supplied && LooksDateTimeLikeBound(high_raw);
 		if (low_supplied) {
@@ -3160,56 +3139,16 @@ static cql::DateTimeValue::Precision PrecisionByRank(int rank) {
 static constexpr int SECOND_RANK = 5;
 static constexpr int MILLISECOND_RANK = 6;
 
-static cql::DateTimeValue DateTimeFromEpochMillis(int64_t millis, const cql::DateTimeValue &source) {
-	int64_t days = FloorDiv(millis, MS_PER_DAY);
-	int64_t ms_of_day = millis - days * MS_PER_DAY;
-	if (ms_of_day < 0) {
-		ms_of_day += MS_PER_DAY;
-		days--;
-	}
-
-	// Howard Hinnant civil_from_days algorithm, with days relative to 1970-01-01.
-	int64_t z = days + 719468;
-	int64_t era = (z >= 0 ? z : z - 146096) / 146097;
-	uint64_t doe = static_cast<uint64_t>(z - era * 146097);
-	uint64_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-	int64_t y = static_cast<int64_t>(yoe) + era * 400;
-	uint64_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-	uint64_t mp = (5 * doy + 2) / 153;
-	uint64_t d = doy - (153 * mp + 2) / 5 + 1;
-	int64_t m = static_cast<int64_t>(mp) + (mp < 10 ? 3 : -9);
-	y += (m <= 2);
-
-	cql::DateTimeValue out = source;
-	out.year = static_cast<int32_t>(y);
-	out.month = static_cast<int32_t>(m);
-	out.day = static_cast<int32_t>(d);
-	out.hour = static_cast<int32_t>(ms_of_day / MS_PER_HOUR);
-	ms_of_day %= MS_PER_HOUR;
-	out.minute = static_cast<int32_t>(ms_of_day / MS_PER_MINUTE);
-	ms_of_day %= MS_PER_MINUTE;
-	out.second = static_cast<int32_t>(ms_of_day / MS_PER_SECOND);
-	out.millisecond = static_cast<int32_t>(ms_of_day % MS_PER_SECOND);
-	out.has_tz = false;
-	out.tz_offset_minutes = 0;
-	return out;
-}
-
+// CQL #datetime-2 (cql-tests #88): an offset-less DateTime assumes the timezone
+// offset of the evaluation request timestamp (Now() — system-local UTC offset),
+// so it normalizes with that offset rather than keeping its local components.
+// Callers only reach here for hour-or-finer comparisons with at least one
+// explicit offset operand; day-and-coarser comparisons stay on local
+// components (CQL-14 doctrine). The normalizer lives in the cql library
+// (cql/datetime.cpp) so the interval boundary comparison shares ONE
+// implementation instead of growing a second copy.
 static cql::DateTimeValue NormalizeForTemporalCompare(const cql::DateTimeValue &value) {
-	if (!value.has_tz) {
-		// CQL #datetime-2 (cql-tests #88): an offset-less DateTime assumes
-		// the timezone offset of the evaluation request timestamp (Now() —
-		// system-local UTC offset), so it normalizes with that offset
-		// rather than keeping its local components. Callers only reach
-		// here for hour-or-finer comparisons with at least one explicit
-		// offset operand; day-and-coarser comparisons stay on local
-		// components (CQL-14 doctrine).
-		cql::DateTimeValue assumed = value;
-		assumed.has_tz = true;
-		assumed.tz_offset_minutes = cql::evaluation_request_offset_minutes();
-		return DateTimeFromEpochMillis(ToEpochMillisForElapsed(assumed), assumed);
-	}
-	return DateTimeFromEpochMillis(ToEpochMillisForElapsed(value), value);
+	return cql::normalize_for_temporal_compare(value, cql::evaluation_request_offset_minutes());
 }
 
 static int CompareTemporalComponents(const cql::DateTimeValue &left, const cql::DateTimeValue &right,

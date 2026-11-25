@@ -40,4 +40,15 @@ struct DateTimeValue {
 	int compare_at_precision(const DateTimeValue &other, Precision prec) const;
 };
 
+// Normalize a DateTime to UTC wall-clock components for comparison.
+//
+// CQL #datetime-2 (cql-tests #88): an offset-less DateTime assumes the timezone
+// offset of the evaluation request timestamp, so it normalizes with that offset
+// (`assumed_offset_minutes`, normally `evaluation_request_offset_minutes()`)
+// instead of keeping its local components. A value that carries its own offset
+// uses it. Day-and-coarser comparisons stay on local components and must not be
+// routed here (CQL-14 doctrine); callers only reach this for hour-or-finer
+// comparisons where at least one operand has an explicit offset.
+DateTimeValue normalize_for_temporal_compare(const DateTimeValue &value, int32_t assumed_offset_minutes);
+
 } // namespace cql

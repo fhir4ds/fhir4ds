@@ -1328,6 +1328,32 @@ birthDates (documented day-1 convention) rather than intervals.
 
 ### CQL Interval Operator Boundaries
 
+**FHIR4-47 (2026-11-25): native interval-bound comparison must answer like the
+Python authority.** `IntervalOverlapsFunc` decided overlaps with a per-bound
+uncertainty-RANGE model (expand each bound to `[value, high-boundary-of-its-
+precision]`, ask whether the ranges provably touch). That model reports NULL
+for any two SAME-precision bounds landing on the same day/month/year —
+`Interval[@2026-01-01, @2026-01-01] overlaps Interval[@2026-01-01,
+@2026-12-31]` is TRUE — and a determined TRUE where the fixtures pin
+uncertainty. Two fixes: (1) `intervalFromBounds` (cql_extension.cpp) now
+normalizes DuckDB's space-separated TIMESTAMP rendering
+(`'2026-01-01 00:00:00'` → `'2026-01-01T00:00:00.000'`), mirroring
+`udf/interval.py::_normalize_timestamp_bound`, so a TIMESTAMP-derived bound
+keeps millisecond precision instead of reading as SECOND precision against a
+millisecond peer; (2) the overlap/before/after decision routes through ONE
+precision- and offset-aware bound ordering (`cql::compare_bounds_nullable`,
+formerly file-static `compare_interval_order_nullable`) that adds the
+AMUX-165/#datetime-2 assumed evaluation-request offset for mixed-precision
+pairs carrying an explicit `±hh:mm`, the Date→midnight promotion, and treats a
+trailing `Z` as offset-less exactly as `_normalize_datetime_str` does. Pinned
+uncertainty is preserved: DATE/DATETIME second-vs-millisecond stays NULL
+(DateTimeIncludedInNull), the §Time combined-ms rule (AMUX-171) is untouched,
+and both comparisons are evaluated before combining so a known-false side never
+short-circuits an undecided one (the Python authority's order). Residual known
+gap: the native tri-state still compares AUTHORED bounds with a closure rule
+while Python compares open bounds through their effective successors, so
+open-bound intervals combined with mixed precision can still diverge.
+
 **Hardened in CQL-16 EXPLORER campaign launch (2026-08-22).** Two
 native-only dual-engine bugs: (1) `BoundValue::compare` in
 extensions/cql/src/cql/interval.cpp returned incomparable (-2) for
