@@ -35,7 +35,7 @@ from pathlib import Path
 warnings.simplefilter("ignore", UserWarning)
 
 sys.path.insert(0, str(Path(__file__).parent))
-from conformance_log import _collect_stats  # noqa: E402
+from conformance_log import _collect_stats, log_file  # noqa: E402
 
 # Configuration: (name, script, report, extra script args).
 # Every entry here is part of the release gate. The DQM runner is invoked once
