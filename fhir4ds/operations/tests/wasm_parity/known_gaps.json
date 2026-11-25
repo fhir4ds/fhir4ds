@@ -298,7 +298,7 @@
         "web/website/static/bulk-publisher-app/extensions/fhirpath.duckdb_extension.wasm",
         "web/website/static/bulk-publisher-app/workers/fhirpath.duckdb_extension.wasm"
       ],
-      "reason": "BulkPublishDemo (web/website/src/components/BulkPublishDemo, in the built snapshot web/website/static/bulk-publisher-app) ships its own cql and fhirpath wasm binaries and pins a different @duckdb/duckdb-wasm version (^1.33.1-dev41.0) than the other apps (1.33.1-dev64.0). Not overwritten by the wasm rebuild: the rebuilt bundles target the v1.5.5 core of the other apps and may not load under this app's pin. Owner: web apps — unify the pin, then let scripts/build_wasm_extensions.py install into its directories too.",
+      "reason": "BulkPublishDemo (web/website/src/components/BulkPublishDemo, in the built snapshot web/website/static/bulk-publisher-app) ships its own cql and fhirpath wasm binaries and pins a different @duckdb/duckdb-wasm version (^1.33.1-dev41.0) than the other apps (1.33.1-dev64.0). Not overwritten by the wasm rebuild: the rebuilt bundles target the v1.5.5 core of the other apps and may not load under this app's pin. Owner: web apps \u2014 unify the pin, then let scripts/build_wasm_extensions.py install into its directories too.",
       "owner": "web apps",
       "since": "2026-11-24",
       "expires": "2027-02-22"
@@ -329,17 +329,6 @@
       "owner": "fhir4ds lane",
       "since": "2026-11-24",
       "expires": "2026-12-24"
-    },
-    {
-      "id": "tierc-cms75-degenerate-interval-overlap",
-      "kind": "PARITY_GAP",
-      "target": "CMS75",
-      "reason": "Tier C: real duckdb-wasm (and the x86 native engine) evaluate intervalOverlaps as NULL for a zero-width, Z-suffixed prevalence interval that sits on the Measurement Period start, where the Python UDF says TRUE; patient f076026e-a9df-4c3c-acc9-8c3af6845543 drops out of the Numerator (desktop 2, browser 1). AMUX-165's assumed evaluation-request offset is applied in the native cqlTimezoneOffset but not in the interval boundary comparison. Removes when the FHIR4-47 C++ fix lands AND the wasm bundles are rebuilt with scripts/build_wasm_extensions.py (the name-level staleness check cannot see a behaviour-only fix).",
-      "owner": "fhir4ds lane (FHIR4-47)",
-      "since": "2026-11-24",
-      "expires": "2026-12-24",
-      "suite": "qi-core-2025",
-      "surface": "real"
     },
     {
       "id": "tierc-cms986-tied-encounter-pick",

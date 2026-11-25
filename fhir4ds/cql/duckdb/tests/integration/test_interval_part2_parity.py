@@ -1747,24 +1747,6 @@ define ProperIncludedInPrecisionNull: @T12:00:00 properly included in millisecon
 #: 1.5.5 / 1.5.6 / 2.0.0) and `scripts/build_wasm_extensions.py --build
 #: --extension cql` have been run and the bundles deployed: the probe below
 #: detects the rebuilt binary and asserts the real values automatically.
-_FHIR4_47_NO_PYTHON_STALE: dict[str, tuple] = {
-    # Both interval bounds are DuckDB TIMESTAMP text -> second precision
-    # natively, millisecond precision on desktop.
-    "z_zero_width_on_peer_low": (None,),
-    "datetime_second_vs_millisecond_stays_null": (True,),
-    "timestamp_second_vs_millisecond_stays_null": (True,),
-    # The range model cannot prove same-precision day/month/year contact.
-    "day_precision_touch": (None,),
-    "day_precision_reverse_touch": (None,),
-    "month_precision_touch": (None,),
-    "year_precision_touch": (None,),
-    "date_vs_timestamp_bound": (None,),
-    # Range-model uncertainty where the relationship is definitively false/true.
-    "overlaps_before_same_day": (None,),
-    "overlaps_after_same_day": (None,),
-    # intervalFromBounds keeps the space-separated TIMESTAMP spelling.
-    "interval_from_bounds_timestamp_text": ("2026-01-01T00:00:00",),
-}
 
 
 def _fh4_47_cases() -> dict[str, tuple[str, tuple]]:
@@ -1921,17 +1903,6 @@ def _fh4_47_cases() -> dict[str, tuple[str, tuple]]:
     }
 
 
-def _fh4_47_native_is_current(con: duckdb.DuckDBPyConnection) -> bool:
-    """True when the loaded cql extension carries the FHIR4-47 bound comparison."""
-    row = con.execute(
-        "SELECT intervalOverlaps("
-        "intervalFromBounds('2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', true, true), "
-        "intervalFromBounds(CAST(CAST('2026-01-01T00:00:00.000' AS TIMESTAMP) AS VARCHAR), "
-        "CAST(CAST('2026-12-31T23:59:59.999' AS TIMESTAMP) AS VARCHAR), true, true))"
-    ).fetchone()
-    return row is not None and row[0] is True
-
-
 def test_cql_interval_overlaps_temporal_bound_parity_fhir4_47() -> None:
     """FHIR4-47: overlaps/before/after answer like the Python authority.
 
@@ -1962,27 +1933,12 @@ def test_cql_interval_overlaps_temporal_bound_no_python_fhir4_47() -> None:
     ``python3 scripts/build_extension_bundles.py --build --abi 1.5.5``, then
     ``--abi 1.5.6`` and ``--abi 2.0.0``, then
     ``python3 scripts/build_wasm_extensions.py --build --extension cql``.
-    ``_fh4_47_native_is_current`` flips this test onto the real values as soon
-    as a rebuilt binary is loaded, so a stale map can never quietly outlive
-    the rebuild.
+    The bundles carry the fix (x86 slots and the wasm bundle), so the
+    no-Python surface asserts the same values as the Python authority.
     """
     cases = _fh4_47_cases()
     with no_python_connection() as no_py:
-        current = _fh4_47_native_is_current(no_py)
-        if current:
-            for label in _FHIR4_47_NO_PYTHON_STALE:
-                assert label in cases, label
+        # Bundles rebuilt with FHIR4-47 (x86 slots + the wasm bundle), so the
+        # no-Python surface asserts the real values.
         for label, (sql, expected) in cases.items():
-            if current:
-                assert no_py.execute(sql).fetchone() == expected, label
-                continue
-            stale = _FHIR4_47_NO_PYTHON_STALE.get(label, expected)
-            row = no_py.execute(sql).fetchone()
-            assert row == stale, (
-                f"{label}: the bundled extension returned {row!r}, expected the "
-                f"pre-FHIR4-47 value {stale!r}. If the bundles now carry the fix, "
-                "delete the entry from _FHIR4_47_NO_PYTHON_STALE."
-            )
-        if not current:
-            for label in _FHIR4_47_NO_PYTHON_STALE:
-                assert label in cases, label
+            assert no_py.execute(sql).fetchone() == expected, label
