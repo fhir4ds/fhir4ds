@@ -11,6 +11,15 @@ Auto-coding demos are easy: point a terminology engine at some text, show the SN
 
 This post is about a way out of that loop, and the numbers it produced on real hospital data.
 
+:::note Updated after publication (2026-11-25)
+Two things have moved since this ran, and neither changes the methodology:
+
+- The runner is now **single-pass**. It used to be split into `--phase piqi|autocode|after` legs that handed intermediate artifacts (stripped inputs, gold labels, the augmented corpus) between processes; it now runs the whole experiment in one process and writes one report. The "every artifact preserved" claim above described the old behaviour and has been corrected.
+- The PIQI rubric has grown since (more criteria, and MedicationRequest is now in the stripped set), so the scored-item count is larger than the one in the tables below. The percentages here are from the 2026-11-20 rubric on the 2026-11-20 corpus slice and should not be compared with a fresh run; a refreshed benchmark will be published when we re-run at this scale.
+
+The dated numbers below are left exactly as published — this is a record, not a live dashboard.
+:::
+
 {/* truncate */}
 
 ## The trick: strip what you already have
@@ -53,6 +62,6 @@ The trade is clean. Pure semantic search maximizes coverage — it finds a plaus
 
 What it establishes: on real clinical text, with a genuine answer key, the auto-coder recovers most of what coding can recover, gets standard codes exactly right where they exist, translates local dictionaries into credible standard equivalents, and never regresses anything that was already passing. Every claim there is a measured number, not a demo.
 
-What it doesn't: this is one corpus, one engine version, one rubric. The methodology — strip, recover, grade against the removed originals, ceiling-arm the denominator — is the contribution we'd most like to see others copy. It turns any coded corpus into an auto-coding benchmark, and it is fully scripted: `fhir4ds.realism.piqi_autocoding` runs the whole experiment against any FHIR NDJSON or bundle corpus, deterministically, seed-invariant, with every artifact preserved.
+What it doesn't: this is one corpus, one engine version, one rubric. The methodology — strip, recover, grade against the removed originals, ceiling-arm the denominator — is the contribution we'd most like to see others copy. It turns any coded corpus into an auto-coding benchmark, and it is fully scripted: `fhir4ds.realism.piqi_autocoding` runs the whole experiment against any FHIR NDJSON or bundle corpus, deterministically and seed-invariant, and writes every number it computes to one report.
 
 The companion post covers the framework that scored all of this — [PIQI implemented as FHIR resources, measured on the same ICU data](/blog/realism-benchmark-mimic/).

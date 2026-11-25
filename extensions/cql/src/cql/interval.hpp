@@ -116,6 +116,14 @@ struct Interval {
 
 bool operator==(const Interval &a, const Interval &b);
 
+// CQL ordering of two interval bounds at the precision of the less precise
+// operand. Returns NullOpt when the relationship cannot be determined (mixed
+// DATE/DATETIME precision, incomparable Quantity units, type mismatch) and
+// -1/0/1 when it can. Mixed-precision DATE/DATETIME pairs compare as instants
+// when either side carries an explicit offset (CQL #datetime-2 assumed
+// evaluation-request offset, FHIR4-47).
+Optional<int> compare_bounds_nullable(const BoundValue &left, const BoundValue &right);
+
 // Detect whether a string is a JSON interval or a point value
 bool is_json_interval(const std::string &str);
 

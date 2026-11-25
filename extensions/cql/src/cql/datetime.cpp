@@ -419,4 +419,69 @@ int DateTimeValue::compare_at_precision(const DateTimeValue &other, Precision pr
 	return 0;
 }
 
+namespace {
+
+constexpr int64_t kMillisPerMinute = 60000LL;
+constexpr int64_t kMillisPerHour = 3600000LL;
+constexpr int64_t kMillisPerDay = 86400000LL;
+constexpr int64_t kMillisPerSecond = 1000LL;
+
+int64_t floor_div(int64_t a, int64_t b) {
+	int64_t q = a / b;
+	if ((a % b != 0) && ((a < 0) != (b < 0))) {
+		--q;
+	}
+	return q;
+}
+
+// Howard Hinnant civil_from_days, with `days` relative to 1970-01-01.
+DateTimeValue from_epoch_millis(int64_t millis, const DateTimeValue &source) {
+	int64_t days = floor_div(millis, kMillisPerDay);
+	int64_t ms_of_day = millis - days * kMillisPerDay;
+	if (ms_of_day < 0) {
+		ms_of_day += kMillisPerDay;
+		days--;
+	}
+
+	const int64_t z = days + 719468;
+	const int64_t era = (z >= 0 ? z : z - 146096) / 146097;
+	const uint64_t doe = static_cast<uint64_t>(z - era * 146097);
+	const uint64_t yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+	int64_t y = static_cast<int64_t>(yoe) + era * 400;
+	const uint64_t doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+	const uint64_t mp = (5 * doy + 2) / 153;
+	const uint64_t d = doy - (153 * mp + 2) / 5 + 1;
+	int64_t m = static_cast<int64_t>(mp) + (mp < 10 ? 3 : -9);
+	y += (m <= 2);
+
+	DateTimeValue out = source;
+	out.year = static_cast<int32_t>(y);
+	out.month = static_cast<int32_t>(m);
+	out.day = static_cast<int32_t>(d);
+	out.hour = static_cast<int32_t>(ms_of_day / kMillisPerHour);
+	ms_of_day %= kMillisPerHour;
+	out.minute = static_cast<int32_t>(ms_of_day / kMillisPerMinute);
+	ms_of_day %= kMillisPerMinute;
+	out.second = static_cast<int32_t>(ms_of_day / kMillisPerSecond);
+	out.millisecond = static_cast<int32_t>(ms_of_day % kMillisPerSecond);
+	out.has_tz = false;
+	out.tz_offset_minutes = 0;
+	return out;
+}
+
+} // namespace
+
+DateTimeValue normalize_for_temporal_compare(const DateTimeValue &value, int32_t assumed_offset_minutes) {
+	DateTimeValue walker = value;
+	if (!walker.has_tz) {
+		// CQL #datetime-2: the offset-less operand takes the evaluation-request
+		// offset, so the pair compares as instants instead of wall clocks.
+		walker.has_tz = true;
+		walker.tz_offset_minutes = assumed_offset_minutes;
+	}
+	const int64_t millis =
+	    walker.to_epoch_millis() - static_cast<int64_t>(walker.tz_offset_minutes) * kMillisPerMinute;
+	return from_epoch_millis(millis, walker);
+}
+
 } // namespace cql

@@ -8036,3 +8036,67 @@ the recommendation in the FHIR4-48 report). Pinned for the fixed measures by
 `fhir4ds/dqm/tests/integration/test_strict_scalar_subqueries_fhir4_48.py`,
 whose synthetic case is built so a "just append LIMIT 1" non-correlated fix
 fails the opposite patient's assertion.
+
+## `within N unit of` is Time-aware (FHIR4-50)
+
+The whole family (`within`, `properly within`, `starts/ends [properly] within`)
+used to cast both operands through TIMESTAMP (`_temporal_utils.py::
+_temporal_target_type` is hardcoded TIMESTAMP), so a CQL Time value — a
+'T'-prefixed clock string — raised `ConversionException` at bind time, for the
+plain form as well as the FHIR4-46 `properly` variant.
+`_temporal_comparisons.py::_translate_within_time_offsets` now owns the Time
+path and is selected by `_within_operand_is_time` when either operand is
+statically Time (literals, `Time(...)`, `ToTime(...)`, `x as Time`,
+declares whose `definition_meta.cql_type` is `Time`/`Interval<Time>`, interval
+literals with Time bounds, or an already-inlined Time literal SQL value).
+It composes EXISTING helpers — no new UDF, no new macro, no native rebuild:
+
+    |A - B| <= Q  ->  cqlSameOrAfter(A, dateSubtractQuantity(B, Q))
+                      and cqlSameOrBefore(A, dateAddQuantity(B, Q))
+    |A - B| <  Q  ->  cqlAfter(A, dateSubtractQuantity(B, Q))
+                      and cqlBefore(A, dateAddQuantity(B, Q))
+
+Reference (cqframework cql-to-elm `Cql2ElmVisitor.visitWithinIntervalOperatorPhrase`):
+`In(left, Interval(right - Q, right + Q))` with bounds CLOSED for the plain form
+and OPEN for `properly within`; the reference's Time arithmetic is
+`java.time.LocalTime.plus` (AddEvaluator), i.e. it WRAPS modulo midnight, while
+`InEvaluator` does NOT wrap the interval. So bound pairs that cross midnight
+answer FALSE for points outside the wrapped range
+(`@T23:30 within 1 hour of @T00:15` -> FALSE, `@T21:00 within 3 hours of
+@T23:00` -> FALSE). Keep both halves: wrapping arithmetic
+(`dateAdd/SubtractQuantity`) plus a directional precision-aware compare
+(`cqlSameOrAfter/cqlSameOrBefore/cqlAfter/cqlBefore`, all four in
+`_PYTHON_PREFERRED_CPP_CONFLICTS`, so desktop Python is the authority and the
+C++ mirror serves WASM — verified identical on Time). Do NOT lower this to
+`intervalContains(intervalFromBounds(...))` or to a reference-date TIMESTAMP
+trick: both change the midnight answers.
+
+Boundaries that are deliberate:
+- DAY-LEVEL units on Time (`within 3 days of`) stay NULL: CQL 1.5 §8.1/§8.15
+  allow only hours/minutes/seconds/milliseconds for Time, so the offset bounds
+  are unknown. The reference inherits `LocalTime.plus(3, DAYS)` (a silent
+  no-op), an artifact of the Java type rather than spec semantics; in a
+  population WHERE a NULL is already read as not-in-population.
+- A bare `Interval within Q of point` is NOT a CQL signature (`In` takes a
+  point; the interval spellings are `starts/ends within`). It keeps its
+  historical TIMESTAMP lowering on both engines — the Time path must not
+  swallow it, or the engines diverge (Python answers NULL for a malformed
+  operand where C++ answers FALSE). Pinned by
+  `test_within_time_operands_parity.py::
+  test_cql_bare_interval_within_is_left_on_its_historical_lowering`.
+- Dynamically-typed operands on BOTH sides (e.g. `O.valueTime within 3 hours of
+  N.valueTime`) still take the TIMESTAMP path: no static Time signal exists.
+  One statically-Time side is enough (`O.valueTime within 3 hours of @T12:00`
+  works and is covered end-to-end).
+- The Date/DateTime lowering is BYTE-IDENTICAL to the pre-fix SQL; the new
+  test file pins the golden strings.
+
+Sub-precision Time arithmetic (found through this card):
+`dateAddQuantity`'s Time branch shifted and THEN formatted the result, so
+`@T12:00 - 30 seconds` produced 'T11:59' on the Python authority while the C++
+extension and the reference (`truncateValueToTargetPrecision`) answer 'T12:00'.
+CQL §8.1/§8.15 truncate the QUANTITY to the input precision BEFORE the shift;
+the branch now does that (and restates the amount in the input unit, so
+`@T12:00:00 + 1500 milliseconds` is 'T12:00:01', not 'T12:00:00'). Pinned by
+`test_datetime_part1_parity.py::
+test_cql_datetime_part1_time_subprecision_quantity_truncation_parity`.

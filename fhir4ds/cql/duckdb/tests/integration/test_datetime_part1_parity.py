@@ -905,3 +905,55 @@ define DaysBetweenDates: days between @2014-01-15 and @2014-02-01
             assert row == expected_value, f"Python mismatch for {name}: {row!r} != {expected_value!r}"
     finally:
         py.close()
+
+
+def test_cql_datetime_part1_time_subprecision_quantity_truncation_parity() -> None:
+    """Time ± Quantity truncates the QUANTITY to the input precision (FHIR4-50).
+
+    CQL 1.5 §8.1 Add / §8.15 Subtract: "Arithmetic is performed at the
+    precision of the input".  A quantity finer than the input precision is
+    therefore truncated to the input unit BEFORE the shift (the reference
+    engine's ``truncateValueToTargetPrecision``), so 30 seconds added to a
+    minute-precision Time is a no-op.
+
+    The Python fallback used to shift and then format the result, which FLOORS
+    across a boundary: ``@T12:00 - 30 seconds`` produced 'T11:59' while the
+    C++ extension produced 'T12:00'.  FHIR4-50 found the divergence through the
+    new ``within ... of`` Time path and fixed the truncation order; this pins
+    both engines to the same value in both directions.
+    """
+    cql = """library DateTime50 version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define AddSubPrecisionSecond: @T12:00 + 30 seconds
+define SubtractSubPrecisionSecond: @T12:00 - 30 seconds
+define SubtractSubPrecisionMillis: @T12:00:00 - 1500 milliseconds
+define AddSubPrecisionMillis: @T12:00:00 + 1500 milliseconds
+define SubtractWholeHour: @T12:00 - 1 hour
+define SubtractWrapsMidnight: @T00:30 - 3 hours
+define AddWrapsMidnight: @T23:30 + 3 hours
+define SubtractAtSamePrecision: @T12:00 - 30 minutes
+"""
+    translated = translate_cql(cql)
+    expected = {
+        "AddSubPrecisionSecond": "T12:00",
+        "SubtractSubPrecisionSecond": "T12:00",
+        "SubtractSubPrecisionMillis": "T11:59:59",
+        "AddSubPrecisionMillis": "T12:00:01",
+        "SubtractWholeHour": "T11:00",
+        "SubtractWrapsMidnight": "T21:30",
+        "AddWrapsMidnight": "T02:30",
+        "SubtractAtSamePrecision": "T11:30",
+    }
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for name, expected_value in expected.items():
+            sql = f"SELECT {translated[name].to_sql()}"
+            py_row = py.execute(sql).fetchone()
+            cpp_row = cpp.execute(sql).fetchone()
+            assert cpp_row == py_row, f"{name}: cpp={cpp_row} py={py_row}"
+            assert py_row == (expected_value,), f"{name}: {py_row} != {expected_value!r}"
+    finally:
+        py.close()
+        cpp.close()

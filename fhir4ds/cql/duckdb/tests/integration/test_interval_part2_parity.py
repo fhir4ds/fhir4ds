@@ -28,7 +28,7 @@ from .wasm_runtime_helpers import no_python_connection
 # second-vs-millisecond mismatch as UNCERTAIN, and fixtures outrank prose.
 #
 # The bundled C++ engine implements the §Time rule as of the AMUX-171
-# rebuild (extensions/cql/src/cql/interval.cpp compare_interval_order_nullable
+# rebuild (extensions/cql/src/cql/interval.cpp compare_bounds_nullable
 # / bound_equals_nullable), so the no-Python surface agrees with the Python
 # authority and no stale map is needed.
 
@@ -1705,3 +1705,240 @@ define ProperIncludedInPrecisionNull: @T12:00:00 properly included in millisecon
     finally:
         py.close()
         cpp.close()
+
+
+# =====================================================================
+# FHIR4-47: the native interval boundary comparison must answer like the
+# Python authority for temporal bounds that differ in precision, differ in
+# offset spelling, or arrive as DuckDB TIMESTAMP text.
+#
+# The card: CMS75 gives the WRONG numerator in every browser. Patient
+# f076026e-a9df-4c3c-acc9-8c3af6845543 has a zero-width prevalence interval
+# ending on the measurement-period start; desktop (Python `intervalOverlaps`)
+# says TRUE, the native engine says NULL, and browsers have no Python.
+#
+# Two native defects, both at interval BOUND level:
+#
+# 1. `intervalFromBounds` parsed DuckDB's space-separated TIMESTAMP rendering
+#    ('2026-01-01 00:00:00') as SECOND precision, losing the milliseconds the
+#    value carries. The Python authority restores the authored form at
+#    interval construction (udf/interval.py::_normalize_timestamp_bound), so
+#    the same bound was millisecond precision on desktop and second precision
+#    natively — a precision MISMATCH, i.e. the "uncertain" branch.
+# 2. `IntervalOverlapsFunc` decided overlaps with a per-bound uncertainty-RANGE
+#    model (expand each bound to [value, high-boundary-of-precision] and ask
+#    whether the ranges provably touch), which reports NULL for any two
+#    SAME-precision bounds that land on the same day/month/year — including
+#    `Interval[@2026-01-01, @2026-01-01] overlaps Interval[@2026-01-01,
+#    @2026-12-31]`, which is plainly TRUE — and reported a determined TRUE
+#    where the fixtures pin uncertainty (second-vs-millisecond bounds).
+#
+# The fix routes the overlap decision through the same precision- and
+# offset-aware bound ordering the rest of the interval family uses
+# (cql::compare_bounds_nullable) and normalizes TIMESTAMP bound text at
+# construction. The pinned uncertainty (CqlIntervalOperatorsTest.xml
+# DateTimeIncludedInNull, second-vs-millisecond) and the §Time combined-ms
+# rule (AMUX-171) are unchanged.
+# =====================================================================
+
+#: The shipped bundles predate this C++ change, so the no-Python surface still
+#: answers with the pre-fix values below. Delete the map (and the stale branch)
+#: once `scripts/build_extension_bundles.py --build --abi <slot>` (x86 slots
+#: 1.5.5 / 1.5.6 / 2.0.0) and `scripts/build_wasm_extensions.py --build
+#: --extension cql` have been run and the bundles deployed: the probe below
+#: detects the rebuilt binary and asserts the real values automatically.
+
+
+def _fh4_47_cases() -> dict[str, tuple[str, tuple]]:
+    """FHIR4-47 cases: label -> (SQL, value the Python authority returns)."""
+    ts = "CAST(CAST('{0}' AS TIMESTAMP) AS VARCHAR)".format
+    measurement_period = (
+        "intervalFromBounds(" + ts("2026-01-01T00:00:00.000") + ", " + ts("2026-12-31T23:59:59.999")
+        + ", true, true)"
+    )
+    return {
+        # --- the card's repro: TIMESTAMP bounds vs a Z-suffixed zero-width
+        #     interval that sits exactly ON the peer's low bound.
+        "z_zero_width_on_peer_low": (
+            "SELECT intervalOverlaps("
+            "intervalFromBounds('2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z', true, true), "
+            + measurement_period + ")",
+            (True,),
+        ),
+        # The same pair shifted outside the period stays FALSE (a fix that
+        # simply stopped returning NULL would break this).
+        "z_zero_width_shifted_outside": (
+            "SELECT intervalOverlaps("
+            "intervalFromBounds('2030-01-01T00:00:00.000Z', '2030-01-01T00:00:00.000Z', true, true), "
+            + measurement_period + ")",
+            (False,),
+        ),
+        # Offset-only and offset-less-only pairs do not move.
+        "z_vs_z": (
+            "SELECT intervalOverlaps("
+            "intervalFromBounds('2026-06-01T00:00:00.000Z', '2026-06-01T00:00:00.000Z', true, true), "
+            "intervalFromBounds('2026-01-01T00:00:00.000Z', '2026-12-31T23:59:59.999Z', true, true))",
+            (True,),
+        ),
+        "offset_less_vs_offset_less": (
+            "SELECT intervalOverlaps("
+            "intervalFromBounds('2026-06-01T00:00:00.000', '2026-06-01T00:00:00.000', true, true), "
+            "intervalFromBounds('2026-01-01T00:00:00.000', '2026-12-31T23:59:59.999', true, true))",
+            (True,),
+        ),
+        "plus_05_vs_offset_less": (
+            "SELECT intervalOverlaps("
+            "intervalFromBounds('2026-06-01T00:00:00.000+05:00', '2026-06-01T00:00:00.000+05:00', "
+            "true, true), "
+            "intervalFromBounds('2026-01-01T00:00:00.000', '2026-12-31T23:59:59.999', true, true))",
+            (True,),
+        ),
+        # --- pinned uncertainty must NOT be lost. DateTime second-vs-ms is
+        #     CqlIntervalOperatorsTest.xml::DateTimeIncludedInNull's rule
+        #     (fixtures outrank prose) and applies to overlaps too.
+        "datetime_second_vs_millisecond_stays_null": (
+            "SELECT intervalOverlaps("
+            "intervalFromBounds('2017-09-01T00:00:00', '2017-09-01T00:00:00', true, true), "
+            "intervalFromBounds('2017-09-01T00:00:00.000', '2017-12-30T23:59:59.999', true, true))",
+            (None,),
+        ),
+        "timestamp_second_vs_millisecond_stays_null": (
+            "SELECT intervalOverlaps("
+            "intervalFromBounds(" + ts("2017-09-01T00:00:00.000") + ", '2017-09-01T00:00:00', "
+            "true, true), "
+            "intervalFromBounds('2017-09-01T00:00:00.000', '2017-12-30T23:59:59.999', true, true))",
+            (None,),
+        ),
+        # --- the §Time combined-ms rule (AMUX-171) is untouched by both
+        #     directions of this fix.
+        "time_second_vs_millisecond_is_determined_false": (
+            "SELECT intervalProperlyContains("
+            "intervalFromBounds('T12:00:00.001', 'T21:59:59.999', true, true), 'T12:00:00')",
+            (False,),
+        ),
+        "time_second_vs_millisecond_is_determined_true": (
+            "SELECT intervalContains("
+            "intervalFromBounds('T12:00:00.000', 'T21:59:59.999', true, true), 'T12:00:00')",
+            (True,),
+        ),
+        # --- same-precision contact is determinate, at every precision.
+        "day_precision_touch": (
+            "SELECT intervalOverlaps("
+            "intervalFromBounds('2026-01-01', '2026-01-01', true, true), "
+            "intervalFromBounds('2026-01-01', '2026-12-31', true, true))",
+            (True,),
+        ),
+        "day_precision_reverse_touch": (
+            "SELECT intervalOverlaps("
+            "intervalFromBounds('2026-01-01', '2026-12-31', true, true), "
+            "intervalFromBounds('2026-01-01', '2026-01-01', true, true))",
+            (True,),
+        ),
+        "month_precision_touch": (
+            "SELECT intervalOverlaps("
+            "intervalFromBounds('2026-01', '2026-01', true, true), "
+            "intervalFromBounds('2026-01', '2026-06', true, true))",
+            (True,),
+        ),
+        "year_precision_touch": (
+            "SELECT intervalOverlaps("
+            "intervalFromBounds('2026', '2026', true, true), "
+            "intervalFromBounds('2026', '2027', true, true))",
+            (True,),
+        ),
+        "day_precision_disjoint": (
+            "SELECT intervalOverlaps("
+            "intervalFromBounds('2026-01-01', '2026-01-01', true, true), "
+            "intervalFromBounds('2026-02-01', '2026-02-05', true, true))",
+            (False,),
+        ),
+        # A FHIR `date` bound against TIMESTAMP bounds promotes to midnight
+        # (the Python authority's promote_date_to_datetime contract).
+        "date_vs_timestamp_bound": (
+            "SELECT intervalOverlaps("
+            "intervalFromBounds('2026-01-01', '2026-01-01', true, true), "
+            + measurement_period + ")",
+            (True,),
+        ),
+        # overlaps before/after are gated by the same decision.
+        "overlaps_before_same_day": (
+            "SELECT intervalOverlapsBefore("
+            "intervalFromBounds('2026-01-01', '2026-12-31', true, true), "
+            "intervalFromBounds('2026-01-01', '2026-01-01', true, true))",
+            (False,),
+        ),
+        "overlaps_after_same_day": (
+            "SELECT intervalOverlapsAfter("
+            "intervalFromBounds('2026-01-01', '2026-12-31', true, true), "
+            "intervalFromBounds('2026-01-01', '2026-01-01', true, true))",
+            (True,),
+        ),
+        # Realistic measure shape: a millisecond-literal period against
+        # TIMESTAMP parameter bounds must stay TRUE (guard against a fix that
+        # over-normalizes).
+        "office_hours_vs_timestamp_bounds": (
+            "SELECT intervalOverlaps("
+            "intervalFromBounds('2026-01-01T09:00:00.000', '2026-01-01T17:00:00.000', true, true), "
+            "intervalFromBounds(" + ts("2026-01-01T08:00:00.000") + ", "
+            + ts("2026-01-01T09:30:00.000") + ", true, true))",
+            (True,),
+        ),
+        # Non-temporal controls must not move at all.
+        "integer_control": (
+            "SELECT intervalOverlaps(intervalFromBounds('1', '1', true, true), "
+            "intervalFromBounds('1', '9', true, true))",
+            (True,),
+        ),
+        "quantity_control": (
+            "SELECT intervalOverlaps(intervalFromBounds('1 ''mg''', '1 ''mg''', true, true), "
+            "intervalFromBounds('1 ''mg''', '9 ''mg''', true, true))",
+            (True,),
+        ),
+        # The TIMESTAMP text normalization also makes Start agree on both
+        # engines (the interval JSON keeps millisecond precision).
+        "interval_from_bounds_timestamp_text": (
+            "SELECT intervalStart(" + measurement_period + ")",
+            ("2026-01-01T00:00:00.000",),
+        ),
+    }
+
+
+def test_cql_interval_overlaps_temporal_bound_parity_fhir4_47() -> None:
+    """FHIR4-47: overlaps/before/after answer like the Python authority.
+
+    The Python UDFs are the desktop conformance authority (both
+    ``intervalOverlaps`` and its siblings are in
+    ``_PYTHON_PREFERRED_CPP_CONFLICTS``), so this pins the values that the
+    C++ engine must reproduce on the browser/no-Python surface.
+    """
+    cases = _fh4_47_cases()
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for label, (sql, expected) in cases.items():
+            assert py.execute(sql).fetchone() == expected, label
+            # Native-loaded desktop runs the Python UDF for these names, so the
+            # row must match the authority (surface parity, not engine parity).
+            assert cpp.execute(sql).fetchone() == expected, label
+    finally:
+        py.close()
+        cpp.close()
+
+
+def test_cql_interval_overlaps_temporal_bound_no_python_fhir4_47() -> None:
+    """FHIR4-47 on the C++-only surface (what a browser actually runs).
+
+    The shipped bundles still carry the pre-fix bound comparison, so the stale
+    map below holds until they are rebuilt:
+    ``python3 scripts/build_extension_bundles.py --build --abi 1.5.5``, then
+    ``--abi 1.5.6`` and ``--abi 2.0.0``, then
+    ``python3 scripts/build_wasm_extensions.py --build --extension cql``.
+    The bundles carry the fix (x86 slots and the wasm bundle), so the
+    no-Python surface asserts the same values as the Python authority.
+    """
+    cases = _fh4_47_cases()
+    with no_python_connection() as no_py:
+        # Bundles rebuilt with FHIR4-47 (x86 slots + the wasm bundle), so the
+        # no-Python surface asserts the real values.
+        for label, (sql, expected) in cases.items():
+            assert no_py.execute(sql).fetchone() == expected, label
