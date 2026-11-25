@@ -1,0 +1,65 @@
+{
+  "_comment": "Provenance of the WASM extension bundles the web apps ship. duckdb-wasm's core is built from one DuckDB release (duckdb_abi); the side modules must be built for the same release or LOAD fails. `bundles` names the source copy of each extension and where scripts/build_wasm_extensions.py installs it; every other copy in the tree must be byte-identical to the source copy (T7, fhir4ds/operations/tests/wasm_parity/shipped_bundles.py). A bundle's `source` stays null until scripts/build_wasm_extensions.py rebuilds it: the bundles shipped today carry only the ABI stamp.",
+  "schema_version": 1,
+  "duckdb_abi": "1.5.5",
+  "duckdb_wasm_version": "1.33.1-dev64.0",
+  "bundles": [
+    {
+      "extension": "cql",
+      "path": "web/cql-cleanroom/public/extensions/cql.duckdb_extension.wasm",
+      "sha256": "721a986fbb8aec990671cf9e2c064be3727ee30b23ccdd2cbd3f47c13e4c39d7",
+      "size": 984740,
+      "install": [
+        "web/cql-cleanroom/public/extensions",
+        "web/cql-clinic/public/extensions",
+        "web/wasm-demo/public/extensions",
+        "fhir4ds/devserver/static-cleanroom/assets",
+        "fhir4ds/devserver/static-cleanroom/extensions",
+        "web/website/static/cql-cleanroom/assets",
+        "web/website/static/cql-cleanroom/extensions",
+        "web/website/static/cql-clinic-app/assets",
+        "web/website/static/cql-clinic-app/extensions",
+        "web/website/static/wasm-app/assets",
+        "web/website/static/wasm-app/extensions"
+      ],
+      "source": {
+        "commit": "9e67030c6889f1635b1d8df6093cdf5f4710a2da",
+        "cql_source": "c9236b061969f393478eaddba805164f0db0b46d",
+        "common_source": "06b99a1cc19d0ae1e2eee11101fc401b7c0c96e1",
+        "duckdb_tag": "v1.5.5",
+        "emsdk": "emsdk-3.1.71",
+        "built_at": "2026-11-25T01:32:56+00:00"
+      }
+    },
+    {
+      "extension": "fhirpath",
+      "path": "web/cql-cleanroom/public/extensions/fhirpath.duckdb_extension.wasm",
+      "sha256": "24a03e42bba60ad417ac68ba9054390fb3b11452c555725930ddc51dd1612ff2",
+      "size": 806664,
+      "install": [
+        "web/cql-cleanroom/public/extensions",
+        "web/cql-clinic/public/extensions",
+        "web/wasm-demo/public/extensions",
+        "web/viewing-room/public/extensions",
+        "fhir4ds/devserver/static-cleanroom/assets",
+        "fhir4ds/devserver/static-cleanroom/extensions",
+        "web/website/static/cql-cleanroom/assets",
+        "web/website/static/cql-cleanroom/extensions",
+        "web/website/static/cql-clinic-app/assets",
+        "web/website/static/cql-clinic-app/extensions",
+        "web/website/static/wasm-app/assets",
+        "web/website/static/wasm-app/extensions",
+        "web/website/static/viewing-room-app/assets",
+        "web/website/static/viewing-room-app/extensions"
+      ],
+      "source": {
+        "commit": "9e67030c6889f1635b1d8df6093cdf5f4710a2da",
+        "fhirpath_source": "0f89f73f4d2899124be9816c4f70092e2f4139a3",
+        "common_source": "06b99a1cc19d0ae1e2eee11101fc401b7c0c96e1",
+        "duckdb_tag": "v1.5.5",
+        "emsdk": "emsdk-3.1.71",
+        "built_at": "2026-11-25T01:33:09+00:00"
+      }
+    }
+  ]
+}

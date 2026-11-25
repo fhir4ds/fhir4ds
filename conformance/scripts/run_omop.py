@@ -48,7 +48,8 @@ def build_connection():
     return con
 
 
-def main():
+def run_checks(con) -> dict:
+    """Run the sectioned checks (schema, required, grain, mapping, vd) against ``con``."""
     results = {"total": 0, "passed": 0, "failed": 0, "sections": {}}
 
     def check(section, name, fn):
@@ -67,7 +68,6 @@ def main():
             results["failed"] += 1
 
     expected = json.loads((OMOP_DIR / "demo" / "expected-rows.json").read_text())
-    con = build_connection()
 
     # -- schema section ----------------------------------------------------
     for table, spec in expected.items():
@@ -184,6 +184,12 @@ def main():
             sql = gen.generate(vd)
             con.execute(f"SELECT * FROM ({sql}) LIMIT 1").fetchall()
         check("vd-conformance", f"{stem} parse+generate+execute", vd_check)
+
+    return results
+
+
+def main():
+    results = run_checks(build_connection())
 
     ok = results["failed"] == 0
     # Standard report shape: {suite: {tests: [{name, result: {passed, error}}]}}

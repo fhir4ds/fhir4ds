@@ -6848,3 +6848,79 @@ medterm4ds card.
 The HTTP adapter stays available behind `--http-base-url` as an explicit
 escape hatch for a remote/isolated terminology server; NOTHING in the
 default or tested path requires it.
+
+## WASM parity gates — the browser surface is gated like the desktop (2026-11-24, AMUX-175)
+
+The web apps do not run desktop DuckDB: translated SQL runs on duckdb-wasm (core `v1.5.5`)
+with C++ **wasm** extension bundles plus `web/*/src/lib/cql-macros.ts`. Earlier parity work
+lived in `fhir4ds/operations/tests`, which no CI job ran, and it checked names, not behaviour.
+The gates below are now the contract; details, commands and the fragile areas are in
+`fhir4ds/operations/AGENTS.md` ("WASM parity gates").
+
+**Standing principles (Joel, 2026-11-24):** no macro may exist in the browser that does not
+exist on desktop; drift is not fixed by another one-off campaign but by a gate that makes the
+gaps visible and expires every excuse; the infrastructure comes before fixing the gaps.
+
+- **Step 0** names the reference bundle (`web/cql-cleanroom/src/lib/cql-macros.ts`) and fails on
+  a wasm-only macro, a same-name macro with a different body, a desktop macro the browser
+  lacks, a drifted `cql-macros.ts` copy, or a shipped `.wasm` that is not one known set
+  (`fhir4ds/wasm_extension_bundles.json`, `scripts/build_wasm_extensions.py --verify`).
+- **Tier A** runs the official corpora through the official comparators on a *simulated*
+  browser surface (x86 bundles + the reference macros) — CQL 2,037, ViewDefinition 144, OMOP
+  38, and FHIRPath R4 (only 3 tests evaluable until the XML examples are typed; see
+  `fhir4ds/operations/AGENTS.md`).
+- **Tier B** boots real duckdb-wasm with the shipped wasm bundles in headless chromium. It is
+  the only gate that sees the engine: binder, Arrow transport, bundle staleness. Both tiers
+  run per PR; Step 0 and Tier A must stay green even if Tier B is demoted to the scheduled job.
+- **Tier C** runs real DQM measure population SQL on real duckdb-wasm — a curated set per
+  PR, the whole QI-Core suite on the schedule. It is the referee for C++ *behaviour* fixes,
+  which add no function name and so are invisible to the staleness check.
+- **Every gap is registered or fixed, never ignored** (`wasm_parity/known_gaps.json`): a
+  registration carries a reason, an owner and an expiry (90 days; 30 for principle kinds and
+  in-flight desktop defects); a registration whose gap no longer reproduces fails the gate;
+  `WASM_ONLY_MACRO` needs `approved_by`; a case-level registration names the surface it was
+  seen on. A new gap fails with a ready-to-paste entry — triage is a decision, not a diff.
+
+What the first run found (so nobody re-chases it): 33 desktop macros have no browser
+counterpart, 53 same-name macros have a different body, `AllTrue`/`AnyTrue`/`AllFalse`/
+`AnyFalse` are Binder Errors in every browser, the shipped `cql.duckdb_extension.wasm` lacked
+six functions the desktop bundles provide (`RoundQuantity`, `RoundQuantityTo`, `Comparable`,
+`cqlEquivalentInValueset`, `fhirpathEquivalentInValueset`, `cqlDateTimeEquivalentListElement`)
+and predated the AMUX-171 Time rules, and `web/wasm-demo` and `web/cql-clinic` still ship
+their own diverged `cql-macros.ts`.
+
+**The wasm bundles were rebuilt on 2026-11-24** with `scripts/build_wasm_extensions.py`, last
+from `9e67030c688` (which contains dev `a9845673e87`), and `fhir4ds/wasm_extension_bundles.json`
+records their provenance. On the official CQL corpus vendored at `0a8f7d3` (2,043 tests, 2,015
+of which execute on both surfaces) real duckdb-wasm gives exactly the simulator's numbers
+(1,816 green, 128 parity gaps from missing macros and body drift, 64 representation
+differences, 7 that fail on both): no real-only gap is left. So every C++ change needs that
+rebuild, or the browser
+silently runs an older engine than desktop. The script's first real run failed four times
+before it built; the causes are recorded in `fhir4ds/operations/AGENTS.md`.
+
+**Tier C (real measure SQL on real duckdb-wasm) is a gate since 2026-11-24.** The CMS159 bind
+failure that motivated FHIR4-15/16 does not reproduce — the full population SQL binds and runs
+on real duckdb-wasm. The first suite-wide run (QI-Core 2025, 45 measures) found what no
+expression-level gate can: CMS75 gives a wrong answer in every browser (a native
+`intervalOverlaps` NULL where the Python UDF says TRUE; FHIR4-47), CMS56 and CMS832 crash on
+multi-row scalar subqueries that only the desktop DQM harness tolerates (FHIR4-48), and
+`in_valueset` reads an in-process ValueSet cache that three of the four web apps never fill, so
+those apps report EMPTY populations with no error (FHIR4-49). Note that DuckDB never executes a
+scalar call whose result nothing reads — a cache load in an unread projection is a silent
+no-op. A curated set of measures runs per PR in the cleanroom CI job; the whole suite runs on
+the schedule. Details: `fhir4ds/operations/AGENTS.md`.
+
+**Rules for anyone touching this surface**
+
+- A translator macro that reaches population SQL is ported to the reference bundle or added to
+  the ledger in the same change (`test_macro_sync.py` + Step 0).
+- C++ changes need a wasm rebuild as well as the x86 ones
+  (`scripts/build_wasm_extensions.py --build --extension <name>`), or the browser silently
+  runs last month's engine. Tier B turns that into an exact list instead of a suspicion, and
+  the ledger forces the now-stale registrations to be deleted.
+- Tier B and Tier C cannot run under `scripts/capped.sh` (chromium cannot start with a capped
+  address space); they are light and run uncapped, and Tier C caps each desktop translation
+  itself. Everything else stays capped.
+- Values cross to the browser as VARCHAR: under the apps' `castBigIntToDouble` flag Arrow
+  rounds BIGINT beyond 2^53 and delivers DECIMAL/HUGEINT unscaled.

@@ -40,10 +40,16 @@ jobs:
           python-version: "3.10"
           cache: pip
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Install package and test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev,measures]"
+          # jsonschema: the official ViewDefinition runner validates its report with it
+          python -m pip install -e ".[dev,measures]" jsonschema
 
       - name: Ruff cleaned packages
         run: >
@@ -55,7 +61,14 @@ jobs:
           conformance/scripts
           --output-format=github
 
+      # The WASM parity gates (Step 0 + Tier A) live in fhir4ds/operations/tests. Only they
+      # are listed here: the rest of that directory needs the optional mcp/serve extras this
+      # job does not install. With FHIR4DS_REQUIRE_WASM_PARITY=1 a missing input (node,
+      # corpus, bundles) fails instead of skipping. Tier B (real duckdb-wasm) runs in the
+      # cleanroom job, which has node_modules.
       - name: Pytest
+        env:
+          FHIR4DS_REQUIRE_WASM_PARITY: "1"
         run: >
           python -m pytest
           fhir4ds/cli/tests
@@ -63,6 +76,11 @@ jobs:
           fhir4ds/sources
           fhir4ds/cql/tests/unit
           fhir4ds/viewdef
+          fhir4ds/operations/tests/test_wasm_surface_parity.py
+          fhir4ds/operations/tests/test_wasm_parity_step0.py
+          fhir4ds/operations/tests/test_wasm_parity_tier_a.py
+          fhir4ds/operations/tests/test_wasm_parity_selftest.py
+          fhir4ds/operations/tests/test_macro_sync.py
 
   python-311:
     name: Python 3.11 compatibility
@@ -97,9 +115,9 @@ jobs:
           fhir4ds/viewdef
 
   cleanroom:
-    name: CQL Cleanroom (cell parity + units)
+    name: CQL Cleanroom (cell parity + units + WASM parity Tier B + C)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -121,3 +139,36 @@ jobs:
       - name: Unit tests (vitest)
         working-directory: web/cql-cleanroom
         run: ./node_modules/.bin/vitest run
+
+      # WASM parity Tier B: headless duckdb-wasm with the shipped wasm extension bundles.
+      # It must run uncapped and needs this job's node_modules, so it lives here.
+      - name: Setup Python (WASM parity Tier B)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install package (WASM parity Tier B + C)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,measures]"
+
+      - name: Install chromium (WASM parity Tier B)
+        working-directory: web/cql-cleanroom
+        run: npx playwright install --with-deps chromium
+
+      - name: WASM parity Tier B (real duckdb-wasm)
+        env:
+          FHIR4DS_REQUIRE_WASM_PARITY: "1"
+          FHIR4DS_REQUIRE_WASM_REAL: "1"
+        run: python -m pytest fhir4ds/operations/tests/test_wasm_parity_tier_b.py -q -p no:cacheprovider
+
+      # WASM parity Tier C: real measure population SQL on real duckdb-wasm, curated measures
+      # (the whole suite runs in the scheduled job, conformance.yml).
+      - name: Checkout DQM conformance fixtures (WASM parity Tier C)
+        run: git submodule update --init tests/data/ecqm-content-qicore-2025
+
+      - name: WASM parity Tier C (real measures on real duckdb-wasm)
+        env:
+          FHIR4DS_REQUIRE_WASM_PARITY: "1"
+          FHIR4DS_REQUIRE_WASM_REAL: "1"
+        run: python -m pytest fhir4ds/operations/tests/test_wasm_parity_tier_c.py -q -p no:cacheprovider
