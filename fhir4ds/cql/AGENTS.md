@@ -7973,3 +7973,66 @@ predicates (`intervalOverlapsPrecise`, `intervalBeforePrecise`,
 `intervalAfterPrecise`, `intervalOverlapsBefore/AfterPrecise`) still lack the
 open-null treatment on BOTH engines. Do not widen FHIR4-42's guard into them
 without doing the dual-engine pair and re-running both DQM suites.
+
+## FHIR4-48 — generated SQL must be single-row BY CONSTRUCTION (2026-11-25)
+
+DuckDB's default is `scalar_subquery_error_on_multiple_rows=true`: a scalar
+subquery that yields more than one row is an ERROR. The desktop DQM harness
+masks that (`fhir4ds/dqm/tests/conformance/database.py` sets it false), so a
+lowering emitting a multi-row scalar subquery ran green in the gate and raised
+"More than one row returned by a subquery used as an expression" on EVERY
+non-masked consumer — duckdb-wasm in all the web apps and any user connection.
+The wasm-parity lane found it; the gate could not. **A harness flag that hides a
+shape defect is part of the defect.** Two root causes and their fixes:
+
+- **A query-return alias referenced from a nested scope was re-materialised as
+  the whole source query.** `_temporal_intervals.py::_ensure_resource_to_interval`
+  returned `symbol.ast_expr` — `intervalStart((SELECT <expr> FROM "<cte>" AS
+  Inner))` — for any query-return alias whose source was a computed projection.
+  That is multi-row (one per element of the source) AND uncorrelated (no
+  `patient_id` predicate), so it could also answer from another patient's row.
+  A query source `( <source> X return <expr> ) Y` iterates ELEMENTS, so `Y` has
+  a value only for the CURRENT row: `_rebase_query_return_projection` re-points
+  `<expr>` from `X` onto the enclosing row alias `Y` (exactly what the enclosing
+  select projects). No aggregate and no LIMIT-1 "pick a row" guess is needed,
+  and correctness does not depend on row order. The rebase is narrow on
+  purpose — single column, no joins/grouping/ordering/DISTINCT, FROM must be a
+  quoted identifier naming the symbol's own CTE, no nested subquery, no
+  qualified reference to any OTHER alias — and returns None (previous shape)
+  otherwise. The inner WHERE is deliberately NOT carried: it selects which
+  source rows become elements, which the enclosing FROM already applied.
+  FIXED CMS56 (5 "Has THA with Initial and Follow Up … Assessments" + "Numerator").
+- **A multi-source query's `return` never de-duplicated.** CQL 1.5 §Query:
+  `return` (no `all`) ELIMINATES DUPLICATE TUPLE RESULTS. The single-source
+  path honoured it; the CROSS JOIN path did not, so `from A X, B Y … return X`
+  emitted one row per B. Any definition — and every promoted `_fn_…` CTE
+  derived from it — was then non-unique on `(patient_id, _row_key)`, and the
+  `(SELECT value FROM "_fn_…" WHERE patient_id AND _row_key)` lookups returned
+  several rows. FIXED CMS832 (10 CTEs incl. the three `_fn_` CTEs and
+  "Denominator Exclusion"). The rule now lives in ONE helper,
+  `_query.py::_return_clause_is_distinct`, used by BOTH lowering paths:
+  explicit `return distinct` always de-duplicates; the IMPLICIT default of a
+  plain `return` stays ROOT-scoped, because a nested DISTINCT leaks into scalar
+  property extractions (`intervalStart((SELECT DISTINCT …))`, CMS56 54/58 /
+  QI gate 46/47 history). `return all` and no-return-clause queries untouched.
+
+Effect to expect from the de-dup fix: duplicated entries inside NON-population
+list columns collapse (CMS832 "Qualifying Creatinine Lab Result by Time" lost
+582 duplicate elements, "Inpatient Encounter with Creatinine" 14). Every
+POPULATION column keeps identical patient membership — verified, and consistent
+with qi-core staying 100%.
+
+**Verification recipe (use it whenever you touch query/CTE lowering).** The gate
+cannot see this class, so measure it directly: compile each measure, `SET
+scalar_subquery_error_on_multiple_rows=true` on that connection, then (a)
+`{with-head} SELECT count(*) FROM "<each definition CTE>"` and (b) execute the
+FULL generated SQL. `all_columns=True` matters — column CTEs a population-only
+projection never touches still crash a web app that asks for them. Measured:
+qi-core-2025 **2/47 before → 0/47 after**; us-core-2025 **0/73 population
+columns clean for CMS56/CMS832** but `CMS145` and `CMS156` still raise on a
+strict connection (2 and 4 CTEs) — PRE-EXISTING (identical on the parent tree),
+out of FHIR4-48's scope, and the reason the harness flag is not flipped yet (see
+the recommendation in the FHIR4-48 report). Pinned for the fixed measures by
+`fhir4ds/dqm/tests/integration/test_strict_scalar_subqueries_fhir4_48.py`,
+whose synthetic case is built so a "just append LIMIT 1" non-correlated fix
+fails the opposite patient's assertion.
