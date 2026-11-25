@@ -1285,6 +1285,34 @@ class CQLParser:
                     right = self.parse_type_expression()
                     op = f"on or after {precision} of" if precision else "on or after"
                     left = BinaryExpression(operator=f"starts {op}", left=left, right=right)
+                # Handle "starts properly within N unit of EXPR" timing
+                # operator (CQL 1.5 grammar: ('starts'|'ends'|'occurs')?
+                # 'properly'? 'within' quantity 'of' ...).
+                elif self.match(TokenType.PROPERLY) \
+                        and self.peek().type == TokenType.IDENTIFIER \
+                        and self.peek().value.lower() == "within":
+                    saved_pos = self.pos
+                    self.advance()  # consume 'properly'
+                    self.advance()  # consume 'within'
+                    if self.match(TokenType.INTEGER, TokenType.DECIMAL) and self._within_unit_follows():
+                        quantity_value = self.advance().value
+                        unit = self.advance().value
+                        self.expect(
+                            TokenType.OF,
+                            "Expected 'of' after unit in 'starts properly within N unit of'",
+                        )
+                        right = self.parse_type_expression()
+                        left = BinaryExpression(
+                            operator=f"starts properly within {quantity_value} {unit} of",
+                            left=left,
+                            right=right,
+                        )
+                    else:
+                        self.pos = saved_pos
+                        right = self._try_parse_complex_interval_comparison("starts")
+                        if right is None:
+                            right = self.parse_type_expression()
+                        left = BinaryExpression(operator="starts", left=left, right=right)
                 # Handle "starts within N unit of EXPR" timing operator
                 elif self.match(TokenType.IDENTIFIER) and self.current().value.lower() == "within":
                     # Grammar (withinIntervalOperatorPhrase) requires
@@ -1364,6 +1392,34 @@ class CQLParser:
                     right = self.parse_type_expression()
                     op = f"on or after {precision} of" if precision else "on or after"
                     left = BinaryExpression(operator=f"ends {op}", left=left, right=right)
+                # Handle "ends properly within N unit of EXPR" timing operator
+                # (CQL 1.5 grammar: ('starts'|'ends'|'occurs')? 'properly'?
+                # 'within' quantity 'of' ...).
+                elif self.match(TokenType.PROPERLY) \
+                        and self.peek().type == TokenType.IDENTIFIER \
+                        and self.peek().value.lower() == "within":
+                    saved_pos = self.pos
+                    self.advance()  # consume 'properly'
+                    self.advance()  # consume 'within'
+                    if self.match(TokenType.INTEGER, TokenType.DECIMAL) and self._within_unit_follows():
+                        quantity_value = self.advance().value
+                        unit = self.advance().value
+                        self.expect(
+                            TokenType.OF,
+                            "Expected 'of' after unit in 'ends properly within N unit of'",
+                        )
+                        right = self.parse_type_expression()
+                        left = BinaryExpression(
+                            operator=f"ends properly within {quantity_value} {unit} of",
+                            left=left,
+                            right=right,
+                        )
+                    else:
+                        self.pos = saved_pos
+                        right = self._try_parse_complex_interval_comparison("ends")
+                        if right is None:
+                            right = self.parse_type_expression()
+                        left = BinaryExpression(operator="ends", left=left, right=right)
                 # Handle "ends within N unit of EXPR" timing operator
                 elif self.match(TokenType.IDENTIFIER) and self.current().value.lower() == "within":
                     saved_pos = self.pos
@@ -1448,6 +1504,46 @@ class CQLParser:
                     # CQL §9.17: "properly during" is a synonym for "properly included in"
                     right = self.parse_type_expression()
                     left = BinaryExpression(operator="properly included in", left=left, right=right)
+                elif self.match_and_advance(TokenType.BETWEEN):
+                    # CQL grammar (`betweenExpression`):
+                    #   expression 'properly'? 'between' expressionTerm
+                    #       'and' expressionTerm
+                    # `properly` makes both bounds EXCLUSIVE: the reference
+                    # implementation lowers the point form to
+                    # And(Greater, Less) where plain `between` is
+                    # And(GreaterOrEqual, LessOrEqual).
+                    low = self.parse_type_expression()
+                    self.expect(TokenType.AND, "Expected 'and' in between expression")
+                    high = self.parse_type_expression()
+                    left = BinaryExpression(
+                        operator="properly between",
+                        left=left,
+                        right=BinaryExpression(operator="and", left=low, right=high),
+                    )
+                elif self.match(TokenType.IDENTIFIER) and self.current().value.lower() == "within":
+                    # CQL grammar (`withinIntervalOperatorPhrase`):
+                    #   'properly'? 'within' quantity 'of' ('start' | 'end')?
+                    # `properly` makes the constructed bounds EXCLUSIVE
+                    # (|A - B| < N rather than |A - B| <= N). As in the
+                    # plain form, an incomplete phrase must surface the
+                    # leftover tokens rather than consume the modifier.
+                    self.advance()  # consume 'within'
+                    if not (self.match(TokenType.INTEGER, TokenType.DECIMAL)
+                            and self._within_unit_follows()):
+                        self.pos = saved_pos
+                        break
+                    quantity_value = self.advance().value
+                    unit = self.advance().value
+                    self.expect(
+                        TokenType.OF,
+                        "Expected 'of' after unit in 'properly within N unit of'",
+                    )
+                    right = self.parse_type_expression()
+                    left = BinaryExpression(
+                        operator=f"properly within {quantity_value} {unit} of",
+                        left=left,
+                        right=right,
+                    )
                 else:
                     # Unknown properly combination
                     self.pos = saved_pos

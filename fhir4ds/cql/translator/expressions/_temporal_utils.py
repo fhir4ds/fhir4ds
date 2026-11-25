@@ -662,11 +662,25 @@ class TemporalUtilsMixin:
         """
         Parse a CQL "within N unit of" operator string.
 
-        Handles: "within 60 days of", "within 3 months of", etc.
+        Handles: "within 60 days of", "within 3 months of", and the
+        `properly` form "properly within 60 days of" (CQL grammar:
+        ('starts' | 'ends' | 'occurs')? 'properly'? 'within' quantity 'of').
+
+        The `properly` modifier makes the constructed offset bounds EXCLUSIVE —
+        |A - B| < N rather than |A - B| <= N. The reference implementation
+        lowers both to In(A, Interval[B - Q, B + Q]) and closes the bounds only
+        for the non-proper form (createInterval(lower, !isProper, upper,
+        !isProper) in cql-to-elm Cql2ElmVisitor).
 
         Returns:
-            Dict with keys: quantity_value, quantity_unit. Returns None if not a within operator.
+            Dict with keys: quantity_value, quantity_unit, proper. Returns None
+            if not a within operator.
         """
+        proper = False
+        if operator.startswith("properly "):
+            proper = True
+            operator = operator[len("properly "):]
+
         if not operator.startswith("within ") or not operator.endswith(" of"):
             return None
 
@@ -685,4 +699,5 @@ class TemporalUtilsMixin:
         return {
             "quantity_value": quantity_value,
             "quantity_unit": quantity_unit,
+            "proper": proper,
         }
