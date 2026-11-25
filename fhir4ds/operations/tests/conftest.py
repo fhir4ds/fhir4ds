@@ -3,6 +3,11 @@
 A missing environment input (node, a corpus, the bundled extensions, the web apps'
 node_modules) skips the dependent tests with a message that names the input. Setting
 ``FHIR4DS_REQUIRE_WASM_PARITY=1`` turns that into a failure for CI.
+
+The real engine (Tier B and Tier C) has its own flag, ``FHIR4DS_REQUIRE_WASM_REAL``. It is
+the only one that governs those fixtures, so a job that sets the parity flag but has no
+``node_modules`` or chromium (the python job) skips Tier B and Tier C instead of failing,
+while the cleanroom job, which sets both, runs them.
 """
 
 from __future__ import annotations
@@ -26,7 +31,8 @@ REAL_REQUIRE_ENV = "FHIR4DS_REQUIRE_WASM_REAL"
 
 
 def _skip_or_fail(exc: reference_mod.EnvironmentInputMissing, env: str | None = None):
-    if reference_mod.required() or (env is not None and reference_mod.required(env)):
+    """Skip, or fail when the flag that governs THIS input is set (CI)."""
+    if reference_mod.required(env):
         raise exc
     pytest.skip(str(exc))
 

@@ -89,9 +89,18 @@ def test_b3_curated_family_matches_desktop(
     assert problems == [], f"{family}: {result.counts()}\n" + "\n".join(problems)
 
 
-def test_b3_report(wasm_ledger):
-    """One report for every family: tests/output/wasm-parity/real.{json,md}."""
-    assert set(_RESULTS) == set(FAMILIES), "run the family tests first"
+def test_b3_report(real_facts, wasm_desktop, wasm_real, wasm_ledger):
+    """One report for every family: tests/output/wasm-parity/real.{json,md}.
+
+    Self-sufficient: a family whose result is not cached yet is run here, so
+    the report is complete when this test is selected alone, and the test
+    skips together with the family tests when the real engine is unavailable.
+    """
+    for family in FAMILIES:
+        if family not in _RESULTS:
+            _RESULTS[family] = tier_b.run(
+                wasm_desktop, wasm_real, real_facts["contract"], families=[family]
+            )
     results = {family: _RESULTS[family] for family in FAMILIES}
     merged = SuiteResult(
         tier_b.SUITE,

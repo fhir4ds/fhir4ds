@@ -26,11 +26,15 @@ import json
 import os
 import sys
 import tempfile
+from pathlib import Path
 
 import duckdb
 import pytest
 
-sys.path.insert(0, os.path.expanduser("~/src/fhir4ds"))
+# The repo under test, never a developer's main checkout: this line used to put
+# ~/src/fhir4ds first on sys.path, so every later import in the same pytest
+# process came from that other tree.
+sys.path.insert(0, str(Path(__file__).resolve().parents[4]))  # repo root
 
 from fhir4ds import register
 from fhir4ds.dqm.evaluator import MeasureEvaluator

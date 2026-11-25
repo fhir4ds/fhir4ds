@@ -204,12 +204,35 @@ missing" skips into failures (CI). A lane worktree has no `node_modules`: point
 
 ### Known fragile areas
 
-- **Only the WASM parity files are in the PR CI job.** `fhir4ds/operations/tests` as a whole is
-  not: `test_capability_matrix.py`, `test_compare_evidence.py::TestMcpCompareTool` and
-  `test_api_surface_contract.py::test_all_names_importable[fhir4ds.serve]` FAIL without the
-  optional `mcp` / `serve` extras instead of skipping (the first CI run that included the
-  directory: 7 failed, 4,361 passed). The ViewDefinition gate needs `jsonschema` (the official
-  runner's report validation); CI installs it, and the gate reports it as a missing input.
+- **The whole of `fhir4ds/operations/tests` runs in the PR CI job (WP-4, 2026-11-25).** The
+  python job installs the optional `serve` extra because `test_api_surface_contract.py` freezes
+  that public package. Without an extra its tests SKIP with the reason (`optional extra 'serve'
+  is not installed here`) instead of failing on the environment; the skip is keyed on the
+  extra's own imports (`fastapi` / `uvicorn`, and `pandas` for `fhir4ds.dqm`), so an
+  installed-but-broken package still fails. Before this, a run without the extras failed on
+  `test_all_names_importable[fhir4ds.serve]` and on `test_wasm_parity_tier_b.py::test_b3_report`,
+  which assumed the family tests had run first; that test now runs any missing family itself
+  and skips with them when the engine is unavailable. The ViewDefinition gate needs
+  `jsonschema` (the official runner's report validation); CI installs it, and the gate reports
+  it as a missing input.
+- **Two flags, two jobs.** `FHIR4DS_REQUIRE_WASM_PARITY=1` (python job) makes a missing
+  Step 0 / Tier A input fail. `FHIR4DS_REQUIRE_WASM_REAL=1` (cleanroom job) does the same for
+  the real engine, and it is the ONLY flag that governs the Tier B / Tier C fixtures: the
+  python job has no `node_modules` and no chromium, so those tests skip there. The first WP-4
+  CI run had the fixtures fail on either flag and 19 Tier B/C tests errored in the python job.
+- **CI installs the `mcp` extra, so the MCP tests RUN.** The first two WP-4 CI runs failed
+  them with `ModuleNotFoundError: No module named 'mcp.server.fastmcp'; 'mcp.server' is not a
+  package` (extra installed) or an `ImportError` for the missing extra (not installed). Root
+  cause, from the CI log: `fhir4ds/dqm/tests/unit/test_iter7_qa_regression.py` put
+  `Path(__file__).parents[3]` first on `sys.path`. That is the `fhir4ds` PACKAGE directory, not
+  the repo root, so for every test that ran later in the same process `import mcp` resolved to
+  `fhir4ds/mcp`, whose `server` is a module and not a package. It now uses `parents[4]`. The
+  same pass fixed `test_evol_v0026_d9_explorer.py`, which put `~/src/fhir4ds` (a developer's
+  main checkout) first on `sys.path`, so in any worktree every later import came from another
+  tree. RULE: a test never puts the package directory or a home-directory checkout on
+  `sys.path`; from `fhir4ds/<pkg>/tests/<dir>/` the repo root is `parents[4]`. Know the symptom
+  class: `pytest.importorskip("mcp")` PASSES on the shadow and the failure appears inside the
+  code under test.
 - **Chromium and the memory cap.** `scripts/capped.sh` sets `RLIMIT_AS`; chromium's V8 sandbox
   reservation then fails with SIGTRAP. The engine detects a capped address space and reports an
   environment input (run Tier B uncapped). The hard limit cannot be lifted for a child.

@@ -49,7 +49,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           # jsonschema: the official ViewDefinition runner validates its report with it
-          python -m pip install -e ".[dev,measures]" jsonschema
+          # serve: fhir4ds/operations/tests exercises it (the public API surface contract
+          # freezes fhir4ds.serve). mcp: the MCP capability legs only run with it installed.
+          python -m pip install -e ".[dev,measures,serve,mcp]" jsonschema
 
       - name: Ruff cleaned packages
         run: >
@@ -61,11 +63,13 @@ jobs:
           conformance/scripts
           --output-format=github
 
-      # The WASM parity gates (Step 0 + Tier A) live in fhir4ds/operations/tests. Only they
-      # are listed here: the rest of that directory needs the optional mcp/serve extras this
-      # job does not install. With FHIR4DS_REQUIRE_WASM_PARITY=1 a missing input (node,
-      # corpus, bundles) fails instead of skipping. Tier B (real duckdb-wasm) runs in the
-      # cleanroom job, which has node_modules.
+      # The WASM parity gates live in fhir4ds/operations/tests (Step 0 + Tier A here; Tier B
+      # and Tier C need the real engine and run in the cleanroom job), so the whole directory
+      # runs. The optional serve extra is installed above because the public API surface
+      # contract freezes fhir4ds.serve; without it that test skips with the reason.
+      # With FHIR4DS_REQUIRE_WASM_PARITY=1 a missing input (node, corpus, bundles) fails
+      # instead of skipping. Tier B/C are governed by FHIR4DS_REQUIRE_WASM_REAL alone, so they
+      # skip in this job (no node_modules, no chromium).
       - name: Pytest
         env:
           FHIR4DS_REQUIRE_WASM_PARITY: "1"
@@ -76,11 +80,7 @@ jobs:
           fhir4ds/sources
           fhir4ds/cql/tests/unit
           fhir4ds/viewdef
-          fhir4ds/operations/tests/test_wasm_surface_parity.py
-          fhir4ds/operations/tests/test_wasm_parity_step0.py
-          fhir4ds/operations/tests/test_wasm_parity_tier_a.py
-          fhir4ds/operations/tests/test_wasm_parity_selftest.py
-          fhir4ds/operations/tests/test_macro_sync.py
+          fhir4ds/operations/tests
 
   python-311:
     name: Python 3.11 compatibility
