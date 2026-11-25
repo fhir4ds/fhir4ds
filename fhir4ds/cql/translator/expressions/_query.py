@@ -82,6 +82,22 @@ def _spec_resource_types() -> frozenset:
         _SPEC_RETRIEVE_RESOURCE_TYPES = KNOWN_FHIR_RESOURCE_TYPES
     return _SPEC_RETRIEVE_RESOURCE_TYPES
 
+
+def _retrieve_resource_type_from_cte_name(cte_name: Optional[str]) -> Optional[str]:
+    """The FHIR resource type a RETRIEVE CTE name denotes, else ``None``.
+
+    Retrieve CTEs are named ``"<ResourceType>: <terminology>"`` (phase 2 adds the
+    profile in parentheses); a definition/pre-computed CTE has no such prefix.
+    Used to recover the resource type of an alias whose query source is a
+    MethodInvocation, where no receiver type can be inferred.
+    """
+    if not cte_name:
+        return None
+    prefix, sep, _rest = cte_name.partition(": ")
+    if not sep:
+        return None
+    return prefix if prefix in _spec_resource_types() else None
+
 if TYPE_CHECKING:
     from ...translator.context import SQLTranslationContext
     from ...translator.expressions import ExpressionTranslator
@@ -2517,6 +2533,28 @@ class QueryMixin:
         if fixed_expr is None:
             self.context.let_variables[let_name] = let_expr_sql
             return
+
+        # A query source that is a FLUENT CALL over a retrieve
+        # (`([MedicationRequest: VS]).moreThanOneOrder() AntiInfectives`)
+        # iterates exactly the retrieve's resource rows, but the receiver is a
+        # MethodInvocation, so `_extract_query_source_resource_type` cannot name
+        # a resource type and the alias never lands in `_alias_resource_types`.
+        # The bound CTE name still names the retrieve, so record the type from
+        # it: without it the promoted let CTE below claims to be PATIENT-only
+        # (no `_row_key`), and a SIBLING let that consumes it
+        # (`timing: dosage.timing`) lowers to
+        #     (SELECT value FROM "_let_…_dosage" WHERE patient_id = <alias>.patient_id)
+        # which returns one row per order of the patient — a multi-row scalar
+        # subquery (`_let_…_timing` and, through it, CMS156 "Two High Risk
+        # Medications with Prolonged Duration" / "Numerator 1" / "Numerator 3").
+        # Recording the type also keeps `_resource_row_key_expr` on ONE branch
+        # (plain `id`) for both the CTE column and every later lookup; the two
+        # branches render different keys (`Type/id` vs `id`) and a mismatch would
+        # silently NULL the value instead of raising.
+        if not self.context._alias_resource_types.get(alias):
+            _retrieve_rt = _retrieve_resource_type_from_cte_name(cte_name)
+            if _retrieve_rt:
+                self.context._alias_resource_types[alias] = _retrieve_rt
 
         # Check if source CTE has a resource column.  Patient-only lookups are
         # ambiguous for multi-row resource sources, so resource-backed CTEs add
