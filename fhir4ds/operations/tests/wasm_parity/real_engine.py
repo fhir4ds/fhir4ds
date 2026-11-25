@@ -28,6 +28,7 @@ from typing import Any
 
 from .reference_bundle import REPO_ROOT, EnvironmentInputMissing
 from .shipped_bundles import load_manifest
+from .surfaces import normalize_definition
 
 NODE_MODULES = REPO_ROOT / "web" / "cql-cleanroom" / "node_modules"
 _ASSETS = Path(__file__).with_name("real")
@@ -276,7 +277,9 @@ class RealWasmEngine:
             ]
         )[0]["rows"]
         return {
-            row["name"][1]: " ".join(str(row["body"][1]).split()) for row in rows if row["body"]
+            row["name"][1]: normalize_definition(str(row["body"][1]))
+            for row in rows
+            if row["body"]
         }
 
     # -- evaluation -------------------------------------------------------------------

@@ -357,6 +357,23 @@ def cli(argv: list[str] | None = None) -> int:
             print(f"  [{violation.code}] {violation.message[:600]}")
             if violation.proposal is not None:
                 print("  proposal:", json.dumps(violation.proposal))
+        from . import macro_bundle
+
+        generated_problems = list(macro_bundle.problems())
+        stale_catalog = macro_bundle.browser_catalog_stale()
+        if stale_catalog:
+            generated_problems.append(stale_catalog)
+        print(
+            _summary_line(
+                "generated",
+                [
+                    ledger.Violation("generated", "GENERATED_BUNDLE", text)
+                    for text in generated_problems
+                ],
+            )
+        )
+        for text in generated_problems:
+            print(f"  [GENERATED_BUNDLE] {text[:600]}")
         for name, module in _evaluators().items():
             if args.suite and name not in args.suite:
                 continue

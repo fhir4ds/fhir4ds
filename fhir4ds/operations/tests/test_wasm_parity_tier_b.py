@@ -11,12 +11,13 @@ capped virtual address space. It is light (a few short-lived browsers).
 from __future__ import annotations
 
 import dataclasses
+import json
 import os
 from datetime import date
 
 import pytest
 
-from fhir4ds.operations.tests.wasm_parity import ledger, report, tier_b
+from fhir4ds.operations.tests.wasm_parity import ledger, macro_bundle, report, tier_b
 from fhir4ds.operations.tests.wasm_parity.evaluators import SuiteResult, judge
 
 FAMILIES = (
@@ -154,3 +155,29 @@ def test_b6_fhirpath_corpus_matches_desktop_on_the_real_engine(wasm_desktop, was
         f"[{v.code}] {v.message}" for v in violations
     )
 
+
+def test_b7_browser_catalog_describes_the_real_engine(wasm_real):
+    """The macro generator's portability oracle is the real engine as it is today.
+
+    ``browser_catalog.json`` says which names a generated macro may call. It is a capture,
+    so it goes stale when the wasm bundles or duckdb-wasm change; Step 0 can only compare
+    bundle hashes, this test compares the live catalog.
+    """
+    live = macro_bundle.capture_browser_catalog(wasm_real)
+    committed = json.loads(macro_bundle.BROWSER_CATALOG_FILE.read_text())
+    assert live["engine_version"] == committed["engine_version"], (
+        f"duckdb-wasm core is {live['engine_version']}, browser_catalog.json was captured "
+        f"from {committed['engine_version']}"
+    )
+    assert live["extensions"] == committed["extensions"], (
+        f"statically linked extensions are {live['extensions']}, browser_catalog.json "
+        f"records {committed['extensions']}"
+    )
+    only_live = sorted(set(live["names"]) - set(committed["names"]))
+    only_committed = sorted(set(committed["names"]) - set(live["names"]))
+    assert not only_live and not only_committed, (
+        "browser_catalog.json no longer describes the shipped wasm bundles: "
+        f"only live {only_live[:12]}, only committed {only_committed[:12]}. Re-capture with "
+        "`python -m fhir4ds.operations.tests.wasm_parity.macro_bundle --capture-browser` "
+        "(needs node_modules and chromium), then regenerate with `--write`"
+    )
