@@ -34,10 +34,14 @@ npx playwright test        # e2e (needs vite preview on :5176, see below)
   drives `tests/e2e/matrix-leg.spec.ts` via the `CLEANROOM_MATRIX_FIXTURE`
   env (one fixture mechanism; per-leg sections) and SKIPS cleanly when the
   preview server is down.
-- Macro-sync contract: `test_macro_sync.py` diffs the Python translator
-  macro surface against `src/lib/cql-macros.ts`. New Python macros must be
-  ported or added to `BROWSER_MACRO_GAP_ALLOWLIST` (justified entries only;
-  the test prunes stale and flags silently-ported entries).
+- Generated macro bundle: `src/lib/cql-macros.ts` is GENERATED from the desktop
+  catalog by `fhir4ds/operations/tests/wasm_parity/macro_bundle.py` — never edit
+  it here. After a Python macro changes, run
+  `python -m fhir4ds.operations.tests.wasm_parity.macro_bundle --write` from the
+  repo root and commit the result; Step 0 (T8) fails CI when the file is not
+  byte-identical to the generator output. The only hand-written statement is the
+  approved 2-argument `Coalesce` in `src/lib/cql-macros.overlay.ts`;
+  `test_macro_sync.py` only checks that the exported name set matches the file.
 
 ## Architecture seams
 

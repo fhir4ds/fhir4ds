@@ -51,12 +51,11 @@ FDD: `fhir4ds-private/docs/architecture/plans/FEATURE_OPERATIONS_LAYER.md` (v3.2
   gate. E2E needs the built app served on :5176
   (`npx vite preview --port 5176 --strictPort`); legs skip cleanly
   when tooling/preview is absent.
-- Macro sync: `operations/tests/test_macro_sync.py` diffs the Python
-  macro surface (`cql/duckdb/macros/*.py`) against
-  `web/cql-cleanroom/src/lib/cql-macros.ts`. Unported macros must
-  either be ported or added to `BROWSER_MACRO_GAP_ALLOWLIST` (with
-  justification) — the allowlist itself is contract-checked (stale
-  entries and silently-ported entries both fail).
+- Macro sync: `web/cql-cleanroom/src/lib/cql-macros.ts` is GENERATED from the desktop
+  catalog by `operations/tests/wasm_parity/macro_bundle.py`; hand-written bodies live
+  only in `cql-macros.overlay.ts` next to it. Step 0 (T8) fails when the file is not
+  byte-identical to the generator output; `test_macro_sync.py` only checks that the
+  exported name set matches the file.
 - CLI: `verify --evidence PATH` writes the multi-patient populations
   artifact; `verify --baseline PATH` compares it against the current
   evaluation (exit 2 on missing/invalid baseline file).
@@ -95,14 +94,12 @@ FDD: `fhir4ds-private/docs/architecture/plans/FEATURE_OPERATIONS_LAYER.md` (v3.2
   shared fixture. Adapter changes must keep it green; the cleanroom leg
   extends it without changing the fixture. The cleanroom leg skips on
   environment availability (no npx/node_modules/preview).
-- **Macro-sync contract**
-  (`operations/tests/test_macro_sync.py`): every `CREATE MACRO` name in
-  `fhir4ds/cql/duckdb/macros/*.py` must be registered in
-  `web/cql-cleanroom/src/lib/cql-macros.ts` (or listed with
-  justification in `BROWSER_MACRO_GAP_ALLOWLIST`). Allowlist hygiene is
-  enforced both directions (stale entries fail; silently-ported entries
-  must leave the allowlist). New translator macros that reach population
-  SQL MUST be ported in the same change.
+- **Macro-sync contract**: a translator macro is browser-supported only if the
+  generator emits it or the real browser answers the same name natively
+  (`wasm_parity/browser_catalog.json`). Change a macro body, then run
+  `python -m fhir4ds.operations.tests.wasm_parity.macro_bundle --write` and commit the
+  regenerated file; a macro that cannot be emitted must be registered in the ledger
+  (`MISSING_IN_BROWSER`). `BROWSER_MACRO_GAP_ALLOWLIST` no longer exists.
 - **translate_cql modes**: `audit_mode='none'` (CTE shape) |
   `'population'` (plain-boolean population SQL) | `'full'` (audit
   structs + patient_ids pushdown); `output_columns` aliases final
@@ -127,10 +124,10 @@ FDD: `fhir4ds-private/docs/architecture/plans/FEATURE_OPERATIONS_LAYER.md` (v3.2
 - CLI `verify --evidence PATH` writes the per-patient populations
   artifact; `--baseline PATH` prints the compare_evidence delta
   (missing/invalid baseline file → exit 2).
-- The macro-sync contract: `operations/tests/test_macro_sync.py` fails
-  CI when a new Python translator macro is not registered in
-  `web/cql-cleanroom/src/lib/cql-macros.ts` and not justified in
-  `BROWSER_MACRO_GAP_ALLOWLIST` (stale allowlist entries also fail).
+- The macro-sync contract is enforced by Step 0 (T3–T5, T8) in
+  `test_wasm_parity_step0.py`: a desktop macro without a browser counterpart, a
+  same-name macro with a different body, or a hand edit of the generated
+  `cql-macros.ts` fails CI with a ready-to-paste ledger entry.
 
 ## Validation
 
@@ -148,18 +145,26 @@ The browser apps run translated SQL on duckdb-wasm with **C++ wasm extension bun
 Code: `fhir4ds/operations/tests/wasm_parity/`. Plan:
 `FEATURE_WASM_PARITY_TEST_INFRA.md`. Reports: `tests/output/wasm-parity/*.{json,md}` (gitignored).
 
-- **The reference bundle is named**: `web/cql-cleanroom/src/lib/cql-macros.ts` (116
-  statements). Every `web/*/src/lib/cql-macros.ts` must be byte-identical to it (T6). It is
-  loaded through node, never re-parsed by regex.
+- **The reference bundle is generated**: `web/cql-cleanroom/src/lib/cql-macros.ts` (149
+  statements: 148 emitted from the desktop catalog + `Coalesce` from the hand-written
+  overlay `cql-macros.overlay.ts`). The source of truth is the desktop catalog text after
+  full registration; the portability oracle is the REAL browser catalog
+  (`wasm_parity/browser_catalog.json`, captured by Tier B B7). 76 desktop macros whose
+  body calls a Python UDF are left out because the browser answers the name natively;
+  one (`setvariable`) cannot be emitted and is registered. Every other
+  `web/*/src/lib/cql-macros.ts` must be byte-identical to it (T6). It is loaded through
+  node, never re-parsed by regex.
 - **Two browser surfaces.** The *simulator* (Tier A) = desktop DuckDB + the x86 bundles + the
   reference statements: it proves the contract and runs the official corpora cheaply. The
   *real engine* (Tier B) = headless duckdb-wasm + the **shipped** wasm bundles: only it sees
   the binder, the planner, the Arrow transport and bundle staleness. Tier A cannot replace
   Tier B: the two fail different cases.
-- **Step 0 (T1–T7)** `test_wasm_parity_step0.py`: reference parses; simulator is faithful; no
-  wasm-only macros; same-name macros have equal bodies; every desktop macro is in the reference
-  or natively provided; app bundles identical; shipped `.wasm` copies are one known set
-  (`fhir4ds/wasm_extension_bundles.json`, `scripts/build_wasm_extensions.py --verify`).
+- **Step 0 (T1–T8)** `test_wasm_parity_step0.py`: reference parses; simulator is
+  faithful; no wasm-only macros; same-name macros have equal bodies; every desktop macro
+  is in the reference or natively provided; app bundles identical; shipped `.wasm` copies
+  are one known set (`fhir4ds/wasm_extension_bundles.json`,
+  `scripts/build_wasm_extensions.py --verify`); the reference file is byte-identical to
+  the generator output and every overlay statement is a registered gap (T8).
 - **Tier A** `test_wasm_parity_tier_a.py`, one ratchet test per suite, each reusing the official
   runner's own comparator: CQL (2,043 at corpus `0a8f7d3`, vendored in git),
   ViewDefinition (144), OMOP (38), and FHIRPath R4 (1,001 of 1,191 tests evaluable; the
@@ -168,9 +173,10 @@ Code: `fhir4ds/operations/tests/wasm_parity/`. Plan:
   `BROWSER_ONLY_PASS`, `BOTH_FAIL`, `ENGINE_DIFF`, `TRANSLATE_DIFF` (must be zero, cannot be
   registered), `TRANSLATE_ERROR` (reported only).
 - **Tier B** `test_wasm_parity_tier_b.py` (~30 s): B1 real catalog (macro bodies equal the
-  simulation; the exact staleness list), B2 version pins, B3 curated families equal desktop,
-  B4 Arrow transport envelope, B5 opt-in whole CQL corpus on real duckdb-wasm
-  (`FHIR4DS_WASM_FULL_CORPUS=1`, ~35 s).
+  simulation; the exact staleness list), B2 version pins, B3 curated families equal
+  desktop, B4 Arrow transport envelope, B5 opt-in whole CQL corpus on real duckdb-wasm
+  (`FHIR4DS_WASM_FULL_CORPUS=1`, ~35 s), B6 the whole evaluable FHIRPath R4 corpus
+  desktop vs real, B7 the committed browser catalog describes this real engine.
 
 ### The ledger is the policy (`known_gaps.json`)
 
@@ -196,6 +202,12 @@ PYTHONPATH=$PWD bash scripts/capped.sh 16 8 python3 -m pytest \
 # Tier B: WITHOUT the cap (chromium cannot start under `ulimit -v`), light
 PYTHONPATH=$PWD python3 -m pytest fhir4ds/operations/tests/test_wasm_parity_tier_b.py -q
 python3 -m fhir4ds.operations.tests.wasm_parity.report [--suite cql] [--tier-b]
+# The reference macro bundle is generated; after changing any macro body:
+PYTHONPATH=$PWD python3 -m fhir4ds.operations.tests.wasm_parity.macro_bundle --check   # CI default
+PYTHONPATH=$PWD python3 -m fhir4ds.operations.tests.wasm_parity.macro_bundle --write   # regenerate
+FHIR4DS_WASM_NODE_MODULES=<checkout root> PYTHONPATH=$PWD python3 -m \
+  fhir4ds.operations.tests.wasm_parity.macro_bundle --capture-browser               # after a bundle rebuild
+# fhir4ds/operations/tests/test_wasm_parity_macro_bundle.py holds the generator's unit tests
 ```
 
 `FHIR4DS_REQUIRE_WASM_PARITY=1` and `FHIR4DS_REQUIRE_WASM_REAL=1` turn "environment input
@@ -203,6 +215,29 @@ missing" skips into failures (CI). A lane worktree has no `node_modules`: point
 `FHIR4DS_WASM_NODE_MODULES` at a checkout root that ran `npm install` in `web/cql-cleanroom`.
 
 ### Known fragile areas
+
+- **The reference bundle is a build artifact (WP-1, 2026-11-25).** Never edit
+  `web/cql-cleanroom/src/lib/cql-macros.ts`; run `macro_bundle --write`. Step 0 T8 compares
+  the file with the generator output, so a hand edit or a macro change without regeneration
+  fails the python CI job. The only hand-written statement is the approved 2-argument
+  `Coalesce` in `cql-macros.overlay.ts`; an overlay statement for a macro that is neither
+  blocked nor approved is a T8 violation.
+- **duckdb-wasm registers its statically linked extensions lazily.** The real engine lists
+  987 function names at boot and 1,188 after `LOAD json, parquet, core_functions, icu,
+  autocomplete, httpfs`. The browser catalog is captured AFTER loading them (B7 proves the
+  capture describes the current engine), and ICU is available there. Recapture with
+  `--capture-browser` after every wasm bundle rebuild; T8 refuses a catalog whose recorded
+  bundle hashes differ from the manifest.
+- **`macro_bundle.py` facts that are easy to get wrong.** Parameter DEFAULT values are not in
+  DuckDB's catalog (`Slice(lst, start := 0, the_end := NULL)`), so the generator replays
+  `register_all_macros` through a recording proxy. `AS alias(column)` is a table alias with
+  columns, not a call: the list-equality macros' `_cql_contains_u(item)` looked like five
+  Python helpers in a regex spike and are pure SQL. DuckDB prints a boolean constant in a
+  macro body as `true` when it bound the body at creation and as `CAST('t' AS BOOLEAN)` when
+  it stored the text as written; `surfaces.normalize_definition` folds both before any
+  comparison. Macro names that are SQL keywords (`And`, `First`, `Mode`, `Skip`, `Trim`, …)
+  are quoted. `CREATE MACRO IF NOT EXISTS` is silently ignored for a name DuckDB already
+  defines (`Abs`, `Concat`), so those are emitted with `CREATE OR REPLACE MACRO`.
 
 - **The whole of `fhir4ds/operations/tests` runs in the PR CI job (WP-4, 2026-11-25).** The
   python job installs the optional `serve` extra because `test_api_surface_contract.py` freezes
@@ -372,6 +407,13 @@ every failure is now fixed in the script, and each is a trap for anyone rebuildi
   lines it prints rather than assuming a known one.
 
 ### Baseline recorded (dev `87bece82a55`, corpus `f724ee4`, 2026-11-24)
+
+**Since WP-1 Part A (dev `2d539924367`, 2026-11-25) the reference bundle is generated**: 149
+statements, body drift 0 (was 53), desktop macros without a browser counterpart 1 (was 33:
+`setvariable`). Tier A CQL on simulator AND real duckdb-wasm: GREEN 1,964, PARITY_GAP 2 (the
+registered boundary null-precision pair), BOTH_FAIL 7, ENGINE_DIFF 42 (Python authority vs
+native representation), TRANSLATE_ERROR 23 — before: GREEN 1,816 / PARITY_GAP 128. The lines
+below are the hand-written-bundle baseline and stay as history.
 
 - Contract: 116 reference statements; 1 wasm-only macro (`Coalesce`); 53 same-name macros with
   a different body; 33 desktop macros with no browser counterpart; 73 names where the browser
