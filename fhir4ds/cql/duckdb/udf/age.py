@@ -17,6 +17,15 @@ values. All functions therefore delegate to the §22.21 duration engine and
 return VARCHAR: an integer string when the result is certain, or a closed
 interval JSON string ({"start":..,"end":..}) when uncertain.
 
+FHIR4-71: a second-precision operand is EXACT, not a one-second window —
+seconds and milliseconds are ONE combined decimal precision (CQL §Types/Time,
+AMUX-171: "when milliseconds are null, they are combined as .0"), so the
+second-precision age operators return a crisp integer. The carve-out is passed
+explicitly (`treat_second_as_exact=True`) and applies to the age family only;
+generic `duration between` / `difference between` keep their strict
+finer-than-target rule. Operands genuinely COARSER than the requested unit
+(a day-precision birthDate asked for hours) still yield uncertainty intervals.
+
 Supports both scalar (row-by-row) and Arrow vectorized implementations.
 """
 
@@ -69,11 +78,21 @@ def _age_with_uncertainty(birth_text: str | None, unit: str, as_of_text: str | N
     negative age (asOf before birthDate at full precision) is clinically
     invalid and returns None; uncertain intervals spanning negative values
     are surfaced per spec.
+
+    ``treat_second_as_exact=True`` is the FHIR4-71 age carve-out: seconds and
+    milliseconds are ONE combined decimal precision (CQL §Types/Time, AMUX-171
+    — "when milliseconds are null, they are combined as .0"), so a
+    second-precision operand is exact and the age is crisp. Generic
+    `duration between` / `difference between` keep the strict
+    finer-than-target rule (their official fixtures pin uncertainty
+    intervals), so the carve-out is opted into HERE, at the age call site.
     """
     if birth_text is None or as_of_text is None:
         return None
     try:
-        result = _duration_between_with_uncertainty(str(birth_text), str(as_of_text), unit)
+        result = _duration_between_with_uncertainty(
+            str(birth_text), str(as_of_text), unit, treat_second_as_exact=True
+        )
     except (ValueError, TypeError, OverflowError) as e:
         _logger.warning("_age_with_uncertainty failed: %s", e)
         return None

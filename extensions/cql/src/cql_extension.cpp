@@ -3818,9 +3818,39 @@ static cql::DateTimeValue AsUtcIfNaive(cql::DateTimeValue v) {
 	return v;
 }
 
+// FHIR4-71 / AMUX-171: CQL §Types/Time makes seconds and milliseconds ONE
+// combined decimal precision — "when milliseconds are null, they are combined
+// as .0" — so both collapse onto a single ladder rung for the AGE family.
+// Keep in lockstep with
+// fhir4ds/cql/duckdb/udf/datetime.py::_combined_second_ms_level.
+static int CombinedSecondMsLevel(int rank) {
+	const int second_rank = PrecisionRank(cql::DateTimeValue::Precision::Second);
+	return rank >= second_rank ? second_rank : rank;
+}
+
+// Ladder rung an AGE operand must reach for a certain (crisp) result. Sub-day
+// targets normally need one component FINER than the requested unit, but the
+// seconds+milliseconds collapse saturates the ladder: a second-precision
+// operand is exact at .000. Keep in lockstep with
+// fhir4ds/cql/duckdb/udf/datetime.py::_age_exact_precision_requirement.
+static int AgeExactPrecisionRequirement(int unit_rank) {
+	const int second_rank = PrecisionRank(cql::DateTimeValue::Precision::Second);
+	return unit_rank >= second_rank ? second_rank : unit_rank + 1;
+}
+
+// `treat_second_as_exact` is the FHIR4-71 AGE-family carve-out. The age
+// operators are duration calculations, but their operands are clinically exact
+// at the finest precision the author wrote: since seconds and milliseconds are
+// ONE combined decimal precision (AMUX-171), a second-precision operand pins
+// .000 and the age is CRISP, not a one-second uncertainty window. Generic
+// `duration between` / `difference between` keep the strict finer-than-target
+// rule (their official fixtures pin uncertainty intervals, e.g.
+// `months between @2012-01-02 and @2012` -> Interval[0, 10]); only the age
+// call sites pass true, so the carve-out is visible where it matters.
 static cql::Optional<std::string> CqlDurationBetweenString(const std::string &start_text,
                                                            const std::string &end_text,
-                                                           const std::string &unit_text) {
+                                                           const std::string &unit_text,
+                                                           bool treat_second_as_exact = false) {
 	auto start = cql::DateTimeValue::parse(start_text);
 	auto end = cql::DateTimeValue::parse(end_text);
 	if (!start || !end) {
@@ -3861,7 +3891,18 @@ static cql::Optional<std::string> CqlDurationBetweenString(const std::string &st
 		// [0, 1]; CQL 1.5 Language Semantics "Determining Difference and
 		// Duration"). Keep in lockstep with
 		// fhir4ds/cql/duckdb/udf/datetime.py::_duration_between_with_uncertainty.
-		both_sufficient_precision = start_rank > unit_rank && end_rank > unit_rank;
+		if (treat_second_as_exact) {
+			// FHIR4-71 age carve-out: seconds and milliseconds are one combined
+			// decimal precision (AMUX-171), so a second-precision operand is
+			// EXACT at .000 and the age is crisp. Coarser operands (an
+			// hour-precision @T06, a day-precision birthDate asked for seconds)
+			// keep their uncertainty intervals.
+			int required = AgeExactPrecisionRequirement(unit_rank);
+			both_sufficient_precision = CombinedSecondMsLevel(start_rank) >= required &&
+			                            CombinedSecondMsLevel(end_rank) >= required;
+		} else {
+			both_sufficient_precision = start_rank > unit_rank && end_rank > unit_rank;
+		}
 	}
 	if (both_sufficient_precision || date_fully_specified) {
 		auto duration = ComputeDurationBetweenValue(*start, *end, unit_text, is_week);
@@ -3970,9 +4011,12 @@ static std::string AgeReferenceText(const std::string &unit) {
 	return (unit == "hour" || unit == "minute" || unit == "second") ? AgeNowText() : AgeTodayText();
 }
 
+// FHIR4-71: the age family opts into the seconds+milliseconds combined-precision
+// carve-out (AMUX-171) — a second-precision operand is exact, so the age is
+// crisp. Generic duration/difference keeps the strict finer-than-target rule.
 static cql::Optional<std::string> AgeFromStringTexts(const std::string &birth_text, const std::string &as_of_text,
                                                      const std::string &unit) {
-	return AgeTextGuarded(CqlDurationBetweenString(birth_text, as_of_text, unit));
+	return AgeTextGuarded(CqlDurationBetweenString(birth_text, as_of_text, unit, /*treat_second_as_exact=*/true));
 }
 
 #define DEFINE_AGE_TEXT_UDF(FuncName, unit)                                                                            \

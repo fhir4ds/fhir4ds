@@ -64,6 +64,56 @@ def _load_valueset_table(con: duckdb.DuckDBPyConnection) -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# FHIR4-71 rebuild window (age family, second precision)
+# ---------------------------------------------------------------------------
+#
+# FHIR4-71: seconds and milliseconds are ONE combined decimal precision (CQL
+# §Types/Time, AMUX-171 — "when milliseconds are null, they are combined as
+# .0"), so the AGE operators return a CRISP value when both operands carry at
+# least second precision. The Python UDFs ship that carve-out; the bundled
+# `cql.duckdb_extension` still predates the C++ mirror, so the C++-served age
+# surface keeps the pre-fix uncertainty interval until the extension bundles are
+# rebuilt (`python3 scripts/build_extension_bundles.py --build --abi <slot>`).
+# The probe below reads the LOADED binary, so these expectations flip
+# automatically once the rebuilt extension ships — delete the map and its
+# branches at that point.
+_AGE_SECOND_PRECISION_STALE: dict[tuple[str, tuple[str, ...]], tuple[str, ...]] = {
+    (
+        "SELECT CalculateAgeInSecondsAt(?, ?)",
+        ("2000-05-15T00:00:00Z", "2000-05-15T00:00:01Z"),
+    ): ('{"start":0,"end":1,"lowClosed":true,"highClosed":true}',),
+    (
+        "SELECT CalculateAgeInSecondsAt(?, ?)",
+        ("2000-05-15T00:00:00Z", "2000-05-15T01:00:00Z"),
+    ): ('{"start":3599,"end":3600,"lowClosed":true,"highClosed":true}',),
+    (
+        "SELECT CalculateAgeInSecondsAt(?, ?)",
+        ("2000-05-15T00:00:00.000Z", "2000-05-15T00:00:01.250Z"),
+    ): ("1",),
+}
+
+
+def _native_age_second_precision_is_current(con: duckdb.DuckDBPyConnection) -> bool:
+    """True when the loaded cql extension implements the FHIR4-71 age carve-out."""
+    row = con.execute(
+        "SELECT CalculateAgeInSecondsAt('2000-05-15T00:00:00Z', '2000-05-15T00:00:01Z')"
+    ).fetchone()[0]
+    return row == "1"
+
+
+def _native_age_expected(
+    native_current: bool,
+    sql: str,
+    params: list,
+    expected: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Expected row for a C++-served age call, honouring the rebuild window."""
+    if native_current:
+        return expected
+    return _AGE_SECOND_PRECISION_STALE.get((sql, tuple(params)), expected)
+
+
 def test_cql_clinical_expressions_parse_and_translate() -> None:
     for expression in [
         "CalculateAgeInYearsAt(@2000-05-14, @2026-05-14)",
@@ -146,7 +196,17 @@ def test_cql_clinical_direct_surface_matches_cpp_registration() -> None:
         ("SELECT CalculateAgeInDaysAt(?, ?)", ["2000-05-14", "2000-05-16"], ('2',)),
         ("SELECT CalculateAgeInHoursAt(?, ?)", ["2000-05-15T00:00:00Z", "2000-05-15T01:00:00Z"], ('1',)),
         ("SELECT CalculateAgeInMinutesAt(?, ?)", ["2000-05-15T00:00:00Z", "2000-05-15T00:01:00Z"], ('1',)),
+        # FHIR4-71: a second-precision operand is EXACT at .000 (seconds and
+        # milliseconds are one combined decimal precision, AMUX-171), so the
+        # second-precision age is crisp — not a one-second uncertainty window.
         ("SELECT CalculateAgeInSecondsAt(?, ?)", ["2000-05-15T00:00:00Z", "2000-05-15T00:00:01Z"], ('1',)),
+        ("SELECT CalculateAgeInSecondsAt(?, ?)", ["2000-05-15T00:00:00Z", "2000-05-15T01:00:00Z"], ('3600',)),
+        ("SELECT CalculateAgeInSecondsAt(?, ?)",
+         ["2000-05-15T00:00:00.000Z", "2000-05-15T00:00:01.250Z"], ('1',)),
+        # A day-precision birthDate is genuinely COARSER than seconds, so it
+        # must keep its uncertainty interval (unchanged by FHIR4-71).
+        ("SELECT CalculateAgeInSecondsAt(?, ?)", ["2000-05-15", "2000-05-15T00:00:01Z"],
+         ('{"start":-86398,"end":1,"lowClosed":true,"highClosed":true}',)),
         ("SELECT CalculateAgeInYearsAt(?, ?)", ["2000-02-29", "2021-02-28"], ('21',)),
         ("SELECT CalculateAgeInMonthsAt(?, ?)", ["2020-02-29", "2021-02-28"], ('12',)),
         ("SELECT extractFirstCode(?, 'code')", [observation], ("http://loinc.org|8867-4",)),
@@ -157,10 +217,13 @@ def test_cql_clinical_direct_surface_matches_cpp_registration() -> None:
 
     py = _python_only_connection()
     cpp = _cpp_connection()
+    native_age_current = _native_age_second_precision_is_current(cpp)
     try:
         for sql, params, expected in cases:
             assert py.execute(sql, params).fetchone() == expected
-            assert cpp.execute(sql, params).fetchone() == expected
+            assert cpp.execute(sql, params).fetchone() == _native_age_expected(
+                native_age_current, sql, params, expected
+            )
     finally:
         py.close()
         cpp.close()
@@ -182,12 +245,22 @@ def test_cql_clinical_age_direct_surface_matches_no_python_registration() -> Non
         ("SELECT CalculateAgeInMonthsAt(?, ?)", ["2020-02-29", "2021-02-28"], ('12',)),
         ("SELECT CalculateAgeInHoursAt(?, ?)", ["2000-05-15T00:00:00Z", "2000-05-15T01:00:00Z"], ('1',)),
         ("SELECT CalculateAgeInMinutesAt(?, ?)", ["2000-05-15T00:00:00Z", "2000-05-15T00:01:00Z"], ('1',)),
+        # FHIR4-71: second-precision operands are EXACT (.000), so the age is
+        # crisp; coarser operands keep their uncertainty interval.
         ("SELECT CalculateAgeInSecondsAt(?, ?)", ["2000-05-15T00:00:00Z", "2000-05-15T00:00:01Z"], ('1',)),
+        ("SELECT CalculateAgeInSecondsAt(?, ?)", ["2000-05-15T00:00:00Z", "2000-05-15T01:00:00Z"], ('3600',)),
+        ("SELECT CalculateAgeInSecondsAt(?, ?)",
+         ["2000-05-15T00:00:00.000Z", "2000-05-15T00:00:01.250Z"], ('1',)),
+        ("SELECT CalculateAgeInSecondsAt(?, ?)", ["2000-05-15", "2000-05-15T00:00:01Z"],
+         ('{"start":-86398,"end":1,"lowClosed":true,"highClosed":true}',)),
     ]
 
     with no_python_connection() as con:
+        native_age_current = _native_age_second_precision_is_current(con)
         for sql, params, expected in cases:
-            assert con.execute(sql, params).fetchone() == expected
+            assert con.execute(sql, params).fetchone() == _native_age_expected(
+                native_age_current, sql, params, expected
+            )
 
 
 def _cql_clinical_library() -> str:

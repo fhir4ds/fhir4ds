@@ -506,10 +506,64 @@ def _normalize_between_unit(unit: str) -> str | None:
     return None
 
 
-def _duration_between_with_uncertainty(start_str: str, end_str: str, unit: str) -> str | None:
+#: FHIR4-71 / AMUX-171: CQL §Types/Time makes seconds and milliseconds ONE
+#: combined decimal precision — "when milliseconds are null, they are combined
+#: as .0" — so both collapse onto a single ladder level for the AGE family.
+#: Spell it as a literal: ``_PRECISION_INDEX`` (which maps 'second' to this
+#: level) is defined further down this module.
+_COMBINED_SECOND_MS_LEVEL = 5
+
+
+def _combined_second_ms_level(precision: str) -> int:
+    """Precision ladder level with seconds and milliseconds collapsed into one.
+
+    CQL §Types/Time (AMUX-171): "seconds and milliseconds are combined and
+    represented as a Decimal for the purposes of comparison ... When
+    milliseconds are null, they are combined as .0".  A second-precision value
+    is therefore EXACT at ``.000``, not a one-second window, so it belongs on
+    the same rung as millisecond precision.
+    """
+    if precision in ('second', 'millisecond'):
+        return _COMBINED_SECOND_MS_LEVEL
+    return _PRECISION_INDEX.get(precision, 0)
+
+
+def _age_exact_precision_requirement(unit_key: str) -> int:
+    """Ladder level an age operand must reach for a certain (crisp) result.
+
+    Sub-day targets normally need one component FINER than the requested unit
+    (an hour-precision @T06 is any instant in [06:00, 06:59:59.999]).  With the
+    AMUX-171 seconds+milliseconds collapse the ladder stops at the combined
+    level, so a second/millisecond target saturates there: a second-precision
+    operand is exact at ``.000``.
+    """
+    unit_level = _combined_second_ms_level(unit_key)
+    if unit_level >= _COMBINED_SECOND_MS_LEVEL:
+        return _COMBINED_SECOND_MS_LEVEL
+    return unit_level + 1
+
+
+def _duration_between_with_uncertainty(
+    start_str: str,
+    end_str: str,
+    unit: str,
+    *,
+    treat_second_as_exact: bool = False,
+) -> str | None:
     """CQL §22.21 DurationBetween with uncertainty interval support.
 
     Always returns VARCHAR: either an integer string or a JSON interval string.
+
+    ``treat_second_as_exact`` is the AGE-family carve-out (FHIR4-71). The age
+    operators are duration calculations, but their operands are clinically
+    exact at the finest precision the author wrote: since seconds and
+    milliseconds are ONE combined decimal precision (AMUX-171), a
+    second-precision operand pins ``.000`` and the age is CRISP, not a
+    one-second uncertainty window. Generic ``duration between`` /
+    ``difference between`` keep the strict finer-than-target rule because the
+    official fixtures pin their uncertainty intervals (e.g.
+    ``months between @2012-01-02 and @2012`` -> ``Interval[0, 10]``); only the
+    age call sites opt in, so the carve-out is visible where it matters.
     """
     s_prec = _infer_precision(start_str)
     e_prec = _infer_precision(end_str)
@@ -548,7 +602,19 @@ def _duration_between_with_uncertainty(start_str: str, end_str: str, unit: str) 
         # whole units (cql-tests #183: `hours between @T06 and @T07:00:00` is
         # [0, 1]; CQL 1.5 Language Semantics "Determining Difference and
         # Duration").
-        both_sufficient_precision = s_idx > unit_idx and e_idx > unit_idx
+        if treat_second_as_exact:
+            # FHIR4-71 age carve-out: seconds and milliseconds are one combined
+            # decimal precision (AMUX-171), so a second-precision operand is
+            # EXACT at .000 and the age is crisp. Coarser operands (an
+            # hour-precision @T06, a day-precision birthDate asked for seconds)
+            # keep their uncertainty intervals.
+            required = _age_exact_precision_requirement(unit_key)
+            both_sufficient_precision = (
+                _combined_second_ms_level(s_prec) >= required
+                and _combined_second_ms_level(e_prec) >= required
+            )
+        else:
+            both_sufficient_precision = s_idx > unit_idx and e_idx > unit_idx
     if both_sufficient_precision or date_fully_specified:
         # Both have sufficient precision — certain result
         s = _parse_to_datetime(start_str)
