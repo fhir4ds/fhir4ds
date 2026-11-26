@@ -2772,6 +2772,52 @@ class FunctionsMixin:
                 if list_func is not None:
                     return SQLFunctionCall(name=list_func, args=[source_sql])
 
+            # FHIR4-63: a QUERY ALIAS always binds ONE element per iteration
+            # (CQL 1.5 §Query), so every aggregate over it is the SINGLETON
+            # case, and a singleton list makes the family an identity:
+            #
+            #   Count(x)            -> 0 when the element is null, else 1
+            #   Sum/Min/Max/Avg(x)  -> the element value itself
+            #
+            # It is never a count of the SOURCE ROWS. Without this branch the
+            # aggregate fell through to `_translate_count` / the generic
+            # function path and emitted a raw SQL row aggregate in WHERE or
+            # lambda scope: `COUNT(C.resource)` inside a query WHERE gives
+            # "WHERE clause cannot contain aggregates!", and `COUNT(G)` inside
+            # the `_lt_<alias>` unnest scope gives "Aggregate with only
+            # constant parameters has to be bound in the root subquery".
+            #
+            # Query sources register an alias either as a table alias
+            # (`add_alias(alias, table_alias=...)` — resource rows or projected
+            # values) or as an element placeholder (`add_alias(alias,
+            # ast_expr=SQLIdentifier(name="_lt_<alias>"))`). Both resolve to a
+            # single element through `_translate_identifier(SCALAR)`.
+            if (
+                self.context.is_alias(arg.name)
+                and arg.name not in self.context.promoted_definitions
+                and (
+                    getattr(symbol, "table_alias", None)
+                    or getattr(symbol, "cte_name", None)
+                    or symbol_expr is not None
+                )
+            ):
+                element = self.translate(arg, usage=ExprUsage.SCALAR)
+                if not _is_list_returning_sql(element):
+                    if name.lower() == "count":
+                        return SQLCase(
+                            when_clauses=[(
+                                SQLUnaryOp(
+                                    operator="IS NULL",
+                                    operand=element,
+                                    prefix=False,
+                                ),
+                                SQLLiteral(value=0),
+                            )],
+                            else_clause=SQLLiteral(value=1),
+                        )
+                    if name.lower() in ("sum", "min", "max", "avg"):
+                        return element
+
             meta = self.context.definition_meta.get(arg.name)
             cql_type = str(getattr(meta, "cql_type", "") or "")
             # CQL-18 HISTORIAN QA-001: PATIENT_SCALAR List-typed defines
