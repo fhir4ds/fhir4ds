@@ -109,8 +109,9 @@ def test_collapse_one_sided_periods_match_the_python_authority(label: str, with_
 @pytest.mark.parametrize("predicate", POINT_PREDICATES)
 @pytest.mark.parametrize("period_first", [True, False], ids=["period-first", "period-second"])
 def test_point_predicates_are_uncertain_for_a_period_operand(predicate: str, period_first: bool) -> None:
-    operands = (JANUARY, "'2026-02-01'") if period_first else ("'2025-01-01'", JANUARY)
-    expression = f"{predicate}('{operands[0]}', {operands[1]})"
+    period, after_period, before_period = f"'{JANUARY}'", "'2026-02-01'", "'2025-01-01'"
+    left, right = (period, after_period) if period_first else (before_period, period)
+    expression = f"{predicate}({left}, {right})"
     for leg, con in _legs():
         assert _text(con, expression) is None, f"{leg}: {predicate} must not compare a period as a point"
 
