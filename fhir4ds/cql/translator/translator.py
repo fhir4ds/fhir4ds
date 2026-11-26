@@ -77,9 +77,11 @@ from ..translator.types import (
     SQLCast,
     SQLExists,
     SQLExpression,
+    SQLExcept,
     SQLFragment,
     SQLFunctionCall,
     SQLIdentifier,
+    SQLIntersect,
     SQLList,
     SQLLiteral,
     SQLNull,
@@ -89,6 +91,7 @@ from ..translator.types import (
     SQLJoin,
     SQLSelect,
     SQLSubquery,
+    SQLUnion,
     SQLWindowFunction,
     deduplicate_retrieve_ctes,
 )
@@ -96,6 +99,7 @@ from ..translator.queries import SQLQueryBuilder, CTEReference
 from ..translator.cql_version import DEFAULT_CQL_VERSION, validate_cql_version
 from ..translator.context import (
     MeasurementPeriod,
+    RowShape as _ContextRowShape,
     SQLTranslationContext as ContextSQLTranslationContext,
 )
 from ..translator.retrieve_optimizer import run_optimization_phases
@@ -2126,6 +2130,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             # PATIENT_MULTI_VALUE LIST() aggregate, nesting list-in-list.
             from ..parser.ast_nodes import (
                 BinaryExpression as _DefBinExpr,
+                Identifier as _DefIdentifier3,
                 ListExpression as _DefListExpr,
                 Literal as _DefLiteral,
                 Property as _DefProperty,
@@ -2151,6 +2156,21 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                     return False
                 if isinstance(_o, _DefLiteral) and _o.value is None:
                     return True
+                # FHIR4-67: an ELEMENT-VALUED define (`define Ids: ([Condition]
+                # C return C.id) X`, RowShape.PATIENT_MULTI_VALUE) holds a list
+                # VALUE, so `Ids union { 'zz' }` stores ONE row whose value
+                # column is the whole union list — the same physical shape as
+                # the property / list-literal unions above. Resource defines
+                # (`has_resource`) stay excluded (the DQM CMS130/133 guard);
+                # in any case the result check below already rejects a row-level
+                # SQL UNION, so this can never re-shape a resource union.
+                if isinstance(_o, _DefIdentifier3):
+                    _om = self._context.definition_meta.get(_o.name)
+                    if _om is not None and not getattr(_om, "has_resource", False):
+                        return bool(
+                            getattr(_om, "stores_list_value", False)
+                            or _om.shape == _ContextRowShape.PATIENT_MULTI_VALUE
+                        )
                 return False
             _uexpr = definition.expression
             if isinstance(_uexpr, _DefBinExpr):
@@ -2178,6 +2198,29 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 # List<Any>, stores_list_value, and shape PATIENT_SCALAR.
                 _definition_is_navigation_list = True
 
+            # FHIR4-67: `intersect` / `except` over LIST operands lower to the
+            # list macros (CQL 1.5 Appendix B, List Operators:
+            # `intersect(left List<T>, right List<T>) List<T>`, and the same
+            # for `except`), whose result is ONE value per patient — the whole
+            # element list. The define therefore stores a list, exactly like
+            # the element-list union above. Without this marker the
+            # PATIENT_MULTI_VALUE projection aggregates the single row with
+            # LIST() and nests the result ([[...]]), so a set operation over
+            # element defines surfaced a one-element list-of-list instead of
+            # the elements.
+            #
+            # A ROW-level `intersect`/`except` (resource rows: two retrieves,
+            # two resource defines) lowers to SQLIntersect/SQLExcept and is
+            # excluded here — those keep RESOURCE_ROWS / element rows.
+            if (
+                isinstance(_uexpr, _DefBinExpr)
+                and getattr(_uexpr, "operator", None) in ("intersect", "except")
+                and not isinstance(
+                    result, (SQLSelect, SQLSubquery, SQLUnion, SQLExcept, SQLIntersect)
+                )
+                and self._definition_result_is_list_returning(result)
+            ):
+                _definition_is_navigation_list = True
             # Iteration 7 QA-011: expand/collapse defines
             # (`define X: expand Interval[...] per day`,
             # `define C: collapse {...} per 2`) hold ONE row per patient

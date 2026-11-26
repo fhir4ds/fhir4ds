@@ -8308,6 +8308,69 @@ qi-core-2025 47 + us-core-2025 74, Measurement Period supplied): the gate fires
 **0 times**, so no measure SQL changes bytes and the DQM gate cannot move.
 Red-first: neutralizing only the five new gate sites fails 7 of 7 tests.
 
+### Set operations over a multi-row define are LIST operations (FHIR4-67)
+
+`intersect` / `except` / `union` are the CQL 1.5 Appendix B **List** overloads
+(`intersect(left List<T>, right List<T>) List<T>`, same for `except`/`union`),
+and a define whose body is a query with a `return` clause IS a list — the
+Developer's Guide, "Queries": *"If the query is plural, the result type is a
+list whose element types are the type of the return expression."* So
+`define Ids: ([Condition] C return C.id) X` is `List<String>` and every set
+operation over it is the list overload, never a row-level SQL set operation.
+
+`union` already normalized its operands back to the full CTE scan
+(`_as_subquery` widening), which is why `"Ids" union "Other"` was correct.
+`intersect`/`except` did not: each operand was consumed through the generic
+SCALAR lookup `(SELECT sub.value FROM "Ids" ... LIMIT 1)`, so define-vs-define
+answered from ONE arbitrary element (silently, row order deciding whether it
+looked right) and any real list peer raised `UNNEST() for correlated
+expressions is not supported yet` (or `array_length(VARCHAR)`).
+
+`OperatorsMixin._setop_operands_as_lists` (one gate, delegating to the FHIR4-65
+`_multi_row_define_list`) now materializes each operand as the per-patient
+element list before dispatch. Two details are load-bearing:
+
+* `_setop_operand_rows_shaped(..., define_aware=True)` decides "rows" from the
+  DEFINE, not from the SQL shape — an element define's SCALAR translation is
+  also a subquery, so the shape-first answer made every element define look
+  like a row collection and suppressed the conversion.
+* `union` keeps `define_aware=False` (the historical SQL-shape-first answer) so
+  its row-level SQL UNION path and the CMS130/133 resource-union guard are
+  untouched; the definition-shape inference in `translator.py` marks a
+  list-returning `intersect`/`except` define as stored-list (one row, value =
+  the whole list), without which the `PATIENT_MULTI_VALUE` projection aggregates
+  the single row into `[[...]]`. That marking also fixes
+  `Ids union { 'zz' }`, which had the same nesting.
+
+Consumers outside this card still differ (each verified identical before/after):
+a VALUE define against a RESOURCE peer (`"Ids" intersect [Condition]`) keeps
+rows semantics and raises a column-count BinderException (it is a static type
+error in CQL); a query operand (`"Ids" intersect ([Condition] C return C.id) X`)
+is blocked by the pre-existing double-alias defect (`SELECT <expr> AS X AS
+value`).
+
+**Parallelism hazard, MEASURED (card FHIR4-72):** a list-VALUE assertion is
+NOT deterministic at `threads>1`. Verified on this tree with a single translated
+library (patients p1={c1,c2,c3}, p2=\u2205, p3={c9}): 400 executions of the SAME
+population SQL at `threads=8` returned `BothIntersect = ()` for p1 — a patient
+with two matches — exactly once, while 60/60 executions at `threads=1` were
+stable and correct. Same rate with and without `AS MATERIALIZED`.
+
+What this is NOT, on the evidence: the plain correlated
+`list(_lst_src.value) FROM "<Def>"` materialisation was complete in every one of
+~750 runs (`Ids` never truncated), and a DuckDB-only reduction (DISTINCT CTE +
+correlated `list()`) did not reproduce at all. So the earlier hypothesis
+"partial `list()` from a DISTINCT CTE" is UNCONFIRMED — what varies is the
+INTERSECT/EXCEPT result, i.e. the two-correlated-list operand shape this card
+introduced. Do not repeat the list-truncation claim without a fresh repro.
+
+Consequence for tests: assert list VALUES with `SET threads=1` (as
+`test_fhir4_67_setops_over_list_define.py` does) and treat any value assertion
+over these paths at default threads as potentially flaky. A 0.25% per-query
+error rate is invisible to a boolean-only check and dangerous in a population
+denominator, so FHIR4-72 is HIGH priority and must be isolated before the next
+release.
+
 ## `within N unit of` is Time-aware (FHIR4-50)
 
 The whole family (`within`, `properly within`, `starts/ends [properly] within`)

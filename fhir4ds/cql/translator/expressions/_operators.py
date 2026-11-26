@@ -1292,9 +1292,9 @@ class OperatorsMixin:
           definition): they keep their own list-operator paths and are never
           scalarized.
 
-        The gate mirrors ``_operators.py::_union_operand_as_list`` (CQL-19
-        EXPLORER QA-001) so one definition of "element-rows define" serves
-        both the set-operation and the membership consumers.
+        The gate is the one definition of "element-rows define" (CQL-19
+        EXPLORER QA-001) shared by the membership consumers and every set
+        operation (``_setop_operand_as_list``).
 
         Library-qualified references (``Common."SharedIds"``) are registered in
         ``definition_meta`` under their DOTTED name (the included-library CTE
@@ -1305,25 +1305,11 @@ class OperatorsMixin:
         only claimed when its dotted name actually resolves to a definition.
         """
         from ...parser.ast_nodes import Identifier as CQLIdentifier
-        from ...parser.ast_nodes import Property as CQLProperty
-        from ...parser.ast_nodes import QualifiedIdentifier as CQLQualifiedIdentifier
 
-        if isinstance(node, CQLQualifiedIdentifier) and getattr(node, "parts", None):
-            name = ".".join(node.parts)
-        elif isinstance(node, CQLIdentifier):
-            name = node.name
-        elif (
-            isinstance(node, CQLProperty)
-            and isinstance(getattr(node, "source", None), CQLIdentifier)
-            and getattr(node, "path", None)
-        ):
-            # Library-qualified define reference (`Common."SharedIds"`).
-            name = f"{node.source.name}.{node.path}"
-        else:
+        name = self._operand_definition_name(node)
+        if name is None:
             return None
-        if self.context.is_alias(name):
-            return None
-        meta = self.context.definition_meta.get(name)
+        meta = self._operand_definition_meta(name)
         if meta is None:
             return None
         if getattr(meta, "stores_list_value", False):
@@ -1338,6 +1324,45 @@ class OperatorsMixin:
         if not isinstance(node, CQLIdentifier):
             node = CQLIdentifier(name=name, quoted=True)
         return full_list_source(node)
+
+    def _operand_definition_name(self, node: object) -> Optional[str]:
+        """Resolve an operator operand to a definition name, if it names one.
+
+        Handles the three spellings the parser can produce in an operand
+        position: ``Identifier("Ids")``, ``QualifiedIdentifier(["Lib","D"])``
+        and the library-qualified define reference
+        ``Property(Identifier("Common"), "SharedIds")`` (registered in
+        ``definition_meta`` under its DOTTED name — the included-library CTE is
+        literally named ``"Common.SharedIds"``).
+
+        Returns ``None`` when the node does not name a definition (retrieves,
+        queries, literals, query aliases, dynamic property navigation).
+        """
+        from ...parser.ast_nodes import Identifier as CQLIdentifier
+        from ...parser.ast_nodes import Property as CQLProperty
+        from ...parser.ast_nodes import QualifiedIdentifier as CQLQualifiedIdentifier
+
+        if isinstance(node, CQLQualifiedIdentifier) and getattr(node, "parts", None):
+            name = ".".join(node.parts)
+        elif isinstance(node, CQLIdentifier):
+            name = node.name
+        elif (
+            isinstance(node, CQLProperty)
+            and isinstance(getattr(node, "source", None), CQLIdentifier)
+            and getattr(node, "path", None)
+        ):
+            name = f"{node.source.name}.{node.path}"
+        else:
+            return None
+        if self.context.is_alias(name):
+            return None
+        return name
+
+    def _operand_definition_meta(self, name: Optional[str]):
+        """``definition_meta`` entry for *name*, or ``None``."""
+        if name is None:
+            return None
+        return self.context.definition_meta.get(name)
 
     def _list_contains_call(
         self,
@@ -3086,8 +3111,8 @@ class OperatorsMixin:
             # FHIR4-65 gate inside `_translate_in_op`/`_translate_contains_op`,
             # and duplicating it here would re-shape their tested SQL.
             # `union`/`intersect`/`except` are excluded too: set operations own
-            # their element-rows conversion via `_union_operand_as_list`
-            # (CQL-19 EXPLORER QA-001).
+            # their element-rows conversion via `_setop_operand_as_list`
+            # (CQL-19 EXPLORER QA-001, FHIR4-67).
             if operator in {
                 "=", "!=", "<>", "~", "!~", "equivalent", "not equivalent",
                 "includes", "included in",
@@ -3734,6 +3759,12 @@ class OperatorsMixin:
         if operator == "intersect":
             return self._translate_intersect_op(operator, left, right, expr)
         if operator == "except":
+            # FHIR4-67: `except` is the LIST overload (CQL 1.5 Appendix B,
+            # List Operators: `except(left List<T>, right List<T>) List<T>`).
+            # A multi-row element-rows define operand is materialized into its
+            # per-patient element list first — the same gate the membership
+            # operators (FHIR4-65) and `union`/`intersect` use.
+            left, right = self._setop_operands_as_lists(left, right, expr)
             left, right = self._promote_list_setop_scalar_operands(left, right, expr)
             if self._is_list_operands(left, right, expr):
                 if isinstance(right, SQLNull):
@@ -5776,92 +5807,175 @@ class OperatorsMixin:
         return result
 
 
-    def _translate_union_op(self, operator, left, right, expr) -> SQLExpression:
-        """Extracted from _translate_binary_expression."""
-        left_is_rows = isinstance(left, (SQLSelect, SQLSubquery, SQLUnion, SQLExcept, SQLIntersect))
-        right_is_rows = isinstance(right, (SQLSelect, SQLSubquery, SQLUnion, SQLExcept, SQLIntersect))
+    def _setop_operand_rows_shaped(self, sql_node, ast_node, define_aware: bool = True) -> bool:
+        """True when a set-operation operand denotes a ROW collection.
 
-        # CQL-19 SKEPTIC QA-003: CQL 1.5 §10.25 list union needs the full
-        # element list on BOTH operands. Three operand shapes arrived rows-
-        # shaped or scalar-truncated and broke the list branches below:
-        #   (a) dynamic multi-valued FHIR properties (scalar fhirpath_text,
-        #       first-node truncation) -> list_concat(VARCHAR, VARCHAR[])
-        #       BinderException;
-        #   (b) stored-list define identifiers (dynamic-list defines like
-        #       `define G: Patient.name.given`) -> rows-shaped
-        #       (SELECT * FROM "G") that the Distinct wrap rejects as a
-        #       multi-column subquery;
-        #   (c) property paths over retrieve aliases
-        #       (`Obs.component.code.coding.code`) -> rows-shaped CTE scans.
-        # Retrieve/Query operands keep their row shape (resource unions).
+        With ``define_aware`` (the ``intersect``/``except`` path) a define
+        decides this, not its SQL shape: an element-valued define
+        (`define Ids: ([Condition] C return C.id) X`) is a LIST of values even
+        though its SCALAR translation happens to be a subquery (the two-column
+        ``LIMIT 1`` lookup). Consulting the SQL shape first made every
+        element-rows define look like a row collection, which suppressed the
+        list conversion in ``_setop_operand_as_list``.
+
+        ``define_aware=False`` reproduces the historical SQL-shape-first
+        answer, which ``union`` deliberately keeps: a union of element-rows
+        defines lowers to a ROW-level SQL UNION over the operand CTEs (one CTE
+        row per element, which is the shape the population projection already
+        aggregates) and the definition-shape inference in ``translator.py``
+        marks stored-list unions from the AST operands. Converting those
+        operands to lists instead would change that shape (and the CMS130/133
+        resource-union guard lives on the same path), so union is left alone.
+
+        Resource defines (``has_resource``, RESOURCE_ROWS), retrieves and query
+        sources are row collections; anything the AST cannot classify falls
+        back to the SQL shape.
+        """
+        if define_aware:
+            meta = self._operand_definition_meta(self._operand_definition_name(ast_node))
+            if meta is not None:
+                return bool(getattr(meta, "has_resource", False))
+        from ...parser.ast_nodes import Identifier as CQLIdentifier
+        from ...parser.ast_nodes import Retrieve as CQLRetrieve
+
+        # A LIST VALUE is never a row collection: query sources whose `return`
+        # projects an element value (and list-producing expressions) lower to a
+        # one-column list projection, not to rows of resources.
+        if _is_list_returning_sql(sql_node):
+            return False
+        if isinstance(sql_node, (SQLSelect, SQLSubquery, SQLUnion, SQLExcept, SQLIntersect, RetrievePlaceholder)):
+            return True
+        if isinstance(ast_node, CQLRetrieve):
+            return True
+        if isinstance(ast_node, CQLIdentifier):
+            _m = self.context.definition_meta.get(ast_node.name)
+            return _m is not None and getattr(_m, "has_resource", False)
+        return False
+
+    def _setop_operands_as_lists(self, left, right, expr):
+        """Reshape a set-operation's operands into per-patient element lists.
+
+        FHIR4-67: ``intersect``/``except``/``union`` are LIST operators. CQL
+        1.5 Appendix B (§List Operators): ``intersect(left List<T>, right
+        List<T>) List<T>``, ``except(left List<T>, right List<T>) List<T>``.
+        A define whose body is a query with a ``return`` clause is a LIST —
+        the Developer's Guide, "Queries": *"If the query is plural, the
+        result type is a list whose element types are the type of the return
+        expression."* — so ``define Ids: ([Condition] C return C.id) X`` is
+        ``List<String>`` and every set operation over it is the list
+        overload, never a row-level SQL set operation.
+
+        Such a define materializes as ``RowShape.PATIENT_MULTI_VALUE`` (ONE
+        CTE row per element). Consumed through the generic SCALAR identifier
+        lookup it becomes ``(SELECT sub.value ... LIMIT 1)``, so before this
+        gate a set operation saw ONE element (``"Ids" intersect "Other"``
+        answered from a single arbitrary row — silently, and row order
+        decided whether the answer looked right) or raised a BinderException
+        when the peer was a real list (``CQLListIntersectEq``'s UNNEST cannot
+        run over a correlated subquery).
+
+        Consumers materialize the full list; the define keeps its row CTE
+        (FHIR4-65 doctrine, one gate: ``_multi_row_define_list``).
+
+        The ``peer_rows`` guard is unchanged from CQL-19 EXPLORER QA-001: with
+        a ROWS-shaped peer (a retrieve, a resource define) the operation keeps
+        rows semantics — DQM resource unions depend on it (CMS117/CMS130/
+        CMS133/CMS645 regression guard). A value define intersected with a
+        resource retrieve is a static type error in CQL anyway (``T`` cannot
+        be both ``String`` and ``Condition``).
+        """
+        # CQL-19 SKEPTIC QA-003: the set-operation path needs the full element
+        # list on BOTH operands — dynamic multi-valued FHIR properties (scalar
+        # fhirpath_text, first-node truncation), stored-list defines and
+        # property paths over retrieve aliases all arrive rows-shaped or
+        # scalar-truncated here.
+        left_is_rows = self._setop_operand_rows_shaped(left, getattr(expr, "left", None))
+        right_is_rows = self._setop_operand_rows_shaped(right, getattr(expr, "right", None))
+        left, _ = self._setop_operand_as_list(
+            left, getattr(expr, "left", None), left_is_rows, peer_rows=right_is_rows
+        )
+        right, _ = self._setop_operand_as_list(
+            right, getattr(expr, "right", None), right_is_rows, peer_rows=left_is_rows
+        )
+        return left, right
+
+    def _setop_operand_as_list(self, sql_node, ast_node, is_rows, peer_rows=False):
+        """Return (list_sql, converted) for ONE set-operation operand.
+
+        ``converted=True`` means the operand was re-shaped into a single list
+        value per patient and must not be treated as a rows operand.
+        """
         from ...parser.ast_nodes import Identifier as CQLIdentifier, Property as CQLProperty
 
-        def _operand_rows_shaped(sql_node, ast_node) -> bool:
-            if isinstance(sql_node, (SQLSelect, SQLSubquery, SQLUnion, SQLExcept, SQLIntersect, RetrievePlaceholder)):
-                return True
-            if isinstance(ast_node, CQLIdentifier):
-                _m = self.context.definition_meta.get(ast_node.name)
-                return _m is not None and getattr(_m, "has_resource", False)
-            return False
+        if isinstance(ast_node, CQLIdentifier):
+            meta = self.context.definition_meta.get(ast_node.name)
+            if meta is not None and getattr(meta, "stores_list_value", False):
+                # Stored-list define: scalar translation yields the
+                # whole element list held in the CTE value column.
+                return self.translate(ast_node, usage=ExprUsage.SCALAR), True
+        # CQL-19 EXPLORER QA-001 + FHIR4-65/FHIR4-67: element-rows value
+        # defines (`define CondIds: [Condition] C return C.id`) hold one row
+        # per element; a set-operation operand must be the per-patient
+        # element LIST, not the 2-column rows scan. Only convert when the PEER
+        # operand is also element-list-shaped — with a rows-shaped peer
+        # (retrieves, resource defines) the operation must keep rows semantics
+        # (DQM resource unions, CMS117/CMS645 regression guard).
+        #
+        # Delegates to the FHIR4-65 gate so membership and the set operations
+        # share ONE definition of "element-rows define"; it also resolves
+        # library-qualified references (`Common."SharedIds"`), which the
+        # Identifier-only test used to miss.
+        if not peer_rows:
+            _multi_row_list = self._multi_row_define_list(ast_node)
+            if _multi_row_list is not None:
+                return _multi_row_list, True
+        if is_rows and isinstance(ast_node, CQLProperty):
+            static_type = self._static_structural_type_name(ast_node) or ""
+            if not static_type.startswith("Interval<"):
+                list_sql = self.translate(ast_node, usage=ExprUsage.LIST)
+                # LIST usage over a multi-valued navigation yields a
+                # one-row list-valued subquery
+                # (COALESCE(flatten(LIST(...)), [])) — accepted; a bare
+                # rows scan (SELECT * FROM cte) is not list-valued and
+                # keeps its rows shape.
+                if _is_list_returning_sql(list_sql):
+                    return list_sql, True
+        promoted = _promote_fhirpath_text_list(sql_node)
+        return promoted, promoted is not sql_node
 
-        def _union_operand_as_list(sql_node, ast_node, is_rows, peer_rows=False):
-            """Return (list_sql, converted); converted=True when the operand
-            was re-shaped into a single list value per patient and must not
-            be treated as a rows operand below."""
-            if isinstance(ast_node, CQLIdentifier):
-                meta = self.context.definition_meta.get(ast_node.name)
-                if meta is not None and getattr(meta, "stores_list_value", False):
-                    # Stored-list define: scalar translation yields the
-                    # whole element list held in the CTE value column.
-                    return self.translate(ast_node, usage=ExprUsage.SCALAR), True
-                # CQL-19 EXPLORER QA-001: element-rows value defines
-                # (`define CondIds: [Condition] C return C.id`) hold one row
-                # per element; a union operand must be the per-patient
-                # element LIST, not the 2-column rows scan. Only convert
-                # when the PEER operand is also element-list-shaped — with a
-                # rows-shaped peer (retrieves, resource defines) the union
-                # must keep rows semantics (DQM resource unions, CMS117/
-                # CMS645 regression guard).
-                if (
-                    meta is not None
-                    and not getattr(meta, "has_resource", False)
-                    and meta.shape == RowShape.PATIENT_MULTI_VALUE
-                    and not peer_rows
-                ):
-                    _list_sql = self._list_operator_full_list_source(ast_node)
-                    if _list_sql is not None:
-                        return _list_sql, True
-            if is_rows and isinstance(ast_node, CQLProperty):
-                static_type = self._static_structural_type_name(ast_node) or ""
-                if not static_type.startswith("Interval<"):
-                    list_sql = self.translate(ast_node, usage=ExprUsage.LIST)
-                    # LIST usage over a multi-valued navigation yields a
-                    # one-row list-valued subquery
-                    # (COALESCE(flatten(LIST(...)), [])) — accepted; a bare
-                    # rows scan (SELECT * FROM cte) is not list-valued and
-                    # keeps its rows shape.
-                    if _is_list_returning_sql(list_sql):
-                        return list_sql, True
-            promoted = _promote_fhirpath_text_list(sql_node)
-            return promoted, promoted is not sql_node
-
-        _right_peer_rows = _operand_rows_shaped(right, getattr(expr, "right", None))
-        _left_peer_rows = _operand_rows_shaped(left, getattr(expr, "left", None))
+    def _translate_union_op(self, operator, left, right, expr) -> SQLExpression:
+        """Extracted from _translate_binary_expression."""
         # Capture the PRE-promotion operands for interval detection: a
         # dynamic FHIR Period operand (`E1.period`) translates to
         # fhirpath_text(resource, 'period'), which _is_fhir_interval_expression
-        # recognizes — but _union_operand_as_list's last-resort promotion
+        # recognizes — but _setop_operand_as_list's last-resort promotion
         # rewrites it to from_json(fhirpath(...), '["VARCHAR"]') which the
         # recognizer misses, dropping the union into list semantics
         # (BinderException on the mixed CASE, or list_concat of Period JSON
         # strings instead of §19.31 interval union).
         _left_pre_promotion = left
         _right_pre_promotion = right
-        left, _left_converted = _union_operand_as_list(
-            left, getattr(expr, "left", None), left_is_rows, peer_rows=_right_peer_rows
+        # Peer predicates must be computed from the PRE-conversion operands,
+        # exactly as before: an operand that has been re-shaped into a list
+        # value is no longer rows-shaped, and letting that feed back into the
+        # OTHER operand's decision would change union's row-union path.
+        _right_peer_rows = self._setop_operand_rows_shaped(
+            _right_pre_promotion, getattr(expr, "right", None), define_aware=False
         )
-        right, _right_converted = _union_operand_as_list(
-            right, getattr(expr, "right", None), right_is_rows, peer_rows=_left_peer_rows
+        _left_peer_rows = self._setop_operand_rows_shaped(
+            _left_pre_promotion, getattr(expr, "left", None), define_aware=False
+        )
+        left, _left_converted = self._setop_operand_as_list(
+            left,
+            getattr(expr, "left", None),
+            isinstance(left, (SQLSelect, SQLSubquery, SQLUnion, SQLExcept, SQLIntersect)),
+            peer_rows=_right_peer_rows,
+        )
+        right, _right_converted = self._setop_operand_as_list(
+            right,
+            getattr(expr, "right", None),
+            isinstance(right, (SQLSelect, SQLSubquery, SQLUnion, SQLExcept, SQLIntersect)),
+            peer_rows=_left_peer_rows,
         )
         # RetrievePlaceholder is not a rows SQL type but is rows-shaped
         # (converted to a subquery by _as_subquery below) — keep it rows
@@ -6474,6 +6588,15 @@ class OperatorsMixin:
 
     def _translate_intersect_op(self, operator, left, right, expr) -> SQLExpression:
         """Extracted from _translate_binary_expression."""
+        # FHIR4-67: `intersect` is the LIST overload (CQL 1.5 Appendix B,
+        # List Operators: `intersect(left List<T>, right List<T>) List<T>`), so
+        # a multi-row element-rows define operand must be materialized into
+        # its per-patient element list before any list/row dispatch. Without
+        # this the define arrived as the scalar `LIMIT 1` lookup and the
+        # operation inspected ONE row (silently wrong, row-order dependent) or
+        # raised `UNNEST() for correlated expressions is not supported yet`
+        # (or `array_length(VARCHAR)`) inside the list macro.
+        left, right = self._setop_operands_as_lists(left, right, expr)
         left, right = self._promote_list_setop_scalar_operands(left, right, expr)
         if self._is_list_operands(left, right, expr):
             return self._list_intersect_call(left, right, expr.left, expr.right)
