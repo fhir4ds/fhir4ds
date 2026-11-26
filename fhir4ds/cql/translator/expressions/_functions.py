@@ -152,6 +152,24 @@ def _validate_coalesce_scalar_arity(count: int) -> None:
         )
 
 
+# FHIR4-69: CQL 1.5 §5.5.1 implicit ``T -> List<T>`` promotion source types.
+# An aggregate function's signatures are all ``List<T>`` (Appendix B
+# §Count/§Sum/§Avg/§Min/§Max), so when the operand is statically ONE value of
+# one of these SCALAR types the promotion makes it the one-element list
+# ``{ x }`` and the aggregate is the SINGLETON case:
+#
+#     Count(x)            -> 0 when x is null, else 1
+#     Sum/Min/Max/Avg(x)  -> x itself (null when x is null)
+#
+# Deliberately excludes every non-scalar / multi-valued / unknown shape:
+# List<…>, Interval<…>, Tuple { … }, Any (forward references and
+# uninferrable types), and resource types. See
+# ``_static_scalar_aggregate_define_type`` for the whole gate.
+_STATIC_SCALAR_AGGREGATE_CQL_TYPES = frozenset({
+    "Boolean", "Integer", "Decimal", "String",
+    "Date", "DateTime", "Time", "Quantity",
+})
+
 # CQL-10 HISTORIAN QA-002: statically-known operand types that are NEVER
 # valid for the CQL 1.5 §16 arithmetic operator family (no String/Boolean
 # overload exists and Table 9-E defines no implicit String/Boolean ->
@@ -647,10 +665,21 @@ class FunctionsMixin:
             return None
         return types
 
-    def _validate_static_aggregate_argument(self, name: str, arg) -> None:
-        """Fail fast for statically invalid CQL aggregate list element types."""
+    def _validate_static_aggregate_argument(
+        self, name: str, arg, element_types: Optional[set[str]] = None,
+    ) -> None:
+        """Fail fast for statically invalid CQL aggregate list element types.
+
+        *element_types* lets a caller supply the element type directly instead
+        of inferring it from a list source — FHIR4-69 uses it for the implicit
+        ``T -> List<T>`` promotion of a statically scalar operand, so the
+        Appendix B element-type rules are applied to the promoted ``List<T>``
+        (``Sum('abc')`` stays a translation error instead of becoming an
+        identity).
+        """
         lower = name.lower()
-        element_types = self._static_list_element_types(arg)
+        if element_types is None:
+            element_types = self._static_list_element_types(arg)
         if not element_types:
             return
 
@@ -685,6 +714,78 @@ class FunctionsMixin:
             supported = numeric_or_quantity | {"Date", "DateTime", "Time", "String"}
             if not concrete <= supported:
                 raise TranslationError(f"{name} does not support List<{', '.join(sorted(concrete))}> source")
+
+    def _static_scalar_aggregate_define_type(self, name: str) -> Optional[str]:
+        """Return the scalar CQL type when a DEFINE holds ONE value per patient.
+
+        FHIR4-69: the aggregate signatures are all ``List<T>``, so a
+        statically NON-list operand reaches them through the CQL 1.5 §5.5.1
+        implicit ``T -> List<T>`` promotion, which yields the one-element list
+        ``{ x }``. Every aggregate over it is therefore the SINGLETON case (see
+        ``_translate_aggregate_pre``) — and must NEVER be lowered as a SQL row
+        aggregate over the patient rows.
+
+        The gate is deliberately narrow and positive — it claims an operand
+        ONLY when the one-element promotion is provable:
+
+        * the definition's metadata ``cql_type`` is a primitive SCALAR type
+          (``_STATIC_SCALAR_AGGREGATE_CQL_TYPES``) — never ``List<…>``,
+          ``Interval<…>``, ``Tuple { … }``, ``Any`` (forward references and
+          uninferrable types) or a resource type;
+        * the CTE stores that value in its ``value`` column, i.e. it is neither
+          resource-backed (``has_resource``) nor a stored whole-list value
+          (``stores_list_value``) — both shapes have their own lowering earlier
+          in ``_translate_aggregate_pre`` and their row-aggregate handling is
+          load-bearing for both corpora;
+        * the row shape is one-row-per-patient (``PATIENT_SCALAR``), or the
+          inference ABSTAINED (``UNKNOWN`` — e.g. ``define "Nul": (null as
+          Integer)`` still emits a ``_patients``-joined one-row CTE).
+
+        Everything else — property paths, retrieves, query sources, element-rows
+        and multi-row defines, ``distinct`` arguments, JSON-array text functions,
+        unknown types — returns ``None``. A binder error is loud; a silently
+        wrong value is not.
+        """
+        meta = self.context.definition_meta.get(name)
+        if meta is None:
+            return None
+        if getattr(meta, "has_resource", False):
+            return None
+        if getattr(meta, "stores_list_value", False):
+            return None
+        if getattr(meta, "shape", None) not in (RowShape.PATIENT_SCALAR, RowShape.UNKNOWN):
+            return None
+        cql_type = str(getattr(meta, "cql_type", "") or "")
+        if cql_type not in _STATIC_SCALAR_AGGREGATE_CQL_TYPES:
+            return None
+        return cql_type
+
+    def _static_scalar_aggregate_literal_type(self, node) -> Optional[str]:
+        """Return the scalar CQL type of a LITERAL operand, else ``None``.
+
+        FHIR4-69 companion to ``_static_scalar_aggregate_define_type``: a
+        literal is unambiguously ONE value, so the §5.5.1 ``T -> List<T>``
+        promotion always yields exactly ``{ x }``. Only the SCALAR literal
+        forms are claimed — ``7``, ``'a'``, ``true``, ``@2024-01-01``,
+        ``@T12:00``, ``5 'mg'`` and the typeless ``null`` literal (declared as
+        ``"Null"`` so ``Count(null)`` can answer 0).
+
+        Collections (``ListExpression``), intervals, tuples and instances are
+        never literals of this kind and are not claimed; a ``Literal`` carrying
+        a list/tuple/dict value is rejected defensively.
+        """
+        if isinstance(node, Literal):
+            value = getattr(node, "value", None)
+            if isinstance(value, (list, tuple, dict)):
+                return None
+            if value is None:
+                return "Null"
+        elif not isinstance(node, (DateTimeLiteral, TimeLiteral, Quantity)):
+            return None
+        literal_type = self._static_structural_type_name(node)
+        if literal_type not in _STATIC_SCALAR_AGGREGATE_CQL_TYPES:
+            return None
+        return literal_type
 
     def _unwrap_list_source(self, arg):
         """Unwrap a potential list argument for aggregate handling.
@@ -2750,6 +2851,34 @@ class FunctionsMixin:
                 return SQLUnaryOp(operator="NOT", operand=expr)
             return expr
 
+        def _singleton_aggregate(element: SQLExpression) -> Optional[SQLExpression]:
+            """Lower an aggregate over ONE value (implicit ``List<T>`` promotion).
+
+            FHIR4-69 / CQL 1.5 §5.5.1: a statically non-list operand ``x`` is
+            promoted to ``{ x }``, so the aggregate family over it is the
+            singleton case — ``Count`` is a null test, the rest are identities.
+            Returns ``None`` so the caller can fall through for every aggregate
+            whose singleton semantics are NOT an identity (AllTrue/AnyTrue/…,
+            Median/StdDev/Variance/Product/GeometricMean), which keep their
+            existing lowering.
+            """
+            lower_name = name.lower()
+            if lower_name == "count":
+                return SQLCase(
+                    when_clauses=[(
+                        SQLUnaryOp(
+                            operator="IS NULL",
+                            operand=element,
+                            prefix=False,
+                        ),
+                        SQLLiteral(value=0),
+                    )],
+                    else_clause=SQLLiteral(value=1),
+                )
+            if lower_name in ("sum", "min", "max", "avg"):
+                return element
+            return None
+
         # Named scalar list definitions keep their CQL list type in metadata,
         # but translating the identifier directly in aggregate context produces
         # a scalar CTE lookup. Inline literal Quantity lists here so the
@@ -2991,6 +3120,57 @@ class FunctionsMixin:
                     quantity_result = self._translate_quantity_list_aggregate(name, source_sql)
                     if quantity_result is not None:
                         return quantity_result
+
+            # FHIR4-69: a STATICALLY SCALAR define holds ONE value per patient,
+            # so every aggregate over it is the SINGLETON case of the CQL 1.5
+            # §5.5.1 implicit `T -> List<T>` promotion (`x` -> `{ x }`).
+            # Without this branch the aggregate fell through to
+            # `_translate_count` / the generic function path and emitted a raw
+            # SQL ROW aggregate over the patient rows:
+            #
+            #   define "N": 5
+            #     Sum("N") -> SUM((SELECT sub.value ...))  -- Binder Error:
+            #                 column "patient_id" must appear in the GROUP BY
+            #                 clause or must be part of an aggregate function
+            #     Count("N") -> (SELECT COUNT(*) FROM "N" AS sub ...)  -- binds,
+            #                 but counts ROWS: `define "Nul": (null as
+            #                 Integer)` then answers 1 where CQL says 0.
+            #
+            # Count over a null-valued scalar is the silent-wrong-value half of
+            # this defect, which is why the gate below is positive rather than
+            # exclusionary (see `_static_scalar_aggregate_define_type`).
+            _scalar_type = self._static_scalar_aggregate_define_type(arg.name)
+            if _scalar_type is not None:
+                # The promoted source is `List<T>`, so Appendix B's element-type
+                # rules apply unchanged: `Sum(<String define>)` is still a
+                # translation error, not an identity.
+                self._validate_static_aggregate_argument(
+                    name, arg, element_types={_scalar_type},
+                )
+                element = self.translate(arg, usage=ExprUsage.SCALAR)
+                if not _is_list_returning_sql(element):
+                    _singleton = _singleton_aggregate(element)
+                    if _singleton is not None:
+                        return _singleton
+
+        # FHIR4-69: the same singleton promotion applies to a SCALAR LITERAL
+        # operand. `Count(7)` promotes 7 to `{7}` (§5.5.1), so the answer is 1
+        # — never `COUNT(7)`, which is a row aggregate over `_patients` and
+        # trips DuckDB's GROUP BY binder check on the bare `patient_id`.
+        _literal_scalar_type = self._static_scalar_aggregate_literal_type(arg)
+        if _literal_scalar_type is not None:
+            self._validate_static_aggregate_argument(
+                name,
+                arg,
+                element_types=(
+                    None if _literal_scalar_type == "Null" else {_literal_scalar_type}
+                ),
+            )
+            element = self.translate(arg, usage=ExprUsage.SCALAR)
+            if not _is_list_returning_sql(element):
+                _singleton = _singleton_aggregate(element)
+                if _singleton is not None:
+                    return _singleton
 
         # Retrieve sources (e.g. Count([Encounter])) need a correlated subquery
         # because the Retrieve translates to a RetrievePlaceholder that Phase 3
