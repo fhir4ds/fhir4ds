@@ -220,6 +220,48 @@ def _demoted_rows_source_cte(sql_expr) -> "str | None":
     return fc.expr.name
 
 
+def _is_iterable_list_source(source_expr) -> bool:
+    """True when *source_expr* is a one-row scalar LIST projection.
+
+    Shape: ``(SELECT list(<element>) FROM ... )`` — the single-column aggregate
+    projection a fluent function's query body lowers to, and the shape a LIST
+    aggregation generally takes. ``COALESCE(list(...), <empty list>)`` wrappers
+    count as well (the ``{ <query> }`` list-selector lowering uses them).
+
+    Deliberately narrow:
+
+    * JSON-array **text** sources (``expand(...)``, ``collapse_intervals(...)``)
+      are plain ``VARCHAR`` function calls, not subqueries — ``UNNEST`` on them
+      is not a list iteration, and their own lowering paths already handle
+      element iteration.
+    * Bare list macros (``from_json``, ``list_transform``) are handled by their
+      own branches (early list-transform, return-clause transform).
+
+    Only this aggregate-projection shape is claimed, so the per-element
+    iteration added in FHIR4-60 cannot silently reroute the retrieve/set-op
+    row sources (which are ``SELECT`` row shapes, never list projections).
+    """
+    if not isinstance(source_expr, SQLSubquery):
+        return False
+    inner = source_expr.query
+    if not isinstance(inner, SQLSelect) or not inner.columns:
+        return False
+    if len(inner.columns) != 1:
+        return False
+    col = inner.columns[0]
+    return _is_list_projection_expr(col.expr if isinstance(col, SQLAlias) else col)
+
+
+def _is_list_projection_expr(expr) -> bool:
+    """True for ``list(...)`` and ``COALESCE(list(...), <empty list>)``."""
+    if isinstance(expr, SQLFunctionCall):
+        if expr.name in ("list", "LIST"):
+            return True
+        if expr.name.upper() == "COALESCE" and expr.args:
+            return _is_list_projection_expr(expr.args[0])
+    return False
+
+
 def _references_qualified(expr, alias: str, column: str) -> bool:
     """True when `expr` references `<alias>.<column>` anywhere."""
     from ...translator.types import SQLQualifiedIdentifier
@@ -3062,6 +3104,105 @@ class QueryMixin:
 
         return result
 
+    def _should_iterate_list_source(self, node, source_expr, alias) -> bool:
+        """True when *node*'s LIST-valued *source_expr* must iterate elements.
+
+        Single gate for both source paths that can produce a one-row scalar LIST
+        projection (a ``ParameterPlaceholder`` from function inlining, and a
+        nested call expanded in place). Requires an iteration alias and a clause
+        that can reference it — without one the list value itself is the result,
+        so unnesting would only cost a round trip. Queries with ``sort`` are
+        left on their existing lowering: element order must not be silently
+        dropped (``list()`` is an aggregate, so it cannot carry the ORDER BY).
+        """
+        return bool(
+            alias
+            and (node.where or node.return_clause)
+            and not getattr(node, 'sort', None)
+            and _is_iterable_list_source(source_expr)
+        )
+
+    def _translate_query_over_list_source(
+        self, node, source_expr, alias: str, usage: ExprUsage, source_ast=None,
+    ) -> SQLExpression:
+        """Translate a Query whose source is a per-row scalar LIST value.
+
+        CQL 1.5 §Query: the source alias binds to EACH ELEMENT of the source
+        collection. A query source can lower to a one-row scalar LIST
+        projection — ``(SELECT list(<elem>) FROM ... )`` — when it is a fluent
+        function call whose body is a query with a ``return`` clause (FHIR4-60:
+        ``FHIRCommon.verified(conditions List<FHIR.Condition>)``'s body
+        ``conditions C where C.verificationStatus ...``, inlined as an argument
+        of ``Encounter.encounterDiagnosis()``). Binding the alias to that LIST
+        made every ``<alias>.<property>`` access a list-valued
+        ``fhirpath_text(JSON[], 'verificationStatus')`` call, which has no
+        matching signature — the whole measure failed to BIND.
+
+        The fix iterates ONE ELEMENT PER ROW (``UNNEST``) and rebuilds the
+        query result as a single-column ``list(...)`` projection, so:
+
+        * ``<alias>.<property>`` lowers to a per-element
+          ``fhirpath_text(_lt_<alias>, '<property>')`` scalar (correct);
+        * the query stays a ONE-COLUMN scalar value, so scalar consumers
+          (``in_valueset(...)``, ``coding_matches(...)``) keep working — a
+          ``patient_id``/``resource`` row projection here is rejected with
+          ``Subquery returns 2 columns - expected 1`` (the failed prototype).
+
+        Usage handling mirrors the Children()/Descendants() list-source
+        branch: ``BOOLEAN`` yields ``array_length(<list>) > 0``; ``EXISTS``
+        yields the list subquery, which ``_strip_aggregates_for_exists``
+        rewrites to ``SELECT 1`` before it becomes an ``EXISTS`` (an aggregate
+        projection always emits one row, so leaving ``list(...)`` in place
+        would make ``EXISTS`` unconditionally true).
+        """
+        _lt_param = f"_lt_{alias}"
+        self.context.push_scope()
+        try:
+            self.context.add_alias(alias, ast_expr=SQLIdentifier(name=_lt_param))
+            if source_ast is not None:
+                self.context._alias_source_asts[alias] = source_ast
+            if hasattr(node, 'let_clauses') and node.let_clauses:
+                self._process_let_clauses(node.let_clauses, node=node)
+
+            _where = None
+            if node.where:
+                _where = _demote_audit_struct_to_bool(
+                    self.translate(node.where, usage=ExprUsage.BOOLEAN)
+                )
+
+            _body: SQLExpression = SQLIdentifier(name=_lt_param)
+            if node.return_clause:
+                _body = self.translate(node.return_clause, usage=ExprUsage.SCALAR)
+        finally:
+            # Pop even on exception: a leaked scope corrupts alias resolution
+            # for every later translation in this library.
+            self.context.pop_scope()
+
+        _body = _ensure_scalar_body(_body)
+        _unnest_from = SQLAlias(
+            expr=SQLSubquery(query=SQLSelect(columns=[SQLAlias(
+                expr=SQLFunctionCall(name="unnest", args=[source_expr]),
+                alias=_lt_param,
+            )])),
+            alias="_lt_unnest",
+        )
+        # No ORDER BY: list() is an aggregate, so a non-aggregated ORDER BY is
+        # invalid. Element order follows the source list order.
+        _list_expr = SQLFunctionCall(name="list", args=[_body])
+        result: SQLExpression = SQLSubquery(query=SQLSelect(
+            columns=[_list_expr],
+            from_clause=_unnest_from,
+            where=_where,
+        ))
+
+        if usage == ExprUsage.BOOLEAN:
+            return SQLBinaryOp(
+                left=SQLFunctionCall(name="array_length", args=[result]),
+                operator=">",
+                right=SQLLiteral(value=0),
+            )
+        return result
+
     def _try_backbone_array_on_definition(
         self, src_expr, alias, node, usage: ExprUsage,
     ):
@@ -5220,6 +5361,15 @@ class QueryMixin:
                         source_expr_node,
                     )
                     alias = source_alias
+                    # FHIR4-60: the inlined argument lowered to a one-row
+                    # scalar LIST projection instead of a row/table source
+                    # (FHIRCommon.verified's `conditions C where ...` body over
+                    # a fluent-call argument). Iterate its ELEMENTS, exactly as
+                    # the list-literal / nested-query / Children() sources do.
+                    if self._should_iterate_list_source(node, source_expr, alias):
+                        return self._translate_query_over_list_source(
+                            node, source_expr, alias, usage, source_expr_node,
+                        )
             else:
                 # Check for backbone array property on a definition
                 _bb_done = self._try_backbone_array_on_definition(
@@ -5326,6 +5476,16 @@ class QueryMixin:
                         )
                         self.context.add_alias(alias, table_alias=alias)
                         self.context._alias_source_asts[alias] = source_expr_node
+                    elif self._should_iterate_list_source(node, source_expr, alias):
+                        # FHIR4-60: the source lowers to a one-row scalar LIST
+                        # projection (`(SELECT list(<elem>) FROM ... )`). CQL
+                        # 1.5 §Query iterates ELEMENTS, so the alias must bind
+                        # per element; binding it to the list itself made every
+                        # `<alias>.<prop>` a list-valued
+                        # `fhirpath_text(JSON[], ...)` call (BinderException).
+                        return self._translate_query_over_list_source(
+                            node, source_expr, alias, usage, source_expr_node,
+                        )
 
         # Register alias in context for property access
         # Store the source SQL expression so property access can use it

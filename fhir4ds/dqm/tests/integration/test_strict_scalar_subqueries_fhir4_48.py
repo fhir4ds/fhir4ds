@@ -31,6 +31,7 @@ them pass.
 
 import json
 import os
+import re
 import tempfile
 
 import duckdb
@@ -250,13 +251,18 @@ def _measure_config(measure_id: str, suite: str = "qi-core-2025"):
 #: unit test) because the defect is only reachable through a real measure's
 #: ``flatten(<query with references()>)`` shape.
 #:
-#: CMS986 is deliberately ABSENT: its assigned ``value``-column defect is fixed
-#: (see ``fhir4ds/cql/tests/integration/test_fhir4_56_method_and_promotion.py``)
-#: but a SECOND, distinct pre-existing defect still stops it binding —
-#: ``verified(conditions List<FHIR.Condition>)`` inlined over a fluent-call
-#: source binds ``C`` to the whole list, so ``C.verificationStatus`` lowers to
-#: ``fhirpath_text(JSON[], 'verificationStatus')``. That is a list-valued
-#: query-source alias-binding gap with its own card.
+#: FHIR4-60 adds CMS986. Its ``value``-column defect is FHIR4-56's (see
+#: ``fhir4ds/cql/tests/integration/test_fhir4_56_method_form_receiver.py``);
+#: the shape it still could not bind on was
+#: ``verified(conditions List<FHIR.Condition>)`` inlined over
+#: ``Encounter.encounterDiagnosis()``: the query alias ``C`` bound to the WHOLE
+#: list, so ``C.verificationStatus`` lowered to
+#: ``fhirpath_text(JSON[], 'verificationStatus')`` — no such signature
+#: (``fhirpath_text(VARCHAR, VARCHAR)``). The alias now iterates the list's
+#: ELEMENTS (``fhirpath_text(_lt_C, 'verificationStatus')``) while the query
+#: stays a one-column scalar list for its consumers. See
+#: ``fhir4ds/cql/duckdb/tests/integration/test_fhir4_60_list_valued_query_source.py``
+#: for the focused shape test.
 #:
 #: ``all_columns=True`` on purpose: a column CTE that a population-only
 #: projection never references still crashes a web app that asks for it.
@@ -265,6 +271,7 @@ STRICT_MEASURES = [
     ("qi-core-2025", "CMS832", False),
     ("us-core-2025", "CMS145", True),
     ("us-core-2025", "CMS156", True),
+    ("us-core-2025", "CMS986", True),
     ("us-core-2025", "NHSNAcuteCare", True),
     ("us-core-2025", "NHSNGlycemicControl", True),
 ]
@@ -313,3 +320,87 @@ def test_generated_measure_sql_executes_on_strict_connection(
     assert result.comparison.mismatched_patients == []
     assert result.comparison.accuracy_pct == 100.0
     assert result.patient_count > 0
+
+
+# ---------------------------------------------------------------------------
+# 3. FHIR4-60: a list-valued query source must bind its alias PER ELEMENT
+# ---------------------------------------------------------------------------
+
+#: ``fhirpath_text(<list aggregate subquery>, '<property>')`` — the FHIR4-60
+#: signature that has no matching DuckDB overload. A SCALAR subquery as the
+#: first argument is legitimate (`fhirpath_text((SELECT _pd.patient_resource
+#: ... LIMIT 1), 'id')`), so only the LIST aggregate projection is matched.
+_FHIRPATH_TEXT_LIST_ARG = re.compile(
+    r"fhirpath_text\(\s*\(SELECT\s+(?:list|COALESCE\(\s*list)\s*\(",
+    re.IGNORECASE,
+)
+
+
+@pytest.mark.slow
+def test_cms986_never_passes_a_list_to_fhirpath_text():
+    """CMS986's SQL must extract per-ELEMENT, never from the whole list.
+
+    ``FHIRCommon.verified(conditions List<FHIR.Condition>)``'s body is
+    ``conditions C where C.verificationStatus ...``. Inlined over
+    ``Encounter.encounterDiagnosis()`` — a fluent call whose body is a query
+    with a ``return`` clause, so one LIST per row — the alias ``C`` used to
+    bind to the LIST, and every property access on it emitted
+
+        fhirpath_text((SELECT list(CASE WHEN ... END) FROM ...),
+                      'verificationStatus')
+
+    which has no signature (``fhirpath_text(VARCHAR, VARCHAR)``) and stopped the
+    whole measure binding. The per-element form is
+    ``fhirpath_text(_lt_C, 'verificationStatus')``.
+
+    This is the TRANSLATION half of the pin; the execution half is
+    ``test_generated_measure_sql_executes_on_strict_connection[CMS986]``.
+    """
+    content_dir = US_CORE_SUITE
+    if not os.path.isdir(content_dir):
+        pytest.skip(f"us-core content package not present at {content_dir}")
+    cfg = _measure_config("CMS986", "us-core-2025")
+    if cfg is None:
+        pytest.skip("CMS986 not present in the discovered suite")
+
+    from fhir4ds.cql.parser import parse_cql
+    from fhir4ds.cql.parser.ast_nodes import Definition
+    from fhir4ds.cql.translator import CQLToSQLTranslator
+
+    con = _strict_connection()
+    try:
+        library = parse_cql(cfg.cql_path.read_text())
+
+        def library_loader(alias, version=None):
+            for path in cfg.include_paths:
+                lib_file = path / f"{alias}.cql"
+                if lib_file.exists():
+                    return parse_cql(lib_file.read_text())
+            return None
+
+        translator = CQLToSQLTranslator(
+            connection=con, library_loader=library_loader, audit_mode=False,
+        )
+        translator.translate_library(library)
+        sql = translator.translate_library_to_population_sql(
+            library=library,
+            output_columns={
+                stmt.name: stmt.name
+                for stmt in library.statements
+                if isinstance(stmt, Definition) and not stmt.name.startswith("SDE")
+            },
+            parameters={"Measurement Period": ("2026-01-01", "2026-12-31")},
+        )
+    finally:
+        con.close()
+
+    match = _FHIRPATH_TEXT_LIST_ARG.search(sql)
+    assert match is None, (
+        "CMS986 passes a list to fhirpath_text() — a list-valued query source "
+        "bound its alias to the whole list instead of iterating its elements "
+        f"(at offset {match.start() if match else None}: "
+        f"{sql[max(0, (match.start() if match else 0) - 80):(match.start() if match else 0) + 160]!r})"
+    )
+    assert "fhirpath_text(_lt_" in sql, (
+        "expected the per-element `_lt_<alias>` property access in CMS986's SQL"
+    )
