@@ -334,14 +334,17 @@ fixed measure makes its registration STALE and the gate refuses until it is dele
 - **Per PR** (cleanroom job in `ci.yml`): the curated set `tier_c.CURATED` — small fast measures,
   CMS159 (the FHIR4-15 repro) and the three measures that carry a known real-only defect, so a
   fix flips them and the ledger flags the registration.
-- **Scheduled** (`conformance.yml`, `wasm-parity` job): `FHIR4DS_WASM_TIER_C_SUITE=qi-core-2025`
-  runs all 47 measures (~210 s on the real engine here, plus one desktop translation each).
-- **US-Core 2025 is NOT scheduled yet** (`FHIR4DS_WASM_TIER_C_SUITE=us-core-2025` runs it by
-  hand, ~12 min with a dump cache): on dev `d0c7719a493` + the WP-5 bundles, 71 measures ran —
-  34 identical, 36 order/instant-only, 1 registered real gap (CMS136, a `sort by` tie — WP-6),
-  3 desktop TRANSLATE_ERRORs (CMS986, NHSNAcuteCare, NHSNGlycemicControl — WP-7, owned by the
-  fhir4ds lane). A translation error cannot be registered, so the job would be red; schedule it
-  in the same change that fixes the last of those.
+- **Scheduled** (`conformance.yml`, `wasm-parity` job, timeout 150 min): two steps, one per
+  suite, each `FHIR4DS_WASM_TIER_C_SUITE=<suite>` over every measure — `qi-core-2025` (47
+  measures: ~8 min to translate + ~12 min on the real engine here) and `us-core-2025` (74
+  measures: ~26 min + ~35 min; CMS136 alone emits ~22 MB of SQL). Each suite is its own step
+  so one failing does not hide the other.
+- **US-Core 2025 state** (dev `62f53a961ca` + the wasm bundles rebuilt from it, 2026-11-26):
+  all 74 measures translate and run — 36 identical, 37 order/instant-only, 1 registered real
+  gap (CMS136, a `sort by` tie — WP-6). Before that it had 3 desktop TRANSLATE_ERRORs (CMS986,
+  NHSNAcuteCare, NHSNGlycemicControl), fixed by the fhir4ds lane (FHIR4-56, FHIR4-60), and two
+  real diffs fixed in the native engine (WP-5, below). A translation error cannot be
+  registered, so the suite could only be scheduled once the last of those was fixed.
 - **The desktop translation runs under its own cap** (`tier_c.TRANSLATE_MEMORY_GB`, default 40,
   env `FHIR4DS_WASM_TIER_C_TRANSLATE_GB`): `ulimit -v` bounds ADDRESS SPACE, which DuckDB
   reserves far beyond what it uses (CMS156 needs ~25 GB of address space for under 1 GB of
@@ -439,7 +442,10 @@ every failure is now fixed in the script, and each is a trap for anyone rebuildi
 statements, body drift 0 (was 53), desktop macros without a browser counterpart 1 (was 33:
 `setvariable`). Tier A CQL on simulator AND real duckdb-wasm: GREEN 1,964, PARITY_GAP 2 (the
 registered boundary null-precision pair), BOTH_FAIL 7, ENGINE_DIFF 42 (Python authority vs
-native representation), TRANSLATE_ERROR 23 — before: GREEN 1,816 / PARITY_GAP 128. The lines
+native representation), TRANSLATE_ERROR 23 — before: GREEN 1,816 / PARITY_GAP 128. **Since the rebuild after
+FHIR4-57/58 (dev `62f53a961ca`, 2026-11-26)** the real engine's CQL parity gaps are 0 (GREEN
+1,966, BOTH_FAIL 7, ENGINE_DIFF 42, TRANSLATE_ERROR 23) and the FHIRPath R4 corpus is 1,001 of
+1,001 green on the simulator AND real duckdb-wasm. The lines
 below are the hand-written-bundle baseline and stay as history.
 
 - Contract: 116 reference statements; 1 wasm-only macro (`Coalesce`); 53 same-name macros with

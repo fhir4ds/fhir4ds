@@ -52,9 +52,11 @@ jobs:
   # Tier B real-browser audit with the whole CQL corpus on real duckdb-wasm. The per-PR
   # gate (ci.yml, cleanroom job) runs the curated families only; this scheduled job adds B5.
   wasm-parity:
-    name: WASM parity - whole CQL corpus + QI-Core measures on real duckdb-wasm
+    name: WASM parity - whole CQL corpus + QI-Core and US-Core measures on real duckdb-wasm
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # US-Core 2025 dominates the job: translating all 74 measures takes ~25 min and running
+    # them ~35 min more on a local runner, on top of QI-Core (~20 min) and Tier B.
+    timeout-minutes: 150
 
     steps:
       - name: Checkout
@@ -88,8 +90,9 @@ jobs:
           FHIR4DS_WASM_FULL_CORPUS: "1"
         run: python -m pytest fhir4ds/operations/tests/test_wasm_parity_tier_b.py -q -p no:cacheprovider
 
-      # Tier C: every QI-Core 2025 measure's real population SQL on real duckdb-wasm. The whole
-      # suite is too slow for a PR; the PR job (ci.yml) runs the curated set.
+      # Tier C: every measure's real population SQL on real duckdb-wasm, first QI-Core 2025,
+      # then US-Core 2025. The whole suites are too slow for a PR; the PR job (ci.yml) runs a
+      # curated set. Each suite is its own step so one failing does not hide the other.
       - name: Checkout DQM conformance fixtures (Tier C)
         run: git submodule update --init tests/data/ecqm-content-qicore-2025
 
@@ -98,6 +101,16 @@ jobs:
           FHIR4DS_REQUIRE_WASM_PARITY: "1"
           FHIR4DS_REQUIRE_WASM_REAL: "1"
           FHIR4DS_WASM_TIER_C_SUITE: "qi-core-2025"
+        run: python -m pytest fhir4ds/operations/tests/test_wasm_parity_tier_c.py -q -p no:cacheprovider
+
+      - name: Checkout DQM conformance fixtures (Tier C, US-Core)
+        run: git submodule update --init tests/data/dqm-content-cms-2025
+
+      - name: Tier C (whole US-Core 2025 suite on the real engine)
+        env:
+          FHIR4DS_REQUIRE_WASM_PARITY: "1"
+          FHIR4DS_REQUIRE_WASM_REAL: "1"
+          FHIR4DS_WASM_TIER_C_SUITE: "us-core-2025"
         run: python -m pytest fhir4ds/operations/tests/test_wasm_parity_tier_c.py -q -p no:cacheprovider
 
       - name: Upload WASM parity reports
