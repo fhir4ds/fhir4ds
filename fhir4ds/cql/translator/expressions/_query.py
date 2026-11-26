@@ -1,7 +1,7 @@
 """Query translation mixin for CQL to SQL."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, Tuple
 
 from ...parser.ast_nodes import (
     BinaryExpression,
@@ -4727,6 +4727,62 @@ class QueryMixin:
         )
         return root_ast is node
 
+    @staticmethod
+    def _value_projection_column(select) -> Tuple[bool, Any]:
+        """Detect a query source whose inner select projects a VALUE.
+
+        CQL 1.5 §Query: the alias of a query source binds to each ELEMENT of the
+        source's result.  When the source is itself a query whose ``return``
+        projects a computed value — ``( (... ) C return C.id ) X`` — each row of
+        the source IS that value, so ``X`` denotes the projected EXPRESSION, not
+        a resource row and not a transient column name.
+
+        Returns ``(is_value_projection, projection_expr)``.  Row-shaped
+        projections (``SELECT *`` / ``<alias>.resource``) are not value
+        projections: they keep row semantics (``X.<property>`` ->
+        ``X.resource`` navigation).
+        """
+        if select is None or not getattr(select, "columns", None):
+            return False, None
+        first = select.columns[0]
+        first_expr = first.expr if isinstance(first, SQLAlias) else first
+        is_row_shape = (
+            isinstance(first_expr, SQLIdentifier) and first_expr.name in ("*", "resource")
+        ) or (
+            isinstance(first_expr, SQLQualifiedIdentifier)
+            and first_expr.parts
+            and first_expr.parts[-1] == "resource"
+        )
+        return (not is_row_shape), first_expr
+
+    def _bind_value_projection_alias(self, alias: str, value_expr, source_ast) -> None:
+        """Bind a query alias to the VALUE its source projects (CQL 1.5 §Query).
+
+        FHIR4-66/68: the alias must resolve to the projection EXPRESSION, not to
+        a column named after the alias.  A name-based binding is invalidated by
+        every downstream SQL rewrite that renames the projection column — the
+        definition wrap relabels a list define's single column to ``value``
+        (``CTEManager._wrap_definition_cte``), which turned ``where X = 'c2'``
+        into ``WHERE X = 'c2'`` over a select that no longer has an ``X``
+        column (``Binder Error: Referenced column "X" not found``).  Registering
+        the expression keeps WHERE/RETURN/let references and property access
+        (``X.coding``) correct whatever the surrounding SQL does to the column
+        name, and it lets patient correlation reach the source's own FROM alias
+        instead of a derived-table alias.
+
+        A BARE column reference (``SELECT value FROM "_fn_" ...`` — the
+        promoted-function scalar lookup) is NOT rebound: the column has no row
+        scope of its own, so property access on it would be re-pointed at a
+        non-existent ``<column>.resource``.  Such sources keep the registration
+        their shape was built for.
+        """
+        if isinstance(value_expr, SQLIdentifier):
+            self.context.add_alias(alias, table_alias=alias)
+        else:
+            self.context.add_alias(alias, ast_expr=value_expr)
+        if source_ast is not None:
+            self.context._alias_source_asts[alias] = source_ast
+
     def _translate_query(self, node, usage: ExprUsage = ExprUsage.LIST) -> SQLExpression:
         """
         Handle CQL Query expressions:
@@ -4887,8 +4943,15 @@ class QueryMixin:
                         limit=_inner_sel.limit,
                         distinct=_inner_sel.distinct,
                     )
-                    self.context.add_alias(alias, table_alias=alias)
-                    self.context._alias_source_asts[alias] = _src0_expr
+                    # A nested query that projects a VALUE binds the alias to
+                    # that value (FHIR4-66/68); row-shaped sources keep row
+                    # semantics.
+                    _vp_is_value, _vp_expr = self._value_projection_column(_inner_sel)
+                    if _vp_is_value:
+                        self._bind_value_projection_alias(alias, _vp_expr, _src0_expr)
+                    else:
+                        self.context.add_alias(alias, table_alias=alias)
+                        self.context._alias_source_asts[alias] = _src0_expr
                 elif isinstance(source_expr, SQLArray):
                     source_expr = SQLFunctionCall(name="unnest", args=[source_expr])
             else:
@@ -5782,7 +5845,43 @@ class QueryMixin:
                     inner_query = source_expr
                     if isinstance(inner_query, SQLSubquery):
                         inner_query = inner_query.query
-                    if isinstance(inner_query, SQLSelect) and inner_query.where:
+                    # Nested query source whose projection is a computed VALUE
+                    # (e.g., ``[X] x return e a where a is T``): the alias binds
+                    # to each element VALUE (CQL 1.5 §Query), so preserve the
+                    # inner projection instead of flattening to
+                    # ``SELECT * FROM <cte>`` which silently discards the
+                    # return expression.  Row-shaped projections
+                    # (``*``/``.resource``) keep the flatten.
+                    #
+                    # FHIR4-66/68: this detection must run BEFORE the
+                    # ``inner_query.where`` branch below.  An inner WHERE made
+                    # that branch win and wrap the value projection in a
+                    # derived table (``SELECT * FROM (<projection>) AS X``),
+                    # whose column is unnamed and whose patient correlation then
+                    # addressed the derived alias (``X.patient_id``) —
+                    # ``Binder Error: Referenced table "X" not found``.
+                    _proj_sel = inner_query if isinstance(inner_query, SQLSelect) else None
+                    _is_value_projection, _proj_first = self._value_projection_column(_proj_sel)
+                    if (
+                        _is_value_projection
+                        and isinstance(_proj_sel.from_clause, SQLAlias)
+                        and _proj_sel.from_clause.alias
+                    ):
+                        result = SQLSelect(
+                            columns=[
+                                SQLAlias(expr=_proj_first, alias=alias),
+                            ],
+                            from_clause=_proj_sel.from_clause,
+                            where=_proj_sel.where,
+                            joins=_proj_sel.joins,
+                            group_by=_proj_sel.group_by,
+                            having=_proj_sel.having,
+                            order_by=_proj_sel.order_by,
+                            limit=_proj_sel.limit,
+                            distinct=_proj_sel.distinct,
+                        )
+                        self._bind_value_projection_alias(alias, _proj_first, source_expr_node)
+                    elif isinstance(inner_query, SQLSelect) and inner_query.where:
                         result = SQLSelect(
                             columns=[SQLIdentifier(name="*")],
                             from_clause=SQLAlias(
@@ -5796,59 +5895,15 @@ class QueryMixin:
                         # 2-column scalar subquery and loses correlation).
                         self.context.add_alias(alias, table_alias=alias, cte_name=provisional_cte_name)
                     else:
-                        # Nested query source whose projection is a computed
-                        # value (e.g., ``[X] x return e a where a is T``): the
-                        # alias binds to each element VALUE (CQL 1.5 §Query),
-                        # so preserve the inner projection instead of
-                        # flattening to ``SELECT * FROM <cte>`` which silently
-                        # discards the return expression.  Row-shaped
-                        # projections (``*``/``.resource``) keep the flatten.
-                        _proj_sel = inner_query if isinstance(inner_query, SQLSelect) else None
-                        _is_value_projection = False
-                        _proj_first = None
-                        if _proj_sel is not None and _proj_sel.columns:
-                            _c0 = _proj_sel.columns[0]
-                            _c0e = _c0.expr if isinstance(_c0, SQLAlias) else _c0
-                            _proj_first = _c0e
-                            _is_row_shape = (
-                                isinstance(_c0e, SQLIdentifier)
-                                and _c0e.name in ("*", "resource")
-                            ) or (
-                                isinstance(_c0e, SQLQualifiedIdentifier)
-                                and _c0e.parts
-                                and _c0e.parts[-1] == "resource"
+                        # Use the first placeholder as the FROM source
+                        result = SQLSelect(
+                            columns=[SQLIdentifier(name="*")],
+                            from_clause=SQLAlias(
+                                expr=inner_placeholder,
+                                alias=alias
                             )
-                            _is_value_projection = not _is_row_shape
-                        if (
-                            _is_value_projection
-                            and isinstance(_proj_sel.from_clause, SQLAlias)
-                            and _proj_sel.from_clause.alias
-                        ):
-                            result = SQLSelect(
-                                columns=[
-                                    SQLAlias(expr=_proj_first, alias=alias),
-                                ],
-                                from_clause=_proj_sel.from_clause,
-                                where=_proj_sel.where,
-                                joins=_proj_sel.joins,
-                                group_by=_proj_sel.group_by,
-                                having=_proj_sel.having,
-                                order_by=_proj_sel.order_by,
-                                limit=_proj_sel.limit,
-                                distinct=_proj_sel.distinct,
-                            )
-                            self.context.add_alias(alias, table_alias=alias)
-                            self.context._alias_source_asts[alias] = source_expr_node
-                        else:
-                            # Use the first placeholder as the FROM source
-                            result = SQLSelect(
-                                columns=[SQLIdentifier(name="*")],
-                                from_clause=SQLAlias(
-                                    expr=inner_placeholder,
-                                    alias=alias
-                                )
-                            )
-                            self.context.add_alias(alias, table_alias=alias, cte_name=provisional_cte_name)
+                        )
+                        self.context.add_alias(alias, table_alias=alias, cte_name=provisional_cte_name)
                 else:
                     cte_key = _extract_cte_name(source_expr)
                     result = SQLSelect(
@@ -5882,6 +5937,7 @@ class QueryMixin:
                         _inner_sel = source_expr
                     elif isinstance(source_expr, SQLSubquery) and isinstance(source_expr.query, SQLSelect):
                         _inner_sel = source_expr.query
+                    _vp_bind = None
                     if _inner_sel is not None and not (
                         len(_inner_sel.columns) == 1
                         and isinstance(_inner_sel.columns[0], SQLIdentifier)
@@ -5905,6 +5961,23 @@ class QueryMixin:
                             _cols = [replace_qualified_alias(c, _old_alias, alias) for c in _cols]
                             if _where is not None:
                                 _where = replace_qualified_alias(_where, _old_alias, alias)
+                        # FHIR4-66/68: a single computed VALUE column makes the
+                        # alias denote that VALUE (CQL 1.5 §Query), so bind it to
+                        # the expression.  Without this, `X` addressed a resource
+                        # row (`X.resource = 'c2'` — Conversion Error on the JSON
+                        # cast) and any reference was renamed out of existence by
+                        # the definition wrap.  The projection keeps its authored
+                        # (unnamed) spelling: the column name is never what
+                        # downstream SQL refers to.  A BARE column projection is
+                        # left on this path's own registration (it has no row
+                        # scope to navigate from).
+                        _vp_is_value, _ = self._value_projection_column(_inner_sel)
+                        if _vp_is_value and len(_cols) == 1:
+                            _vp_col = (
+                                _cols[0].expr if isinstance(_cols[0], SQLAlias) else _cols[0]
+                            )
+                            if not isinstance(_vp_col, SQLIdentifier):
+                                _vp_bind = _vp_col
                         result = SQLSelect(
                             columns=_cols,
                             from_clause=from_clause,
@@ -5919,13 +5992,16 @@ class QueryMixin:
                                 alias=alias
                             )
                         )
-                    # Preserve ast_expr from any prior registration so that
-                    # computed return-clause expressions (e.g., intervals from
-                    # inner query return clauses) remain accessible when the
-                    # alias is later referenced in temporal operators.
-                    _prev_sym = self.context.lookup_symbol(alias)
-                    _prev_ast = getattr(_prev_sym, 'ast_expr', None) if _prev_sym else None
-                    self.context.add_alias(alias, table_alias=alias, cte_name=cte_name, ast_expr=_prev_ast)
+                    if _vp_bind is not None:
+                        self._bind_value_projection_alias(alias, _vp_bind, source_expr_node)
+                    else:
+                        # Preserve ast_expr from any prior registration so that
+                        # computed return-clause expressions (e.g., intervals from
+                        # inner query return clauses) remain accessible when the
+                        # alias is later referenced in temporal operators.
+                        _prev_sym = self.context.lookup_symbol(alias)
+                        _prev_ast = getattr(_prev_sym, 'ast_expr', None) if _prev_sym else None
+                        self.context.add_alias(alias, table_alias=alias, cte_name=cte_name, ast_expr=_prev_ast)
 
         # Set resource_alias so scalar subquery correlations (e.g., patient_id)
         # reference the correct outer alias instead of hardcoded "_pt".
