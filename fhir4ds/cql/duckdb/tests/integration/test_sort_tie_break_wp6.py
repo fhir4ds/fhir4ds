@@ -197,3 +197,17 @@ def test_tied_rows_come_out_in_id_order_whatever_the_source_order(insertion_orde
             # The population surface transports these defines as one-item lists.
             assert _as_list(result["FirstId"]) == ["m-a"], (engine, insertion_order, result)
             assert _as_list(result["LastId"]) == ["m-c"], (engine, insertion_order, result)
+
+
+#: ``(<query> return all {...} sort by K).field`` as the source of an aggregate —
+#: the CMS136 shape (``(...).period).rolloutIntervals()``). The tuple-field
+#: extraction is rewritten into ``list(...)`` over the query's rows.
+_CQL_TUPLE_FIELD = """
+library TupleFieldSort version '1.0'
+using FHIR version '4.0.1'
+context Patient
+define "Requests": [MedicationRequest]
+define "IdsInSortOrder":
+  ("Requests" M return all {id: M.id, authored: M.authoredOn} sort by authored).id I
+    aggregate R starting (null as List<String>): R union {I}
+"""
