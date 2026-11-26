@@ -421,6 +421,19 @@ class IntervalMixin:
         symbol = self.context.lookup_symbol(alias_name)
         if symbol and getattr(symbol, "ast_expr", None) is not None:
             _ast = symbol.ast_expr
+            # FHIR4-66/68: a VALUE-projection query source binds the alias to
+            # the projection EXPRESSION, so `_ast` already denotes the
+            # element's VALUE — not a resource row.  The primary-date-path
+            # coercion below would ask for the resource's property on that
+            # value (`fhirpath_text(<value>, 'performedPeriod')`), which
+            # answers NULL for EVERY patient.  That is silent
+            # under-inclusion, not an error (it regressed FHIR4-48's
+            # `with … such that` case when the alias was rebound without this
+            # guard), so a value binding is returned unchanged.
+            if getattr(symbol, "is_value_projection", False) and not isinstance(
+                _ast, (SQLSubquery, SQLSelect)
+            ):
+                return sql_expr
             # Unwrap SQLSubquery to get the inner SQLSelect
             _inner = _ast
             if isinstance(_inner, SQLSubquery) and isinstance(

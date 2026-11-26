@@ -94,6 +94,13 @@ class SymbolInfo:
     ast_expr: Any = None  # AST expression object (set during Phase 1, converted to sql_expr in Phase 3)
     table_alias: Optional[str] = None  # Table alias for CTE references (e.g., "ESRDEncounter" -> table alias)
     cte_name: Optional[str] = None  # CTE name this alias points to (e.g., "Encounter: ValueSet")
+    # True when the alias is bound to the VALUE a query source projects
+    # (``( (...) C return C.id ) X`` -> ``X`` IS the projected value) rather
+    # than to a resource ROW.  Value bindings must never be treated as FHIR
+    # resources: extracting a property from a value (``X.performed`` ->
+    # ``fhirpath_text(<value>, 'performedPeriod')``) answers NULL for every
+    # patient, which is a silent under-inclusion rather than an error.
+    is_value_projection: bool = False
 
 
 @dataclass
