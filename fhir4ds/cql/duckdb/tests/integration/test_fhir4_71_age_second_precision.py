@@ -111,35 +111,6 @@ _AGE_CASES: list[tuple[str, str, list[str | None], str | None]] = [
      [PATIENT_BAD_BIRTH, "2000-05-15T00:00:01Z"], None),
 ]
 
-#: FHIR4-71 rebuild window. The bundled ``cql.duckdb_extension`` predates the
-#: ``treat_second_as_exact`` C++ mirror, so the C++-served age surface keeps the
-#: pre-fix uncertainty interval until the bundles are rebuilt
-#: (``python3 scripts/build_extension_bundles.py --build --abi <slot>``).
-#: ``_native_age_carve_out_is_current`` probes the LOADED binary, so these
-#: expectations flip automatically once the rebuilt extension ships — delete the
-#: map and its branch at that point.
-_NATIVE_SECOND_PRECISION_STALE: dict[str, str | None] = {
-    "SecondsOneSecond": '{"start":0,"end":1,"lowClosed":true,"highClosed":true}',
-    "SecondsOneHour": '{"start":3599,"end":3600,"lowClosed":true,"highClosed":true}',
-    # Sum over two crisp second-precision ages (see the consumer test).
-    "AgeSum": '{"start":1,"end":3,"lowClosed":true,"highClosed":true}',
-}
-
-
-def _native_age_carve_out_is_current(con: duckdb.DuckDBPyConnection) -> bool:
-    """True when the loaded cql extension implements the FHIR4-71 age carve-out."""
-    row = con.execute(
-        "SELECT CalculateAgeInSecondsAt('2000-05-15T00:00:00Z', '2000-05-15T00:00:01Z')"
-    ).fetchone()[0]
-    return row == "1"
-
-
-def _native_expected(native_current: bool, label: str, expected: object) -> object:
-    if native_current:
-        return expected
-    return _NATIVE_SECOND_PRECISION_STALE.get(label, expected)
-
-
 def test_cql_age_second_precision_python_authority_is_crisp() -> None:
     """The Python UDFs (the desktop conformance authority) answer crisply."""
     con = _python_only_connection()
@@ -154,24 +125,23 @@ def test_cql_age_second_precision_python_authority_is_crisp() -> None:
 def test_cql_age_second_precision_native_and_no_python_parity() -> None:
     """Native-loaded and bundled-C++-only engines agree with the authority.
 
-    The two ``SecondsOneSecond`` / ``SecondsOneHour`` cells are PENDING THE
-    EXTENSION REBUILD (see ``_NATIVE_SECOND_PRECISION_STALE``); every other cell
-    is engine-stable and asserted directly.
+    Every cell is asserted directly: the 1.5.5 / 1.5.6 / 2.0.0 bundles were
+    rebuilt from the committed C++ (``scripts/build_extension_bundles.py
+    --build --abi <slot>``, verify 6/6) after this card landed, so the
+    ``treat_second_as_exact`` mirror is live on all three engines.
     """
     cpp = _cpp_connection()
     try:
-        native_current = _native_age_carve_out_is_current(cpp)
         for label, function, args, expected in _AGE_CASES:
             row = cpp.execute(f"SELECT {function}(?, ?)", args).fetchone()
-            assert row == (_native_expected(native_current, label, expected),), label
+            assert row == (expected,), label
     finally:
         cpp.close()
 
     with no_python_connection() as no_py:
-        native_current = _native_age_carve_out_is_current(no_py)
         for label, function, args, expected in _AGE_CASES:
             row = no_py.execute(f"SELECT {function}(?, ?)", args).fetchone()
-            assert row == (_native_expected(native_current, label, expected),), label
+            assert row == (expected,), label
 
 
 def test_cql_age_second_precision_translated_sql_end_to_end() -> None:
@@ -199,15 +169,13 @@ define SecondsDayPrecisionBirthDate: CalculateAgeInSecondsAt(@2000-05-15, @2000-
         for name, sql in translated.items():
             row = py.execute(f"SELECT {sql}").fetchone()
             assert row == (expected[name],), f"python {name}: {row!r}"
-        native_current = _native_age_carve_out_is_current(cpp)
         for name, sql in translated.items():
             row = cpp.execute(f"SELECT {sql}").fetchone()
-            assert row == (_native_expected(native_current, name, expected[name]),), name
+            assert row == (expected[name],), name
         with no_python_connection() as no_py:
-            native_current = _native_age_carve_out_is_current(no_py)
             for name, sql in translated.items():
                 row = no_py.execute(f"SELECT {sql}").fetchone()
-                assert row == (_native_expected(native_current, name, expected[name]),), name
+                assert row == (expected[name],), name
     finally:
         py.close()
         cpp.close()
@@ -239,15 +207,13 @@ define AgeSum: Sum({CalculateAgeInSecondsAt(@2000-05-15T00:00:00Z, @2000-05-15T0
         for name, sql in translated.items():
             row = py.execute(f"SELECT {sql}").fetchone()
             assert row == (expected[name],), f"python {name}: {row!r}"
-        native_current = _native_age_carve_out_is_current(cpp)
         for name, sql in translated.items():
             row = cpp.execute(f"SELECT {sql}").fetchone()
-            assert row == (_native_expected(native_current, name, expected[name]),), name
+            assert row == (expected[name],), name
         with no_python_connection() as no_py:
-            native_current = _native_age_carve_out_is_current(no_py)
             for name, sql in translated.items():
                 row = no_py.execute(f"SELECT {sql}").fetchone()
-                assert row == (_native_expected(native_current, name, expected[name]),), name
+                assert row == (expected[name],), name
     finally:
         py.close()
         cpp.close()
