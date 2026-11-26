@@ -82,6 +82,28 @@ jobs:
           fhir4ds/viewdef
           fhir4ds/operations/tests
 
+      # The curated list above does NOT include fhir4ds/cql/duckdb/tests, so a dev tip can be
+      # red for the whole translator regression family while CI stays green (observed
+      # 2026-11-26: reverting FHIR4-66/68 left 12 tests failing in the two files below and no
+      # job noticed). These are the dependency tripwires: they cross-check the cards that
+      # build on each other (66/68 -> 65/67/70/72), and a regression shows up in seconds.
+      # The whole tree is too slow for PR CI; this explicit set is the cheap floor.
+      - name: Translator dependency tripwires (fhir4ds/cql/duckdb/tests)
+        env:
+          FHIR4DS_REQUIRE_WASM_PARITY: "1"
+        run: >
+          python -m pytest
+          fhir4ds/cql/duckdb/tests/integration/test_fhir4_60_list_valued_query_source.py
+          fhir4ds/cql/duckdb/tests/integration/test_fhir4_62_definition_root_list_query.py
+          fhir4ds/cql/duckdb/tests/integration/test_fhir4_63_count_query_alias.py
+          fhir4ds/cql/duckdb/tests/integration/test_fhir4_65_membership_over_list_define.py
+          fhir4ds/cql/duckdb/tests/integration/test_fhir4_66_68_value_projection_alias.py
+          fhir4ds/cql/duckdb/tests/integration/test_fhir4_67_setops_over_list_define.py
+          fhir4ds/cql/duckdb/tests/integration/test_fhir4_69_aggregate_over_scalar.py
+          fhir4ds/cql/duckdb/tests/integration/test_fhir4_70_list_consumer_scalarization.py
+          fhir4ds/cql/duckdb/tests/integration/test_fhir4_72_list_operand_determinism.py
+          fhir4ds/dqm/tests/integration/test_strict_scalar_subqueries_fhir4_48.py
+
   python-311:
     name: Python 3.11 compatibility
     runs-on: ubuntu-latest
