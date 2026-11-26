@@ -4791,6 +4791,53 @@ class QueryMixin:
         if source_ast is not None:
             self.context._alias_source_asts[alias] = source_ast
 
+    def _sort_tie_break(self, node: Any, result: Any) -> list[tuple[Any, str]]:
+        """Final ORDER BY keys of a row-producing ``sort by`` over resource rows.
+
+        CQL 1.5 leaves the order of equal sort keys undefined, and DuckDB's tie
+        order follows the query plan: the SAME translated SQL returned the two
+        MedicationRequests of CMS136 (US-Core 2025) that share an authored date
+        in source order on desktop and in the other order on duckdb-wasm, so an
+        order-dependent ``aggregate`` produced different intervals. Keys that
+        exist in the data give every engine one answer. The first is the
+        resource id (the tie-break ``_lists.py`` already uses for First/Last
+        over a sorted query); the resource text follows, so the rule is total
+        even when a retrieve spans resource types and two rows share an id.
+        Only resource-row sources get it, and never together with DISTINCT or
+        GROUP BY, where DuckDB rejects an ORDER BY on a column that is not
+        projected or grouped.
+        """
+        sources = node.source if isinstance(node.source, list) else [node.source]
+        source = sources[0] if sources else None
+        expression = getattr(source, "expression", None)
+        if isinstance(expression, Retrieve):
+            resource_rows = True
+        elif isinstance(expression, Identifier):
+            meta = self.context.definition_meta.get(expression.name)
+            resource_rows = bool(
+                meta and meta.has_resource and meta.shape == RowShape.RESOURCE_ROWS
+            )
+        else:
+            resource_rows = False
+        if (
+            not resource_rows
+            or getattr(result, "distinct", False)
+            or getattr(result, "group_by", None)
+        ):
+            return []
+        from_clause = result.from_clause
+        alias = getattr(from_clause, "alias", None)
+        if not isinstance(from_clause, SQLAlias) or not alias:
+            return []
+        resource = SQLQualifiedIdentifier(parts=[alias, "resource"])
+        resource_id = SQLFunctionCall(
+            name="json_extract_string", args=[resource, SQLLiteral(value="$.id")]
+        )
+        return [
+            (resource_id, "ASC NULLS LAST"),
+            (SQLCast(expression=resource, target_type="VARCHAR"), "ASC NULLS LAST"),
+        ]
+
     def _translate_query(self, node, usage: ExprUsage = ExprUsage.LIST) -> SQLExpression:
         """
         Handle CQL Query expressions:
@@ -7141,6 +7188,8 @@ class QueryMixin:
                 # full clause set (joins/group_by/having/limit/distinct) —
                 # the old reconstruction dropped them.
                 if _order_items:
+                    # Ties on the sort key are broken by the resource id (WP-6).
+                    _order_items = _order_items + self._sort_tie_break(node, result)
                     result = SQLSelect(
                         columns=result.columns,
                         from_clause=result.from_clause,
