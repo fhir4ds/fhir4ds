@@ -8200,6 +8200,56 @@ defect, verified identical before and after this change):
 * `Count(<list-valued expression>)` outside a query can reference the alias as a
   table (`fhirpath_text(C.resource, ...)` → `Referenced table "C" not found`).
 
+## A list-valued CONSUMER materializes the full list; the define keeps its row CTE (FHIR4-65)
+
+The FHIR4-60 rule covers a query alias inside a query body. Its mirror image is
+outside: a define whose body is a query with a `return` clause
+(`define Ids: ([Condition] C return C.id) X`) materializes as
+`RowShape.PATIENT_MULTI_VALUE` — ONE ROW PER ELEMENT. Consuming it through the
+generic SCALAR identifier lookup emitted
+`(SELECT sub.value FROM "Ids" ... LIMIT 1)`, so a LIST operator inspected ONE
+row:
+
+    'c1' in "Ids"   -- Ids = [c2, c1, c3] -> FALSE   (c1 IS in Ids)
+
+That is a SILENT WRONG ANSWER, not an error: it reads as correct whenever the
+probed element happens to be the row the LIMIT kept, and both engines answer
+wrong identically (so a parity probe looks clean). Carded and fixed as
+FHIR4-65; the same family produced FHIR4-62 (doubled alias) and FHIR4-63
+(aggregate over a query alias).
+
+The rule, and the boundary that keeps DQM green:
+
+* **Consumers materialize the full list; the define keeps its row CTE.**
+  `OperatorsMixin._multi_row_define_list` delegates to
+  `_list_operator_full_list_source` (`_list_operators`, CQL-19 EXPLORER
+  doctrine), producing `COALESCE((SELECT list(<val>) FROM "<Def>" WHERE
+  patient_id = _pt.patient_id), [])` — the same shape `Count(<define>)` already
+  produced.
+* **NEVER coerce in identifier resolution.** `_core.py`'s identifier /
+  promoted-lookup branches must not add `list(sub.value)`: the flattening
+  unwraps an aggregate next to bare `patient_id` columns and DuckDB demands
+  GROUP BY (DQM 47 -> 28 observed). List coercion belongs at the consumer.
+* **The gate**: `PATIENT_MULTI_VALUE` AND NOT `stores_list_value` AND NOT
+  `has_resource`. A `stores_list_value` define (`define G:
+  Patient.name.given`) already holds the WHOLE list in one row, and a
+  `has_resource` define (`define Obs: [Observation]`) is a resource CTE scan —
+  both keep the scalar lookup, which is correct for them. Mirrors
+  `_union_operand_as_list` so one definition of "element-rows define" serves the
+  set-operation and the membership consumers.
+* **Library-qualified names** (`Common."SharedIds"`) are registered in
+  `definition_meta` under their DOTTED name and had the identical defect; the
+  parser spells them as `Property(Identifier('Common'), 'Def')` in an operand
+  position, so a Property is claimed only when its dotted name resolves.
+
+Audited consumers (translation-only, both engines) after FHIR4-65: `in` /
+`contains` / `~in` are FIXED; `Count/Sum/Max/Avg/Length/Exists/Distinct/Skip/
+Take/Tail/Union/SingletonFrom` were already correct. STILL SCALARIZED and carded:
+`=`/`!=`/`~`, `includes`/`properly includes`, `IndexOf`, `First`, `Last`, and
+arithmetic (`<define> + 1`) — the last four SILENTLY wrong. Corpus measurement:
+0 firings across qi-core-2025 (47) and us-core-2025 (74) for the membership
+gate, so the fix cannot move the DQM gate.
+
 ## `within N unit of` is Time-aware (FHIR4-50)
 
 The whole family (`within`, `properly within`, `starts/ends [properly] within`)

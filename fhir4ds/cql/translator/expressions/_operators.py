@@ -1257,6 +1257,88 @@ class OperatorsMixin:
         right_kind = self._temporal_list_ast_kind(right_ast)
         return bool(left_kind and right_kind and left_kind == right_kind)
 
+    def _multi_row_define_list(self, node: object) -> Optional[SQLExpression]:
+        """FHIR4-65: materialize a MULTI-ROW list-valued define as a list.
+
+        A define whose body is a query with a ``return`` clause
+        (``define Ids: ([Condition] C return C.id) X``) materializes as
+        ``RowShape.PATIENT_MULTI_VALUE`` — ONE ROW PER ELEMENT, with the
+        element in ``meta.value_column``. Consuming such a define through the
+        generic SCALAR identifier lookup emits
+        ``(SELECT sub.value FROM "Ids" ... LIMIT 1)``, so a list operator
+        silently inspected ONE element: with Conditions c1/c2/c3,
+        ``'c1' in "Ids"`` answered FALSE whenever c1 was not the single row
+        the LIMIT happened to keep (FHIR4-65 — a SILENT WRONG ANSWER that
+        reads as correct whenever the probed element happens to be row #1).
+
+        Membership must apply to the WHOLE list, so aggregate the define's
+        rows into the per-patient element list — the same shape
+        ``Count(<define>)`` already produces through
+        ``_list_operator_full_list_source`` (CQL-19 EXPLORER QA-001/QA-002
+        doctrine: consumers materialize the full list, the define itself
+        keeps its row CTE).
+
+        Returns ``None`` — leaving the caller's existing lowering untouched —
+        for every operand that is not a multi-row element-valued define:
+
+        * ``stores_list_value`` defines (static list literals, dynamic
+          multi-valued property defines such as ``define G: Patient.name.given``):
+          the CTE value column already holds the WHOLE list in one row, so
+          the scalar lookup is correct;
+        * ``has_resource`` defines (``define Obs: [Observation]``): a resource
+          CTE scan is not a value list;
+        * non-define operands (retrieves, queries, unions, arbitrary
+          expressions, and dotted references that do not resolve to a
+          definition): they keep their own list-operator paths and are never
+          scalarized.
+
+        The gate mirrors ``_operators.py::_union_operand_as_list`` (CQL-19
+        EXPLORER QA-001) so one definition of "element-rows define" serves
+        both the set-operation and the membership consumers.
+
+        Library-qualified references (``Common."SharedIds"``) are registered in
+        ``definition_meta`` under their DOTTED name (the included-library CTE
+        is literally named ``"Common.SharedIds"``), so the same gate applies —
+        the qualified spelling had the identical one-row defect. The parser
+        produces that reference as a ``Property`` (``Identifier('Common')`` +
+        path ``'SharedIds'``) in an operator operand position, so a Property is
+        only claimed when its dotted name actually resolves to a definition.
+        """
+        from ...parser.ast_nodes import Identifier as CQLIdentifier
+        from ...parser.ast_nodes import Property as CQLProperty
+        from ...parser.ast_nodes import QualifiedIdentifier as CQLQualifiedIdentifier
+
+        if isinstance(node, CQLQualifiedIdentifier) and getattr(node, "parts", None):
+            name = ".".join(node.parts)
+        elif isinstance(node, CQLIdentifier):
+            name = node.name
+        elif (
+            isinstance(node, CQLProperty)
+            and isinstance(getattr(node, "source", None), CQLIdentifier)
+            and getattr(node, "path", None)
+        ):
+            # Library-qualified define reference (`Common."SharedIds"`).
+            name = f"{node.source.name}.{node.path}"
+        else:
+            return None
+        if self.context.is_alias(name):
+            return None
+        meta = self.context.definition_meta.get(name)
+        if meta is None:
+            return None
+        if getattr(meta, "stores_list_value", False):
+            return None
+        if getattr(meta, "has_resource", False):
+            return None
+        if meta.shape != RowShape.PATIENT_MULTI_VALUE:
+            return None
+        full_list_source = getattr(self, "_list_operator_full_list_source", None)
+        if full_list_source is None:
+            return None
+        if not isinstance(node, CQLIdentifier):
+            node = CQLIdentifier(name=name, quoted=True)
+        return full_list_source(node)
+
     def _list_contains_call(
         self,
         list_sql: SQLExpression,
@@ -3453,6 +3535,12 @@ class OperatorsMixin:
                 )
             from ._utils import _promote_fhirpath_text_list as _promote
             list_sql = _promote(list_sql)
+            # FHIR4-65: multi-row list-valued define containers are scalar
+            # `LIMIT 1` lookups — equivalence membership must see the whole
+            # list, exactly like the `in` / `contains` paths.
+            _equiv_container = self._multi_row_define_list(list_ast)
+            if _equiv_container is not None:
+                list_sql = _equiv_container
             return self._list_contains_call(
                 list_sql, elem_sql, list_ast, elem_ast, equivalent=True
             )
@@ -4377,6 +4465,14 @@ class OperatorsMixin:
                     ],
                 )
             return self._list_contains_call(left, right, expr.left, expr.right)
+        # FHIR4-65 (mirror of the `in` fix): a multi-row list-valued define on
+        # the CONTAINER side is the scalar `LIMIT 1` lookup here too, so
+        # `<Ids> contains X` inspected one element. Test the whole list.
+        container_list = self._multi_row_define_list(getattr(expr, "left", None))
+        if container_list is not None:
+            return self._list_contains_call(
+                container_list, right, expr.left, expr.right
+            )
         if isinstance(left, SQLSubquery):
             # Check if the CQL type system indicates this should be an interval
             cql_left = getattr(expr, 'left', None) if expr else None
@@ -5314,6 +5410,16 @@ class OperatorsMixin:
                     )
         if self._is_list_operands(right, left, expr):
             return self._list_contains_call(right, left, expr.right, expr.left)
+        # FHIR4-65: a multi-row list-valued define (`define Ids: ([Condition]
+        # C return C.id) X`) reaches here as the SCALAR identifier lookup
+        # `(SELECT sub.value ... LIMIT 1)`, so `x in Ids` inspected ONE
+        # element. Materialize the whole per-patient element list and test
+        # the full list (same macro family the other list paths use).
+        container_list = self._multi_row_define_list(getattr(expr, "right", None))
+        if container_list is not None:
+            return self._list_contains_call(
+                container_list, left, expr.right, expr.left
+            )
         if isinstance(expr.right, ListExpression):
             # IN list - translate left as SCALAR, list elements as LIST context
             left = self.translate(expr.left, usage=ExprUsage.SCALAR)
