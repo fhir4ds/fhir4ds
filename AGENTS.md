@@ -6912,6 +6912,41 @@ The HTTP adapter stays available behind `--http-base-url` as an explicit
 escape hatch for a remote/isolated terminology server; NOTHING in the
 default or tested path requires it.
 
+### A benchmark leg that codes NOTHING must fail, not report (FHIR4-54, 2026-11-26)
+
+The swallowed-error behaviour above is what makes a *false clean* possible: a
+run finished exit 0 with a complete report whose `gold_accuracy` was 0.0% on
+every axis, whose last pass `uncoded_after_pass` equalled the stripped count,
+and whose `match_grades_written` was `{}` — because every search raised and the
+adapter degraded each to `[]`. That report is indistinguishable from "the
+corpus scored badly", so a broken harness can silently invalidate a whole
+benchmark (same class as FHIR4-45: a gate that cannot see its own failure).
+
+The guard is two-sided, and both halves are load-bearing:
+
+- `piqi_autocoding.assert_autocoding_coded_something()` runs immediately after
+  the auto-coding leg in `run_benchmark` (both the strip and no-strip paths)
+  and raises `AutocodingCoverageError` when the stripped corpus is non-empty
+  and ZERO codings landed. No report is written; the CLI exits 2 with the
+  endpoint coordinates. A zero-resource corpus is not a failure.
+- `InProcessTerminologyEndpoint` keeps CUMULATIVE swallowed-failure counters
+  (`swallowed_failure_count` / `first_swallowed_error` /
+  `degradation_report()`). The breaker's `_consecutive_failures` resets on
+  success and therefore cannot answer "did this run degrade?" — every
+  `self._on_call_failure(...)` call site now passes its reason, and the first
+  one is retained because one representative cause is what explains a leg.
+  A leg that coded SOME resources while swallowing errors still succeeds but
+  is flagged (`autocoding.degraded`, `endpoint_errors`,
+  `first_endpoint_error`) so "clean" and "half-broken" stay distinguishable.
+
+Consequence for future harness work: any row-resilient adapter that converts
+errors into empty results needs a cumulative counter alongside its circuit
+breaker, and any benchmark that writes a report needs a non-zero-work
+tripwire. `run_autocoder` deliberately stays tripwire-free (it is a library
+function; only the report-writing path fails). Tests:
+`fhir4ds/realism/tests/test_piqi_autocoding_fhir4_54.py` — including one that
+bypasses the tripwire to pin the pre-fix false-clean shape as a regression.
+
 ## WASM parity gates — the browser surface is gated like the desktop (2026-11-24, AMUX-175)
 
 The web apps do not run desktop DuckDB: translated SQL runs on duckdb-wasm (core `v1.5.5`)

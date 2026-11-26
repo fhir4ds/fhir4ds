@@ -575,6 +575,19 @@ def evaluate_slice(resources: list[dict], rubric,
 
 # ── auto-coding leg ───────────────────────────────────────────────────
 
+class AutocodingCoverageError(RuntimeError):
+    """The auto-coding leg coded NOTHING, so the run cannot be reported.
+
+    FHIR4-54: a leg whose every terminology search failed degraded to ``[]``
+    through the adapter's row-resilience, and the benchmark then finished
+    exit 0 with a full report whose coverage/exact/code-only were all 0.0%
+    and whose ``match_grades_written`` was ``{}``. That reads as "the corpus
+    scored badly" when the truth is "the harness never ran", which is the
+    same false-clean class as FHIR4-45. Raising is the only honest outcome:
+    a report is only meaningful if at least one resource was coded.
+    """
+
+
 def _autocoded_any(resource: dict) -> bool:
     """True if any CodeableConcept anywhere in the resource carries an
     autocoding extension (walks nested dicts/lists generically)."""
@@ -650,12 +663,68 @@ def run_autocoder(stripped: list[dict], endpoint,
             f"SELECT count(*) FROM {AutoCoder.CACHE_TABLE}").fetchone()[0]
     finally:
         cache_conn.close()
-    return {"cache_rows": int(cache_rows),
-            "engine_version": coder._engine_version,
-            "search_mode": coder._config.search_mode,
-            "min_match_grade": coder._config.min_match_grade,
-            "top_k": coder._config.top_k,
-            "passes": passes}
+    stats = {"cache_rows": int(cache_rows),
+             "engine_version": coder._engine_version,
+             "search_mode": coder._config.search_mode,
+             "min_match_grade": coder._config.min_match_grade,
+             "top_k": coder._config.top_k,
+             "passes": passes}
+    # FHIR4-54: carry the endpoint's swallowed-failure coordinates into the
+    # report so a degraded leg is distinguishable from a clean one. Duck-typed
+    # on purpose: an HTTP endpoint or a test stub need not implement it.
+    degradation = getattr(endpoint, "degradation_report", None)
+    if callable(degradation):
+        stats.update(degradation())
+    return stats
+
+
+def endpoint_error_summary(stats: dict) -> tuple[int, Optional[str]]:
+    """``(swallowed_error_count, first_error_text)`` from a leg's stats."""
+    try:
+        count = int(stats.get("endpoint_errors") or 0)
+    except (TypeError, ValueError):
+        count = 0
+    first = stats.get("first_endpoint_error")
+    return count, (str(first) if first else None)
+
+
+def assert_autocoding_coded_something(stripped: list[dict],
+                                      stats: dict) -> int:
+    """Return the number of coded resources; raise when the leg coded none.
+
+    Called by :func:`run_benchmark` immediately after the auto-coding leg,
+    before any scorecard or report is written (FHIR4-54). ``stripped`` is the
+    MUTATED corpus: a resource counts as coded when an autocoding extension
+    landed on one of its codings.
+
+    A zero-resource input is not a failure (there is nothing to code); an
+    input with codable resources and zero codings always is.
+    """
+    total = len(stripped)
+    coded = sum(1 for r in stripped if _autocoded_any(r))
+    errors, first = endpoint_error_summary(stats)
+    if coded and errors:
+        # Partially degraded: some codings landed, but the leg also swallowed
+        # failures. Flag it so a report reader can tell this apart from a
+        # completely clean run.
+        stats["degraded"] = True
+        _logger.warning(
+            "auto-coding leg swallowed %d endpoint error(s) while coding "
+            "%d/%d resource(s); first error: %s",
+            errors, coded, total, first)
+    if total == 0 or coded:
+        return coded
+    detail = (f", endpoint_errors={errors}, first_endpoint_error={first!r}"
+              if errors else "")
+    raise AutocodingCoverageError(
+        "auto-coding leg produced NO codings for "
+        f"{total} stripped resource(s){detail}. Every terminology search was "
+        "empty or raised and the adapter degraded it to [] — this is a "
+        "harness failure, not a low-scoring corpus, so no report is written. "
+        "Check the medterm4ds search stack / terminology artifacts (the "
+        "adapter logs each swallowed error), then re-run. "
+        "AUTOCODING_ATTEMPTS=" + str(AUTOCODING_ATTEMPTS)
+    )
 
 
 def _autocoded_entries(resource: dict, path: str) -> list[dict]:
@@ -952,6 +1021,11 @@ def run_benchmark(corpus_path: Union[str, Path], output_dir: Union[str, Path],
                 threads=duckdb_threads,
                 test_endpoint=_test_endpoint,
                 isolate=isolate_autocoding)
+            # FHIR4-54: fail fast on a leg that coded nothing, before the
+            # scorecard is recomputed and a report looks merely unimproved.
+            report["autocoding"]["coded_resources"] = (
+                assert_autocoding_coded_something(
+                    slice_resources, report["autocoding"]))
             report["augmentation"] = augmentation_stats(slice_resources)
             report["append_invariants"] = append_invariants(
                 originals, slice_resources)
@@ -981,6 +1055,11 @@ def run_benchmark(corpus_path: Union[str, Path], output_dir: Union[str, Path],
                 threads=duckdb_threads,
                 test_endpoint=_test_endpoint,
                 isolate=isolate_autocoding)
+            # FHIR4-54: fail fast on a leg that coded nothing, before the
+            # BEFORE/CEILING/AFTER legs run on an uncoded corpus.
+            report["autocoding"]["coded_resources"] = (
+                assert_autocoding_coded_something(
+                    stripped, report["autocoding"]))
             report["gold_accuracy"] = gold_accuracy(gold, stripped)
 
         report["baseline"] = evaluate_slice(slice_resources, rubric,
@@ -1269,15 +1348,22 @@ def main(argv: Optional[list[str]] = None) -> int:
               "crashes intermittently in long-lived processes on some "
               "hosts (FHIR4-25)."))
     args = parser.parse_args(argv)
-    report = run_benchmark(args.corpus, args.output_dir,
-                           num_patients=args.num_patients,
-                           skip_autocoding=args.skip_autocoding,
-                           http_base_url=args.http_base_url,
-                           min_match_grade=args.min_match_grade,
-                           search_mode=args.search_mode,
-                           no_strip=args.no_strip,
-                           duckdb_threads=args.duckdb_threads,
-                           isolate_autocoding=not args.inline_autocoding)
+    try:
+        report = run_benchmark(args.corpus, args.output_dir,
+                               num_patients=args.num_patients,
+                               skip_autocoding=args.skip_autocoding,
+                               http_base_url=args.http_base_url,
+                               min_match_grade=args.min_match_grade,
+                               search_mode=args.search_mode,
+                               no_strip=args.no_strip,
+                               duckdb_threads=args.duckdb_threads,
+                               isolate_autocoding=not args.inline_autocoding)
+    except AutocodingCoverageError as exc:
+        # FHIR4-54: a leg that coded nothing is a harness failure. Exit
+        # non-zero with the endpoint coordinates instead of printing a
+        # summary of a report that was never written.
+        print(f"piqi-autocoding: FAILED — {exc}", file=sys.stderr)
+        return 2
     print(summarize(report))
     return 0
 

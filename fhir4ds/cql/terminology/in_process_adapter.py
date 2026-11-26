@@ -200,6 +200,13 @@ class InProcessTerminologyEndpoint:
         # Breaker state — mutated only while ``_engine_lock`` is held.
         self._consecutive_failures: int = 0
         self._tripped_until: float = 0.0
+        # FHIR4-54: CUMULATIVE swallowed-failure counters. The breaker's
+        # ``_consecutive_failures`` resets on success, so it cannot answer
+        # "did this run degrade?" — a leg that swallowed thousands of search
+        # errors looks identical to a clean one from the outside, which is how
+        # a benchmark reported 0% coverage as a successful run.
+        self._swallowed_failures: int = 0
+        self._first_swallowed_error: str = ""
         # FHIR4-25: the engine below owns ONE DuckDB connection, which is
         # not thread-safe (medterm4ds threading guide). Every engine call
         # is serialized through this lock. Re-entrant so a protocol method
@@ -307,9 +314,25 @@ class InProcessTerminologyEndpoint:
         self._consecutive_failures = 0
         self._tripped_until = 0.0
 
-    def _on_call_failure(self) -> None:
-        """Increment failure counters and trip the breaker when threshold met."""
+    def _on_call_failure(
+        self, reason: "BaseException | str | None" = None
+    ) -> None:
+        """Increment failure counters and trip the breaker when threshold met.
+
+        Every swallowed engine failure must come through here so the
+        coordinates survive into the caller's report (FHIR4-54). ``reason``
+        is recorded for the FIRST failure only: one representative cause is
+        what distinguishes "the whole leg was broken" from "a few codes
+        missed".
+        """
         self._consecutive_failures += 1
+        self._swallowed_failures += 1
+        if reason is not None and not self._first_swallowed_error:
+            if isinstance(reason, BaseException):
+                self._first_swallowed_error = (
+                    f"{type(reason).__name__}: {reason}")
+            else:
+                self._first_swallowed_error = str(reason)
         if self._consecutive_failures >= self._breaker_threshold:
             self._tripped_until = time.monotonic() + self._breaker_cooldown_seconds
             _logger.error(
@@ -318,6 +341,31 @@ class InProcessTerminologyEndpoint:
                 self._consecutive_failures,
                 self._breaker_cooldown_seconds,
             )
+
+    # ------------------------------------------------------------------
+    # Degradation reporting (FHIR4-54)
+    # ------------------------------------------------------------------
+
+    @property
+    def swallowed_failure_count(self) -> int:
+        """Cumulative engine-call failures swallowed since construction."""
+        return int(self._swallowed_failures)
+
+    @property
+    def first_swallowed_error(self) -> str:
+        """Text of the first swallowed failure, or ``''`` when none."""
+        return self._first_swallowed_error
+
+    def degradation_report(self) -> dict:
+        """Swallowed-failure coordinates for a caller's run report.
+
+        A caller that must distinguish "clean run" from "every search failed
+        and we degraded to no codings" reads this instead of the logs.
+        """
+        return {
+            "endpoint_errors": int(self._swallowed_failures),
+            "first_endpoint_error": self._first_swallowed_error or None,
+        }
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -457,7 +505,7 @@ class InProcessTerminologyEndpoint:
                 _logger.warning(
                     "in_process expand failed for %s: %s", valueset_url, e
                 )
-                self._on_call_failure()
+                self._on_call_failure(e)
                 return []
             try:
                 refs = []
@@ -480,7 +528,7 @@ class InProcessTerminologyEndpoint:
                     "in_process expand conversion failed for %s: %s",
                     valueset_url, e,
                 )
-                self._on_call_failure()
+                self._on_call_failure(e)
                 return []
             self._on_call_success()
             return refs
@@ -507,7 +555,7 @@ class InProcessTerminologyEndpoint:
                 _logger.warning(
                     "in_process expand_url failed for %s: %s", valueset_url, e
                 )
-                self._on_call_failure()
+                self._on_call_failure(e)
                 return []
             refs: list[CodeRef] = []
             for mt_ref in mt_refs or []:
@@ -530,7 +578,10 @@ class InProcessTerminologyEndpoint:
             "in_process.expand returns [] for %s",
             valueset_url,
         )
-        self._on_call_failure()
+        self._on_call_failure(
+            "medterm4ds expand helpers unavailable (in_process.expand "
+            "degraded to [])"
+        )
         return []
 
     def expand_intensional(self, value_set: dict) -> list[CodeRef]:
@@ -596,7 +647,10 @@ class InProcessTerminologyEndpoint:
                             "(codes, depth_cap_hit)); degrading to [].",
                             len(result),
                         )
-                        self._on_call_failure()
+                        self._on_call_failure(
+                            f"unexpected intensional result shape "
+                            f"({len(result)}-tuple); degraded to []"
+                        )
                         return []
                     expanded, _depth_cap_hit = result
                 else:
@@ -620,7 +674,7 @@ class InProcessTerminologyEndpoint:
                     value_set.get("url", "<intensional>"),
                     e,
                 )
-                self._on_call_failure()
+                self._on_call_failure(e)
                 return []
             try:
                 refs = []
@@ -641,7 +695,7 @@ class InProcessTerminologyEndpoint:
                     value_set.get("url", "<intensional>"),
                     e,
                 )
-                self._on_call_failure()
+                self._on_call_failure(e)
                 return []
             self._on_call_success()
             return refs
@@ -670,7 +724,7 @@ class InProcessTerminologyEndpoint:
                     value_set.get("url", "<intensional>"),
                     e,
                 )
-                self._on_call_failure()
+                self._on_call_failure(e)
                 return []
             refs = []
             for mt_ref in mt_refs or []:
@@ -878,7 +932,7 @@ class InProcessTerminologyEndpoint:
                     mode,
                     e,
                 )
-                self._on_call_failure()
+                self._on_call_failure(e)
                 return []
         else:
             # Legacy fallback: medterm4ds without services.search (pre-0.0.9
@@ -898,7 +952,7 @@ class InProcessTerminologyEndpoint:
                 _logger.warning(
                     "in_process search_text failed for %r: %s", query, e
                 )
-                self._on_call_failure()
+                self._on_call_failure(e)
                 return []
 
         results: list[SearchResult] = []
@@ -966,7 +1020,7 @@ class InProcessTerminologyEndpoint:
                 mode,
                 e,
             )
-            self._on_call_failure()
+            self._on_call_failure(e)
             return []
         self._on_call_success()
         return results

@@ -321,8 +321,16 @@ class TestAutocodingIsolationWiring(unittest.TestCase):
             def _fake_leg(resources, **kwargs):
                 return resources, {"endpoint": "test_stub"}
 
+            # FHIR4-54: the leg is FAKED here, so it codes nothing by
+            # construction. This class pins the isolate-vs-inline wiring only
+            # (see the docstring), so the zero-coding tripwire — which exists
+            # to catch a REAL leg that silently coded nothing — is bypassed.
+            # The tripwire itself is covered by
+            # test_piqi_autocoding_fhir4_54.py.
             with mock.patch.object(pa, "_autocoding_leg",
-                                   side_effect=_fake_leg) as leg:
+                                   side_effect=_fake_leg) as leg, \
+                    mock.patch.object(pa, "assert_autocoding_coded_something",
+                                      return_value=1):
                 pa.run_benchmark(corpus, base / "out", num_patients=1,
                                  no_strip=True, **kwargs)
         return leg.call_args.kwargs
