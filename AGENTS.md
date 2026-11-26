@@ -7080,6 +7080,11 @@ aliases (`unnest(x) AS _cql_contains_u(item)`), not functions.
 - A translator macro that reaches population SQL is browser-supported by regeneration or it
   is registered, in the same change: `python -m fhir4ds.operations.tests.wasm_parity.macro_bundle
   --write` after changing a macro body, a ledger entry for one the browser cannot get (Step 0).
+- Order is part of the answer (WP-6). A `sort by` must survive every rewrite up to the SQL that
+  consumes the list (an element of a returned tuple is a valid sort key; ties are broken by the
+  resource id), and a membership test over a define tests every row of it. The last two Tier C
+  gaps (CMS136, CMS986) were translator defects of this kind and were wrong on desktop as well;
+  rules in `fhir4ds/cql/AGENTS.md`, "Order is part of the answer".
 - C++ changes need a wasm rebuild as well as the x86 ones
   (`scripts/build_wasm_extensions.py --build --extension <name>`), or the browser silently
   runs last month's engine. Tier B turns that into an exact list instead of a suspicion, and

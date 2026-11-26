@@ -286,6 +286,93 @@ def _references_qualified(expr, alias: str, column: str) -> bool:
     return False
 
 
+#: Hidden column the listified tuple projection carries the resource id in,
+#: the final ORDER BY key of a list built from a ``sort by`` query.
+_LIST_SORT_ID = "__sid"
+#: Alias of the row projection a sort key reads the tuple field back from.
+_LIST_PROJ = "__fhir4ds_proj"
+
+
+def _sort_key_of_tuple_projection(select, name):
+    """The SQL expression behind tuple element *name* in a ``return { ... }`` projection.
+
+    CQL §19.29: a ``sort by`` expression is evaluated in the scope of the
+    query result, so for ``[R] X return all {a: ..., b: ...} sort by b`` the
+    key is the ``b`` expression. The result is ONE ``json_object`` column, so
+    the plain-column lookup finds nothing — and the sort used to be dropped
+    silently, leaving the order of such a query to the query plan.
+    """
+    import copy
+
+    from ...translator.types import SQLFunctionCall, SQLLiteral
+
+    if len(select.columns) != 1:
+        return None
+    column = select.columns[0]
+    expr = column.expr if isinstance(column, SQLAlias) else column
+    if not (isinstance(expr, SQLFunctionCall) and expr.name == "json_object"):
+        return None
+    args = expr.args
+    for index in range(0, len(args) - 1, 2):
+        key = args[index]
+        if isinstance(key, SQLLiteral) and key.value == name:
+            if select.distinct:
+                # A DISTINCT select may only be ordered by expressions over
+                # its projected columns.
+                return SQLFunctionCall(
+                    name="json_extract_string",
+                    args=[copy.deepcopy(expr), SQLLiteral(value=f"$.{name}")],
+                )
+            return copy.deepcopy(args[index + 1])
+    return None
+
+
+def _tuple_field_text(tuple_expr, path_arg):
+    """SQL text of the tuple field that ``json_extract_string(<tuple>, path)`` reads, or None."""
+    from ...translator.types import SQLFunctionCall, SQLLiteral
+
+    if not (
+        isinstance(tuple_expr, SQLFunctionCall)
+        and tuple_expr.name == "json_object"
+        and isinstance(path_arg, SQLLiteral)
+    ):
+        return None
+
+    text = str(path_arg.value)
+    key = text[2:] if text.startswith("$.") else None
+    args = tuple_expr.args
+    for index in range(0, len(args) - 1, 2):
+        field = args[index]
+        if isinstance(field, SQLLiteral) and field.value == key:
+            return args[index + 1].to_sql()
+    return None
+
+
+def _sort_key_of_projected_field(sort_expr, field_text, path_arg):
+    """``start of <field>`` / ``end of <field>`` evaluated on the projected tuple field.
+
+    CMS136 sorts by ``start of X.medicationRequestPeriod()`` while the
+    projected field is ``period: X.medicationRequestPeriod()`` — the same
+    (very large) expression in both. Reading the bound off the projected field
+    is the same value at a fraction of the SQL and of the per-row work.
+    """
+    from ...translator.types import SQLFunctionCall, SQLQualifiedIdentifier
+
+    if field_text is None:
+        return None
+    text = sort_expr.to_sql()
+    for name in ("intervalStart", "intervalEnd"):
+        prefix = f"{name}("
+        if text.startswith(prefix) and text.endswith(")"):
+            inner = text[len(prefix):-1]
+            if inner in (field_text, f"CAST({field_text} AS VARCHAR)"):
+                return SQLFunctionCall(name=name, args=[SQLFunctionCall(
+                    name="json_extract_string",
+                    args=[SQLQualifiedIdentifier(parts=[_LIST_PROJ, "v"]), path_arg],
+                )])
+    return None
+
+
 def _listify_tuple_projection(node):
     """Turn a SCALAR tuple-field extraction into a LIST projection.
 
@@ -299,10 +386,11 @@ def _listify_tuple_projection(node):
 
     Rewrite to ``(SELECT list(json_extract_string(t.v, '$.field')) FROM
     (<query>) AS t)`` when the extraction wraps an unlimited multi-row tuple
-    projection.
+    projection. The query's ``sort by`` orders that list.
     """
     from ...translator.types import (
-        SQLAlias, SQLFunctionCall, SQLQualifiedIdentifier, SQLSelect, SQLSubquery,
+        SQLAlias, SQLFunctionCall, SQLLiteral, SQLQualifiedIdentifier, SQLSelect,
+        SQLSubquery,
     )
 
     if not (isinstance(node, SQLFunctionCall)
@@ -330,8 +418,54 @@ def _listify_tuple_projection(node):
     if path_arg is None:
         return node
     aliased = SQLAlias(expr=col_expr, alias="v")
+    inner_columns = [aliased]
+    #: Sort keys read off the projected field need the tuple one level up.
+    outer_columns: list = []
+    aggregate_order: list = []
+    sort_items = list(sel.order_by or [])
+    if sort_items and not sel.distinct and not sel.group_by:
+        # ``(<query> sort by K).field``: the list must come out in the query's
+        # order, so the sort keys ride along as hidden columns and order the
+        # aggregate (an ORDER BY on the derived table alone is not something
+        # SQL promises an aggregate it feeds). Ties on K are broken by the
+        # resource id — the key ``sort by`` itself appends — because a list()
+        # over equal keys is otherwise in query-plan order, which differs
+        # between DuckDB builds (CMS136: two requests with one authored date
+        # produced different medication periods on duckdb-wasm).
+        field_text = _tuple_field_text(col_expr, path_arg)
+        for index, (sort_expr, direction) in enumerate(sort_items):
+            name = f"__s{index}"
+            bound_of_field = _sort_key_of_projected_field(sort_expr, field_text, path_arg)
+            if bound_of_field is None:
+                inner_columns.append(SQLAlias(expr=sort_expr, alias=name))
+            else:
+                outer_columns.append(SQLAlias(expr=bound_of_field, alias=name))
+            aggregate_order.append(
+                (SQLQualifiedIdentifier(parts=["t", name]), direction)
+            )
+        from_alias = (
+            sel.from_clause.alias if isinstance(sel.from_clause, SQLAlias) else None
+        )
+        if (
+            from_alias
+            and f"{from_alias}.resource" in col_expr.to_sql()
+            and not any("$.id" in sort_expr.to_sql() for sort_expr, _ in sort_items)
+        ):
+            inner_columns.append(SQLAlias(
+                expr=SQLFunctionCall(
+                    name="json_extract_string",
+                    args=[
+                        SQLQualifiedIdentifier(parts=[from_alias, "resource"]),
+                        SQLLiteral(value="$.id"),
+                    ],
+                ),
+                alias=_LIST_SORT_ID,
+            ))
+            aggregate_order.append(
+                (SQLQualifiedIdentifier(parts=["t", _LIST_SORT_ID]), "ASC NULLS LAST")
+            )
     new_inner = SQLSelect(
-        columns=[aliased],
+        columns=inner_columns,
         from_clause=sel.from_clause,
         where=sel.where,
         joins=sel.joins,
@@ -339,6 +473,18 @@ def _listify_tuple_projection(node):
         having=sel.having,
         distinct=sel.distinct,
     )
+    if outer_columns:
+        new_inner = SQLSelect(
+            columns=[
+                SQLQualifiedIdentifier(parts=[_LIST_PROJ, "v"]),
+                *outer_columns,
+                *(
+                    SQLQualifiedIdentifier(parts=[_LIST_PROJ, column.alias])
+                    for column in inner_columns[1:]
+                ),
+            ],
+            from_clause=SQLAlias(expr=SQLSubquery(query=new_inner), alias=_LIST_PROJ),
+        )
     list_call = SQLFunctionCall(
         name="list",
         args=[SQLFunctionCall(
@@ -348,6 +494,7 @@ def _listify_tuple_projection(node):
                 path_arg,
             ],
         )],
+        order_by=aggregate_order or None,
     )
     return SQLSubquery(query=SQLSelect(
         columns=[list_call],
@@ -4791,6 +4938,53 @@ class QueryMixin:
         if source_ast is not None:
             self.context._alias_source_asts[alias] = source_ast
 
+    def _sort_tie_break(self, node: Any, result: Any) -> list[tuple[Any, str]]:
+        """Final ORDER BY keys of a row-producing ``sort by`` over resource rows.
+
+        CQL 1.5 leaves the order of equal sort keys undefined, and DuckDB's tie
+        order follows the query plan: the SAME translated SQL returned the two
+        MedicationRequests of CMS136 (US-Core 2025) that share an authored date
+        in source order on desktop and in the other order on duckdb-wasm, so an
+        order-dependent ``aggregate`` produced different intervals. Keys that
+        exist in the data give every engine one answer. The first is the
+        resource id (the tie-break ``_lists.py`` already uses for First/Last
+        over a sorted query); the resource text follows, so the rule is total
+        even when a retrieve spans resource types and two rows share an id.
+        Only resource-row sources get it, and never together with DISTINCT or
+        GROUP BY, where DuckDB rejects an ORDER BY on a column that is not
+        projected or grouped.
+        """
+        sources = node.source if isinstance(node.source, list) else [node.source]
+        source = sources[0] if sources else None
+        expression = getattr(source, "expression", None)
+        if isinstance(expression, Retrieve):
+            resource_rows = True
+        elif isinstance(expression, Identifier):
+            meta = self.context.definition_meta.get(expression.name)
+            resource_rows = bool(
+                meta and meta.has_resource and meta.shape == RowShape.RESOURCE_ROWS
+            )
+        else:
+            resource_rows = False
+        if (
+            not resource_rows
+            or getattr(result, "distinct", False)
+            or getattr(result, "group_by", None)
+        ):
+            return []
+        from_clause = result.from_clause
+        alias = getattr(from_clause, "alias", None)
+        if not isinstance(from_clause, SQLAlias) or not alias:
+            return []
+        resource = SQLQualifiedIdentifier(parts=[alias, "resource"])
+        resource_id = SQLFunctionCall(
+            name="json_extract_string", args=[resource, SQLLiteral(value="$.id")]
+        )
+        return [
+            (resource_id, "ASC NULLS LAST"),
+            (SQLCast(expression=resource, target_type="VARCHAR"), "ASC NULLS LAST"),
+        ]
+
     def _translate_query(self, node, usage: ExprUsage = ExprUsage.LIST) -> SQLExpression:
         """
         Handle CQL Query expressions:
@@ -7123,6 +7317,14 @@ class QueryMixin:
                     return SQLIdentifier(name=_sort_ident_name)
                 if _sort_ident_name and _sort_ident_name in self.context.let_variables:
                     return self.context.let_variables[_sort_ident_name]
+                if (
+                    _sort_ident_name
+                    and isinstance(result, SQLSelect)
+                    and result.columns
+                ):
+                    _tuple_key = _sort_key_of_tuple_projection(result, _sort_ident_name)
+                    if _tuple_key is not None:
+                        return _tuple_key
                 if not _sort_ident_name:
                     return self.translate(sort_item.expression, usage=ExprUsage.SCALAR)
                 return None  # simple identifier not in columns or let variables
@@ -7141,6 +7343,8 @@ class QueryMixin:
                 # full clause set (joins/group_by/having/limit/distinct) —
                 # the old reconstruction dropped them.
                 if _order_items:
+                    # Ties on the sort key are broken by the resource id (WP-6).
+                    _order_items = _order_items + self._sort_tie_break(node, result)
                     result = SQLSelect(
                         columns=result.columns,
                         from_clause=result.from_clause,
@@ -7213,10 +7417,38 @@ class QueryMixin:
                 if isinstance(node, SQLSubquery):
                     return SQLSubquery(query=_fold_marker_swap(node.query))
                 if isinstance(node, SQLSelect):
+                    # Every clause survives: this rewrite only renames
+                    # placeholders, and a rebuilt select that drops ORDER BY
+                    # (or a join) silently changes what the fold iterates.
                     return SQLSelect(
                         columns=[_fold_marker_swap(c) for c in node.columns] if node.columns else node.columns,
                         from_clause=_fold_marker_swap(node.from_clause) if node.from_clause else node.from_clause,
                         where=_fold_marker_swap(node.where) if node.where else node.where,
+                        joins=[
+                            SQLJoin(
+                                join_type=join.join_type,
+                                table=_fold_marker_swap(join.table),
+                                alias=join.alias,
+                                on_condition=(
+                                    _fold_marker_swap(join.on_condition)
+                                    if join.on_condition is not None
+                                    else None
+                                ),
+                            )
+                            for join in (node.joins or [])
+                        ],
+                        group_by=(
+                            [_fold_marker_swap(group) for group in node.group_by]
+                            if node.group_by
+                            else None
+                        ),
+                        having=_fold_marker_swap(node.having) if node.having else node.having,
+                        order_by=[
+                            (_fold_marker_swap(sort_expr), direction)
+                            for sort_expr, direction in node.order_by
+                        ] if node.order_by else None,
+                        limit=node.limit,
+                        distinct=node.distinct,
                     )
                 if isinstance(node, SQLAlias):
                     return SQLAlias(
