@@ -25,6 +25,7 @@ would make the gate permanently red and train readers to ignore it.
 """
 
 import json
+import os
 import subprocess
 import sys
 import warnings
@@ -48,8 +49,31 @@ SCRIPTS = [
     ("CQL", "conformance/scripts/run_cql.py", "conformance/reports/cql_report.json", ()),
     ("DQM (QI-Core 2025)", "conformance/scripts/run_dqm.py", "conformance/reports/dqm_report.json", ("--suite", "qi-core-2025")),
     ("DQM (US-Core 2025)", "conformance/scripts/run_dqm.py", "conformance/reports/us_core_dqm_report.json", ("--suite", "us-core-2025")),
+    # FHIR4-64: a measure can be silently unbuildable and the suites above still
+    # print PASS, because DuckDB binds only the reachable plan and the DQM
+    # harness projects population columns only (CMS986 for months). These entries
+    # bind every measure's ALL-COLUMNS SQL with EXPLAIN and exit non-zero on the
+    # first failure. They write no report, so they are exit-status-only.
+    ("DQM bind-only (QI-Core 2025)", "conformance/scripts/run_dqm_bind.py", None, ("--suite", "qi-core-2025")),
+    # ~535s of DuckDB planning for the 73 measures, so the master gate is not the
+    # right place to pay it on every push. The nightly/main conformance job sets
+    # FHIR4DS_BIND_CHECK_US_CORE=1; local runs can do the same when touching the
+    # translator, because US-Core is where the CMS986 class lived.
+    ("DQM bind-only (US-Core 2025)", "conformance/scripts/run_dqm_bind.py", None, ("--suite", "us-core-2025"), "FHIR4DS_BIND_CHECK_US_CORE"),
     ("OMOP Mapping", "conformance/scripts/run_omop.py", "conformance/reports/omop_report.json", ()),
 ]
+
+def suite_entry(entry):
+    """Normalize a SCRIPTS row to ``(name, script, report, args, gate_env)``.
+
+    The optional 5th element names an environment variable that must be set for
+    the entry to run. Bind-only gates (FHIR4-64) use it because their full-suite
+    cost is DuckDB planning time, not conformance work.
+    """
+    name, path, report_path, extra_args = entry[:4]
+    gate_env = entry[4] if len(entry) > 4 else None
+    return name, path, report_path, tuple(extra_args), gate_env
+
 
 @dataclass
 class SuiteOutcome:
@@ -165,12 +189,16 @@ def main():
     # to be discarded, so a suite that never ran still produced a green table
     # built from a stale report.
     outcomes: list[SuiteOutcome] = []
-    for name, path, report_path, extra_args in SCRIPTS:
+    for entry in SCRIPTS:
+        name, path, report_path, extra_args, gate_env = suite_entry(entry)
+        if gate_env and not os.environ.get(gate_env):
+            print(f"\n>>> Skipping {name} (set {gate_env}=1 to enable).")
+            continue
         outcomes.append(run_script(name, path, report_path, extra_args))
 
     # Display Summary Table
     print("\n" + "=" * 60)
-    print(f"{'Specification':<25} | {'Passed':<8} | {'Total':<8} | {'Rate':<8}")
+    print(f"{'Specification':<31} | {'Passed':<8} | {'Total':<8} | {'Rate':<8}")
     print("-" * 60)
 
     grand_total = 0
@@ -179,19 +207,28 @@ def main():
     failed_suites = [outcome for outcome in outcomes if not outcome.ok]
     failed_names = {outcome.name for outcome in failed_suites}
 
-    for name, _path, report_path, _args in SCRIPTS:
+    for entry in SCRIPTS:
+        name, _path, report_path, _args, gate_env = suite_entry(entry)
+        if gate_env and not os.environ.get(gate_env):
+            print(f"{name:<31} | {'skipped':<8} | {'-':<8} | {'-':>6}")
+            continue
         if name in failed_names:
             # Never print numbers for a suite that did not produce them.
-            print(f"{name:<25} | {'NOT RUN':<8} | {'-':<8} | {'-':>6}")
+            print(f"{name:<31} | {'NOT RUN':<8} | {'-':<8} | {'-':>6}")
+            continue
+        if report_path is None:
+            # Bind-only gate: it produced no report and no test counts on
+            # purpose. Reaching here means it exited 0.
+            print(f"{name:<31} | {'BIND OK':<8} | {'-':<8} | {'-':>6}")
             continue
         p, t, r = get_summary(report_path)
-        print(f"{name:<25} | {p:<8} | {t:<8} | {r:>6.1f}%")
+        print(f"{name:<31} | {p:<8} | {t:<8} | {r:>6.1f}%")
         grand_total += t
         grand_passed += p
 
     print("-" * 60)
     grand_rate = (grand_passed / grand_total * 100) if grand_total > 0 else 0
-    print(f"{'OVERALL COMPLIANCE':<25} | {grand_passed:<8} | {grand_total:<8} | {grand_rate:>6.1f}%")
+    print(f"{'OVERALL COMPLIANCE':<31} | {grand_passed:<8} | {grand_total:<8} | {grand_rate:>6.1f}%")
     print("=" * 60)
 
     if failed_suites:
@@ -205,7 +242,10 @@ def main():
 
     # Build a synthetic combined report for the master log entry
     all_failures = []
-    for _name, _path, report_path, _args in SCRIPTS:
+    for entry in SCRIPTS:
+        _name, _path, report_path, _args, _env = suite_entry(entry)
+        if report_path is None:
+            continue  # bind-only gates produce no report and no test counts
         _, _, failures = _collect_stats(report_path)
         all_failures.extend(failures)
 
