@@ -150,6 +150,35 @@ See `docs/architecture/AUDIT_REPORT.md` §7 for full details.
 
 ### Known Fragile Areas (Found by QA - 2026-04-30)
 
+- **Authored JSON number spelling + JSON unescape (FHIR4-58, 2026-11-25)**:
+  **FIXED.** Three coupled native rules, each pinned by official R4 FHIRPath
+  cells that the Python core already passed:
+  (1) a Decimal's boundary precision comes from its AUTHORED spelling, and
+  yyjson keeps only the parsed double — `9.5e2` and `950.0` are
+  indistinguishable after `yyjson_read`. The host now hands the evaluator the
+  JSON text (`Evaluator::setAuthoredSource`, called from `EvaluateFhirpath`)
+  and `Evaluator::authoredNumberText` lazily re-parses it ONCE per document with
+  `YYJSON_READ_NUMBER_AS_RAW` and walks both trees in lockstep to record each
+  number node's raw spelling. Only a boundary call on a JSON number pays for
+  it. Fixtures: `HighBoundaryDecimalExponent1/2/4/5`,
+  `LowBoundaryDecimalExponent1/3/4` (9.5e2.highBoundary(0) = 955, half-unit 5).
+  (2) `@2014-01-01T08` is read as 08:00 (a FHIR dateTime with an hour has
+  minutes), so an EXPLICIT-precision boundary fills only the components below
+  the authored precision — `formatDateTimeBoundary`'s new
+  `explicit_precision` parameter keeps the traditional whole-template fill for
+  the default (no-argument) form and fills the minute with 00 when only an
+  hour is authored. Fixtures: `HighBoundaryDateTimeMillisecond1/3`.
+  (3) `unescape('json')` implements the JSON escape table (including `\uXXXX`
+  with surrogate pairs) and returns its input unchanged on a malformed escape,
+  mirroring the Python authority's `json.JSONDecodeError` fallback. Fixtures:
+  `testEscapeUnescape/testUnescapeJson2/3/4`.
+  Regression:
+  `fhir4ds/fhirpath/duckdb/tests/integration/test_fhir4_58_boundary_unescape_parity.py`
+  (native-loaded == forced Python fallback, by official test id). Prose data
+  whose spelling matters (`9.5e2`) must reach the UDF as TEXT — a Python
+  `json.dumps` round trip rewrites it into `950.0` and silently changes the
+  answer.
+
 - **FHIRPath FP-20 HISTORIAN iteration 1 §9 Environment Variables + §10
   Types/Reflection + §11 Type Safety + §12 Formal Specifications
   (2026-06-30):** **1 NATIVE DEFECT RESOLVED, 1 INTENDED.** Fresh

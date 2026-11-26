@@ -8,6 +8,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 // Forward declare yyjson types (namespaced in DuckDB v1.5.0)
@@ -112,6 +113,18 @@ public:
 		arena_ = arena;
 	}
 
+	// FHIR4-58: the JSON text this evaluator's document was parsed from.
+	// yyjson keeps only the parsed double for a number, so a Decimal's AUTHORED
+	// spelling (`9.5e2` vs `950.0`) is unrecoverable from the document. The
+	// boundary helpers need it (the mantissa exponent is part of a Decimal's
+	// precision), so the host passes the source text; the pointer must stay
+	// valid for the duration of evaluate(). Read lazily — see
+	// Evaluator::authoredNumberText.
+	void setAuthoredSource(const char *text, size_t len) {
+		authored_source_ = text;
+		authored_source_len_ = len;
+	}
+
 private:
 	FPCollection eval(const ASTNode &node, const FPCollection &input, yyjson_doc *doc);
 
@@ -196,8 +209,13 @@ private:
 	FPCollection fn_convertsToDateTime(const FPCollection &input, const std::string &format = "");
 	FPCollection fn_convertsToTime(const FPCollection &input);
 	FPCollection fn_convertsToQuantity(const FPCollection &input, const std::string &to_unit = "");
-	FPCollection fn_lowBoundary(const FPCollection &input, const FPCollection *precision_arg);
-	FPCollection fn_highBoundary(const FPCollection &input, const FPCollection *precision_arg);
+	FPCollection fn_lowBoundary(const FPCollection &input, const FPCollection *precision_arg,
+	                            yyjson_doc *doc);
+	FPCollection fn_highBoundary(const FPCollection &input, const FPCollection *precision_arg,
+	                             yyjson_doc *doc);
+
+	// FHIR4-58: authored (raw JSON) spelling of a number node, or nullptr.
+	const std::string *authoredNumberText(yyjson_doc *doc, yyjson_val *val);
 	FPCollection fn_precision(const FPCollection &input);
 	FPCollection fn_encode(const FPCollection &input, const FPCollection &format);
 	FPCollection fn_decode(const FPCollection &input, const FPCollection &format);
@@ -244,6 +262,12 @@ private:
 
 	// Phase 7: Arena allocator (optional, set per-batch)
 	ArenaAllocator *arena_ = nullptr;
+
+	// FHIR4-58: authored JSON number spellings (see setAuthoredSource).
+	const char *authored_source_ = nullptr;
+	size_t authored_source_len_ = 0;
+	yyjson_doc *authored_numbers_doc_ = nullptr;
+	std::unordered_map<const yyjson_val *, std::string> authored_numbers_;
 
 	// Factory-created yyjson documents (freed in destructor)
 	std::vector<yyjson_doc*> owned_docs_;

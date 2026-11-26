@@ -23,6 +23,8 @@ using namespace duckdb_yyjson; // NOLINT
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
+#include <vector>
 
 // Defensive bounds-check macro for AST child access.
 // The parser should guarantee correct structure, but this guards against
@@ -5376,6 +5378,93 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 			}
 			return {FPValue::FromString(result)};
 		}
+		if (mode == "json") {
+			// FHIR4-58: reverse of escape('json') — the JSON string escape table
+			// (`\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`, `\uXXXX` with
+			// surrogate pairs). Official fixtures testUnescapeJson2/3/4 pinned
+			// this and the native path used to return its input unchanged. A
+			// malformed escape keeps the input unchanged, mirroring the Python
+			// authority's `json.JSONDecodeError -> return string` fallback.
+			std::string result;
+			bool ok = true;
+			for (size_t i = 0; i < s.size() && ok; ++i) {
+				unsigned char c = static_cast<unsigned char>(s[i]);
+				if (c < 0x20) { ok = false; break; }  // raw control char: invalid JSON string
+				if (c != '\\') { result += s[i]; continue; }
+				if (i + 1 >= s.size()) { ok = false; break; }
+				char e = s[i + 1];
+				switch (e) {
+				case '"': result += '"'; i += 1; break;
+				case '\\': result += '\\'; i += 1; break;
+				case '/': result += '/'; i += 1; break;
+				case 'b': result += '\b'; i += 1; break;
+				case 'f': result += '\f'; i += 1; break;
+				case 'n': result += '\n'; i += 1; break;
+				case 'r': result += '\r'; i += 1; break;
+				case 't': result += '\t'; i += 1; break;
+				case 'u': {
+					if (i + 6 > s.size()) { ok = false; break; }
+					long cp = 0;
+					for (size_t k = 0; k < 4; k++) {
+						char h = s[i + 2 + k];
+						int v;
+						if (h >= '0' && h <= '9') v = h - '0';
+						else if (h >= 'a' && h <= 'f') v = h - 'a' + 10;
+						else if (h >= 'A' && h <= 'F') v = h - 'A' + 10;
+						else { ok = false; v = 0; }
+						if (!ok) break;
+						cp = cp * 16 + v;
+					}
+					if (!ok) break;
+					i += 6;
+					if (cp >= 0xD800 && cp <= 0xDBFF) {
+						// high surrogate: a low surrogate must follow
+						if (i + 6 > s.size() || s[i] != '\\' || s[i + 1] != 'u') { ok = false; break; }
+						long lo = 0;
+						for (size_t k = 0; k < 4; k++) {
+							char h = s[i + 2 + k];
+							int v;
+							if (h >= '0' && h <= '9') v = h - '0';
+							else if (h >= 'a' && h <= 'f') v = h - 'a' + 10;
+							else if (h >= 'A' && h <= 'F') v = h - 'A' + 10;
+							else { ok = false; v = 0; }
+							if (!ok) break;
+							lo = lo * 16 + v;
+						}
+						if (!ok) break;
+						if (lo < 0xDC00 || lo > 0xDFFF) { ok = false; break; }
+						cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
+						i += 6;
+					} else if (cp >= 0xDC00 && cp <= 0xDFFF) {
+						ok = false;  // lone low surrogate
+						break;
+					}
+					if (cp < 0x80) {
+						result += static_cast<char>(cp);
+					} else if (cp < 0x800) {
+						result += static_cast<char>(0xC0 | (cp >> 6));
+						result += static_cast<char>(0x80 | (cp & 0x3F));
+					} else if (cp < 0x10000) {
+						result += static_cast<char>(0xE0 | (cp >> 12));
+						result += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+						result += static_cast<char>(0x80 | (cp & 0x3F));
+					} else {
+						result += static_cast<char>(0xF0 | (cp >> 18));
+						result += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+						result += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+						result += static_cast<char>(0x80 | (cp & 0x3F));
+					}
+					// the loop's ++i advances past the last consumed hex digit
+					i -= 1;
+					break;
+				}
+				default:
+					ok = false;
+					break;
+				}
+			}
+			return {FPValue::FromString(ok ? result : s)};
+		}
 		return {FPValue::FromString(s)};
 	}
 
@@ -5757,10 +5846,10 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 			return fn_decode(input, arg);
 		}
 		if (name == "lowBoundary") {
-			return fn_lowBoundary(input, &arg);
+			return fn_lowBoundary(input, &arg, doc);
 		}
 		if (name == "highBoundary") {
-			return fn_highBoundary(input, &arg);
+			return fn_highBoundary(input, &arg, doc);
 		}
 		if (name == "defineVariable") {
 			// defineVariable('name', expr) - sets variable and returns input
@@ -5807,10 +5896,10 @@ FPCollection Evaluator::evalFunction(const ASTNode &node, const FPCollection &in
 		return fn_round(input, nullptr);
 	}
 	if (name == "lowBoundary" && node.children.empty()) {
-		return fn_lowBoundary(input, nullptr);
+		return fn_lowBoundary(input, nullptr, doc);
 	}
 	if (name == "highBoundary" && node.children.empty()) {
-		return fn_highBoundary(input, nullptr);
+		return fn_highBoundary(input, nullptr, doc);
 	}
 	if (name == "precision" && node.children.empty()) {
 		return fn_precision(input);
@@ -11700,7 +11789,8 @@ static std::string _pj_format_at_scale(const std::string &q_magnitude, bool q_ne
 	return out;
 }
 
-static FPCollection decimalBoundary(const FPValue &val, const FPCollection *precision_arg, bool is_high) {
+static FPCollection decimalBoundary(const FPValue &val, const FPCollection *precision_arg, bool is_high,
+                                   const std::string *authored_text = nullptr) {
 	int out_prec = 8;
 	if (precision_arg && !precision_arg->empty()) {
 		out_prec = static_cast<int>((*precision_arg)[0].type == FPValue::Type::Integer ?
@@ -11709,11 +11799,22 @@ static FPCollection decimalBoundary(const FPValue &val, const FPCollection *prec
 	if (out_prec < 0 || out_prec > 28) return {};
 
 	// Preferred: exact text path (source text, incl. e-notation spellings).
+	// Navigation stamps a JSON number's source_text with yyjson's re-rendered
+	// text ("950.0" for `9.5e2`), so for a JSON number the AUTHORED spelling
+	// must win when the host supplied the document text (FHIR4-58).
 	std::string text = val.source_text;
 	bool parsed_ok = false, negative = false;
 	std::string digits;
 	int e10 = 0;
-	if (!text.empty()) {
+	if (val.type == FPValue::Type::JsonVal && val.json_val && authored_text &&
+	    !authored_text->empty()) {
+		// FHIR4-58: a Decimal's precision is its authored digit count, mantissa
+		// exponent included (`9.5e2` has one mantissa fraction digit => boundary
+		// half-unit 5, official fixtures parameters-example-decimals), and
+		// yyjson discards that spelling on parse. See
+		// Evaluator::authoredNumberText.
+		parsed_ok = _pj_parse_decimal_text(*authored_text, negative, digits, e10);
+	} else if (!text.empty()) {
 		parsed_ok = _pj_parse_decimal_text(text, negative, digits, e10);
 	} else if (val.type == FPValue::Type::Integer) {
 		digits = std::to_string(val.int_val);
@@ -11844,7 +11945,8 @@ static FPCollection decimalBoundary(const FPValue &val, const FPCollection *prec
 }
 
 static std::string formatDateTimeBoundary(const DateTimeParts &p, int digit_prec, bool is_high,
-                                           const std::string &orig_tz, bool is_time) {
+                                           const std::string &orig_tz, bool is_time,
+                                           bool explicit_precision = true) {
 	std::ostringstream oss;
 	if (is_time) oss << "T";
 
@@ -11868,8 +11970,18 @@ static std::string formatDateTimeBoundary(const DateTimeParts &p, int digit_prec
 	oss << std::setfill('0') << std::setw(2)
 	    << ((p.precision >= 4) ? p.hour : (is_high ? (is_time ? p.hour : 23) : 0));
 	if (digit_prec <= (is_time ? 2 : 10)) return oss.str();
+	// FHIR4-58: `@2014-01-01T08` is not legal FHIR (a dateTime with an hour has
+	// minutes), so the reference implementation reads it as 08:00 and an
+	// explicit-precision boundary fills only the components BELOW the authored
+	// precision: highBoundary(17) of T08 is 08:00:59.999, not 08:59:59.999
+	// (official fixtures HighBoundaryDateTimeMillisecond1/3). A value with NO
+	// time at all keeps the whole-day fill (23:59:59.999), and the
+	// default-precision form keeps the shared fill template both engines have
+	// always produced.
 	oss << ":" << std::setfill('0') << std::setw(2)
-	    << ((p.precision >= 5) ? p.minute : (is_high ? 59 : 0));
+	    << ((p.precision >= 5) ? p.minute
+	        : (is_time ? (is_high ? 59 : 0)
+	                   : ((explicit_precision && p.precision >= 4) ? 0 : (is_high ? 59 : 0))));
 	if (digit_prec <= (is_time ? 4 : 12)) return oss.str();
 	// v0.0.24 it6 (EXPLORER): for Time inputs, preserve components at the
 	// input's precision and fill only components below it (§G-5 doctrine,
@@ -11899,7 +12011,79 @@ static std::string formatDateTimeBoundary(const DateTimeParts &p, int digit_prec
 	return oss.str();
 }
 
-FPCollection Evaluator::fn_lowBoundary(const FPCollection &input, const FPCollection *precision_arg) {
+// FHIR4-58: authored (raw JSON) spelling of a number node.
+//
+// yyjson keeps only the parsed double, so `9.5e2` and `950.0` are
+// indistinguishable after yyjson_read — yet a Decimal's precision in FHIRPath is
+// its authored digit count, including the mantissa exponent (`9.5e2` has one
+// mantissa fraction digit, so its boundary half-unit is 5, not 0.05; official
+// fixtures parameters-example-decimals: 9.5e2.highBoundary(0) = 955). The host
+// hands us the JSON text the document was parsed from; it is re-parsed ONCE per
+// document with YYJSON_READ_NUMBER_AS_RAW — the same text yields the same node
+// tree — and both trees are walked in lockstep to record each number node's raw
+// spelling. Built lazily, so only an expression that asks a boundary function
+// for the precision of a JSON number pays for it.
+static void collectAuthoredNumberTexts(yyjson_val *plain, yyjson_val *raw,
+                                       std::unordered_map<const yyjson_val *, std::string> &out) {
+	std::vector<std::pair<yyjson_val *, yyjson_val *>> stack;
+	stack.push_back(std::make_pair(plain, raw));
+	while (!stack.empty()) {
+		std::pair<yyjson_val *, yyjson_val *> top = stack.back();
+		stack.pop_back();
+		yyjson_val *p = top.first;
+		yyjson_val *r = top.second;
+		if (!p || !r) continue;
+		if (yyjson_is_num(p)) {
+			const char *text = yyjson_get_raw(r);
+			if (text) {
+				// RAW values carry their length in the tag; copy now, the raw
+				// document is freed right after the walk.
+				out.insert(std::make_pair(static_cast<const yyjson_val *>(p),
+				                          std::string(text, yyjson_get_len(r))));
+			}
+			continue;
+		}
+		if (yyjson_is_arr(p) && yyjson_is_arr(r)) {
+			size_t n = yyjson_arr_size(p);
+			for (size_t i = 0; i < n; i++) {
+				stack.push_back(std::make_pair(yyjson_arr_get(p, i), yyjson_arr_get(r, i)));
+			}
+			continue;
+		}
+		if (yyjson_is_obj(p) && yyjson_is_obj(r)) {
+			yyjson_obj_iter iter;
+			yyjson_obj_iter_init(p, &iter);
+			yyjson_val *key;
+			while ((key = yyjson_obj_iter_next(&iter))) {
+				const char *name = yyjson_get_str(key);
+				if (!name) continue;
+				stack.push_back(std::make_pair(yyjson_obj_iter_get_val(key), yyjson_obj_get(r, name)));
+			}
+		}
+	}
+}
+
+const std::string *Evaluator::authoredNumberText(yyjson_doc *doc, yyjson_val *val) {
+	if (!doc || !val) return nullptr;
+	if (authored_numbers_doc_ != doc) {
+		authored_numbers_doc_ = doc;
+		authored_numbers_.clear();
+		if (authored_source_ && authored_source_len_ > 0) {
+			yyjson_doc *raw_doc = yyjson_read(authored_source_, authored_source_len_,
+			                                  YYJSON_READ_NUMBER_AS_RAW);
+			if (raw_doc) {
+				collectAuthoredNumberTexts(yyjson_doc_get_root(doc), yyjson_doc_get_root(raw_doc),
+				                           authored_numbers_);
+				yyjson_doc_free(raw_doc);
+			}
+		}
+	}
+	auto it = authored_numbers_.find(static_cast<const yyjson_val *>(val));
+	return it == authored_numbers_.end() ? nullptr : &it->second;
+}
+
+FPCollection Evaluator::fn_lowBoundary(const FPCollection &input, const FPCollection *precision_arg,
+                                       yyjson_doc *doc) {
 	if (input.empty()) return {};
 	auto &val = input[0];
 	auto t = effectiveType(val);
@@ -11919,7 +12103,7 @@ FPCollection Evaluator::fn_lowBoundary(const FPCollection &input, const FPCollec
 			time_val.type = FPValue::Type::Time;
 			time_val.string_val = normalizeTimeLiteralString(s);
 			FPCollection single = {time_val};
-			return fn_lowBoundary(single, precision_arg);
+			return fn_lowBoundary(single, precision_arg, doc);
 		}
 		if (s.size() >= 4 && std::isdigit((unsigned char)s[0]) && std::isdigit((unsigned char)s[1]) &&
 		    std::isdigit((unsigned char)s[2]) && std::isdigit((unsigned char)s[3])) {
@@ -11934,12 +12118,12 @@ FPCollection Evaluator::fn_lowBoundary(const FPCollection &input, const FPCollec
 			}
 			date_val.string_val = s;
 			FPCollection single = {date_val};
-			return fn_lowBoundary(single, precision_arg);
+			return fn_lowBoundary(single, precision_arg, doc);
 		}
 	}
 
 	if (t == FPValue::Type::Integer || t == FPValue::Type::Decimal) {
-		return decimalBoundary(val, precision_arg, false);
+		return decimalBoundary(val, precision_arg, false, authoredNumberText(doc, val.json_val));
 	}
 	if (t == FPValue::Type::Quantity) {
 		FPValue dec_val = FPValue::FromDecimal(val.quantity_value);
@@ -11984,7 +12168,7 @@ FPCollection Evaluator::fn_lowBoundary(const FPCollection &input, const FPCollec
 		// Default behavior (no precision arg) - return at maximum precision (DateTime)
 		FPValue v;
 		v.type = FPValue::Type::DateTime;
-		v.string_val = formatDateTimeBoundary(p, 17, false, tz, false);
+		v.string_val = formatDateTimeBoundary(p, 17, false, tz, false, false);
 		return {v};
 	}
 	if (t == FPValue::Type::Time) {
@@ -12011,7 +12195,8 @@ FPCollection Evaluator::fn_lowBoundary(const FPCollection &input, const FPCollec
 	return {};
 }
 
-FPCollection Evaluator::fn_highBoundary(const FPCollection &input, const FPCollection *precision_arg) {
+FPCollection Evaluator::fn_highBoundary(const FPCollection &input, const FPCollection *precision_arg,
+                                        yyjson_doc *doc) {
 	if (input.empty()) return {};
 	auto &val = input[0];
 	auto t = effectiveType(val);
@@ -12031,7 +12216,7 @@ FPCollection Evaluator::fn_highBoundary(const FPCollection &input, const FPColle
 			time_val.type = FPValue::Type::Time;
 			time_val.string_val = normalizeTimeLiteralString(s);
 			FPCollection single = {time_val};
-			return fn_highBoundary(single, precision_arg);
+			return fn_highBoundary(single, precision_arg, doc);
 		}
 		if (s.size() >= 4 && std::isdigit((unsigned char)s[0]) && std::isdigit((unsigned char)s[1]) &&
 		    std::isdigit((unsigned char)s[2]) && std::isdigit((unsigned char)s[3])) {
@@ -12046,12 +12231,12 @@ FPCollection Evaluator::fn_highBoundary(const FPCollection &input, const FPColle
 			}
 			date_val.string_val = s;
 			FPCollection single = {date_val};
-			return fn_highBoundary(single, precision_arg);
+			return fn_highBoundary(single, precision_arg, doc);
 		}
 	}
 
 	if (t == FPValue::Type::Integer || t == FPValue::Type::Decimal) {
-		return decimalBoundary(val, precision_arg, true);
+		return decimalBoundary(val, precision_arg, true, authoredNumberText(doc, val.json_val));
 	}
 	if (t == FPValue::Type::Quantity) {
 		FPValue dec_val = FPValue::FromDecimal(val.quantity_value);
@@ -12095,7 +12280,7 @@ FPCollection Evaluator::fn_highBoundary(const FPCollection &input, const FPColle
 		// Default (no precision arg) - return at maximum precision (DateTime)
 		FPValue v;
 		v.type = FPValue::Type::DateTime;
-		v.string_val = formatDateTimeBoundary(p, 17, true, tz, false);
+		v.string_val = formatDateTimeBoundary(p, 17, true, tz, false, false);
 		return {v};
 	}
 	if (t == FPValue::Type::Time) {

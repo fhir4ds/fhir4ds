@@ -960,6 +960,10 @@ static fhirpath::FPCollection EvaluateFhirpath(FhirpathState &state, const char 
 	if (arena) {
 		evaluator.setArena(arena);
 	}
+	// FHIR4-58: hand the evaluator the JSON text it is about to evaluate so the
+	// boundary helpers can recover a number's AUTHORED spelling (yyjson keeps
+	// only the parsed double, and `9.5e2` / `950.0` differ in precision).
+	evaluator.setAuthoredSource(json_data, json_len);
 	fhirpath::FPCollection results;
 	try {
 		results = evaluator.evaluate(*ast, doc, yyjson_doc_get_root(doc));
