@@ -6349,8 +6349,8 @@ two causes, and BOTH had to be fixed:
    compare raw operands and answer NULL for an interval-shaped operand, like
    Python. The three-argument P-variants (`cqlSameAsP` family) KEEP the
    low-bound substitution — desktop is native there too, so it is not a
-   browser gap. Open on the fhir4ds lane: Python `cqlDateTimeEqual` RAISES on
-   such an operand (a desktop defect); the native one returns NULL.
+   browser gap. Python `cqlDateTimeEqual` used to RAISE on such an operand (a desktop
+   defect); FHIR4-59 (`ee58d84008a`) made it answer NULL like its siblings.
 
 CMS996 is now **114/114 (100%)**.
 
@@ -6954,15 +6954,15 @@ six functions the desktop bundles provide (`RoundQuantity`, `RoundQuantityTo`, `
 and predated the AMUX-171 Time rules, and `web/wasm-demo` and `web/cql-clinic` still ship
 their own diverged `cql-macros.ts`.
 
-**The wasm bundles were rebuilt on 2026-11-24** with `scripts/build_wasm_extensions.py`, last
-from `9e67030c688` (which contains dev `a9845673e87`), and `fhir4ds/wasm_extension_bundles.json`
-records their provenance. On the official CQL corpus vendored at `0a8f7d3` (2,043 tests, 2,015
-of which execute on both surfaces) real duckdb-wasm gives exactly the simulator's numbers
-(1,816 green, 128 parity gaps from missing macros and body drift, 64 representation
-differences, 7 that fail on both): no real-only gap is left. So every C++ change needs that
-rebuild, or the browser
-silently runs an older engine than desktop. The script's first real run failed four times
-before it built; the causes are recorded in `fhir4ds/operations/AGENTS.md`.
+**The wasm bundles were first rebuilt on 2026-11-24** with `scripts/build_wasm_extensions.py`
+and again after every C++ change (last from dev `62f53a961ca`, 2026-11-26);
+`fhir4ds/wasm_extension_bundles.json` records their provenance. On the official CQL corpus
+vendored at `0a8f7d3` (2,043 tests, 2,015 of which execute on both surfaces) real duckdb-wasm
+now gives exactly the simulator's numbers (1,966 green, 0 parity gaps, 42 representation
+differences, 7 that fail on both), and 1,001 of 1,001 evaluable FHIRPath R4 tests: no
+real-only gap is left. So every C++ change needs that rebuild, or the browser silently runs an
+older engine than desktop. The script's first real run failed four times before it built; the
+causes are recorded in `fhir4ds/operations/AGENTS.md`.
 
 **Tier C (real measure SQL on real duckdb-wasm) is a gate since 2026-11-24.** The CMS159 bind
 failure that motivated FHIR4-15/16 does not reproduce — the full population SQL binds and runs
