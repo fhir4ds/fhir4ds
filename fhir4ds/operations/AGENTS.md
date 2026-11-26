@@ -364,9 +364,12 @@ every failure is now fixed in the script, and each is a trap for anyone rebuildi
   (`web/website/static/{cql-cleanroom,cql-clinic-app,wasm-app,viewing-room-app}/{assets,extensions}`)
   and `fhir4ds/devserver/static-cleanroom/{assets,extensions}` hold copies of the bundles. They
   are in the manifest's `install` lists, so the script keeps them identical (the same bytes an
-  app rebuild would produce for that one file). BulkPublishDemo's copies are deliberately NOT
-  installed: it pins a different duckdb-wasm version (ledger: `bundle-drift-bulk-publisher`).
-- `--verify` exits 1 while BulkPublishDemo's drift exists; that is the intended signal.
+  app rebuild would produce for that one file). BulkPublishDemo's copies ARE installed since
+  2026-11-25: dev unified its duckdb-wasm pin with the other apps, so the two directories under
+  `web/website/static/bulk-publisher-app` are in the manifest's install lists and the
+  `bundle-drift-bulk-publisher` registration was retired.
+- `--verify` exits 0 on a clean tree. An exit 1 is a real copy drift or a stale bundle; read the
+  lines it prints rather than assuming a known one.
 
 ### Baseline recorded (dev `87bece82a55`, corpus `f724ee4`, 2026-11-24)
 

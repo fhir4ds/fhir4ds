@@ -289,21 +289,6 @@
       "expires": "2026-12-24"
     },
     {
-      "id": "bundle-drift-bulk-publisher",
-      "kind": "WASM_COPY_DRIFT",
-      "target": [
-        "web/website/package.json",
-        "web/website/static/bulk-publisher-app/extensions/cql.duckdb_extension.wasm",
-        "web/website/static/bulk-publisher-app/workers/cql.duckdb_extension.wasm",
-        "web/website/static/bulk-publisher-app/extensions/fhirpath.duckdb_extension.wasm",
-        "web/website/static/bulk-publisher-app/workers/fhirpath.duckdb_extension.wasm"
-      ],
-      "reason": "BulkPublishDemo (web/website/src/components/BulkPublishDemo, in the built snapshot web/website/static/bulk-publisher-app) ships its own cql and fhirpath wasm binaries and pins a different @duckdb/duckdb-wasm version (^1.33.1-dev41.0) than the other apps (1.33.1-dev64.0). Not overwritten by the wasm rebuild: the rebuilt bundles target the v1.5.5 core of the other apps and may not load under this app's pin. Owner: web apps \u2014 unify the pin, then let scripts/build_wasm_extensions.py install into its directories too.",
-      "owner": "web apps",
-      "since": "2026-11-24",
-      "expires": "2027-02-22"
-    },
-    {
       "id": "ts-body-drift-broken-bool-aggregates",
       "kind": "TS_BODY_DRIFT",
       "target": [
