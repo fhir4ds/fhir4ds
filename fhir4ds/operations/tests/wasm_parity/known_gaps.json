@@ -63,19 +63,6 @@
       "expires": "2027-02-22"
     },
     {
-      "id": "cql-parity-gap-boundary-null-precision",
-      "kind": "PARITY_GAP",
-      "suite": "cql",
-      "target": [
-        "CqlArithmeticFunctionsTest.xml::HighBoundaryNullPrecision",
-        "CqlArithmeticFunctionsTest.xml::LowBoundaryNullPrecision"
-      ],
-      "reason": "Desktop evaluates High/LowBoundary through the Python UDF (a null precision means the default precision, CQL-10); the browser contract runs the C++ mirror, which returns NULL for a null precision. Fix: port the null-precision default into the native boundary helpers and rebuild the bundles.",
-      "owner": "fhir4ds lane",
-      "since": "2026-11-24",
-      "expires": "2027-02-22"
-    },
-    {
       "id": "cql-desktop-defects-corpus-f724ee4",
       "kind": "DESKTOP_DEFECT",
       "suite": "cql",
@@ -125,40 +112,6 @@
       "expires": "2026-12-25",
       "suite": "us-core-2025",
       "surface": "real"
-    },
-    {
-      "id": "fhirpath-native-vs-core-boundary-exponent-decimal",
-      "kind": "DESKTOP_DEFECT",
-      "suite": "fhirpath",
-      "target": [
-        "HighBoundary/HighBoundaryDecimalExponent1",
-        "HighBoundary/HighBoundaryDecimalExponent2",
-        "HighBoundary/HighBoundaryDecimalExponent4",
-        "HighBoundary/HighBoundaryDecimalExponent5",
-        "HighBoundary/HighBoundaryDateTimeMillisecond1",
-        "HighBoundary/HighBoundaryDateTimeMillisecond3",
-        "LowBoundary/LowBoundaryDecimalExponent1",
-        "LowBoundary/LowBoundaryDecimalExponent3",
-        "LowBoundary/LowBoundaryDecimalExponent4"
-      ],
-      "reason": "The native highBoundary/lowBoundary disagree with the official expectation while the Python core passes (typed inputs, since WP-3): decimals that arrive in exponent notation (9.5e2) lose the mantissa precision the spec says counts (highBoundary(0) gives 951, not 955), and the DateTime millisecond boundary of an offset value is wrong (@2014-01-01T08:05-05:00.highBoundary(17) gives ...T08:59:59.999-12:00, not ...T08:00:59.999-12:00). Identical on the x86 and the wasm build, so every browser has it. Removed by a native fix in extensions/fhirpath plus an x86 and a wasm bundle rebuild; this gate flips to STALE then.",
-      "owner": "fhir4ds lane",
-      "since": "2026-11-25",
-      "expires": "2026-12-25"
-    },
-    {
-      "id": "fhirpath-native-vs-core-unescape-json",
-      "kind": "DESKTOP_DEFECT",
-      "suite": "fhirpath",
-      "target": [
-        "testEscapeUnescape/testUnescapeJson2",
-        "testEscapeUnescape/testUnescapeJson3",
-        "testEscapeUnescape/testUnescapeJson4"
-      ],
-      "reason": "Native unescape('json') leaves \\uXXXX and \\\" escapes in place ('\\\\u0041B'.unescape('json') stays \\\\u0041B instead of AB) while the Python core passes. Identical on the x86 and the wasm build, so every browser has it. Removed by a native fix plus an x86 and a wasm bundle rebuild.",
-      "owner": "fhir4ds lane",
-      "since": "2026-11-25",
-      "expires": "2026-12-25"
     }
   ]
 }
