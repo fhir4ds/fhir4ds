@@ -2978,6 +2978,33 @@ class OperatorsMixin:
                     f"conversion"
                 )
 
+        # FHIR4-70: CQL 1.5 Appendix B defines NO list arithmetic. `Add` (§9.1),
+        # `Subtract` (§9.2), `Multiply` (§9.3), `Divide` (§9.4), `Truncated
+        # Divide` (§9.5), `Modulo` (§9.6) and `Power` (§9.9) every one takes
+        # SCALAR operands (Integer/Long/Decimal/Quantity and, for Add/Subtract,
+        # a temporal left operand with a time-valued Quantity right). There is
+        # no `List<T>` signature and no element-wise promotion rule, so a
+        # list-valued operand is a SEMANTIC error — the reference engine raises
+        # InvalidOperatorArgument rather than producing anything.
+        #
+        # Before this guard a multi-row element-rows define
+        # (`define Nums: ([Condition] C return 1) X`) reached arithmetic as the
+        # SCALAR `LIMIT 1` lookup and silently computed over ONE element
+        # (`"Nums" + 1` -> 2.0 for a two-element list) — a SILENT WRONG ANSWER
+        # that reads as correct whenever the list happens to hold one element.
+        # Elementwise semantics are NOT invented here: CQL defines none.
+        if operator in ("+", "-", "*", "/", "^", "div", "mod", "%"):
+            for _operand in (expr.left, expr.right):
+                if self._multi_row_define_list(_operand) is not None:
+                    raise TranslationError(
+                        f"CQL arithmetic operator '{operator}' has no list "
+                        f"operand signature (CQL 1.5 Appendix B: Add/Subtract/"
+                        f"Multiply/Divide/TruncatedDivide/Modulo/Power take "
+                        f"scalar operands); a multi-row list-valued define must "
+                        f"be reduced to a scalar (e.g. with an aggregate or "
+                        f"Count/First) before arithmetic"
+                    )
+
         if operator == "implies":
             self._validate_boolean_operand(expr.left, operator)
             self._validate_boolean_operand(expr.right, operator)
@@ -3044,6 +3071,34 @@ class OperatorsMixin:
                 left = _coerce_query_rows_to_list(left)
             if _is_query_list_source(expr.right):
                 right = _coerce_query_rows_to_list(right)
+
+            # FHIR4-70: a multi-row element-rows define (`define Ids:
+            # ([Condition] C return C.id) X`) reaches this point as the SCALAR
+            # `LIMIT 1` lookup, so every list consumer below saw a VARCHAR
+            # instead of a list — `array_length(VARCHAR)` binder errors for
+            # `=`/`!=`/`~`/`includes`, and silent one-row answers for
+            # First/Last/IndexOf/arithmetic (guarded separately). Materialize
+            # the whole per-patient element list HERE, once, so each operator
+            # keeps its own (already correct) list lowering — the FHIR4-65
+            # doctrine: consumers materialize, the define keeps its row CTE.
+            #
+            # `in`/`contains` are excluded: they already run the identical
+            # FHIR4-65 gate inside `_translate_in_op`/`_translate_contains_op`,
+            # and duplicating it here would re-shape their tested SQL.
+            # `union`/`intersect`/`except` are excluded too: set operations own
+            # their element-rows conversion via `_union_operand_as_list`
+            # (CQL-19 EXPLORER QA-001).
+            if operator in {
+                "=", "!=", "<>", "~", "!~", "equivalent", "not equivalent",
+                "includes", "included in",
+                "properly includes", "properly included in",
+            }:
+                _multi_row_left = self._multi_row_define_list(expr.left)
+                if _multi_row_left is not None:
+                    left = _multi_row_left
+                _multi_row_right = self._multi_row_define_list(expr.right)
+                if _multi_row_right is not None:
+                    right = _multi_row_right
 
         # CQL §12.3: between — `X between low and high` → `X >= low and X <= high`
         # (`properly between` — FHIR4-46 — uses the exclusive comparisons).

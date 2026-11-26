@@ -2381,6 +2381,22 @@ class FunctionsMixin:
             from ...translator.expressions._utils import _promote_fhirpath_text_list
             index_args[0] = _promote_fhirpath_text_list(index_args[0])
             source_arg = index_args[0]
+            # FHIR4-70: a multi-row element-rows define (`define Ids:
+            # ([Condition] C return C.id) X`) reaches here as the SCALAR
+            # `LIMIT 1` lookup, so the rows-to-list coercion below built a
+            # ONE-ELEMENT list and CQLIndexOf answered 0 for whichever row the
+            # LIMIT kept and -1 for every other member — a SILENT WRONG
+            # ANSWER. Materialize the whole per-patient element list instead
+            # (FHIR4-65 doctrine: consumers materialize, the define keeps its
+            # row CTE) and skip the rows-to-list wrap that keys off the
+            # scalar-subquery shape.
+            _multi_row_list = None
+            _gate = getattr(self, "_multi_row_define_list", None)
+            if _gate is not None and func.arguments:
+                _multi_row_list = _gate(func.arguments[0])
+            if _multi_row_list is not None:
+                index_args[0] = _multi_row_list
+                source_arg = _multi_row_list
             # CQL-18 HISTORIAN QA-001: a reference to a PATIENT_SCALAR
             # List-typed define already lowers to a scalar subquery whose
             # value column IS the element list. Wrapping it in the
@@ -4577,6 +4593,22 @@ class FunctionsMixin:
         arg = func.arguments[0]
         if not isinstance(arg, Identifier):
             return None
+        # FHIR4-70: a multi-row ELEMENT-ROWS define (`define Ids: ([Condition]
+        # C return C.id) X`, RowShape.PATIENT_MULTI_VALUE) is the mirror case
+        # of the stored-list define below: one CTE ROW PER ELEMENT rather than
+        # one row holding the whole list. The generic argument path lowered it
+        # to the scalar lookup `(SELECT sub.value ... LIMIT 1)` and
+        # LIST_EXTRACT CHARACTER-SLICED that VARCHAR ('c1' -> 'c'/'1') — a
+        # SILENT WRONG ANSWER. Materialize the whole per-patient element list
+        # (FHIR4-65 doctrine: the CONSUMER materializes, the define keeps its
+        # row CTE) and index into it. A list-valued define must never reach
+        # the string Indexer (CQL-12 EXPLORER `_is_string_index_source`).
+        _multi_row = self._multi_row_define_list(arg)
+        if _multi_row is not None:
+            idx = 1 if func.name.lower() == "first" else -1
+            return SQLFunctionCall(
+                name="LIST_EXTRACT", args=[_multi_row, SQLLiteral(value=idx)]
+            )
         meta = self.context.definition_meta.get(arg.name)
         if not (
             meta is not None

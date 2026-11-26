@@ -259,6 +259,19 @@ class ListsMixin:
         elements = []
         for element in lst.elements:
             source = self._static_conversion_source_node(element)
+            # FHIR4-70: a multi-row ELEMENT-ROWS define
+            # (`define Ids: ([Condition] C return C.id) X`) is one CTE ROW PER
+            # ELEMENT, so the generic element translation produced the scalar
+            # `LIMIT 1` VARCHAR — the selector became `[VARCHAR]` and
+            # `Flatten({"Ids"})` failed with `flatten(VARCHAR[])` while the
+            # stored-list spelling (`{ "G" }`, `define G: Patient.name.given`)
+            # already nested correctly. Materialize the element list so the
+            # selector element is the LIST (CQL 1.5 Appendix B list selector:
+            # `{ "Ids" }` is a List<List<T>> holding the whole define list).
+            _multi_row = self._multi_row_define_materialized_list(source or element)
+            if _multi_row is not None:
+                elements.append(_multi_row)
+                continue
             elements.append(self.translate(source or element, boolean_context=False))
         return SQLArray(elements=elements)
 
@@ -804,6 +817,20 @@ class ListsMixin:
                     name="list_extract",
                     args=[_rows_list, SQLLiteral(value=_pos)],
                 )
+            # FHIR4-70: the method form of the same element-rows-define defect
+            # the function form has (`"Ids".first()`). Materialize the whole
+            # per-patient element list — the generic receiver translation
+            # scalarizes it to a `LIMIT 1` VARCHAR and list_extract
+            # CHARACTER-SLICES it ('c1' -> 'c'). FHIR4-65 doctrine: the
+            # consumer materializes, the define keeps its row CTE.
+            if _method_lower in {"first", "last"}:
+                _multi_row_src = self._multi_row_define_materialized_list(expr.source)
+                if _multi_row_src is not None:
+                    _pos = 1 if _method_lower == "first" else -1
+                    return SQLFunctionCall(
+                        name="list_extract",
+                        args=[_multi_row_src, SQLLiteral(value=_pos)],
+                    )
         source_usage = (
             ExprUsage.LIST
             if method.lower() in {"first", "last", "singletonfrom", "count", "distinct", "where", "select"}
@@ -1342,6 +1369,17 @@ class ListsMixin:
 
         # For non-Query sources, use list_extract (pre-sorted list)
         source = self.translate(node.source, boolean_context=False)
+        # FHIR4-70: a multi-row element-rows define (`define Ids: ([Condition]
+        # C return C.id) X`) holds ONE ROW PER ELEMENT, so the scalar lookup
+        # above produced `(SELECT sub.value ... LIMIT 1)` — a VARCHAR that
+        # LIST_EXTRACT CHARACTER-SLICES ('c1' -> 'c'), a SILENT WRONG ANSWER.
+        # A list-valued define must never reach the string Indexer (CQL-12
+        # EXPLORER `_is_string_index_source` boundary); materialize the whole
+        # per-patient element list instead (FHIR4-65 doctrine: the CONSUMER
+        # materializes the list, the define keeps its row CTE).
+        _full_list = self._multi_row_define_materialized_list(node.source)
+        if _full_list is not None:
+            source = _full_list
         # EXP1-009: the method form (X.first()) must enforce the same
         # List<T> signature as the function form — a statically String
         # source silently character-indexed ('abc'.first() -> 'a').
@@ -1362,6 +1400,11 @@ class ListsMixin:
 
         # For non-Query sources, use list_extract (pre-sorted list)
         source = self.translate(node.source, boolean_context=False)
+        # FHIR4-70: same element-rows-define fix as First (above) — the
+        # `LIMIT 1` scalar was CHARACTER-SLICED ('c1' -> '1').
+        _full_list = self._multi_row_define_materialized_list(node.source)
+        if _full_list is not None:
+            source = _full_list
         # EXP1-009: same List<T> signature enforcement as First (above).
         self._reject_scalar_string_list_function_arg([source], "Last")
         return SQLFunctionCall(name="LIST_EXTRACT", args=[source, SQLLiteral(value=-1)])
@@ -2661,6 +2704,31 @@ class ListsMixin:
         if isinstance(node, BinaryExpression) and (getattr(node, "operator", "") or "").strip().lower() in {"union", "|"}:
             return True
         return False
+
+    def _multi_row_define_materialized_list(self, node) -> Optional[SQLExpression]:
+        """FHIR4-70: materialize a multi-row element-rows define as a list.
+
+        Thin delegating wrapper over ``OperatorsMixin._multi_row_define_list``
+        (FHIR4-65, ``_operators.py``) so the list-consuming expression
+        translators in THIS module share ONE definition of "element-rows
+        define" instead of growing a second gate.
+
+        A define whose body is a query with a ``return`` clause
+        (``define Ids: ([Condition] C return C.id) X``) materializes as
+        ``RowShape.PATIENT_MULTI_VALUE`` — ONE ROW PER ELEMENT. Consumed
+        through the generic SCALAR identifier lookup it becomes
+        ``(SELECT sub.value ... LIMIT 1)``, so a list consumer inspected one
+        element (and LIST_EXTRACT character-sliced the VARCHAR).
+
+        Returns ``None`` for every operand the FHIR4-65 gate does not claim
+        (``stores_list_value`` defines, ``has_resource`` defines, literals,
+        retrieves, queries, unions, dotted references that are not
+        definitions), leaving the caller's existing lowering untouched.
+        """
+        gate = getattr(self, "_multi_row_define_list", None)
+        if gate is None:  # pragma: no cover - composed translator always has it
+            return None
+        return gate(node)
 
     def _list_operator_full_list_source(self, node) -> Optional[SQLExpression]:
         """CQL-19 EXPLORER QA-002: materialize retrieve-shaped list-operator

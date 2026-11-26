@@ -8250,6 +8250,64 @@ arithmetic (`<define> + 1`) — the last four SILENTLY wrong. Corpus measurement
 0 firings across qi-core-2025 (47) and us-core-2025 (74) for the membership
 gate, so the fix cannot move the DQM gate.
 
+### The remaining list consumers of a multi-row define (FHIR4-70)
+
+FHIR4-65 left the other consumers of the same element-rows define
+(`RowShape.PATIENT_MULTI_VALUE`, one CTE row per element) on the generic
+SCALAR lookup. FHIR4-70 wired all of them to the SAME gate
+(`OperatorsMixin._multi_row_define_list`) — no second mechanism:
+
+* **`First` / `Last`** — SILENT WRONG: `LIST_EXTRACT(<VARCHAR>, 1)` CHARACTER
+  SLICED the single kept row (`'c1'` -> `'c'`, `... -> '1'`). Fixed at BOTH
+  spellings and all three lowering sites: the function form
+  (`_functions.py::_translate_first_last_list_define_pre`, the pre-translate
+  hook that already owned the `stores_list_value` case), the method form
+  (`_lists.py::_translate_method_invocation`), and the prefix form
+  (`_lists.py::_translate_first_expression`/`_translate_last_expression`).
+  A list-valued define must NEVER reach the string `Indexer` (the CQL-12
+  EXPLORER `_is_string_index_source` boundary: `Patient.name.given[0]` is LIST
+  indexing, not character indexing).
+* **`IndexOf`** — SILENT WRONG: the define lowered to the scalar lookup and
+  `_query_rows_as_index_list` wrapped that single row into a ONE-ELEMENT list,
+  so `CQLIndexOf` answered 0 for whichever row `LIMIT 1` kept and -1 for every
+  other member. Gate in `_functions.py` `indexof` branch, before the
+  rows-to-list coercion (which keys off the scalar-subquery shape).
+* **`=` / `!=` / `~` / `!~` / `includes` / `included in` / `properly
+  includes` / `properly included in`** — LOUD (`array_length(VARCHAR)` binder
+  error). ONE gate at the `_translate_binary_expression` list-consumer choke
+  point, right after the `_coerce_query_rows_to_list` block, so each operator
+  keeps its own already-correct list lowering. `in`/`contains` are deliberately
+  EXCLUDED there (they own the identical FHIR4-65 gate inside
+  `_translate_in_op`/`_translate_contains_op`; duplicating it re-shaped their
+  tested SQL), and `union`/`intersect`/`except` keep `_union_operand_as_list`.
+* **`Flatten({ <define> })`** — LOUD (`flatten(VARCHAR[])`). A list-selector
+  ELEMENT is a list value (`{ "Ids" }` is `List<List<T>>`), so
+  `_translate_list_expression` materializes element-rows defines the same way
+  a `stores_list_value` define already nested.
+* **Arithmetic (`<define> + 1`)** — TYPED ERROR, never elementwise. CQL 1.5
+  Appendix B defines NO list arithmetic: Add (§9.1), Subtract (§9.2),
+  Multiply (§9.3), Divide (§9.4), Truncated Divide (§9.5), Modulo (§9.6) and
+  Power (§9.9) all take scalar operands, and there is no `List<T>` signature or
+  elementwise promotion rule (the reference engine raises
+  InvalidOperatorArgument). `_translate_binary_expression` raises a
+  `TranslationError` for `+ - * / ^ div mod` over a claimed define.
+
+ORDER IS NOT A GUARANTEE — the tests assert order-independent properties.
+A query's row order is not a CQL guarantee, so `First`/`Last`/`IndexOf` values
+legitimately differ across engines for the same data. The regression file
+(`test_fhir4_70_list_consumer_scalarization.py`) therefore asserts membership
+(`First(Ids) in Ids` — the card's own signature), distinct in-range indexes for
+every member, and `includes` over MULTI-element lists; `=`/`!=`/`~` are
+asserted only to EXECUTE (they are order-SENSITIVE over lists, so their value
+depends on row order). `First("Ids").first()`'s projected column shape
+(`['c1']`) remains a separate pre-existing list-typed-metadata issue: the
+element is correct post-fix, the projection wrap is not part of this card.
+
+Corpus measurement (translation-only, every definition as an output column,
+qi-core-2025 47 + us-core-2025 74, Measurement Period supplied): the gate fires
+**0 times**, so no measure SQL changes bytes and the DQM gate cannot move.
+Red-first: neutralizing only the five new gate sites fails 7 of 7 tests.
+
 ## `within N unit of` is Time-aware (FHIR4-50)
 
 The whole family (`within`, `properly within`, `starts/ends [properly] within`)
