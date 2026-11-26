@@ -6,6 +6,9 @@ T3  no wasm-only macros (the principle: no macros in WASM that desktop lacks)
 T4  same-name macros carry the same body
 T5  every desktop macro is in the reference or natively provided
 T6  every app's ``cql-macros.ts`` is byte-identical to the reference
+T7  the shipped wasm bundles are one known set
+T8  the reference file is exactly the generator's output, and every desktop macro the
+    generator cannot emit is hand-written in the overlay or registered as missing
 
 Plan: FEATURE_WASM_PARITY_TEST_INFRA.md section 4.3. A gap may be accepted only
 by a ledger entry with a reason, an owner and an expiry (section 4.5). The
@@ -17,7 +20,14 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
-from fhir4ds.operations.tests.wasm_parity import contract, report, shipped_bundles, surfaces
+from fhir4ds.operations.tests.wasm_parity import (
+    contract,
+    ledger,
+    macro_bundle,
+    report,
+    shipped_bundles,
+    surfaces,
+)
 
 GATE = "Step 0 (browser contract vs desktop)"
 
@@ -74,3 +84,35 @@ def test_t7_untracked_build_output_is_not_a_shipped_copy(tmp_path: Path) -> None
 
     assert tracked in found
     assert untracked not in found
+
+
+def test_t8_reference_bundle_is_generated(wasm_ledger):
+    """T8: the reference bundle is generated, never hand-maintained.
+
+    The committed file must equal what ``macro_bundle`` produces from the desktop
+    catalog, the real-browser catalog and the overlay, and the overlay may only carry
+    bodies for macros the generator cannot emit (each registered) or Joel's approved
+    browser-only macro.
+    """
+    generated = macro_bundle.generate()
+    found = macro_bundle.problems(generated)
+    hand_written = {macro_bundle.statement_name(s).lower() for s in macro_bundle.load_overlay()}
+    registered = {
+        target.lower()
+        for entry in wasm_ledger
+        if entry.kind == "MISSING_IN_BROWSER"
+        for target in ((entry.items,) if isinstance(entry.items, str) else entry.items)
+    }
+    unaccounted = sorted(set(generated.classification.blocked) - hand_written - registered)
+    if unaccounted:
+        found.append(
+            "desktop macros the generator cannot emit and nothing accounts for: "
+            f"{unaccounted}; hand-write them in cql-macros.overlay.ts or register them as "
+            "MISSING_IN_BROWSER in known_gaps.json"
+        )
+    stale = macro_bundle.browser_catalog_stale()
+    if stale:
+        found.append(stale)
+    assert not found, report.failure_text(
+        GATE, [ledger.Violation(GATE, "GENERATED_BUNDLE", text) for text in found]
+    )

@@ -135,10 +135,24 @@ def catalog(
     return {key: tuple(infos) for key, infos in out.items()}
 
 
+_BOOLEAN_CAST_RE = re.compile(r"CAST\('([tf])' AS BOOLEAN\)")
+
+
+def normalize_definition(text: str) -> str:
+    """Whitespace collapsed, and boolean constants in one spelling.
+
+    DuckDB prints a boolean constant in a macro body as ``true`` when it bound the
+    body at creation and as ``CAST('t' AS BOOLEAN)`` when it stored the text as
+    written; the two are the same macro.
+    """
+    folded = _BOOLEAN_CAST_RE.sub(lambda m: "true" if m.group(1) == "t" else "false", text)
+    return " ".join(folded.split())
+
+
 def macro_definitions(con: duckdb.DuckDBPyConnection) -> dict[str, str]:
     """Lower-cased macro name -> normalised body, for every macro in the catalog."""
     return {
-        info.name.lower(): info.definition
+        info.name.lower(): normalize_definition(info.definition)
         for infos in catalog(con).values()
         for info in infos
         if info.function_type == "macro" and info.definition is not None

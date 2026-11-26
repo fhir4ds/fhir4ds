@@ -3067,8 +3067,8 @@ The v0.0.14 campaign closed the **Catalog-Error class** (10 translator-reachable
 Python-only UDFs; FDD explicitly said "No TS-macro fallbacks ... none exist
 today; do not add"). Functions that already had a `cql-macros.ts` fallback were
 never audited, so a name-only macro-sync contract
-(`fhir4ds/operations/tests/test_macro_sync.py`, `BROWSER_MACRO_GAP_ALLOWLIST`)
-could not see semantic drift.
+(`fhir4ds/operations/tests/test_macro_sync.py`, `BROWSER_MACRO_GAP_ALLOWLIST` — removed
+by WP-1, which generates the bundle) could not see semantic drift.
 
 - **Fixed:** `ToDate`. Desktop `register()` shadows the name with a Python UDF
   returning validated `VARCHAR`; the browser macro was `CAST(x AS DATE)`
@@ -6887,9 +6887,10 @@ The gates below are now the contract; details, commands and the fragile areas ar
 exist on desktop; drift is not fixed by another one-off campaign but by a gate that makes the
 gaps visible and expires every excuse; the infrastructure comes before fixing the gaps.
 
-- **Step 0** names the reference bundle (`web/cql-cleanroom/src/lib/cql-macros.ts`) and fails on
-  a wasm-only macro, a same-name macro with a different body, a desktop macro the browser
-  lacks, a drifted `cql-macros.ts` copy, or a shipped `.wasm` that is not one known set
+- **Step 0** names the reference bundle (`web/cql-cleanroom/src/lib/cql-macros.ts`, GENERATED
+  from the desktop catalog since WP-1) and fails on a wasm-only macro, a same-name macro with
+  a different body, a desktop macro the browser lacks, a hand-edited or stale generated
+  bundle, a drifted `cql-macros.ts` copy, or a shipped `.wasm` that is not one known set
   (`fhir4ds/wasm_extension_bundles.json`, `scripts/build_wasm_extensions.py --verify`).
 - **Tier A** runs the official corpora through the official comparators on a *simulated*
   browser surface (x86 bundles + the reference macros) — CQL 2,037, ViewDefinition 144, OMOP
@@ -6937,10 +6938,21 @@ scalar call whose result nothing reads — a cache load in an unread projection 
 no-op. A curated set of measures runs per PR in the cleanroom CI job; the whole suite runs on
 the schedule. Details: `fhir4ds/operations/AGENTS.md`.
 
+**The macro contract gap is closed (WP-1, 2026-11-25).** The reference bundle is no longer
+hand-written: `macro_bundle.py` emits every desktop macro the browser cannot answer natively,
+in desktop registration order, checked against a catalog captured from the real browser. That
+took desktop macros missing from the browser from 33 to 1 (`setvariable`) and same-name
+macros with a different body from 53 to 0, and the official CQL corpus went from 128 parity
+gaps to 2 on both the simulator and real duckdb-wasm. Browsers therefore now behave like
+desktop for the strict-Boolean aggregates, typed numerics and regex functions. The spike's
+"five Python-only helpers" that were thought to block the list-equality family were table
+aliases (`unnest(x) AS _cql_contains_u(item)`), not functions.
+
 **Rules for anyone touching this surface**
 
-- A translator macro that reaches population SQL is ported to the reference bundle or added to
-  the ledger in the same change (`test_macro_sync.py` + Step 0).
+- A translator macro that reaches population SQL is browser-supported by regeneration or it
+  is registered, in the same change: `python -m fhir4ds.operations.tests.wasm_parity.macro_bundle
+  --write` after changing a macro body, a ledger entry for one the browser cannot get (Step 0).
 - C++ changes need a wasm rebuild as well as the x86 ones
   (`scripts/build_wasm_extensions.py --build --extension <name>`), or the browser silently
   runs last month's engine. Tier B turns that into an exact list instead of a suspicion, and
