@@ -1499,11 +1499,19 @@ class CTEManagerMixin:
                     else:
                         patient_id_col = SQLQualifiedIdentifier(parts=[source_alias, "patient_id"]) if source_alias else SQLIdentifier(name="patient_id")
 
-                    # Alias the value column(s) as "value" for downstream references
+                    # Alias the value column(s) as "value" for downstream references.
+                    # An already-aliased column must be UNWRAPPED, never
+                    # re-aliased: SQLSelect.to_sql renders a tuple column as
+                    # `<expr> AS "value"`, so an SQLAlias column would emit
+                    # `x AS "C" AS "value"` — a Parser Error near "AS"
+                    # (FHIR4-62: a definition-root list-valued query whose
+                    # source is a nested query's value projection).
                     value_columns = []
                     for col in sql_ast.columns:
                         if isinstance(col, tuple):
                             value_columns.append(col)
+                        elif isinstance(col, SQLAlias):
+                            value_columns.append((col.expr, "value"))
                         else:
                             value_columns.append((col, "value"))
                     new_columns = [patient_id_col] + value_columns
@@ -1575,10 +1583,16 @@ class CTEManagerMixin:
             else:
                 # Non-SELECT/UNION expression (e.g., SQLFunctionCall like jsonConcat).
                 # Wrap with patient_id from _patients and alias the expression as "value".
+                # An already-aliased expression is unwrapped first: SQLAlias renders
+                # `<expr> AS <alias>`, so nesting one under the "value" alias would
+                # emit `x AS q AS value` (FHIR4-62 alias-collision class).
                 return SQLSelect(
                     columns=[
                         SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
-                        SQLAlias(expr=sql_ast, alias="value"),
+                        SQLAlias(
+                            expr=sql_ast.expr if isinstance(sql_ast, SQLAlias) else sql_ast,
+                            alias="value",
+                        ),
                     ],
                     from_clause=SQLAlias(
                         expr=SQLIdentifier(name="_patients"),
