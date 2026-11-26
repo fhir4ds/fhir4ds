@@ -6147,9 +6147,14 @@ go through `_render_set_operands`.
 Note: `collapse_intervals` / `collapse_intervals_per` are in
 `_PYTHON_PREFERRED_CPP_CONFLICTS`, so the Python UDFs above are the desktop
 authority and carry the asymmetric one-sided Period semantics. The bundled C++
-`CollapseIntervals*` (used by the no-Python/WASM path) still treats a missing
-Period side as a closed null bound; port
-`_period_dict_to_interval` there before relying on one-sided Periods in WASM.
+`CollapseIntervals*` (used by the no-Python/WASM path) now carries the same
+rule (WP-5, `b734e58ae7d`, 2026-11-25): in `parse_interval_array` a Period with
+no `start` and no explicit `lowClosed` gets an OPEN null low bound, and the merge
+loops no longer narrow an unbounded end when a bounded neighbour merges into it
+(that second defect was browser-only and invisible on desktop). Before that the
+wasm path treated a missing Period side as a closed null bound and merged
+`[start-only, feb]` into a bounded interval. Pinned by
+`fhir4ds/cql/duckdb/tests/integration/test_wasm_period_point_parity.py`.
 
 ### Inlined-function parameter names shadowed by CTE columns (CMS108/CMS190, 2026-11-10)
 
@@ -6311,9 +6316,15 @@ two causes, and BOTH had to be fixed:
    NULL (CQL 1.5 comparison signatures are same-type; a Period is not a point).
    Fix: `cqlBefore/cqlAfter/cqlSameOrBefore/cqlSameOrAfter/cqlDateTimeEqual` are
    now in `_PYTHON_PREFERRED_CPP_CONFLICTS`, so the Python UDFs are the desktop
-   conformance authority (the bundled C++ keeps the WASM path). The C++ helper is
-   a trap for any future direct-SQL caller — port the Python strictness if it is
-   ever made authoritative again.
+   conformance authority (the bundled C++ keeps the WASM path). The C++ helper WAS
+   a trap for direct-SQL callers and for the browser path: it substituted the
+   Period's low bound. Ported in WP-5 (`b734e58ae7d`): `cqlBefore/After/
+   SameOrBefore/SameOrAfter/DateTimeEqual` (`DEFINE_CQL_TEMPORAL_TWO_UDF`) now
+   compare raw operands and answer NULL for an interval-shaped operand, like
+   Python. The three-argument P-variants (`cqlSameAsP` family) KEEP the
+   low-bound substitution — desktop is native there too, so it is not a
+   browser gap. Open on the fhir4ds lane: Python `cqlDateTimeEqual` RAISES on
+   such an operand (a desktop defect); the native one returns NULL.
 
 CMS996 is now **114/114 (100%)**.
 

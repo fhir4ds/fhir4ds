@@ -116,6 +116,17 @@
       "surface": "real"
     },
     {
+      "id": "tierc-cms136-uscore-sort-tie-order",
+      "kind": "PARITY_GAP",
+      "target": "CMS136",
+      "reason": "Tie order in `sort by periodStart`. Patient a46db6aa-5016-4111-bc4e-a31156c87ec6 has two atomoxetine MedicationRequests authored on 2026-01-02 (209-day and 1-day supply), so the `rolloutIntervals` aggregate depends on the order of two tied rows: desktop keeps source order (209-day first, the order the reference engine's stable sort gives and the fixture expects) and answers [[2026-07-30, 2026-07-30], [2026-01-02, 2026-07-29]]; real duckdb-wasm processes the 1-day request first and answers [[2026-01-03, 2026-07-30], [2026-01-02, 2026-01-02]]. Column 'ADHD Medications Taken on IPSD or During Continuation and Maintenance Phase'. Removed by a deterministic tie-break in the translated sort (WP-6).",
+      "owner": "wasm-parity lane (WP-6)",
+      "since": "2026-11-25",
+      "expires": "2026-12-25",
+      "suite": "us-core-2025",
+      "surface": "real"
+    },
+    {
       "id": "fhirpath-native-vs-core-boundary-exponent-decimal",
       "kind": "DESKTOP_DEFECT",
       "suite": "fhirpath",
