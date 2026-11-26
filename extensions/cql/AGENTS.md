@@ -199,6 +199,25 @@ See `docs/architecture/AUDIT_REPORT.md` §8 for full details.
 - Build: ✅ | Tests: 628 SQL assertions pass
 
 ### Known Fragile Areas (Found by QA - 2026-05-01)
+
+- **HighBoundary/LowBoundary precision argument (FHIR4-57, 2026-11-25)**:
+  **FIXED.** Two coupled rules live in the C++ boundary UDFs
+  (`cql_extension.cpp`), because the desktop Python authority in
+  `fhir4ds/cql/duckdb/udf/math.py` is shadowed by the `HighBoundary(value,
+  prec := NULL)` macro, so only tests that load the compiled extension alone
+  (no-Python/browser) see them: (1) a NULL `precision` is the SPEC DEFAULT
+  (`cql::default_boundary_precision`, the one-argument rule —
+  Decimal 8, Date authored precision, DateTime 17, Time 9), never SQL NULL;
+  (2) a DOUBLE argument is rendered as SHORTEST ROUND-TRIP text
+  (`shortest_double_text`), not at 17 significant digits — the boundary helpers
+  read the "authored" digits from the argument text, so `setprecision(17)` made
+  `1.58888` look like `1.5888800000000001` and `HighBoundary(1.58888, 8)`
+  answer `1.58888` instead of the fixture's `1.58888999`. Keep the
+  no-Python/browser tests in
+  `fhir4ds/cql/duckdb/tests/integration/test_arithmetic_operator_parity.py`
+  (tri-engine) aligned with any change here; `test_wasm_cpp_surface.py` pins the
+  VARCHAR overloads.
+
 - **CQL Errors and Messaging**: **FIXED 2026-05-31 / CQL-22 SKEPTIC/HISTORIAN**:
   `Message(source, condition, code, severity, message)` lowers to the public
   `CQLMessage` helper whenever the translator cannot fold it to source. Keep

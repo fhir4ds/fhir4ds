@@ -7782,6 +7782,49 @@ static void RegisterSpecialScalar(ExtensionLoader &loader, const std::string &na
 // cqlTimezoneOffset, predecessorOf, successorOf
 // =====================================================================
 
+// FHIR4-57: shortest round-trip decimal text for a binary64 argument.
+//
+// The boundary helpers derive the "authored" digits of their argument from its
+// text, so rendering a DOUBLE at a fixed 17 significant digits injects binary64
+// noise into the boundary: 1.58888 renders as "1.5888800000000001", whose high
+// boundary at precision 8 is 1.58888000 instead of the authored 1.58888999
+// (official fixture HighBoundaryNullPrecision). DuckDB's DOUBLE->VARCHAR cast —
+// and Python's str(), which is what the desktop Python UDFs see for a Decimal
+// argument — use the shortest representation that round-trips.
+static std::string shortest_double_text(double value) {
+	if (!std::isfinite(value)) {
+		std::ostringstream oss;
+		oss << value;
+		return oss.str();
+	}
+	for (int precision = 1; precision <= 17; precision++) {
+		std::ostringstream oss;
+		oss << std::setprecision(precision) << value;
+		std::string text = oss.str();
+		char *end = NULL;
+		double parsed = std::strtod(text.c_str(), &end);
+		if (end != text.c_str() && *end == '\0' && parsed == value) {
+			return text;
+		}
+	}
+	std::ostringstream oss;
+	oss << std::setprecision(17) << value;
+	return oss.str();
+}
+
+// FHIR4-57: a NULL precision argument is the spec/signature DEFAULT precision
+// (the same one the one-argument overload applies — CQL §22.10/§22.14 and the
+// reference HighBoundaryEvaluator/LowBoundaryEvaluator signatures), never an
+// unknown result. The Python authority implements this as
+// ``precision is None -> _default_boundary_precision(value)``.
+static cql::Optional<int64_t> boundary_precision_or_default(
+    const UnifiedVectorFormat &p_data, idx_t p_idx, const std::string &value) {
+	if (p_data.validity.RowIsValid(p_idx)) {
+		return cql::Optional<int64_t>(UnifiedVectorFormat::GetData<int64_t>(p_data)[p_idx]);
+	}
+	return cql::default_boundary_precision(value);
+}
+
 DEFINE_ONE_STR_STR_UDF(HighBoundaryFunc1, {
 	auto prec = cql::default_boundary_precision(a_str);
 	if (!prec) { result_mask.SetInvalid(i); continue; }
@@ -7797,7 +7840,6 @@ static void HighBoundaryFunc2(DataChunk &args, ExpressionState &state, Vector &r
 	args.data[1].ToUnifiedFormat(count, p_data);
 
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
-	auto p_vals = UnifiedVectorFormat::GetData<int64_t>(p_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
 	auto result_data = fhir4ds_compat::data<string_t>(result);
@@ -7807,14 +7849,15 @@ static void HighBoundaryFunc2(DataChunk &args, ExpressionState &state, Vector &r
 		auto a_idx = a_data.sel->get_index(i);
 		auto p_idx = p_data.sel->get_index(i);
 
-		if (!a_data.validity.RowIsValid(a_idx) || !p_data.validity.RowIsValid(p_idx)) {
+		if (!a_data.validity.RowIsValid(a_idx)) {
 			result_mask.SetInvalid(i);
 			continue;
 		}
 
 		std::string val = a_vals[a_idx].GetString();
-		int prec = static_cast<int>(p_vals[p_idx]);
-		auto res = cql::high_boundary(val, prec);
+		auto prec = boundary_precision_or_default(p_data, p_idx, val);
+		if (!prec) { result_mask.SetInvalid(i); continue; }
+		auto res = cql::high_boundary(val, static_cast<int>(*prec));
 		if (!res) { result_mask.SetInvalid(i); continue; }
 		result_data[i] = StringVector::AddString(result, *res);
 	}
@@ -7835,7 +7878,6 @@ static void LowBoundaryFunc2(DataChunk &args, ExpressionState &state, Vector &re
 	args.data[1].ToUnifiedFormat(count, p_data);
 
 	auto a_vals = UnifiedVectorFormat::GetData<string_t>(a_data);
-	auto p_vals = UnifiedVectorFormat::GetData<int64_t>(p_data);
 
 	result.SetVectorType(VectorType::FLAT_VECTOR);
 	auto result_data = fhir4ds_compat::data<string_t>(result);
@@ -7845,14 +7887,15 @@ static void LowBoundaryFunc2(DataChunk &args, ExpressionState &state, Vector &re
 		auto a_idx = a_data.sel->get_index(i);
 		auto p_idx = p_data.sel->get_index(i);
 
-		if (!a_data.validity.RowIsValid(a_idx) || !p_data.validity.RowIsValid(p_idx)) {
+		if (!a_data.validity.RowIsValid(a_idx)) {
 			result_mask.SetInvalid(i);
 			continue;
 		}
 
 		std::string val = a_vals[a_idx].GetString();
-		int prec = static_cast<int>(p_vals[p_idx]);
-		auto res = cql::low_boundary(val, prec);
+		auto prec = boundary_precision_or_default(p_data, p_idx, val);
+		if (!prec) { result_mask.SetInvalid(i); continue; }
+		auto res = cql::low_boundary(val, static_cast<int>(*prec));
 		if (!res) { result_mask.SetInvalid(i); continue; }
 		result_data[i] = StringVector::AddString(result, *res);
 	}
@@ -7864,20 +7907,20 @@ static void HighBoundaryDoubleFunc(DataChunk &args, ExpressionState &state, Vect
 	args.data[0].ToUnifiedFormat(count, a_data);
 	args.data[1].ToUnifiedFormat(count, p_data);
 	auto a_vals = UnifiedVectorFormat::GetData<double>(a_data);
-	auto p_vals = UnifiedVectorFormat::GetData<int64_t>(p_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
 	auto result_data = fhir4ds_compat::data<double>(result);
 	auto &result_mask = fhir4ds_compat::validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto ai = a_data.sel->get_index(i);
 		auto pi = p_data.sel->get_index(i);
-		if (!a_data.validity.RowIsValid(ai) || !p_data.validity.RowIsValid(pi)) {
+		if (!a_data.validity.RowIsValid(ai)) {
 			result_mask.SetInvalid(i);
 			continue;
 		}
-		std::ostringstream oss;
-		oss << std::setprecision(17) << a_vals[ai];
-		auto out = cql::high_boundary(oss.str(), static_cast<int>(p_vals[pi]));
+		std::string text = shortest_double_text(a_vals[ai]);
+		auto prec = boundary_precision_or_default(p_data, pi, text);
+		if (!prec) { result_mask.SetInvalid(i); continue; }
+		auto out = cql::high_boundary(text, static_cast<int>(*prec));
 		if (!out) { result_mask.SetInvalid(i); continue; }
 		result_data[i] = std::stod(*out);
 	}
@@ -7897,9 +7940,8 @@ static void HighBoundaryDoubleFunc1(DataChunk &args, ExpressionState &state, Vec
 			result_mask.SetInvalid(i);
 			continue;
 		}
-		std::ostringstream oss;
-		oss << std::setprecision(17) << a_vals[ai];
-		auto out = cql::high_boundary(oss.str(), 8);
+		std::string text = shortest_double_text(a_vals[ai]);
+		auto out = cql::high_boundary(text, 8);
 		if (!out) { result_mask.SetInvalid(i); continue; }
 		result_data[i] = std::stod(*out);
 	}
@@ -7911,20 +7953,20 @@ static void LowBoundaryDoubleFunc(DataChunk &args, ExpressionState &state, Vecto
 	args.data[0].ToUnifiedFormat(count, a_data);
 	args.data[1].ToUnifiedFormat(count, p_data);
 	auto a_vals = UnifiedVectorFormat::GetData<double>(a_data);
-	auto p_vals = UnifiedVectorFormat::GetData<int64_t>(p_data);
 	result.SetVectorType(VectorType::FLAT_VECTOR);
 	auto result_data = fhir4ds_compat::data<double>(result);
 	auto &result_mask = fhir4ds_compat::validity(result);
 	for (idx_t i = 0; i < count; i++) {
 		auto ai = a_data.sel->get_index(i);
 		auto pi = p_data.sel->get_index(i);
-		if (!a_data.validity.RowIsValid(ai) || !p_data.validity.RowIsValid(pi)) {
+		if (!a_data.validity.RowIsValid(ai)) {
 			result_mask.SetInvalid(i);
 			continue;
 		}
-		std::ostringstream oss;
-		oss << std::setprecision(17) << a_vals[ai];
-		auto out = cql::low_boundary(oss.str(), static_cast<int>(p_vals[pi]));
+		std::string text = shortest_double_text(a_vals[ai]);
+		auto prec = boundary_precision_or_default(p_data, pi, text);
+		if (!prec) { result_mask.SetInvalid(i); continue; }
+		auto out = cql::low_boundary(text, static_cast<int>(*prec));
 		if (!out) { result_mask.SetInvalid(i); continue; }
 		result_data[i] = std::stod(*out);
 	}
@@ -7944,9 +7986,8 @@ static void LowBoundaryDoubleFunc1(DataChunk &args, ExpressionState &state, Vect
 			result_mask.SetInvalid(i);
 			continue;
 		}
-		std::ostringstream oss;
-		oss << std::setprecision(17) << a_vals[ai];
-		auto out = cql::low_boundary(oss.str(), 8);
+		std::string text = shortest_double_text(a_vals[ai]);
+		auto out = cql::low_boundary(text, 8);
 		if (!out) { result_mask.SetInvalid(i); continue; }
 		result_data[i] = std::stod(*out);
 	}

@@ -774,3 +774,99 @@ define TemporalPlusQuantity: @2024-01-01 + 1 'day'
         )
         with pytest.raises(TranslationError):
             translate_cql(library)
+
+
+def test_cql_high_low_boundary_null_precision_uses_spec_default_fhir4_57() -> None:
+    """FHIR4-57: a NULL precision argument applies the spec/signature default.
+
+    Official fixtures ``CqlArithmeticFunctionsTest.xml::HighBoundaryNullPrecision``
+    (``HighBoundary(1.58888, null)`` -> ``1.58888999``) and
+    ``::LowBoundaryNullPrecision`` (-> ``1.58888000``) were the last two
+    official CQL cells failing in browsers only: the desktop Python UDFs treat
+    ``precision is None`` as "use the default precision for the value kind",
+    while the compiled C++ two-argument overloads answered SQL NULL.  A Decimal
+    argument additionally exposes the second half of the same defect: the C++
+    DOUBLE overload rendered the binary64 argument at 17 significant digits, so
+    the boundary was computed from 1.5888800000000001 rather than the authored
+    1.58888 (``HighBoundary(1.58888, 8)`` answered 1.58888, not 1.58888999).
+    The Python authority is the reference for both halves, so every engine must
+    agree here.
+    """
+    from decimal import Decimal
+
+    from .wasm_runtime_helpers import no_python_connection
+
+    cql = """library BoundaryNullPrecision version '1.0.0'
+using FHIR version '4.0.1'
+context Patient
+define HighDecimalNull: HighBoundary(1.58888, null)
+define LowDecimalNull: LowBoundary(1.58888, null)
+define HighDateNull: HighBoundary(@2024-01-01, null)
+define LowDateNull: LowBoundary(@2024-01-01, null)
+define HighDateTimeNull: HighBoundary(@2024-06-15T10:30:00, null)
+define LowDateTimeNull: LowBoundary(@2024-06-15T10:30:00, null)
+define HighTimeNull: HighBoundary(@T12:30:00, null)
+define LowTimeNull: LowBoundary(@T12:30:00, null)
+define HighDecimalOmitted: HighBoundary(1.58888)
+define HighDecimalExplicit: HighBoundary(1.58888, 8)
+define LowDecimalExplicit: LowBoundary(1.58888, 8)
+"""
+    translated = translate_cql(cql)
+    expected = {
+        # Official null-precision fixtures, applied to the Decimal overload.
+        "HighDecimalNull": Decimal("1.58888999"),
+        "LowDecimalNull": Decimal("1.58888000"),
+        # Temporal defaults: Date keeps its authored precision, DateTime fills
+        # to milliseconds (17), Time fills to milliseconds (9).
+        "HighDateNull": "2024-01-01",
+        "LowDateNull": "2024-01-01",
+        "HighDateTimeNull": "2024-06-15T10:30:00.999",
+        "LowDateTimeNull": "2024-06-15T10:30:00.000",
+        "HighTimeNull": "T12:30:00.999",
+        "LowTimeNull": "T12:30:00.000",
+        # Controls: omitted precision is the same default, and the explicit
+        # precision form must use the authored digits of the argument.
+        "HighDecimalOmitted": Decimal("1.58888999"),
+        "HighDecimalExplicit": Decimal("1.58888999"),
+        "LowDecimalExplicit": Decimal("1.58888000"),
+    }
+
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        with no_python_connection() as no_py:
+            for name, value in expected.items():
+                sql = "SELECT " + translated[name].to_sql()
+                row = {
+                    "python": py.execute(sql).fetchone()[0],
+                    "native": cpp.execute(sql).fetchone()[0],
+                    "no_python": no_py.execute(sql).fetchone()[0],
+                }
+                for engine, actual in row.items():
+                    assert actual == value, f"{name} on {engine}: {actual!r} != {value!r}"
+
+            # Official fixture expressions verbatim. The declared RESULT types
+            # differ by surface (desktop wraps a Python UDF whose transport is
+            # UNION(VARCHAR, DOUBLE) in a same-name macro; the no-Python surface
+            # is the C++ DOUBLE/VARCHAR overload — the documented
+            # MACRO_VS_NATIVE typing difference), so numeric forms normalize
+            # through VARCHAR first (the CQL-10 EXPLORER cast doctrine) and the
+            # String form compares as text.
+            for sql, value in (
+                (
+                    "SELECT CAST(CAST(HighBoundary(1.58888, null) AS VARCHAR) AS DECIMAL(38, 8))",
+                    Decimal("1.58888999"),
+                ),
+                (
+                    "SELECT CAST(CAST(LowBoundary(1.58888, null) AS VARCHAR) AS DECIMAL(38, 8))",
+                    Decimal("1.58888000"),
+                ),
+                ("SELECT HighBoundary('1.58888', null)", "1.58888999"),
+                ("SELECT LowBoundary('1.58888', null)", "1.58888000"),
+            ):
+                for engine, con in (("python", py), ("native", cpp), ("no_python", no_py)):
+                    actual = con.execute(sql).fetchone()[0]
+                    assert actual == value, f"{sql} on {engine}: {actual!r} != {value!r}"
+    finally:
+        py.close()
+        cpp.close()
