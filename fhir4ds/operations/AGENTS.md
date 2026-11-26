@@ -339,9 +339,10 @@ fixed measure makes its registration STALE and the gate refuses until it is dele
   measures: ~8 min to translate + ~12 min on the real engine here) and `us-core-2025` (74
   measures: ~26 min + ~35 min; CMS136 alone emits ~22 MB of SQL). Each suite is its own step
   so one failing does not hide the other.
-- **State after WP-6** (dev `6e9112b6b7c` + WP-6, fixtures pinned at `90743945`, 2026-11-26;
-  zero gaps on either suite): US-Core 2025 — all 74 measures translate and run, 34 identical and
-  40 order/instant-only; QI-Core 2025 — all 47, 24 identical and 23 order/instant-only. Before
+- **State after WP-6** (re-validated on the frozen dev `a1fc8dcd6f6` + WP-6 + the cql wasm bundle
+  rebuilt from it, fixtures pinned at `90743945`, 2026-11-26; zero gaps on either suite):
+  US-Core 2025 — all 74 measures translate and run, 33 identical and 41 order/instant-only;
+  QI-Core 2025 — all 47, 25 identical and 22 order/instant-only. Before
   WP-6 each suite had one registered real gap (US-Core CMS136, QI-Core CMS986); see "order is
   part of the answer" below. Before that US-Core had 3 desktop TRANSLATE_ERRORs (CMS986,
   NHSNAcuteCare, NHSNGlycemicControl), fixed by the fhir4ds lane (FHIR4-56, FHIR4-60), and two
@@ -411,10 +412,15 @@ out in query-plan order: source order on desktop, reversed on duckdb-wasm for tw
 requests. CMS986 (QI-Core): `"X" contains QualifyingEncounter` kept the define's LIMIT-1
 demotion inside the membership test, so only the row the plan returned first could match;
 desktop was dropping every other matching encounter as well. Fixes and rules: `fhir4ds/cql/AGENTS.md`,
-"Order is part of the answer". Desktop cell diff, WP-6 against dev on the same fixtures:
-QI-Core 47,505 cells, 19 changed (all CMS986 evidence lists, 3 columns for 10 patients, the
-earlier value contained in the new one); US-Core 85,317 cells, 0 changed; 15 and 27 cells
-order/instant-only. DQM gates 47/47 and 73/73. Reading a Tier C gap: check whether the `sort by`
+"Order is part of the answer". Desktop cell diff, WP-6 against the frozen dev translator
+(`a1fc8dcd6f6`) on the same fixtures: QI-Core 47,505 cells, 19 changed (all CMS986 evidence
+lists, 3 columns for 10 patients, the earlier value contained in the new one); US-Core 85,317
+cells, 0 changed; 15 and 66 cells order/instant-only (US-Core list columns whose order now
+follows the id tie-break). No boolean and no non-list cell changed. DQM gates 47/47 and 73/73.
+The FHIR4-72 hoist is pinned together with the WP-6 membership shapes in
+`test_wasm_parity_list_operands.py`: list-binary operators consume only materialized `_cse_*`
+operands, and the answers are the same on desktop and real duckdb-wasm across repetitions.
+Reading a Tier C gap: check whether the `sort by`
 reached the SQL that consumes the list before suspecting the engine. Still open (WP-11): a
 define whose value is an aggregate fold over a listified tuple query is plan-sensitive on
 DuckDB 1.5.6 (NULL inside the full population SQL); no measure in either suite shows it — Tier
