@@ -339,9 +339,11 @@ fixed measure makes its registration STALE and the gate refuses until it is dele
   measures: ~8 min to translate + ~12 min on the real engine here) and `us-core-2025` (74
   measures: ~26 min + ~35 min; CMS136 alone emits ~22 MB of SQL). Each suite is its own step
   so one failing does not hide the other.
-- **US-Core 2025 state** (dev `62f53a961ca` + the wasm bundles rebuilt from it, 2026-11-26):
-  all 74 measures translate and run — 36 identical, 37 order/instant-only, 1 registered real
-  gap (CMS136, a `sort by` tie — WP-6). Before that it had 3 desktop TRANSLATE_ERRORs (CMS986,
+- **State after WP-6** (dev `6e9112b6b7c` + WP-6, fixtures pinned at `90743945`, 2026-11-26;
+  zero gaps on either suite): US-Core 2025 — all 74 measures translate and run, 34 identical and
+  40 order/instant-only; QI-Core 2025 — all 47, 24 identical and 23 order/instant-only. Before
+  WP-6 each suite had one registered real gap (US-Core CMS136, QI-Core CMS986); see "order is
+  part of the answer" below. Before that US-Core had 3 desktop TRANSLATE_ERRORs (CMS986,
   NHSNAcuteCare, NHSNGlycemicControl), fixed by the fhir4ds lane (FHIR4-56, FHIR4-60), and two
   real diffs fixed in the native engine (WP-5, below). A translation error cannot be
   registered, so the suite could only be scheduled once the last of those was fixed.
@@ -400,6 +402,23 @@ low bound where the Python UDFs answer NULL. Desktop was unaffected by construct
 the authority for those names), so only the no-Python parity legs and Tier C could see it —
 which is why Tier C exists. Pinned by
 `fhir4ds/cql/duckdb/tests/integration/test_wasm_period_point_parity.py`.
+
+**WP-6 (2026-11-26): the last two real gaps were translator defects, wrong on desktop too.**
+CMS136 (US-Core): `return all {period, periodStart} sort by periodStart` names an element of the
+returned tuple. The translator resolved sort keys only against projected column aliases and
+`let` variables, so the sort was dropped without a word and the list an aggregate iterates came
+out in query-plan order: source order on desktop, reversed on duckdb-wasm for two same-day
+requests. CMS986 (QI-Core): `"X" contains QualifyingEncounter` kept the define's LIMIT-1
+demotion inside the membership test, so only the row the plan returned first could match;
+desktop was dropping every other matching encounter as well. Fixes and rules: `fhir4ds/cql/AGENTS.md`,
+"Order is part of the answer". Desktop cell diff, WP-6 against dev on the same fixtures:
+QI-Core 47,505 cells, 19 changed (all CMS986 evidence lists, 3 columns for 10 patients, the
+earlier value contained in the new one); US-Core 85,317 cells, 0 changed; 15 and 27 cells
+order/instant-only. DQM gates 47/47 and 73/73. Reading a Tier C gap: check whether the `sort by`
+reached the SQL that consumes the list before suspecting the engine. Still open (WP-11): a
+define whose value is an aggregate fold over a listified tuple query is plan-sensitive on
+DuckDB 1.5.6 (NULL inside the full population SQL); no measure in either suite shows it — Tier
+C is clean on both — so it is not a gap today, only a trap for new CQL.
 
 
 ### Rebuilding the wasm bundles — what the first real run taught (2026-11-24)
