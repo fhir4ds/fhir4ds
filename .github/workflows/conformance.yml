@@ -40,12 +40,12 @@ jobs:
 
       - name: Run full conformance
         env:
-          # FHIR4-64: bind every measure's ALL-COLUMNS SQL with EXPLAIN. The
-          # QI-Core sweep always runs; the US-Core sweep costs ~535s of DuckDB
-          # planning (CMS1218 alone is ~124s), so it is enabled HERE — the
-          # nightly/main gate — rather than in every per-push run. This is the
-          # class that let CMS986 report 73/73 while it could not bind at all.
-          FHIR4DS_BIND_CHECK_US_CORE: "1"
+          # FHIR4-64: bind every measure's ALL-COLUMNS SQL with EXPLAIN. On by
+          # default (FHIR4DS_BIND_CHECK=0 opts out); set explicitly here so the
+          # gate's intent is visible. This is the class that let CMS986 report
+          # 73/73 while it could not bind at all. ~11 min of DuckDB planning for
+          # the two suites (CMS1218 alone is ~124s), hence timeout-minutes: 60.
+          FHIR4DS_BIND_CHECK: "1"
         run: python3 conformance/scripts/run_all.py
 
       - name: Upload conformance reports

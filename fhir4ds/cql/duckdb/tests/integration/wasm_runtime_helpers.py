@@ -113,15 +113,22 @@ def extension_paths() -> list[Path]:
         ]
 
 
-def register_no_python_runtime(con: duckdb.DuckDBPyConnection, tmpdir: Path) -> None:
-    """Load C++ extensions and pure SQL macros, but no Python UDF supplements."""
+def load_extensions(con: duckdb.DuckDBPyConnection, tmpdir: Path) -> None:
+    """LOAD every ABI-matched C++ bundle, renaming ABI-suffixed files first.
+
+    DuckDB only LOADs files named ``*.duckdb_extension``, so an ABI-suffixed
+    bundle (``.duckdb156_extension``, ``.duckdb2_extension``) must be copied
+    under the canonical basename — and the basename drives the entrypoint, so
+    keep ``<name>.duckdb_extension``.
+
+    Any test that loads the bundles itself must go through here: calling
+    ``LOAD '<path>'`` on the ABI-suffixed name fails with "extensions are files
+    ending with '.duckdb_extension'" (which is how
+    test_cql_todate_native_only_matches_python_semantics_s32 turned red).
+    """
     for src in extension_paths():
         if not src.exists():
             raise FileNotFoundError(f"C++ extension is not built: {src}")
-        # DuckDB only LOADs files named `*.duckdb_extension`, so an ABI-suffixed
-        # bundle (`.duckdb156_extension`, `.duckdb2_extension`) must be copied
-        # under the canonical basename — and the basename drives the entrypoint,
-        # so keep `<name>.duckdb_extension`.
         name = src.name
         for sfx in (".duckdb2_extension", ".duckdb156_extension"):
             if name.endswith(sfx):
@@ -131,6 +138,10 @@ def register_no_python_runtime(con: duckdb.DuckDBPyConnection, tmpdir: Path) -> 
         shutil.copy2(src, load_path)
         con.execute(f"LOAD '{load_path}'")
 
+
+def register_no_python_runtime(con: duckdb.DuckDBPyConnection, tmpdir: Path) -> None:
+    """Load C++ extensions and pure SQL macros, but no Python UDF supplements."""
+    load_extensions(con, tmpdir)
     # The current browser build relies mostly on C++ UDFs, but the final runtime
     # contract permits pure SQL macros. Keep this native gate aligned with that
     # contract while still excluding Python create_function() calls.

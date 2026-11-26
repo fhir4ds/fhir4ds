@@ -478,4 +478,10 @@ class TestEngine:
 
 
 def test_version():
-    assert matching_version == "0.0.25"  # aligned with root per test_version doctrine
+    # Release-neutral: compare against the ROOT package version instead of a
+    # hardcoded release string. The hardcoded "0.0.25" broke on the first bump
+    # to 0.0.26 and made the matching gate red for a reason unrelated to
+    # matching (release-consistency doctrine, 0.0.6/0.0.8 Domain 10).
+    import fhir4ds
+
+    assert matching_version == fhir4ds.__version__

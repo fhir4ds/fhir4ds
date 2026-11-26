@@ -538,9 +538,11 @@ class TestCategorize:
 
 class TestPublicSurface:
     def test_import_package_clean(self):
-        import fhir4ds  # noqa: F401
+        import fhir4ds
         import fhir4ds.dedup
-        assert fhir4ds.dedup.__version__ == "0.0.25"
+        # Release-neutral (see the matching twin): a hardcoded release string
+        # went stale at the 0.0.26 bump and reddened an import test.
+        assert fhir4ds.dedup.__version__ == fhir4ds.__version__
 
     def test_normalized_date_is_frozen(self):
         result = normalize_temporal(_obs("effectiveDateTime", "2024-03-05"))

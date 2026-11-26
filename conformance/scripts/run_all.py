@@ -54,21 +54,22 @@ SCRIPTS = [
     # harness projects population columns only (CMS986 for months). These entries
     # bind every measure's ALL-COLUMNS SQL with EXPLAIN and exit non-zero on the
     # first failure. They write no report, so they are exit-status-only.
-    ("DQM bind-only (QI-Core 2025)", "conformance/scripts/run_dqm_bind.py", None, ("--suite", "qi-core-2025")),
-    # ~535s of DuckDB planning for the 73 measures, so the master gate is not the
-    # right place to pay it on every push. The nightly/main conformance job sets
-    # FHIR4DS_BIND_CHECK_US_CORE=1; local runs can do the same when touching the
-    # translator, because US-Core is where the CMS986 class lived.
-    ("DQM bind-only (US-Core 2025)", "conformance/scripts/run_dqm_bind.py", None, ("--suite", "us-core-2025"), "FHIR4DS_BIND_CHECK_US_CORE"),
+    # Both bind-only sweeps are ON by default and share ONE opt-out,
+    # FHIR4DS_BIND_CHECK=0 — see the comment above the SCRIPTS table. They
+    # contribute no test counts, so only their planning cost matters to a caller
+    # that just needs the totals (test_conformance_baseline does exactly that).
+    ("DQM bind-only (QI-Core 2025)", "conformance/scripts/run_dqm_bind.py", None, ("--suite", "qi-core-2025"), "FHIR4DS_BIND_CHECK"),
+    ("DQM bind-only (US-Core 2025)", "conformance/scripts/run_dqm_bind.py", None, ("--suite", "us-core-2025"), "FHIR4DS_BIND_CHECK"),
     ("OMOP Mapping", "conformance/scripts/run_omop.py", "conformance/reports/omop_report.json", ()),
 ]
 
 def suite_entry(entry):
     """Normalize a SCRIPTS row to ``(name, script, report, args, gate_env)``.
 
-    The optional 5th element names an environment variable that must be set for
-    the entry to run. Bind-only gates (FHIR4-64) use it because their full-suite
-    cost is DuckDB planning time, not conformance work.
+    The optional 5th element names an environment variable that, when set to
+    "0", SKIPS the entry (it runs by default). Bind-only gates (FHIR4-64) use it
+    because their cost is DuckDB planning time, not conformance work, and it
+    contributes no test counts.
     """
     name, path, report_path, extra_args = entry[:4]
     gate_env = entry[4] if len(entry) > 4 else None
@@ -191,8 +192,8 @@ def main():
     outcomes: list[SuiteOutcome] = []
     for entry in SCRIPTS:
         name, path, report_path, extra_args, gate_env = suite_entry(entry)
-        if gate_env and not os.environ.get(gate_env):
-            print(f"\n>>> Skipping {name} (set {gate_env}=1 to enable).")
+        if gate_env and os.environ.get(gate_env, "1") == "0":
+            print(f"\n>>> Skipping {name} ({gate_env}=0).")
             continue
         outcomes.append(run_script(name, path, report_path, extra_args))
 
@@ -209,7 +210,7 @@ def main():
 
     for entry in SCRIPTS:
         name, _path, report_path, _args, gate_env = suite_entry(entry)
-        if gate_env and not os.environ.get(gate_env):
+        if gate_env and os.environ.get(gate_env, "1") == "0":
             print(f"{name:<31} | {'skipped':<8} | {'-':<8} | {'-':>6}")
             continue
         if name in failed_names:

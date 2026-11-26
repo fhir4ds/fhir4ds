@@ -52,12 +52,21 @@ def _current_grand_passed() -> int:
     """
     if not RUN_ALL.exists():
         pytest.skip(f"run_all.py not found at {RUN_ALL}")
+    # FHIR4-64: the master run now also bind-checks every measure's
+    # all-columns SQL. That contributes NO test counts, so this totals-only
+    # comparison turns it off rather than paying ~10 minutes of DuckDB planning
+    # inside a pytest (it timed out at 600s once the gate grew, which is what
+    # surfaced this). The timeout is generous because the rest of the master run
+    # is itself ~9 minutes on a quiet machine.
+    env = dict(os.environ)
+    env["FHIR4DS_BIND_CHECK"] = "0"
     proc = subprocess.run(
         [sys.executable, str(RUN_ALL)],
         capture_output=True,
         text=True,
         cwd=str(REPO_ROOT),
-        timeout=600,
+        env=env,
+        timeout=1800,
     )
     # Find the OVERALL COMPLIANCE line and parse the passed count.
     # Format: "OVERALL COMPLANCE           | <passed> | <total>  | <rate>%"

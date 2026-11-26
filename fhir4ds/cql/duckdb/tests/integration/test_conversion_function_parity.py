@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import tempfile
 
 import duckdb
 
@@ -584,13 +585,16 @@ def test_cql_todate_native_only_matches_python_semantics_s32() -> None:
     from pathlib import Path
 
     from fhir4ds.cql.duckdb.tests.integration.wasm_runtime_helpers import (
-        extension_paths,
+        load_extensions,
     )
 
     con = duckdb.connect(config={"allow_unsigned_extensions": True})
     try:
-        for src in extension_paths():
-            con.execute(f"LOAD '{src}'")
+        # ABI-suffixed bundles must be renamed before LOAD (DuckDB only accepts
+        # `*.duckdb_extension`), so go through the shared helper rather than
+        # LOADing the raw packaged path.
+        with tempfile.TemporaryDirectory() as tmp:
+            load_extensions(con, Path(tmp))
         cases = [
             ("'2024-01-01'", "2024-01-01"),
             ("'2024-01'", "2024-01"),
