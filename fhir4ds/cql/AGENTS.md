@@ -338,6 +338,41 @@
   Regression:
   `fhir4ds/cql/tests/integration/test_cql20_f_lateral_portability.py`.
 
+- **Order is part of the answer (WP-6, 2026-11-26; found by the real-engine
+  Tier C gate)**: DuckDB returns rows with equal sort keys, and the rows an
+  unordered aggregate consumes, in query-plan order, and desktop and
+  duckdb-wasm have different plans. Whatever picks or folds in row order
+  therefore answers differently in the browser. Four rules, each with a
+  regression in
+  `fhir4ds/cql/duckdb/tests/integration/test_sort_tie_break_wp6.py`:
+  1. A row-producing `sort by` over resource rows appends the resource id and
+     then the resource text as final ORDER BY keys (`_sort_tie_break`), never
+     together with DISTINCT or GROUP BY.
+  2. `sort by <name>` is evaluated in the scope of the query result (CQL 1.5
+     §19.29), so it may name an element of a `return { ... }` tuple. That
+     result is ONE `json_object` column, which is why the old alias lookup
+     found nothing and dropped the sort silently
+     (`_sort_key_of_tuple_projection`).
+  3. `(<query> sort by K).field` that feeds an aggregate is listified
+     (`_listify_tuple_projection`); that `list(...)` carries `ORDER BY` over
+     the sort keys, brought along as hidden columns, plus the resource id. An
+     ORDER BY on the derived table alone does not order the aggregate it
+     feeds. A key of the form `start of <field>` / `end of <field>` reads the
+     bound off the projected field instead of repeating the field expression
+     (CMS136: +17 KB of SQL instead of +10 MB). `_fold_marker_swap` rebuilds
+     selects and must keep every clause.
+  4. `"<resource-rows define>" contains X` and `X in "<resource-rows define>"`
+     receive the define as its scalar LIMIT-1 demotion; the membership test
+     drops that LIMIT (`_whole_rows_container`), or only the plan's first row
+     can match (CMS986 lost every other encounter). FHIR4-65 covers the same
+     defect for a PATIENT_MULTI_VALUE define that has no resource column.
+  NOT FIXED, filed separately: a define whose value IS an aggregate fold (the
+  fold as a correlated scalar subquery in the CTE projection) is plan-sensitive
+  on DuckDB 1.5.6. The same SQL answers `['m-a', 'm-b', 'm-c']` with
+  `SET disabled_optimizers = 'join_order'` and NULL by default. CMS136's fold
+  sits in a LATERAL and is not affected; the behavioural regression therefore
+  lifts the list subquery out of the fold and runs it on its own.
+
 - `fhir4ds/cql/duckdb/macros/clinical.py` (`_RESOLVE_MACRO_SQL`) and
   `fhir4ds/cql/loader/fhir_loader.py` (`_register_resolve_macro`): the
   resolve() macro body MUST NOT use `TRIM(BOTH '<char>' FROM x)` — the CQL
