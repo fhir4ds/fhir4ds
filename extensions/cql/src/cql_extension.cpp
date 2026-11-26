@@ -3207,9 +3207,14 @@ static std::string ExtractTemporalOperand(const std::string &value) {
 
 static cql::Optional<TemporalCompareResult>
 CompareTemporal(const std::string &left, const std::string &right,
-                const cql::Optional<cql::DateTimeValue::Precision> &specified_precision) {
-	auto a_dt = cql::DateTimeValue::parse(ExtractTemporalOperand(left));
-	auto b_dt = cql::DateTimeValue::parse(ExtractTemporalOperand(right));
+                const cql::Optional<cql::DateTimeValue::Precision> &specified_precision,
+                bool points_only = false) {
+	// `points_only`: the CQL point predicates take POINTS. An interval-shaped operand
+	// is not a point and must stay uncertain (SQL NULL), as the desktop authority does;
+	// substituting its low bound answers a different question with a definite Boolean.
+	// The precision-qualified helpers keep the substitution (native on desktop too).
+	auto a_dt = cql::DateTimeValue::parse(points_only ? left : ExtractTemporalOperand(left));
+	auto b_dt = cql::DateTimeValue::parse(points_only ? right : ExtractTemporalOperand(right));
 	if (!a_dt || !b_dt) {
 		return cql::NullOpt<TemporalCompareResult>();
 	}
@@ -3341,7 +3346,7 @@ static cql::Optional<bool> EvalTemporalPredicate(const TemporalCompareResult &cm
 				continue;                                                                                              \
 			}                                                                                                          \
 			auto cmp = CompareTemporal(a_vals[a_idx].GetString(), b_vals[b_idx].GetString(),                           \
-			                           cql::NullOpt<cql::DateTimeValue::Precision>());                                \
+			                           cql::NullOpt<cql::DateTimeValue::Precision>(), true);                                \
 			if (!cmp) {                                                                                                \
 				result_mask.SetInvalid(i);                                                                             \
 				continue;                                                                                              \
@@ -3438,8 +3443,8 @@ static void CqlDateTimeEqualListElementFunc(DataChunk &args, ExpressionState &st
 			result_mask.SetInvalid(i);
 			continue;
 		}
-		auto a_dt = cql::DateTimeValue::parse(ExtractTemporalOperand(a_vals[a_idx].GetString()));
-		auto b_dt = cql::DateTimeValue::parse(ExtractTemporalOperand(b_vals[b_idx].GetString()));
+		auto a_dt = cql::DateTimeValue::parse(a_vals[a_idx].GetString());
+		auto b_dt = cql::DateTimeValue::parse(b_vals[b_idx].GetString());
 		if (!a_dt || !b_dt || (*a_dt).is_time != (*b_dt).is_time) {
 			result_mask.SetInvalid(i);
 			continue;
@@ -3513,8 +3518,8 @@ static void CqlDateTimeEquivalentListElementFunc(DataChunk &args, ExpressionStat
 			result_data[i] = false;
 			continue;
 		}
-		auto a_dt = cql::DateTimeValue::parse(ExtractTemporalOperand(a_vals[a_idx].GetString()));
-		auto b_dt = cql::DateTimeValue::parse(ExtractTemporalOperand(b_vals[b_idx].GetString()));
+		auto a_dt = cql::DateTimeValue::parse(a_vals[a_idx].GetString());
+		auto b_dt = cql::DateTimeValue::parse(b_vals[b_idx].GetString());
 		if (!a_dt || !b_dt || (*a_dt).is_time != (*b_dt).is_time) {
 			// Unparseable or mixed Time/DateTime pair: no CQL equivalence.
 			result_data[i] = false;
@@ -6625,7 +6630,7 @@ static void CollapseIntervalsFunc(DataChunk &args, ExpressionState &state, Vecto
 		}
 
 		// Sort by low bound
-		std::sort(parsed.begin(), parsed.end(), [](const cql::Interval &a, const cql::Interval &b) {
+		std::stable_sort(parsed.begin(), parsed.end(), [](const cql::Interval &a, const cql::Interval &b) {
 			if (!a.low && !b.low) {
 				return false;
 			}
@@ -6646,13 +6651,26 @@ static void CollapseIntervalsFunc(DataChunk &args, ExpressionState &state, Vecto
 			auto &current = merged.back();
 			auto &next = parsed[j];
 
-			bool can_merge = current.overlaps(next) || current.meets(next) || next.meets(current);
+			bool can_merge;
+			if (!current.high) {
+				// An absent high bound is unbounded (an ongoing period): it absorbs every
+				// later interval, exactly as the desktop authority does.
+				can_merge = true;
+			} else if (!next.low) {
+				// An unknown start reaches back: merge when `next` reaches at least as far.
+				can_merge = !next.high || next.high->compare(*current.high) >= 0;
+			} else {
+				can_merge = current.overlaps(next) || current.meets(next) || next.meets(current);
+			}
 
 			if (can_merge) {
 				// Extend current interval
-				if (!next.high) {
+				if (!current.high) {
+					// Already unbounded: nothing to extend.
+				} else if (!next.high) {
 					current.high = cql::NullOpt<cql::BoundValue>();
-				} else if (!current.high || next.high->compare(*current.high) > 0) {
+					current.high_closed = next.high_closed;
+				} else if (next.high->compare(*current.high) > 0) {
 					current.high = next.high;
 					current.high_closed = next.high_closed;
 				} else if (current.high && next.high->compare(*current.high) == 0) {
@@ -6801,7 +6819,7 @@ static void CollapseIntervalsPerFunc(DataChunk &args, ExpressionState &state, Ve
 			continue;
 		}
 
-		std::sort(parsed.begin(), parsed.end(), [](const cql::Interval &a, const cql::Interval &b) {
+		std::stable_sort(parsed.begin(), parsed.end(), [](const cql::Interval &a, const cql::Interval &b) {
 			if (!a.low && !b.low) {
 				return false;
 			}
@@ -6873,7 +6891,13 @@ static void CollapseIntervalsPerFunc(DataChunk &args, ExpressionState &state, Ve
 			}
 
 			bool can_merge;
-			if (per_precision && current.high && current.high->dt_val && next.low && next.low->dt_val) {
+			if (!current.high) {
+				// An absent high bound is unbounded: it absorbs every later interval.
+				can_merge = true;
+			} else if (!next.low) {
+				// An unknown start reaches back: merge when `next` reaches at least as far.
+				can_merge = !next.high || next.high->compare(*current.high) >= 0;
+			} else if (per_precision && current.high && current.high->dt_val && next.low && next.low->dt_val) {
 				can_merge = TemporalPrecisionMeetsOrOverlaps(*current.high->dt_val, *next.low->dt_val,
 				                                             *per_precision);
 			} else {
@@ -6882,9 +6906,12 @@ static void CollapseIntervalsPerFunc(DataChunk &args, ExpressionState &state, Ve
 
 			if (can_merge) {
 				// Merged bounds come from the ORIGINAL intervals.
-				if (!next.high) {
+				if (!current.high) {
+					// Already unbounded: nothing to extend.
+				} else if (!next.high) {
 					current.high = cql::NullOpt<cql::BoundValue>();
-				} else if (!current.high || next.high->compare(*current.high) > 0) {
+					current.high_closed = next.high_closed;
+				} else if (next.high->compare(*current.high) > 0) {
 					current.high = next.high;
 					current.high_closed = next.high_closed;
 				} else if (current.high && next.high->compare(*current.high) == 0) {
