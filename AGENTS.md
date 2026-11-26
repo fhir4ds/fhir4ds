@@ -6185,6 +6185,18 @@ SELECT clause but cannot be referenced before it is defined` (CMS986). The
 CMS108/CMS190 CQL workarounds can be reverted on a subsequent pass. Pinned by
 `fhir4ds/cql/duckdb/tests/integration/test_fhir4_56_method_form_receiver.py`.
 
+CMS986's SECOND defect — `verified(conditions List<FHIR.Condition>)`'s
+`conditions C where ...` body binding `C` to the WHOLE list, so
+`C.verificationStatus` emitted `fhirpath_text(JSON[], ...)` — is FIXED by
+FHIR4-60. Doctrine and the shape rules live in `fhir4ds/cql/AGENTS.md` ("A
+list-valued query source binds its alias per ELEMENT"); the tests are
+`fhir4ds/cql/duckdb/tests/integration/test_fhir4_60_list_valued_query_source.py`
+plus CMS986 in `fhir4ds/dqm/tests/integration/test_strict_scalar_subqueries_fhir4_48.py`.
+When probing this class, remember DuckDB does not bind an UNREFERENCED CTE: the
+DQM harness projects population columns only (CMS986 = the six `Initial
+Population N`), so a default `run_dqm.py` run cannot see the breakage — always
+re-check with `all_columns=True`.
+
 ### CMS72 residual cells — claim/encounter correlation (RESOLVED 2026-11-10)
 
 `hasPrincipalDiagnosisOf()` (CQMCommon) resolves the principal diagnosis through

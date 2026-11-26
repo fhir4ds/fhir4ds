@@ -8109,20 +8109,96 @@ multi-row shape — both were scalars-vs-lists, so the strict flag was irrelevan
 * CMS986's assigned error — the `value` column — was the method-form inliner
   bug, see the root-cause correction in the repo-root AGENTS.md
   ("Inlined-function parameter names shadowed by CTE columns").
-* CMS986 STILL does not bind, on a DIFFERENT pre-existing defect now unmasked:
-  `verified(conditions List<FHIR.Condition>)`'s body
-  (`conditions C where C.verificationStatus ...`) inlined over a fluent-call
-  source (`Encounter.encounterDiagnosis()`) binds `C` to the WHOLE list, so
-  `C.verificationStatus` lowers to
-  `fhirpath_text(JSON[], 'verificationStatus')`. The source's LIST translation
-  is one scalar list per row (`SELECT list(...) FROM ...`) and must be UNNESTED
-  with the alias bound per element (CQL 1.5 §Query: the alias binds to each
-  element). The shape is reachable from a `ParameterPlaceholder` source
-  (`_query.py`, the fluent-inline branch around the `_pp_demoted` handling) and
-  the equivalent `ListExpression`/`Query` branches already unnest correctly;
-  extending that to the parameter branch needs care because the consumer may be
-  scalar (`in_valueset(<subquery>)` — a 2-column projection is rejected with
-  `Subquery returns 2 columns - expected 1`). Own card.
+* CMS986's SECOND defect was a list-valued QUERY SOURCE and is FIXED by
+  FHIR4-60 — see "A list-valued query source binds its alias per ELEMENT"
+  below.
+
+## A list-valued query source binds its alias per ELEMENT (FHIR4-60)
+
+CQL 1.5 §Query: `<source> <alias> <clauses>` binds `<alias>` to EACH ELEMENT of
+the source collection. When a source lowers to a **one-row scalar LIST
+projection** — `(SELECT list(<elem>) FROM ... )`, which is what a fluent
+function whose body is a query with a `return` clause produces — the translator
+used to bind the alias to the LIST itself. Every `<alias>.<property>` access
+then emitted a list-valued `fhirpath_text(JSON[], '<property>')`, which has no
+matching signature (`fhirpath_text(VARCHAR, VARCHAR)`), so the measure did not
+BIND at all:
+
+    -- CMS986, before (Binder Error: No function matches the given name and
+    -- argument types 'fhirpath_text(JSON[], STRING_LITERAL)')
+    fhirpath_text((SELECT list(CASE WHEN ... END) FROM (...) AS _lt_unnest),
+                  'verificationStatus')
+
+    -- after (per-element UNNEST, one-column scalar list preserved)
+    fhirpath_text(_lt_A, 'verificationStatus')
+
+`_query.py` now has ONE gate (`QueryMixin._should_iterate_list_source`) and ONE
+lowering (`QueryMixin._translate_query_over_list_source`), applied at both
+source paths that can produce the shape:
+
+* the `ParameterPlaceholder` branch — an inlined function's body over an
+  argument from an INCLUDED library (the CMS986 path:
+  `FHIRCommon.verified(conditions List<FHIR.Condition>)` over
+  `Encounter.encounterDiagnosis()`);
+* the generic source branch — the same body with the argument expanded as a
+  nested `MethodInvocation` in one library.
+
+Three shape rules are load-bearing:
+
+1. **The result must stay a ONE-COLUMN scalar list.** The first prototype
+   unnested into a `patient_id`/`resource` row projection and scalar consumers
+   (`in_valueset(...)`, `coding_matches(...)`) rejected it with
+   `Subquery returns 2 columns - expected 1`. The lowering therefore rebuilds
+   `SELECT list(<body>) FROM (SELECT unnest(<list>) AS _lt_<alias>) AS _lt_unnest
+   [WHERE ...]` — the same discipline FHIR4-48 used when it rebased a
+   projection onto the current row instead of aggregating.
+2. **`EXISTS` is rewritten, not aggregated.** An aggregate projection emits one
+   row even for empty input, so `EXISTS (SELECT list(...) ...)` would be
+   unconditionally true. The method returns the list subquery for `EXISTS` usage
+   and lets `_strip_aggregates_for_exists` turn it into `SELECT 1`; `BOOLEAN`
+   usage yields `array_length(<list>) > 0` (mirroring the
+   Children()/Descendants() list-source branch).
+3. **Claim only the aggregate-projection shape** (`(SELECT list(...))`, plus its
+   `COALESCE(list(...), [])` wrapper). JSON-array *text* sources
+   (`expand(...)`, `collapse_intervals(...)`) and bare list macros
+   (`from_json`, `list_transform`) are NOT claimed — `UNNEST` over a VARCHAR
+   text is not a list iteration, and those already have their own element
+   iterations. This is what keeps retrieve/set-op row sources (which are `SELECT`
+   row shapes) off the branch. Queries with `sort` are also left alone: `list()`
+   is an aggregate, so an ORDER BY cannot travel with it and silently dropping
+   the sort would be worse than the old shape.
+
+Evidence (A/B on the same tree, one commit apart in the working copy):
+
+* CMS986 binds on a strict connection and produces **identical per-patient
+  results** (146 patients; 0 diffs, order-insensitive, over the population
+  columns; also 0 cell diffs with `all_columns=True` for CMS1028 — 55 columns ×
+  141 patients — and CMS0334 — 14 × 135) while its SQL shrinks 174,916 →
+  172,159 bytes. The pre-fix alias inlined the WHOLE list subquery at every
+  property access, which is why the sizes fall: CMS1028 is −154 KB (−26%),
+  CMS0334 −1.4 KB, CMS72/CMS832/CMS71 −0.1…−0.35 KB.
+* Gates: DQM qi-core-2025 47/47 and us-core-2025 73/73 with ZERO
+  accuracy/patient-count movement in either suite; official CQL 2036/2043
+  (delta 0); `fhir4ds/dqm/tests` 248 passed; `fhir4ds/cql/tests/{unit,translator}`
+  2244 passed.
+
+Beware when probing this class: the DQM harness projects POPULATION columns only
+for CMS986 (its population definitions are just the six `Initial Population N`),
+and DuckDB does not bind an unreferenced CTE — so the broken CTE is invisible to
+a default `run_dqm.py` run (`all_columns=False`) and the measure "passed" at
+73/73 before the fix. The defect is only visible with `all_columns=True` (what
+every web app requests), which is why it lives in
+`fhir4ds/dqm/tests/integration/test_strict_scalar_subqueries_fhir4_48.py`
+together with a translator-shape assertion.
+
+Adjacent shapes FOUND but deliberately NOT fixed (each is a separate pre-existing
+defect, verified identical before and after this change):
+
+* a DEFINITION-ROOT list-valued query emits `SELECT <expr> AS C AS value`
+  (double alias → `Parser Error: syntax error at or near "AS"`), from the
+  nested-query-source value-projection branch;
+* `Count(<list-valued expression>)` outside a query can reference the alias as a
+  table (`fhirpath_text(C.resource, ...)` → `Referenced table "C" not found`).
 
 ## `within N unit of` is Time-aware (FHIR4-50)
 
