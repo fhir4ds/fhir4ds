@@ -211,3 +211,47 @@ define "IdsInSortOrder":
   ("Requests" M return all {id: M.id, authored: M.authoredOn} sort by authored).id I
     aggregate R starting (null as List<String>): R union {I}
 """
+
+#: ``"<resource-rows define>" contains <element>`` and ``<element> in "<resource-rows
+#: define>"``: the list define is referenced in scalar position, where it arrives as a
+#: LIMIT-1 subquery — the CMS986 shape.
+_CQL_CONTAINS_DEFINE = """
+library ContainsRowsDefine version '1.0'
+using FHIR version '4.0.1'
+context Patient
+define "Requests": [MedicationRequest]
+define "Active": "Requests" M where M.status = 'active'
+define "Matched": "Requests" M where "Active" contains M return M.id
+define "MatchedByIn": "Requests" M where M in "Active" return M.id
+"""
+
+_MEMBERSHIP_DEFINES = ("Matched", "MatchedByIn")
+
+
+@pytest.mark.parametrize("define", _MEMBERSHIP_DEFINES)
+def test_membership_over_a_resource_rows_define_keeps_the_whole_list(define):
+    sql = _expression_sql(_CQL_CONTAINS_DEFINE, define)
+    assert 'FROM "Active" AS sub WHERE sub.patient_id = M.patient_id)' in sql, sql
+    assert "LIMIT 1" not in sql, sql
+
+
+@pytest.mark.parametrize("insertion_order", [_SAME_DAY_IDS, tuple(reversed(_SAME_DAY_IDS))])
+@pytest.mark.parametrize("define", _MEMBERSHIP_DEFINES)
+def test_membership_over_a_resource_rows_define_finds_every_row(define, insertion_order):
+    """``"Active" contains M`` and ``M in "Active"`` test the patient's whole list.
+
+    With the scalar LIMIT-1 demotion kept inside the IN, only the row the query
+    plan returned first matched; the others were dropped, and which one
+    survived depended on the engine.
+    """
+    columns = {define: define}
+    for context_manager, engine in _engines():
+        with context_manager as con:
+            _load(con, "p1", insertion_order)
+            cur = con.execute(_translate(_CQL_CONTAINS_DEFINE, con, columns))
+            row = cur.fetchone()
+            assert row is not None, engine
+            result = dict(zip([d[0] for d in cur.description], row, strict=True))
+            assert sorted(_as_list(result[define])) == ["m-a", "m-b", "m-c"], (
+                define, engine, insertion_order, result
+            )

@@ -1,6 +1,7 @@
 """Binary and unary operator translation for CQL to SQL."""
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import re as _re
@@ -4610,7 +4611,7 @@ class OperatorsMixin:
             return SQLBinaryOp(
                 operator="IN",
                 left=right,
-                right=left,
+                right=self._whole_rows_container(left),
             )
         # Check if left is a list/array-returning expression
         if _is_list_returning_sql(left):
@@ -5772,7 +5773,28 @@ class OperatorsMixin:
                 name="list_contains", args=[all_values, left],
             )
         sql_op = BINARY_OPERATOR_MAP.get(operator, operator)
+        if sql_op in ("IN", "NOT IN"):
+            right = self._whole_rows_container(right)
         return SQLBinaryOp(operator=sql_op, left=left, right=right)
+
+    @staticmethod
+    def _whole_rows_container(subquery):
+        """The list a membership test reads, with the scalar LIMIT-1 demotion removed.
+
+        A RESOURCE_ROWS definition referenced in scalar position arrives as
+        ``(SELECT sub.resource FROM "<define>" AS sub WHERE sub.patient_id =
+        <X>.patient_id LIMIT 1)``. ``contains`` and ``in`` are membership in
+        the patient's WHOLE list: with the LIMIT kept, only the row the query
+        plan returns first can match (CMS986 "Encounter with Malnutrition Risk
+        Screening" contains E lost every other encounter, a different one on
+        duckdb-wasm than on desktop). Anything that is not that shape is
+        returned unchanged.
+        """
+        from ._query import _demoted_rows_source_cte
+
+        if not isinstance(subquery, SQLSubquery) or _demoted_rows_source_cte(subquery) is None:
+            return subquery
+        return SQLSubquery(query=dataclasses.replace(subquery.query, limit=None))
 
 
     def _translate_tuple_comparison(self, expr: "BinaryExpression", operator: str) -> "SQLExpression":
