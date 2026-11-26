@@ -4896,8 +4896,8 @@ class FunctionsMixin:
 
     @staticmethod
     def _promote_fhirpath_text_deep(node):
-        """QA-020 helper: recursively rewrite 2-arg ``fhirpath_text`` calls
-        inside a materialized SQL tree to their list-valued
+        """QA-020 helper: rewrite 2-arg ``fhirpath_text`` calls in the VALUE
+        positions of a materialized SQL tree to their list-valued
         ``from_json(fhirpath(...), '["VARCHAR"]')`` projections.
 
         The CQL-19 `_list_operator_full_list_source` machinery aggregates
@@ -4905,17 +4905,25 @@ class FunctionsMixin:
         lowers to scalar ``fhirpath_text`` the aggregate yields a flat T[]
         instead of T[][]. Promoting each per-row projection to the
         list-valued form restores the nesting DuckDB's ``flatten()`` needs.
+
+        FHIR4-56: the walk is a VALUE-position walk, never a blind recursion.
+        A predicate is not a value — promoting ``fhirpath_text`` inside a
+        WHERE/ON/HAVING/ORDER BY/grouping slot hands a LIST to a consumer that
+        needs one scalar, which is how
+        ``STR_SPLIT(from_json(fhirpath(...)), '/')`` (NHSNAcuteCare /
+        NHSNGlycemicControl) and ``fhirpath_text(JSON[], 'reference')``
+        (CMS986) became Binder Errors. Only projection slots are promoted:
+        SELECT columns, their transparent wrappers (alias, COALESCE, cast,
+        CASE results, list/struct-preserving calls) and FROM-subqueries.
         """
         from ...translator.expressions._utils import _promote_fhirpath_text_list
         from ...translator.types import (
             SQLAlias,
-            SQLBinaryOp,
             SQLCase,
             SQLCast,
             SQLFunctionCall,
             SQLSelect,
             SQLSubquery,
-            SQLUnaryOp,
             SQLUnion,
         )
 
@@ -4927,6 +4935,11 @@ class FunctionsMixin:
         elif isinstance(node, SQLSubquery):
             node.query = FunctionsMixin._promote_fhirpath_text_deep(node.query)
         elif isinstance(node, SQLSelect):
+            # PROJECTION slots only. `where` / `having` / `order_by` /
+            # `group_by` / join ON-conditions are predicates: the value they
+            # carry never becomes a flattened element, and every scalar
+            # consumer that lives there (STR_SPLIT, LIST_EXTRACT, comparisons)
+            # breaks when handed a list.
             node.columns = [
                 (
                     SQLAlias(
@@ -4938,28 +4951,29 @@ class FunctionsMixin:
                 )
                 for c in node.columns
             ]
-            if node.where is not None:
-                node.where = FunctionsMixin._promote_fhirpath_text_deep(node.where)
             if node.from_clause is not None:
                 fc = node.from_clause
                 if isinstance(fc, SQLAlias):
                     fc.expr = FunctionsMixin._promote_fhirpath_text_deep(fc.expr)
                 else:
                     node.from_clause = FunctionsMixin._promote_fhirpath_text_deep(fc)
-        elif isinstance(node, SQLBinaryOp):
-            node.left = FunctionsMixin._promote_fhirpath_text_deep(node.left)
-            node.right = FunctionsMixin._promote_fhirpath_text_deep(node.right)
-        elif isinstance(node, SQLUnaryOp):
-            node.operand = FunctionsMixin._promote_fhirpath_text_deep(node.operand)
+            for join in node.joins or []:
+                if isinstance(join.table, SQLAlias):
+                    join.table.expr = FunctionsMixin._promote_fhirpath_text_deep(
+                        join.table.expr
+                    )
+                else:
+                    join.table = FunctionsMixin._promote_fhirpath_text_deep(join.table)
         elif isinstance(node, SQLCast):
             # EXP1-002: SQLCast's field is `expression` (not `operand`).
             node.expression = FunctionsMixin._promote_fhirpath_text_deep(node.expression)
         elif isinstance(node, SQLCase):
+            # Simple-CASE operand and THEN results are value positions; the
+            # WHEN conditions are predicates.
+            if node.operand is not None:
+                node.operand = FunctionsMixin._promote_fhirpath_text_deep(node.operand)
             node.when_clauses = [
-                (
-                    FunctionsMixin._promote_fhirpath_text_deep(cond),
-                    FunctionsMixin._promote_fhirpath_text_deep(res),
-                )
+                (cond, FunctionsMixin._promote_fhirpath_text_deep(res))
                 for cond, res in node.when_clauses
             ]
             if node.else_clause is not None:

@@ -8094,6 +8094,36 @@ measure failure either. The 3 us-core measures that fail to BIND at all
 `str_split(VARCHAR[], …)`) are a separate pre-existing family, identical before
 and after this card, and unaffected by the flag.
 
+**FHIR4-56 (2026-11-25) fixed 2 of those 3 bind failures.** Neither was a
+multi-row shape — both were scalars-vs-lists, so the strict flag was irrelevant:
+
+* NHSNAcuteCare / NHSNGlycemicControl — `_promote_fhirpath_text_deep`
+  (`expressions/_functions.py`), the flatten() row-projection promotion, was a
+  BLIND recursion: it also rewrote `fhirpath_text` nodes living in WHERE
+  clauses, so `references()`'s `LIST_EXTRACT(STR_SPLIT(<ref url>, '/'), -1)`
+  chain received `from_json(fhirpath(...))` — a list. It is now a VALUE-position
+  walk: SELECT columns and their transparent wrappers only; WHERE / HAVING /
+  ORDER BY / GROUP BY / join ON-conditions and CASE WHEN-conditions stay scalar
+  (a predicate never contributes a flattened element). Both measures now run to
+  100% on a strict connection and are in the FHIR4-48 belt.
+* CMS986's assigned error — the `value` column — was the method-form inliner
+  bug, see the root-cause correction in the repo-root AGENTS.md
+  ("Inlined-function parameter names shadowed by CTE columns").
+* CMS986 STILL does not bind, on a DIFFERENT pre-existing defect now unmasked:
+  `verified(conditions List<FHIR.Condition>)`'s body
+  (`conditions C where C.verificationStatus ...`) inlined over a fluent-call
+  source (`Encounter.encounterDiagnosis()`) binds `C` to the WHOLE list, so
+  `C.verificationStatus` lowers to
+  `fhirpath_text(JSON[], 'verificationStatus')`. The source's LIST translation
+  is one scalar list per row (`SELECT list(...) FROM ...`) and must be UNNESTED
+  with the alias bound per element (CQL 1.5 §Query: the alias binds to each
+  element). The shape is reachable from a `ParameterPlaceholder` source
+  (`_query.py`, the fluent-inline branch around the `_pp_demoted` handling) and
+  the equivalent `ListExpression`/`Query` branches already unnest correctly;
+  extending that to the parameter branch needs care because the consumer may be
+  scalar (`in_valueset(<subquery>)` — a 2-column projection is rejected with
+  `Subquery returns 2 columns - expected 1`). Own card.
+
 ## `within N unit of` is Time-aware (FHIR4-50)
 
 The whole family (`within`, `properly within`, `starts/ends [properly] within`)

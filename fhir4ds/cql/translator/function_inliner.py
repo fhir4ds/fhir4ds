@@ -1188,6 +1188,26 @@ class FunctionInliner:
         if func_def is None or func_def.body is None:
             return None
 
+        # CQL 1.5 §"Function Invocation": the dotted/method form `X.f(a)` is the
+        # same call as `f(X, a)` — the receiver is the FIRST argument. `fluent`
+        # only adds element-wise propagation over a LIST receiver; it does not
+        # decide whether the receiver is an argument at all.
+        #
+        # FHIRHelpers declares every converter non-fluent with a parameter
+        # literally named `value` (`define function ToDateTime(value dateTime):
+        # value.value`), so when the receiver was left out of the parameter map
+        # the body's `value` stayed a bare identifier. It then resolved to a
+        # same-named CTE column (silently NULL — CMS108/CMS190) or to nothing at
+        # all (FHIR4-56: CMS986 `Column "value" referenced ... cannot be
+        # referenced before it is defined`, and `fhirpath_text(value, 'value')`
+        # for NHSN's `.ToString()` calls).
+        #
+        # Bind the receiver as the first POSITIONAL argument for non-fluent
+        # functions so every consumer below (promotion lookup, parameter map)
+        # sees one argument list.
+        if receiver_expr is not None and not func_def.fluent:
+            args = [receiver_expr, *args]
+
         # Check if this function should use a promoted CTE instead of expanding
         if self._should_use_promoted_cte_expand(func_name, func_def, receiver_expr, args):
             # For fluent functions, the receiver is the first parameter

@@ -241,6 +241,23 @@ def _measure_config(measure_id: str, suite: str = "qi-core-2025"):
 #:   ``_row_key``, so the sibling let that consumes it
 #:   (``timing: dosage.timing``) looked its value up by ``patient_id`` alone.
 #:
+#: FHIR4-56 adds the two NHSN measures. Both BIND-FAILED (not merely
+#: multi-row) on every strict consumer with
+#: ``No function matches str_split(VARCHAR[], STRING_LITERAL)``: the flatten()
+#: promotion pass rewrote ``fhirpath_text`` nodes living in a WHERE clause, so
+#: the ``references()`` lowering (``LIST_EXTRACT(STR_SPLIT(<ref url>, '/'), -1)``)
+#: was handed a LIST. They are kept here (rather than only in the translation
+#: unit test) because the defect is only reachable through a real measure's
+#: ``flatten(<query with references()>)`` shape.
+#:
+#: CMS986 is deliberately ABSENT: its assigned ``value``-column defect is fixed
+#: (see ``fhir4ds/cql/tests/integration/test_fhir4_56_method_and_promotion.py``)
+#: but a SECOND, distinct pre-existing defect still stops it binding —
+#: ``verified(conditions List<FHIR.Condition>)`` inlined over a fluent-call
+#: source binds ``C`` to the whole list, so ``C.verificationStatus`` lowers to
+#: ``fhirpath_text(JSON[], 'verificationStatus')``. That is a list-valued
+#: query-source alias-binding gap with its own card.
+#:
 #: ``all_columns=True`` on purpose: a column CTE that a population-only
 #: projection never references still crashes a web app that asks for it.
 STRICT_MEASURES = [
@@ -248,6 +265,8 @@ STRICT_MEASURES = [
     ("qi-core-2025", "CMS832", False),
     ("us-core-2025", "CMS145", True),
     ("us-core-2025", "CMS156", True),
+    ("us-core-2025", "NHSNAcuteCare", True),
+    ("us-core-2025", "NHSNGlycemicControl", True),
 ]
 
 

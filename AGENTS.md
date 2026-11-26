@@ -6171,6 +6171,20 @@ Worked around in CMS108/CMS190 CQL by dropping the conversion; the durable fix
 belongs in the inliner — parameter substitution must take precedence over
 ambient column/alias resolution.
 
+**ROOT CAUSE CORRECTED (FHIR4-56, 2026-11-25).** The binding did not "lose to
+the ambient column" — the receiver was never bound AT ALL. `expand_function`
+built the parameter map from `args` only, and the method form passes the
+receiver separately, so for a NON-fluent callee (`FHIRHelpers` declares every
+converter non-fluent) the map was empty; `fluent` only adds element-wise
+propagation over a LIST receiver, it does not decide whether the receiver is an
+argument. `expand_function` now binds the receiver as the first POSITIONAL
+argument for non-fluent functions (CQL 1.5 §"Function Invocation": `X.f(a)` is
+`f(X, a)`). 'Always NULL' was the benign half: with no same-named column in
+scope it is a hard Binder Error — `Column "value" referenced that exists in the
+SELECT clause but cannot be referenced before it is defined` (CMS986). The
+CMS108/CMS190 CQL workarounds can be reverted on a subsequent pass. Pinned by
+`fhir4ds/cql/duckdb/tests/integration/test_fhir4_56_method_form_receiver.py`.
+
 ### CMS72 residual cells — claim/encounter correlation (RESOLVED 2026-11-10)
 
 `hasPrincipalDiagnosisOf()` (CQMCommon) resolves the principal diagnosis through
