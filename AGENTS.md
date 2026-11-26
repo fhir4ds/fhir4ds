@@ -6573,6 +6573,31 @@ holds, but the case is not exercising what its name claims.
 Verification on the strict-mode tree: `--suite us-core --skip-errors` 73/73,
 `--suite qi-core --skip-errors` 47/47, CQL conformance 1706/1706.
 
+## A claim about a COMMIT must come from a clean worktree at that commit (2026-11-26)
+
+Learned the hard way. A peer reported that dev tip `8bc1fb35672` failed 12 translator
+tests. I ran the same two test files from `~/src/fhir4ds` — which was at that HEAD — got
+12 passed, and told them the finding did not reproduce and that their own WP-6 branch was
+the likely cause. Both statements were wrong: the tree carried an UNCOMMITTED in-flight fix,
+so I had measured the fix, not the tip. Their clean-worktree method reproduced 12 failures
+in 4 seconds.
+
+    git worktree add --detach /tmp/tipclean <sha>     # scratch checkout
+    cd /tmp/tipclean && git status --porcelain | wc -l   # must be 0
+    PYTHONPATH=/tmp/tipclean python3 -m pytest <files>
+
+`git status` being "only untracked stuff" is not enough — the uncommitted files were tracked
+modules. This is the same doctrine as "verify every reported number yourself", applied to
+your OWN command line: verifying a peer's number from a dirty tree is not verification, it is
+a second unverified claim.
+
+Two corollaries worth remembering:
+- A revert is not automatically safe: `8bc1fb35672` reverted FHIR4-66/68, and the two cards
+  layered on top of it (FHIR4-67/72) then failed with `Referenced table _lst_src not found!`.
+  Cards that BUILD on a commit must be in that commit's revert blast radius.
+- The repo's PR CI does not run `fhir4ds/cql/duckdb/tests`, so a red tip is INVISIBLE to CI.
+  Run that tree locally before claiming a tip is clean.
+
 ## `diff.ignoreSubmodules=all` hides submodule pin bumps from `git commit` (2026-11-26)
 
 This clone's `.git/config` sets `diff.ignoreSubmodules = all`. Consequence: `git add
