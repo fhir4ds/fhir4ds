@@ -17,12 +17,13 @@ therefore never emit that shape:
 
 import re
 import sys
+from pathlib import Path
 
 import pytest
 
 duckdb = pytest.importorskip("duckdb")
 
-sys.path.insert(0, "/home/jmontavon/src/fhir4ds")
+sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 from fhir4ds.cql.parser import parse_cql
 from fhir4ds.cql.translator.translator import CQLToSQLTranslator
