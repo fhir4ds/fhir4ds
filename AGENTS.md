@@ -6904,8 +6904,9 @@ gaps visible and expires every excuse; the infrastructure comes before fixing th
 - **Step 0** names the reference bundle (`web/cql-cleanroom/src/lib/cql-macros.ts`, GENERATED
   from the desktop catalog since WP-1) and fails on a wasm-only macro, a same-name macro with
   a different body, a desktop macro the browser lacks, a hand-edited or stale generated
-  bundle, a drifted `cql-macros.ts` copy, or a shipped `.wasm` that is not one known set
-  (`fhir4ds/wasm_extension_bundles.json`, `scripts/build_wasm_extensions.py --verify`).
+  bundle, a drifted `cql-macros.ts` copy, a shipped `.wasm` that is not one known set, or
+  one built from C++ older than `HEAD` (`fhir4ds/wasm_extension_bundles.json` records the
+  source-tree hashes; `STALE_WASM_SOURCE` cannot be registered — rebuild).
 - **Tier A** runs the official corpora through the official comparators on a *simulated*
   browser surface (x86 bundles + the reference macros) — CQL 2,037, ViewDefinition 144, OMOP
   38, and FHIRPath R4 (1,001 of 1,191 tests evaluable against typed JSON examples; see
@@ -6970,7 +6971,9 @@ aliases (`unnest(x) AS _cql_contains_u(item)`), not functions.
 - C++ changes need a wasm rebuild as well as the x86 ones
   (`scripts/build_wasm_extensions.py --build --extension <name>`), or the browser silently
   runs last month's engine. Tier B turns that into an exact list instead of a suspicion, and
-  the ledger forces the now-stale registrations to be deleted.
+  the ledger forces the now-stale registrations to be deleted. Since WP-10 (2026-11-25) the
+  cheap Python CI job catches it first: Step 0 compares the manifest's source-tree hashes
+  with `HEAD`, so a C++ merge without a wasm rebuild fails there with `STALE_WASM_SOURCE`.
 - Tier B and Tier C cannot run under `scripts/capped.sh` (chromium cannot start with a capped
   address space); they are light and run uncapped, and Tier C caps each desktop translation
   itself. Everything else stays capped.
