@@ -37,7 +37,11 @@ CURATED_SUITE = "qi-core-2025"
 # known real-only defect (CMS75, CMS56, CMS832), so a fix flips them and the ledger flags it stale.
 CURATED = ("CMS68", "CMS142", "CMS159", "CMS75", "CMS56", "CMS832")
 TRANSLATE_TIMEOUT_S = 900
-TRANSLATE_MEMORY_GB = 16  # the same floor scripts/capped.sh uses for the DQM harness
+# RLIMIT_AS bounds ADDRESS SPACE, not memory: DuckDB and Arrow reserve tens of GB of
+# virtual space while resident memory stays under 1 GB. At 16 GB the CMS156 (US-Core)
+# translation died silently (exit 127, no traceback); a whole-CI pytest run peaked at
+# 25.3 GB of address space with 0.8 GB resident. 40 GB is still a hard cap on a leak.
+TRANSLATE_MEMORY_GB = int(os.environ.get("FHIR4DS_WASM_TIER_C_TRANSLATE_GB", "40"))
 
 GREEN_STATUSES = ("IDENTICAL", "ORDER_ONLY", "INSTANT_TEXT")
 FAILING_STATUSES = ("PARITY_GAP", "ERROR", "TIMEOUT")
@@ -182,7 +186,9 @@ def load_dump(out_dir: Path) -> dict[str, Any]:
 
 
 def _cap_child() -> None:
-    """Bound the translator child's address space: a leaking translator dies as MemoryError."""
+    """Bound the translator child's address space so a leaking translator cannot take the
+    machine down. It bounds virtual space, not resident memory (see TRANSLATE_MEMORY_GB);
+    a process that hits the cap may die with a bare non-zero exit instead of MemoryError."""
     import resource
 
     limit = TRANSLATE_MEMORY_GB * 1024**3

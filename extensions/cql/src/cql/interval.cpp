@@ -1631,6 +1631,26 @@ oss << "}";
 return oss.str();
 }
 
+// A FHIR Period list element with no `start` has an UNKNOWN start, not an unbounded one.
+// Mirrors the desktop authority (`_period_dict_to_interval` in udf/interval.py): the low
+// bound is emitted open, so it never reaches back to the point-type minimum and never merges
+// with an earlier interval. A missing `end` stays a closed null high bound (ongoing period).
+static bool is_period_with_unknown_start(const std::string &element_json) {
+	if (element_json.empty() || element_json[0] != '{') {
+		return false;
+	}
+	yyjson_doc *doc = yyjson_read(element_json.c_str(), element_json.size(), 0);
+	if (!doc) {
+		return false;
+	}
+	yyjson_val *root = yyjson_doc_get_root(doc);
+	const bool rule = yyjson_is_obj(root) && !yyjson_obj_get(root, "low") &&
+	                  !yyjson_obj_get(root, "high") && !yyjson_obj_get(root, "lowClosed") &&
+	                  (yyjson_obj_get(root, "start") || yyjson_obj_get(root, "end"));
+	yyjson_doc_free(doc);
+	return rule;
+}
+
 std::vector<Interval> parse_interval_array(const std::string &json_array) {
 std::vector<Interval> result;
 if (json_array.empty()) {
@@ -1656,6 +1676,9 @@ char *elem_json = yyjson_val_write(elem, 0, NULL);
 if (elem_json) {
 auto iv = Interval::parse(elem_json);
 if (iv) {
+if (!iv->low && is_period_with_unknown_start(std::string(elem_json))) {
+	iv->low_closed = false;
+}
 result.push_back(*iv);
 }
 free(elem_json);
@@ -1665,6 +1688,9 @@ const char *str_val = yyjson_get_str(elem);
 if (str_val) {
 auto iv = Interval::parse(str_val);
 if (iv) {
+if (!iv->low && is_period_with_unknown_start(std::string(str_val))) {
+	iv->low_closed = false;
+}
 result.push_back(*iv);
 }
 }

@@ -7,8 +7,8 @@
     {
       "extension": "cql",
       "path": "web/cql-cleanroom/public/extensions/cql.duckdb_extension.wasm",
-      "sha256": "23eb673646a2cefcf2f1fd26e2ec571c1d0a0afc3448c832a17026d0a7b5810c",
-      "size": 985696,
+      "sha256": "e064b36e8af5ef80204960f9be2e99f2f247cea5b941c4797a2280314b7e8f9c",
+      "size": 985749,
       "install": [
         "web/cql-cleanroom/public/extensions",
         "web/cql-clinic/public/extensions",
@@ -20,15 +20,17 @@
         "web/website/static/cql-clinic-app/assets",
         "web/website/static/cql-clinic-app/extensions",
         "web/website/static/wasm-app/assets",
-        "web/website/static/wasm-app/extensions"
+        "web/website/static/wasm-app/extensions",
+        "web/website/static/bulk-publisher-app/extensions",
+        "web/website/static/bulk-publisher-app/workers"
       ],
       "source": {
-        "commit": "20e4231688ee9f4e781a86f3a5958767b7dad37b",
-        "cql_source": "5ca3f051fac1a25b15fabce82b4852e01bff3854",
+        "commit": "5e33588feb9304d311ee7f99568a605956a721c6",
+        "cql_source": "44ee122a6248f168c65eb33bcf283a5d4cbf7ca1",
         "common_source": "06b99a1cc19d0ae1e2eee11101fc401b7c0c96e1",
         "duckdb_tag": "v1.5.5",
         "emsdk": "emsdk-3.1.71",
-        "built_at": "2026-11-25T12:27:56+00:00"
+        "built_at": "2026-11-26T02:46:34+00:00"
       }
     },
     {
@@ -50,7 +52,9 @@
         "web/website/static/wasm-app/assets",
         "web/website/static/wasm-app/extensions",
         "web/website/static/viewing-room-app/assets",
-        "web/website/static/viewing-room-app/extensions"
+        "web/website/static/viewing-room-app/extensions",
+        "web/website/static/bulk-publisher-app/extensions",
+        "web/website/static/bulk-publisher-app/workers"
       ],
       "source": {
         "commit": "9e67030c6889f1635b1d8df6093cdf5f4710a2da",

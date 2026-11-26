@@ -65,15 +65,18 @@ _PYTHON_PREFERRED_CPP_CONFLICTS = {
     "intervalIncludedInPrecise",
     "intervalBeforePrecise",
     "intervalAfterPrecise",
-    # Point temporal predicates. The C++ `CompareTemporal` runs its operands
-    # through `ExtractTemporalOperand`, which parses a leading `{` as an
-    # Interval/Period JSON and compares its LOW bound — so a FHIR Period reaching
-    # `before` (e.g. `AllergyIntolerance.onset` on a period-valued onset) compared
-    # as a point and produced a definitive TRUE. The Python implementations parse
-    # the operand as a temporal literal and return NULL for a JSON document,
-    # which is the CQL 1.5 same-type signature behaviour (a Period is not a
-    # point). Verified divergence: native cqlBefore('{"start":"2021-01-10",...}',
-    # '2026-10-10') = TRUE, Python = NULL (CMS996 f6c7dbc1 allergy arm).
+    # Point temporal predicates. Both engines now treat an interval-shaped operand as
+    # "not a point" (NULL): the Python implementations parse the operand as a temporal
+    # literal and return NULL for a JSON document, which is the CQL 1.5 same-type
+    # signature behaviour (a Period is not a point), and since WP-5 (2026-11-25) the C++
+    # `CompareTemporal` passes the operand raw for these no-precision predicates
+    # instead of substituting a Period's LOW bound (`ExtractTemporalOperand`, which the
+    # precision-qualified helpers still use). Before that, a FHIR Period reaching
+    # `before` (e.g. `AllergyIntolerance.onset` on a period-valued onset) compared as a
+    # point and produced a definitive TRUE in every browser while desktop answered NULL
+    # (CMS996 f6c7dbc1 allergy arm). The Python UDFs stay the desktop authority; a
+    # bundle older than WP-5 still has the divergence
+    # (regression: test_wasm_period_point_parity.py).
     "cqlBefore",
     "cqlAfter",
     "cqlSameOrBefore",

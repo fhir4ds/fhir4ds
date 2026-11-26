@@ -37,9 +37,11 @@ Usage
     python3 scripts/build_extension_bundles.py --build --abi 2.0.0 --dry-run
         Print the plan (checks, submodule state, command) without building.
 
-State is always restored: extension sources are checked out back to HEAD,
+State is always restored: pinned extension sources are checked out back to HEAD,
 duckdb submodules return to their recorded commit, and parked build caches are
-moved back — including on failure or Ctrl-C.
+moved back — including on failure or Ctrl-C. A source tree with uncommitted
+changes is refused before anything is touched, so the script never discards
+uncommitted work.
 """
 
 from __future__ import annotations
@@ -172,19 +174,25 @@ def build_one(slot: Slot, dry_run: bool) -> bool:
         print("    [dry run] no build performed")
         return True
 
-    try:
-        if original_sources_dirty:
-            print(
-                f"    refusing to build: extensions/{ext}/src has uncommitted changes "
-                f"({len(original_sources_dirty.splitlines())} file(s)); commit or stash first"
-            )
-            return False
+    # Refuse a dirty source tree BEFORE touching anything. This check used to sit
+    # inside the try block, so the `finally` below ran `git checkout HEAD -- src`
+    # on the very changes it was refusing and destroyed them.
+    if original_sources_dirty:
+        print(
+            f"    refusing to build: extensions/{ext}/src has uncommitted changes "
+            f"({len(original_sources_dirty.splitlines())} file(s)); commit or stash first. "
+            f"Nothing was touched."
+        )
+        return False
 
+    sources_pinned = False
+    try:
         if slot.source_pin:
             checkout = _run(["git", "checkout", "-q", slot.source_pin, "--", f"extensions/{ext}/src"])
             if checkout.returncode != 0:
                 print(f"    failed to pin sources: {checkout.stderr.strip()[:200]}")
                 return False
+            sources_pinned = True
 
         checkout = _run(["git", "-C", str(submodule), "checkout", "-q", f"v{slot.abi}"])
         if checkout.returncode != 0:
@@ -231,14 +239,18 @@ def build_one(slot: Slot, dry_run: bool) -> bool:
         print(f"    installed {slot.filename} ({artifact.stat().st_size:,} bytes, stamped {stamp})")
         return True
     finally:
-        # Restore sources, submodule and the previous build cache no matter what.
-        _run(["git", "checkout", "-q", "HEAD", "--", f"extensions/{ext}/src"])
+        # Restore whatever this call changed: pinned sources, the submodule commit
+        # and the previous build cache. Sources are restored ONLY when they were
+        # pinned; an unconditional checkout here discards uncommitted work.
+        if sources_pinned:
+            _run(["git", "checkout", "-q", "HEAD", "--", f"extensions/{ext}/src"])
         _run(["git", "-C", str(submodule), "checkout", "-q", original_submodule])
         if parked.exists():
             if build_dir.exists():
                 shutil.rmtree(build_dir)
             parked.rename(build_dir)
-        print(f"    restored sources, submodule {original_submodule[:12]}, build cache")
+        restored = "sources, " if sources_pinned else ""
+        print(f"    restored {restored}submodule {original_submodule[:12]}, build cache")
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -336,6 +336,17 @@ fixed measure makes its registration STALE and the gate refuses until it is dele
   fix flips them and the ledger flags the registration.
 - **Scheduled** (`conformance.yml`, `wasm-parity` job): `FHIR4DS_WASM_TIER_C_SUITE=qi-core-2025`
   runs all 47 measures (~210 s on the real engine here, plus one desktop translation each).
+- **US-Core 2025 is NOT scheduled yet** (`FHIR4DS_WASM_TIER_C_SUITE=us-core-2025` runs it by
+  hand, ~12 min with a dump cache): on dev `d0c7719a493` + the WP-5 bundles, 71 measures ran —
+  34 identical, 36 order/instant-only, 1 registered real gap (CMS136, a `sort by` tie — WP-6),
+  3 desktop TRANSLATE_ERRORs (CMS986, NHSNAcuteCare, NHSNGlycemicControl — WP-7, owned by the
+  fhir4ds lane). A translation error cannot be registered, so the job would be red; schedule it
+  in the same change that fixes the last of those.
+- **The desktop translation runs under its own cap** (`tier_c.TRANSLATE_MEMORY_GB`, default 40,
+  env `FHIR4DS_WASM_TIER_C_TRANSLATE_GB`): `ulimit -v` bounds ADDRESS SPACE, which DuckDB
+  reserves far beyond what it uses (CMS156 needs ~25 GB of address space for under 1 GB of
+  RSS); at 16 GB the child died with exit 127 and no traceback, which reads like an engine
+  failure. Do not lower it.
 - Tier C is the referee for defects the name-level gates cannot see: a C++ BEHAVIOUR fix adds no
   function name, so Tier B's staleness check stays green while the browser still runs the old
   logic until the wasm bundles are rebuilt.
@@ -376,6 +387,17 @@ measures ran, 24 byte-identical, 19 equal apart from list order / instant spelli
   SQL binds and runs on real duckdb-wasm.
 - Cost: INSERT literals carry ~98k codes in a few seconds; fine for a suite run. A bulk path
   (register a file buffer and `read_json`) only matters if the payloads grow.
+**Fixed in the native engine (WP-5, `b734e58ae7d`, 2026-11-25):** the two US-Core real diffs
+the first US-Core run found. CMS645 (patient `eeea0041`, Initial Population true -> false):
+the native `CollapseIntervals*` treated a FHIR Period with no `start` as a closed (unbounded)
+low bound and narrowed an unbounded end when merging; the Python authority makes a missing
+start an OPEN null bound (unknown). CMS996 (patient `f6c7dbc1`, Denominator Exclusions
+`[]` -> one encounter): native `cqlBefore` and its siblings substituted a Period operand's
+low bound where the Python UDFs answer NULL. Desktop was unaffected by construction (Python is
+the authority for those names), so only the no-Python parity legs and Tier C could see it —
+which is why Tier C exists. Pinned by
+`fhir4ds/cql/duckdb/tests/integration/test_wasm_period_point_parity.py`.
+
 
 ### Rebuilding the wasm bundles — what the first real run taught (2026-11-24)
 
@@ -404,9 +426,12 @@ every failure is now fixed in the script, and each is a trap for anyone rebuildi
   (`web/website/static/{cql-cleanroom,cql-clinic-app,wasm-app,viewing-room-app}/{assets,extensions}`)
   and `fhir4ds/devserver/static-cleanroom/{assets,extensions}` hold copies of the bundles. They
   are in the manifest's `install` lists, so the script keeps them identical (the same bytes an
-  app rebuild would produce for that one file). BulkPublishDemo's copies are deliberately NOT
-  installed: it pins a different duckdb-wasm version (ledger: `bundle-drift-bulk-publisher`).
-- `--verify` exits 1 while BulkPublishDemo's drift exists; that is the intended signal.
+  app rebuild would produce for that one file). BulkPublishDemo's copies ARE installed since
+  2026-11-25: dev unified its duckdb-wasm pin with the other apps, so the two directories under
+  `web/website/static/bulk-publisher-app` are in the manifest's install lists and the
+  `bundle-drift-bulk-publisher` registration was retired.
+- `--verify` exits 0 on a clean tree. An exit 1 is a real copy drift or a stale bundle; read the
+  lines it prints rather than assuming a known one.
 
 ### Baseline recorded (dev `87bece82a55`, corpus `f724ee4`, 2026-11-24)
 

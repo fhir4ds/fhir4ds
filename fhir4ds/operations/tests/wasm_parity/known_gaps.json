@@ -92,21 +92,6 @@
       "expires": "2026-12-24"
     },
     {
-      "id": "bundle-drift-bulk-publisher",
-      "kind": "WASM_COPY_DRIFT",
-      "target": [
-        "web/website/package.json",
-        "web/website/static/bulk-publisher-app/extensions/cql.duckdb_extension.wasm",
-        "web/website/static/bulk-publisher-app/workers/cql.duckdb_extension.wasm",
-        "web/website/static/bulk-publisher-app/extensions/fhirpath.duckdb_extension.wasm",
-        "web/website/static/bulk-publisher-app/workers/fhirpath.duckdb_extension.wasm"
-      ],
-      "reason": "BulkPublishDemo (web/website/src/components/BulkPublishDemo, in the built snapshot web/website/static/bulk-publisher-app) ships its own cql and fhirpath wasm binaries and pins a different @duckdb/duckdb-wasm version (^1.33.1-dev41.0) than the other apps (1.33.1-dev64.0). Not overwritten by the wasm rebuild: the rebuilt bundles target the v1.5.5 core of the other apps and may not load under this app's pin. Owner: web apps — unify the pin, then let scripts/build_wasm_extensions.py install into its directories too.",
-      "owner": "web apps",
-      "since": "2026-11-24",
-      "expires": "2027-02-22"
-    },
-    {
       "id": "cql-desktop-defects-strict-boolean-fhir4-33",
       "kind": "DESKTOP_DEFECT",
       "suite": "cql",
@@ -128,6 +113,17 @@
       "since": "2026-11-24",
       "expires": "2027-02-22",
       "suite": "qi-core-2025",
+      "surface": "real"
+    },
+    {
+      "id": "tierc-cms136-uscore-sort-tie-order",
+      "kind": "PARITY_GAP",
+      "target": "CMS136",
+      "reason": "Tie order in `sort by periodStart`. Patient a46db6aa-5016-4111-bc4e-a31156c87ec6 has two atomoxetine MedicationRequests authored on 2026-01-02 (209-day and 1-day supply), so the `rolloutIntervals` aggregate depends on the order of two tied rows: desktop keeps source order (209-day first, the order the reference engine's stable sort gives and the fixture expects) and answers [[2026-07-30, 2026-07-30], [2026-01-02, 2026-07-29]]; real duckdb-wasm processes the 1-day request first and answers [[2026-01-03, 2026-07-30], [2026-01-02, 2026-01-02]]. Column 'ADHD Medications Taken on IPSD or During Continuation and Maintenance Phase'. Removed by a deterministic tie-break in the translated sort (WP-6).",
+      "owner": "wasm-parity lane (WP-6)",
+      "since": "2026-11-25",
+      "expires": "2026-12-25",
+      "suite": "us-core-2025",
       "surface": "real"
     },
     {
