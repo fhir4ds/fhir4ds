@@ -88,10 +88,13 @@ def emsdk_root() -> Path:
 def verify(require_source: bool = False) -> int:
     manifest = shipped_bundles.load_manifest()
     observed = shipped_bundles.observe(manifest, REPO)
-    problems = observed.get("STALE_WASM_BUNDLE", []) + observed.get("WASM_COPY_DRIFT", [])
-    for kind in ("STALE_WASM_BUNDLE", "WASM_COPY_DRIFT"):
+    hard = ("STALE_WASM_BUNDLE", "WASM_COPY_DRIFT", "STALE_WASM_SOURCE")
+    problems = [target for kind in hard for target in observed.get(kind, [])]
+    for kind in hard:
         for target in observed.get(kind, []):
             print(f"ERROR [{kind}] {target}")
+    for path, extensions in sorted(shipped_bundles.stale_sources(manifest, REPO).items()):
+        print(f"  {path}: rebuild with --extension <{'|'.join(extensions)}>")
     unknown = observed.get("PROVENANCE_UNKNOWN", [])
     for target in unknown:
         print(f"{'ERROR' if require_source else 'WARNING'} [PROVENANCE_UNKNOWN] {target}")

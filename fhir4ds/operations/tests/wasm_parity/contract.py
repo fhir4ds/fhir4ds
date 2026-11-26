@@ -179,6 +179,10 @@ def evaluate(
 
 
 FILE_LEVEL_KINDS = ("STALE_WASM_BUNDLE", "WASM_COPY_DRIFT", "PROVENANCE_UNKNOWN")
+# Observed by ``shipped_bundles.observe`` but deliberately NOT a ledger kind: a
+# bundle built from an older C++ tree has one remedy (rebuild it), so no
+# registration can ever cover it.
+NON_REGISTRABLE_FILE_KINDS = {"STALE_WASM_SOURCE": "python scripts/build_wasm_extensions.py --build --extension <name>"}
 
 
 def evaluate_files(entries: list[Entry], observed: dict[str, list[str]], *, today: date) -> list[Violation]:
@@ -186,8 +190,20 @@ def evaluate_files(entries: list[Entry], observed: dict[str, list[str]], *, toda
 
     ``observed`` maps a kind in ``FILE_LEVEL_KINDS`` to the targets seen right
     now (``shipped_bundles.observe``). Every observed gap must be registered.
+    Kinds in ``NON_REGISTRABLE_FILE_KINDS`` are violations as observed.
     """
     violations: list[Violation] = []
+    for kind, remedy in NON_REGISTRABLE_FILE_KINDS.items():
+        for target in observed.get(kind, []):
+            violations.append(
+                Violation(
+                    "T7",
+                    kind,
+                    f"{kind}: {target}: C++ sources changed after this WASM bundle was built, so browsers "
+                    f"run an older engine than desktop. Rebuild ({remedy}) and commit the bundles and "
+                    "fhir4ds/wasm_extension_bundles.json; this gap cannot be registered",
+                )
+            )
     for kind in FILE_LEVEL_KINDS:
         if kind not in observed:
             continue

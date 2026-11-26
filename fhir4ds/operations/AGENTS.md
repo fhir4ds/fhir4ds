@@ -163,7 +163,12 @@ Code: `fhir4ds/operations/tests/wasm_parity/`. Plan:
   faithful; no wasm-only macros; same-name macros have equal bodies; every desktop macro
   is in the reference or natively provided; app bundles identical; shipped `.wasm` copies
   are one known set (`fhir4ds/wasm_extension_bundles.json`,
-  `scripts/build_wasm_extensions.py --verify`); the reference file is byte-identical to
+  `scripts/build_wasm_extensions.py --verify`) AND were built from the C++ at `HEAD` —
+  `shipped_bundles.stale_sources` compares the manifest's source-tree hashes
+  (`source.<name>_source`, `source.common_source`) with `git ls-tree HEAD`; a changed
+  `extensions/common` stales both bundles; `STALE_WASM_SOURCE` cannot be registered (it is
+  not a ledger kind), the only remedy is the rebuild, and git that cannot answer never
+  accuses; the reference file is byte-identical to
   the generator output and every overlay statement is a registered gap (T8).
 - **Tier A** `test_wasm_parity_tier_a.py`, one ratchet test per suite, each reusing the official
   runner's own comparator: CQL (2,043 at corpus `0a8f7d3`, vendored in git),
