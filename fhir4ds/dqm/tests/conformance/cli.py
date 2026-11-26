@@ -45,6 +45,18 @@ def main():
         help="Output all definition columns (not just population definitions)",
     )
     parser.add_argument(
+        "--bind-check",
+        action="store_true",
+        help=(
+            "Bind-only gate (FHIR4-64): instead of evaluating, translate every "
+            "discovered measure with all_columns=True and EXPLAIN its SQL on a "
+            "strict connection. Catches measures whose full SQL cannot even be "
+            "planned (missing function/signature, missing table, bad SQL shape) "
+            "— the class the population-only projection never binds. Reads no "
+            "expected results and scans no rows."
+        ),
+    )
+    parser.add_argument(
         "--audit",
         action="store_true",
         help="Run with audit_mode=True to capture evidence structs and measure overhead vs. baseline",
@@ -150,6 +162,23 @@ def main():
     if not configs:
         print("ERROR: No valid measures found.")
         sys.exit(1)
+
+    if args.bind_check:
+        # FHIR4-64: bind-only mode. Nothing is scored and no row is read, so
+        # this path deliberately skips test-data / valueset loading: binding is
+        # static (generated text + table schema), and the whole point is that a
+        # measure which cannot PLAN must fail loudly even when its fixtures are
+        # unavailable.
+        sys.exit(
+            _run_bind_check(
+                configs,
+                measurement_period=(
+                    args.measurement_period_start,
+                    args.measurement_period_end,
+                ),
+                strict_profiles=not getattr(args, "no_strict_profiles", False),
+            )
+        )
 
     # Initialize database once
     print("Initializing database...")
@@ -397,6 +426,82 @@ def main():
                 "measures": results_summary
             }, f, indent=2)
         print(f"\nSummary written to: {summary_path}")
+
+
+def _run_bind_check(
+    configs,
+    *,
+    measurement_period: tuple,
+    strict_profiles: bool = True,
+) -> int:
+    """FHIR4-64 bind-only sweep over ``configs``. Returns the process exit code.
+
+    Translates each measure with ``all_columns=True`` and plans the statement
+    with ``EXPLAIN`` on a STRICT connection — no rows are read and no expected
+    results are consulted, so an unbuildable measure fails here even when its
+    fixtures are missing. This is the check that would have caught CMS986's
+    unbuildable ``all_columns`` SQL while the population-only projection was
+    printing PASSED.
+    """
+    import time
+
+    from .bind_check import BindCheckError, bind_check_suite
+    from .database import BenchmarkDatabase
+
+    started = time.perf_counter()
+    print("Initializing database (bind-only: schema only, no rows loaded)...")
+    db = BenchmarkDatabase()
+    if db.is_cpp:
+        print(">>> C++ extension and Python fallback UDFs loaded successfully")
+    else:
+        print(
+            ">>> Python fallback UDFs loaded successfully "
+            "(C++ extension NOT loaded)"
+        )
+
+    # The measurement period is spliced into the SQL as literals; it cannot
+    # change whether the statement binds, so the CLI's period is enough and the
+    # (potentially large) fixture bundles are never parsed here.
+    parameters = {}
+    period_start, period_end = measurement_period
+    if period_start and period_end:
+        parameters["Measurement Period"] = (period_start, period_end)
+
+    total = len(configs)
+    done = 0
+
+    def _progress(result) -> None:
+        nonlocal done
+        done += 1
+        status = "PASS" if result.ok else "FAIL"
+        print(
+            f"  [{done}/{total}] {result.measure_id}: {status} "
+            f"({result.total_ms / 1000:.1f}s, "
+            f"{result.sql_bytes / 1024:.0f}KB SQL)",
+            flush=True,
+        )
+
+    try:
+        summary = bind_check_suite(
+            db.conn,
+            configs,
+            strict_profiles=strict_profiles,
+            parameters=parameters,
+            on_result=_progress,
+        )
+    except BindCheckError as exc:
+        # The check could not be run honestly (e.g. masked connection); that is
+        # a gate failure, never a pass.
+        print(f"ERROR: {exc}")
+        return 2
+    finally:
+        db.conn.close()
+
+    elapsed = time.perf_counter() - started
+    print()
+    print(summary.format_report())
+    print(f"  {summary.total} measures bind-checked in {elapsed:.1f}s")
+    return 0 if summary.ok else 1
 
 
 def _discover_measures(suite: str = SUITE_QI_CORE_2025):
