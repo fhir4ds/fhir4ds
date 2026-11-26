@@ -6573,6 +6573,35 @@ holds, but the case is not exercising what its name claims.
 Verification on the strict-mode tree: `--suite us-core --skip-errors` 73/73,
 `--suite qi-core --skip-errors` 47/47, CQL conformance 1706/1706.
 
+## `diff.ignoreSubmodules=all` hides submodule pin bumps from `git commit` (2026-11-26)
+
+This clone's `.git/config` sets `diff.ignoreSubmodules = all`. Consequence: `git add
+tests/data/dqm-content-cms-2025` DOES stage the gitlink (visible in `git ls-files -s`, and
+`git status --porcelain` shows `M `), but `git diff --cached` renders nothing and
+`git commit` takes its "nothing to commit" path — it prints the full `git status` and exits 1
+with no error message. That reads like a hook failure and is not one; the tell is that
+`GIT_TRACE=1 git commit` emits a single `built-in: git commit` line before the status dump.
+
+Result: the parent kept pinning `c2af06b5ee` while the working tree ran 18 fixture/CQL commits
+newer, so `git submodule update --init <path>` (what `conformance.yml` and the wasm-parity
+Tier C job do) checked out FIXTURES OLDER THAN THE ONES EVERY LOCAL DQM RUN SCORED. Local
+us-core 73/73 and CI agreement was coincidence, not evidence.
+
+To commit a pin bump:
+
+    git add tests/data/dqm-content-cms-2025
+    git -c diff.ignoreSubmodules=none commit -m "chore(dqm): pin ... 90743945"
+
+Verify afterwards with `git ls-tree HEAD <path>` against `git ls-files -s <path>`, and keep
+the submodule commit pushed to the fixture fork — a parent pin whose SHA is not on the
+submodule remote breaks every CI checkout.
+
+Related smell in the same config: `core.hooksPath = /mnt/d/fhir4ds/.git/hooks` points at a
+stale Windows checkout whose hooks directory contains only `.sample` files, so NO hook runs in
+this clone (and `git rev-parse --git-path hooks` reports that path, not `.git/hooks`). The repo
+ships no `.githooks/` of its own, so nothing is being skipped today — but a hook added under
+`.git/hooks` here would silently never fire.
+
 ## Bundled extension ABI slots — one source tree, three ABIs (2026-11-12)
 
 The three bundled filenames are ABI-specific and DuckDB selects one purely by
