@@ -8349,27 +8349,67 @@ error in CQL); a query operand (`"Ids" intersect ([Condition] C return C.id) X`)
 is blocked by the pre-existing double-alias defect (`SELECT <expr> AS X AS
 value`).
 
-**Parallelism hazard, MEASURED (card FHIR4-72):** a list-VALUE assertion is
-NOT deterministic at `threads>1`. Verified on this tree with a single translated
-library (patients p1={c1,c2,c3}, p2=\u2205, p3={c9}): 400 executions of the SAME
-population SQL at `threads=8` returned `BothIntersect = ()` for p1 — a patient
-with two matches — exactly once, while 60/60 executions at `threads=1` were
-stable and correct. Same rate with and without `AS MATERIALIZED`.
+**Parallelism hazard, MEASURED and FIXED (card FHIR4-72):** a list-VALUE
+comparison over an *element-rows define* was NOT deterministic at `threads>1`.
+The earlier note here claimed the correlated `list()` materialisation "never
+truncated" — that is true of the VALUE in isolation and FALSE once the value is
+a list-macro argument, and it is not an operand-count effect. Measured on this
+tree (patients p1={c1,c2,c3}, p2=empty, p3={c9}; 3000 executions of ONE
+translated population SQL, p1's answer recorded):
 
-What this is NOT, on the evidence: the plain correlated
-`list(_lst_src.value) FROM "<Def>"` materialisation was complete in every one of
-~750 runs (`Ids` never truncated), and a DuckDB-only reduction (DISTINCT CTE +
-correlated `list()`) did not reproduce at all. So the earlier hypothesis
-"partial `list()` from a DISTINCT CTE" is UNCONFIRMED — what varies is the
-INTERSECT/EXCEPT result, i.e. the two-correlated-list operand shape this card
-introduced. Do not repeat the list-truncation claim without a fresh repro.
+| shape | threads=8 | threads=4 |
+|---|---|---|
+| `intersect` over two element-rows defines (two inline aggregates) | 71/3000 wrong (13 empty + 58 len-1) | 371/3000 wrong (90 empty + 281 len-1) |
+| `"Ids" intersect { 'c2','zz' }` (**one** inline aggregate + literal list) | 88/3000 wrong | 560/3000 wrong |
+| the same aggregate projected as a plain VALUE (no macro) | 0/3000 | 0/3000 |
+| the same aggregate hoisted into a value CTE, passed as a lookup | 0/3000 | 0/3000 |
+| `CQLListContainsEq(<inline aggregate>, 'c1')` (`in`/`contains`) | 0/3000 | 0/3000 |
 
-Consequence for tests: assert list VALUES with `SET threads=1` (as
-`test_fhir4_67_setops_over_list_define.py` does) and treat any value assertion
-over these paths at default threads as potentially flaky. A 0.25% per-query
-error rate is invisible to a boolean-only check and dangerous in a population
-denominator, so FHIR4-72 is HIGH priority and must be isolated before the next
-release.
+So the VERIFIED rule is: **a correlated `list()` aggregate must be MATERIALIZED
+before it becomes a list-macro argument.** The macros re-expand their arguments
+textually (`CQLListEqualEq` mentions `left_lst` in `array_length` twice and again
+inside two nested `EXISTS (… unnest(left_lst) …)` subqueries), so the aggregate
+is re-evaluated inside nested subqueries and one of those evaluations
+intermittently answers with a PARTIAL list. NOT the operand count (one is as bad
+as two), NOT `DISTINCT`, distinct inner aliases or `AS MATERIALIZED` — those make
+no difference. Fewer threads is WORSE, so a small CI runner is the worst case,
+and plain `duckdb.connect()` defaults to the core count (**32 on the DQM host**),
+so every desktop `run_dqm.py` / `conformance/scripts/run_all.py` gate run has
+been executing inside this window.
+
+WORKAROUND (now the lowering): `OperatorsMixin._hoist_correlated_list_operands`
+(`fhir4ds/cql/translator/expressions/_operators.py`) evaluates each aggregated
+operand ONCE into its own `_cse_*` value CTE (`SELECT _pt.patient_id, <operand>
+AS value FROM "_patients" AS _pt`, emitted `AS MATERIALIZED` immediately before
+the consuming definition CTE) and passes a correlated value lookup to the macro.
+Wired into the `=`/`!=`, `~`/`!~`, `includes`/`included in`/`properly includes`/
+`properly included in`, `intersect` and `except` lowerings, at the
+`_translate_binary_expression` dispatch point AND inside the four list helpers so
+every re-use of the operands (the audit wrapper's evidence args, `properly
+includes`' length comparison) sees the hoisted form. `in`/`contains`/`IndexOf`
+are deliberately NOT re-shaped: a single list operand there was measured clean in
+both forms.
+
+Consequence for tests: assert list VALUES at the DEFAULT thread count, never with
+`SET threads=1` (that is what hid this) and never by non-emptiness. Regression
+coverage: `duckdb/tests/integration/test_fhir4_72_list_operand_determinism.py`
+(shape invariant + 250 executions × 2 engines at default threads with exact
+per-patient content). `test_fhir4_67_setops_over_list_define.py` keeps its
+`SET threads=1` only for the row-order-sensitive `First`/`Last` assertions.
+
+DQM REFEREE (both suites, `--all-columns`, DuckDB default 32 threads, per
+patient × per column): qi-core-2025 92,737 cells and us-core-2025 166,351 cells
+give **0 content differences and 0 POPULATION-column differences** before vs
+after; both suites stay 47/47 and 73/73 perfect. The exact-text diffs that do
+appear (17 qi-core, 13 us-core) are ALL non-population list columns whose
+elements are reordered — the SAME churn appears between two identical runs of
+the pre-fix tree (23 qi-core, 61 us-core), so it is pre-existing run-to-run list
+order, not this change. The new hoist fires ZERO times across the corpora (no
+measure uses a list `=`/`intersect`/`except`/`includes` over an element-rows
+define), which is why the SQL of 45+60 measures is byte-identical; the one
+material SQL change is CMS136, where the shared `_register_value_cte` DEDUPES
+identical value-CTE bodies (14 `_cse_` CTEs -> 7, 22.3 MB -> 12.0 MB) with
+identical results.
 
 ## `within N unit of` is Time-aware (FHIR4-50)
 

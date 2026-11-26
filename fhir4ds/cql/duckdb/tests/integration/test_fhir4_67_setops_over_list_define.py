@@ -224,27 +224,22 @@ def _run_both_engines():
         return
     for ctx, label in _connections():
         with ctx as con:
-            # DuckDB 1.5.6 ENGINE BUG, not a lowering property: a correlated
-            # `list()` aggregate over a `SELECT DISTINCT` CTE (every retrieve
-            # CTE is one) intermittently returns a PARTIAL list when the plan
-            # runs in parallel.  Minimal reproduction with no fhir4ds code:
+            # PHASE ORDER: `SET threads=1` is retained ONLY for the
+            # row-order-sensitive `First`/`Last` assertions below (an unordered
+            # retrieve legitimately yields either element). The value
+            # assertions themselves are deterministic at the DEFAULT thread
+            # count since FHIR4-72 materializes every correlated `list()`
+            # operand into its own value CTE before it reaches a list macro —
+            # see `test_fhir4_72_list_operand_determinism.py`, which repeats
+            # these defines 250 times per engine at the default thread count.
             #
-            #   WITH cte AS MATERIALIZED (SELECT DISTINCT patient_id, value
-            #                              FROM raw),
-            #        p   AS MATERIALIZED (SELECT DISTINCT ON (patient_id)
-            #                              patient_id FROM pts)
-            #   SELECT _pt.patient_id,
-            #          COALESCE((SELECT list(_l.value) FROM cte AS _l
-            #                     WHERE _l.patient_id = _pt.patient_id), [])
-            #   FROM p AS _pt;         -- varies between runs at threads=8
-            #
-            # It affects every element-rows define materialization
-            # (`_list_operator_full_list_source`, CQL-19/FHIR4-65), including
-            # the pre-existing membership/First/IndexOf lowerings — this card
-            # only makes it visible because list VALUES are compared instead of
-            # booleans.  Pin the executor so the assertions below test the
-            # LOWERING deterministically; the engine hazard is reported
-            # separately.
+            # Do NOT re-derive the defect from this comment: the earlier claim
+            # that the plain correlated `list()` materialisation truncates by
+            # itself was never reproduced (0/3000 as a plain VALUE, 0/3000
+            # hoisted). What truncates is the same aggregate used as a LIST
+            # MACRO ARGUMENT, which the macros re-expand textually into nested
+            # UNNEST/EXISTS subqueries — one inline aggregate is as bad as two
+            # (88/3000 at threads=8, 560/3000 at threads=4).
             con.execute("SET threads=1")
             sql = _translate(_LIBRARY, con)
             # Keep DuckDB's default strictness: a shape defect must not be

@@ -194,6 +194,11 @@ _CQL_INTEGER_MAX = 2147483647
 _CQL_LONG_MIN = -9223372036854775808
 _CQL_LONG_MAX = 9223372036854775807
 
+#: FHIR4-72: node budget for the correlated-list-operand hoist walk. Operands
+#: above this are left on their historical lowering (they are already
+#: pathological — the hoist is a correctness fix, not a size optimisation).
+_LIST_OPERAND_HOIST_MAX_NODES = 20000
+
 
 def _infer_static_numeric_type(node: Any) -> Optional[str]:
     """Statically infer the numeric CQL type of a literal-ish expression.
@@ -1522,6 +1527,9 @@ class OperatorsMixin:
         # doctrine extended to the equality/set-op lowering sites).
         left_sql = _coerce_json_list_source(left_sql)
         right_sql = _coerce_json_list_source(right_sql)
+        # FHIR4-72: materialize a correlated list() operand before it becomes
+        # a list-macro argument.
+        left_sql, right_sql = self._hoist_correlated_list_operands(left_sql, right_sql)
         return SQLFunctionCall(name=name, args=[left_sql, right_sql])
 
     def _list_except_call(
@@ -1545,6 +1553,9 @@ class OperatorsMixin:
         # doctrine extended to the equality/set-op lowering sites).
         left_sql = _coerce_json_list_source(left_sql)
         right_sql = _coerce_json_list_source(right_sql)
+        # FHIR4-72: materialize a correlated list() operand before it becomes
+        # a list-macro argument.
+        left_sql, right_sql = self._hoist_correlated_list_operands(left_sql, right_sql)
         return SQLFunctionCall(name=name, args=[left_sql, right_sql])
 
     def _list_intersect_call(
@@ -1568,6 +1579,9 @@ class OperatorsMixin:
         # doctrine extended to the equality/set-op lowering sites).
         left_sql = _coerce_json_list_source(left_sql)
         right_sql = _coerce_json_list_source(right_sql)
+        # FHIR4-72: materialize a correlated list() operand before it becomes
+        # a list-macro argument.
+        left_sql, right_sql = self._hoist_correlated_list_operands(left_sql, right_sql)
         return SQLFunctionCall(name=name, args=[left_sql, right_sql])
 
     def _list_index_of_call(
@@ -1643,6 +1657,9 @@ class OperatorsMixin:
         # doctrine extended to the equality/set-op lowering sites).
         left_sql = _coerce_json_list_source(left_sql)
         right_sql = _coerce_json_list_source(right_sql)
+        # FHIR4-72: materialize a correlated list() operand before it becomes
+        # a list-macro argument.
+        left_sql, right_sql = self._hoist_correlated_list_operands(left_sql, right_sql)
         return SQLFunctionCall(name=name, args=[left_sql, right_sql])
 
     def _infer_static_cql_type_for_logical_operand(self, operand: object) -> str:
@@ -3125,6 +3142,15 @@ class OperatorsMixin:
                 if _multi_row_right is not None:
                     right = _multi_row_right
 
+                # FHIR4-72: hoist HERE, before the operator-specific
+                # lowering, so every consumer of these operands agrees — the
+                # audit wrapper re-uses them as evidence (`audit_comparison`),
+                # and `properly includes` repeats them in its length
+                # comparison. Hoisting later (inside the list macro helpers)
+                # would still leave the correlated list() aggregates in those
+                # re-uses, which is the defect this rule exists to remove.
+                left, right = self._hoist_correlated_list_operands(left, right)
+
         # CQL §12.3: between — `X between low and high` → `X >= low and X <= high`
         # (`properly between` — FHIR4-46 — uses the exclusive comparisons).
         if operator in ("between", "properly between"):
@@ -4099,6 +4125,12 @@ class OperatorsMixin:
                             right=SQLLiteral(1),
                         ),
                     )
+                # FHIR4-72: the AND below repeats BOTH operands (the has-all
+                # macro and the two array_length calls), so hoist ONCE here
+                # and pass the hoisted pair to every use — otherwise the
+                # operator SELECT carries two correlated list() aggregates
+                # again and the DuckDB parallel-execution defect survives.
+                left, right = self._hoist_correlated_list_operands(left, right)
                 return SQLBinaryOp(
                     operator="AND",
                     left=self._list_has_all_call(left, right, expr.left, expr.right),
@@ -4197,6 +4229,9 @@ class OperatorsMixin:
                             right=SQLLiteral(1),
                         ),
                     )
+                # FHIR4-72: see the `properly includes` site — hoist ONCE so
+                # every use of the pair shares one correlated aggregate.
+                right, left = self._hoist_correlated_list_operands(right, left)
                 return SQLBinaryOp(
                     operator="AND",
                     left=self._list_has_all_call(right, left, expr.right, expr.left),
@@ -6385,6 +6420,65 @@ class OperatorsMixin:
             )
         return inner
 
+    def _register_value_cte(self, operand: SQLExpression) -> str:
+        """Register ``operand`` as a per-patient value CTE; return its name.
+
+        The body is ``SELECT _pt.patient_id, <operand> AS value FROM
+        "_patients" AS _pt``: one row per patient, registered under
+        ``context._let_variable_ctes[current definition]`` so the existing
+        emission pass places it immediately before the consuming definition
+        CTE (after ``_patients``) and Phase 3 resolves retrieve placeholders
+        inside it like any other let body. ``_cse_`` names are emitted with
+        ``AS MATERIALIZED`` (see ``translator._build_sql``'s injection loop),
+        which is load-bearing here: an inlined CTE would move the value
+        expression back into the consumer.
+
+        The body MUST project patient_id alongside value: the correlated
+        lookup does ``_lv.patient_id = <X>.patient_id``, and a missing column
+        makes DuckDB fail the whole alias binding with a misleading
+        "Referenced table _lv not found" Binder Error (CMS136 — misdiagnosed
+        for several rounds as a scope/recursive interaction; minimal repro:
+        any CTE without patient_id referenced via ``_lv.patient_id``).
+        """
+        scope_name = self.context._current_definition or "__unknown__"
+        if scope_name not in self.context._let_variable_ctes:
+            self.context._let_variable_ctes[scope_name] = {}
+        existing = self.context._let_variable_ctes[scope_name]
+        # Reuse an identical body (a definition can be translated more than
+        # once — inference passes re-translate operands). Without this the
+        # emission carries one dead MATERIALIZED CTE per repeated translation.
+        operand_keys = getattr(self.context, "_value_cte_operand_keys", None)
+        if operand_keys is None:
+            operand_keys = {}
+            self.context._value_cte_operand_keys = operand_keys
+        rendered_operand = operand.to_sql()
+        reused = operand_keys.get((scope_name, rendered_operand))
+        if reused is not None and reused in existing:
+            return reused
+        _cse_counters = getattr(self.context, "_cse_cte_counters", None)
+        if _cse_counters is None:
+            _cse_counters = {}
+            self.context._cse_cte_counters = _cse_counters
+        _cse_counters[scope_name] = _cse_counters.get(scope_name, 0) + 1
+        import re as _re
+        safe_scope = _re.sub(r"[^A-Za-z0-9_]+", "_", scope_name).strip("_") or "scope"
+        cte_name = f"_cse_{safe_scope[:32]}_{_cse_counters[scope_name]}"
+        while cte_name in existing:
+            _cse_counters[scope_name] += 1
+            cte_name = f"_cse_{safe_scope[:32]}_{_cse_counters[scope_name]}"
+        existing[cte_name] = SQLSelect(
+            columns=[
+                SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
+                SQLAlias(expr=operand, alias="value"),
+            ],
+            from_clause=SQLAlias(
+                expr=SQLIdentifier(name="_patients", quoted=True),
+                alias="_pt",
+            ),
+        )
+        operand_keys[(scope_name, rendered_operand)] = cte_name
+        return cte_name
+
     def _hoist_list_union_operand(self, operand: SQLExpression) -> SQLExpression:
         """Hoist a LARGE list-union operand into a per-patient value CTE.
 
@@ -6486,41 +6580,7 @@ class OperatorsMixin:
         if foreign_root is not None:
             return operand  # row-scoped operand: hoisting would break correlation
 
-        # Register the value CTE under the current definition
-        scope_name = self.context._current_definition or "__unknown__"
-        if scope_name not in self.context._let_variable_ctes:
-            self.context._let_variable_ctes[scope_name] = {}
-        existing = self.context._let_variable_ctes[scope_name]
-        _cse_counters = getattr(self.context, "_cse_cte_counters", None)
-        if _cse_counters is None:
-            _cse_counters = {}
-            self.context._cse_cte_counters = _cse_counters
-        _cse_counters[scope_name] = _cse_counters.get(scope_name, 0) + 1
-        import re as _re
-        safe_scope = _re.sub(r"[^A-Za-z0-9_]+", "_", scope_name).strip("_") or "scope"
-        cte_name = f"_cse_{safe_scope[:32]}_{_cse_counters[scope_name]}"
-        while cte_name in existing:
-            _cse_counters[scope_name] += 1
-            cte_name = f"_cse_{safe_scope[:32]}_{_cse_counters[scope_name]}"
-
-        # The body MUST project patient_id alongside value: the correlated
-        # lookup does `_lv.patient_id = <X>.patient_id`, and a missing
-        # column makes DuckDB fail the whole alias binding with a
-        # misleading "Referenced table _lv not found" Binder Error
-        # (CMS136 — misdiagnosed for several rounds as a scope/recursive
-        # interaction; minimal repro: any CTE without patient_id
-        # referenced via `_lv.patient_id`).
-        body = SQLSelect(
-            columns=[
-                SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
-                SQLAlias(expr=operand, alias="value"),
-            ],
-            from_clause=SQLAlias(
-                expr=SQLIdentifier(name="_patients", quoted=True),
-                alias="_pt",
-            ),
-        )
-        existing[cte_name] = body
+        cte_name = self._register_value_cte(operand)
 
         lookup = SQLSubquery(query=SQLSelect(
             columns=[SQLIdentifier(name="value")],
@@ -6537,6 +6597,191 @@ class OperatorsMixin:
             ),
         ))
         # Preserve list typing so population wrapping does not nest lists
+        lookup.result_type = getattr(operand, "result_type", None) or "List<Any>"
+        return lookup
+
+    # ------------------------------------------------------------------
+    # FHIR4-72: a correlated list() aggregate must be MATERIALIZED before it
+    # becomes a list-macro argument
+    # ------------------------------------------------------------------
+    # A list-binary operator lowers to a macro (`CQLListEqualEq`,
+    # `CQLListIntersectEq`, …) that re-expands its arguments TEXTUALLY: one
+    # `CQLListEqualEq` mentions `left_lst` in `array_length` twice and again
+    # inside two nested `EXISTS (… unnest(left_lst) …)` subqueries. An operand
+    # that is a correlated `list()` aggregate
+    #
+    #     COALESCE((SELECT list(_lst_src.value) FROM "<Def>" AS _lst_src
+    #                WHERE _lst_src.patient_id = _pt.patient_id), [])
+    #
+    # is therefore RE-EVALUATED inside those nested subqueries, and at
+    # `threads > 1` DuckDB intermittently answers one of those evaluations with
+    # a PARTIAL list (or nothing). It is silent — the answer is a list VALUE, so
+    # a truncated operand reads as a smaller result instead of an error, and any
+    # boolean derived from it simply flips.
+    #
+    # Measured on this tree (patients p1={c1,c2,c3}, p2=empty, p3={c9}; 3000
+    # executions of ONE translated population SQL, `p1`'s answer recorded):
+    #
+    #   two inline aggregates, `intersect`        threads=8 ->  71/3000 wrong
+    #                                             threads=4 -> 371/3000 wrong
+    #   ONE inline aggregate + literal list in
+    #   `CQLListIntersectEq` (`Ids intersect { 'c2','zz' }`)
+    #                                             threads=8 ->  88/3000 wrong
+    #                                             threads=4 -> 560/3000 wrong
+    #   the same aggregate projected as a plain
+    #   VALUE (no macro)                          threads=8/4 -> 0/3000
+    #   the same aggregate HOISTED to a value CTE
+    #   and passed as a lookup                    threads=8/4 -> 0/3000
+    #
+    # So the discriminator is NOT the operand count (one is as bad as two),
+    # and NOT `DISTINCT`, distinct inner aliases or `AS MATERIALIZED` — it is
+    # whether the correlated aggregate appears as a MACRO ARGUMENT at all.
+    # `threads` defaults to the core count (32 on the DQM host), so the desktop
+    # gate runs inside this window, and fewer threads is WORSE: a small CI
+    # runner is the worst case.
+    #
+    # `in`/`contains`/`indexOf` take a single list and were measured CLEAN in
+    # both forms (`CQLListContainsEq(<inline aggregate>, 'c1')` 0/3000 at
+    # threads=4 and 8), so their lowering is deliberately left alone.
+    @staticmethod
+    def _sql_unique_nodes(node) -> Optional[list]:
+        """Collect every node of the AST once (placeholder-safe, iterative)."""
+        nodes: list = []
+        seen: set = set()
+        stack = [node]
+        while stack:
+            current = stack.pop()
+            if current is None or id(current) in seen:
+                continue
+            seen.add(id(current))
+            nodes.append(current)
+            if len(nodes) > _LIST_OPERAND_HOIST_MAX_NODES:
+                return None
+            if isinstance(current, (list, tuple)):
+                stack.extend(current)
+                continue
+            fields = getattr(current, "__dataclass_fields__", None)
+            if fields:
+                for field_name in fields:
+                    stack.append(getattr(current, field_name, None))
+        return nodes
+
+    def _correlated_list_aggregate_count(self, nodes: list) -> int:
+        """Count correlated ``list()`` aggregate subqueries in one operand."""
+        count = 0
+        for node in nodes:
+            if not isinstance(node, SQLSubquery):
+                continue
+            sub_nodes = self._sql_unique_nodes(node)
+            if not sub_nodes:
+                continue
+            if not any(
+                isinstance(inner, SQLFunctionCall) and inner.name.lower() == "list"
+                for inner in sub_nodes
+            ):
+                continue
+            # A correlated aggregate references the OUTER patient alias
+            # (`_pt.patient_id`) — an uncorrelated `list()` over its own scan
+            # is evaluated once and is not part of this defect.
+            if any(
+                isinstance(inner, SQLQualifiedIdentifier)
+                and inner.parts
+                and inner.parts[0] == "_pt"
+                for inner in sub_nodes
+            ):
+                count += 1
+        return count
+
+    def _list_operand_is_hoistable(self, nodes: list) -> bool:
+        """True when the operand can be evaluated by ``_register_value_cte``.
+
+        The hoisted body is ``SELECT _pt.patient_id, <operand> AS value FROM
+        "_patients" AS _pt``, so the operand's only FREE alias root may be
+        ``_pt`` (the correlation this defect is about); every other root must
+        be bound INSIDE the operand (FROM/JOIN aliases). Opaque SQL and
+        unqualified column references are refused — their meaning would change
+        under the new FROM scope.
+        """
+        bound = {
+            node.alias.lower()
+            for node in nodes
+            if isinstance(node, SQLAlias) and node.alias
+        }
+        for node in nodes:
+            if isinstance(node, SQLRaw):
+                return False
+            if isinstance(node, SQLQualifiedIdentifier):
+                if node.parts[0].lower() not in bound and node.parts[0].lower() != "_pt":
+                    return False
+            elif isinstance(node, SQLIdentifier):
+                # Unqualified column: only a QUOTED identifier (a CTE/table
+                # reference) keeps its meaning inside the hoisted body.
+                if not node.quoted:
+                    return False
+        return True
+
+    def _hoist_correlated_list_operands(
+        self, left: SQLExpression, right: SQLExpression
+    ) -> Tuple[SQLExpression, SQLExpression]:
+        """FHIR4-72: materialize EVERY correlated ``list()`` operand of a list
+        macro into its own per-patient value CTE.
+
+        A list macro re-expands its arguments TEXTUALLY — ``CQLListEqualEq``
+        alone references ``left_lst`` in ``array_length`` twice and again inside
+        two nested ``EXISTS (… unnest(left_lst) …)`` subqueries. A correlated
+        ``list()`` aggregate passed as such an argument is therefore
+        re-evaluated inside nested subqueries, and at ``threads > 1`` DuckDB
+        intermittently returns a PARTIAL list (or nothing) for one of those
+        evaluations. Evaluating the operand ONCE in a value CTE and passing a
+        correlated value lookup leaves the macro arguments free of aggregates,
+        which is the shape verified deterministic (see the card comment above).
+
+        Semantics are unchanged: the CTE holds the SAME expression, evaluated
+        once per patient against ``_patients``, and the lookup is keyed on the
+        patient id the subquery used to correlate on. Operands that do not
+        qualify (row-scoped, opaque, aggregate-free) are returned untouched.
+        """
+        if not getattr(self.context, "_current_definition", None):
+            # No definition scope to attach the value CTE to; the emission
+            # pass would never pick it up (dangling reference).
+            return left, right
+        if getattr(self.context, "_building_function_promotion_cte", False):
+            return left, right
+
+        operands = []
+        for operand in (left, right):
+            nodes = self._sql_unique_nodes(operand)
+            if not nodes:
+                return left, right
+            operands.append((operand, nodes, self._correlated_list_aggregate_count(nodes)))
+
+        if not operands[0][2] and not operands[1][2]:
+            return left, right
+
+        translated = []
+        for operand, nodes, count in operands:
+            if count and self._list_operand_is_hoistable(nodes):
+                translated.append(self._list_value_cte_lookup(operand))
+            else:
+                translated.append(operand)
+        return translated[0], translated[1]
+
+    def _list_value_cte_lookup(self, operand: SQLExpression) -> SQLSubquery:
+        """Reference a previously registered value CTE for ``operand``."""
+        cte_name = self._register_value_cte(operand)
+        lookup = SQLSubquery(query=SQLSelect(
+            columns=[SQLIdentifier(name="value")],
+            from_clause=SQLAlias(
+                expr=SQLIdentifier(name=cte_name, quoted=True),
+                alias="_lv",
+            ),
+            where=SQLBinaryOp(
+                operator="=",
+                left=SQLQualifiedIdentifier(parts=["_lv", "patient_id"]),
+                right=SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
+            ),
+        ))
+        # Preserve list typing so later lowering/wrapping does not nest lists.
         lookup.result_type = getattr(operand, "result_type", None) or "List<Any>"
         return lookup
 
@@ -8654,6 +8899,9 @@ class OperatorsMixin:
             # operands (first-node truncation) to full list projections.
             left = _promote_fhirpath_text_list(left)
             right = _promote_fhirpath_text_list(right)
+            # FHIR4-72: materialize a correlated list() operand before it becomes
+        # a list-macro argument.
+            left, right = self._hoist_correlated_list_operands(left, right)
             result: SQLExpression = SQLFunctionCall(
                 name="CQLListEquivalentEq",
                 args=[left, right],
