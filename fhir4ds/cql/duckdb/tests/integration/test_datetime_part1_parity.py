@@ -957,3 +957,39 @@ define SubtractAtSamePrecision: @T12:00 - 30 minutes
     finally:
         py.close()
         cpp.close()
+
+
+def test_cql_temporal_predicates_return_null_for_non_temporal_operands_fhir4_59() -> None:
+    """FHIR4-59: a Period/interval operand is UNKNOWN, not an error.
+
+    CQL 1.5 §12.1 signatures are same-type, so a FHIR Period JSON document is
+    not a DateTime point: every point predicate must answer NULL. cqlBefore /
+    cqlAfter / cqlSameOrBefore / cqlSameOrAfter already had the guard; the
+    plain cqlDateTimeEqual was the lone asymmetry and let a ValueError from the
+    temporal parser escape as a UDF error (a Period reaching it, e.g. through
+    an inlined FHIRHelpers conversion, surfaced as a hard failure instead of
+    SQL NULL).
+    """
+    period = '{"start":"2021-01-10","end":"2026-01-10"}'
+    range_json = '{"low":{"value":1,"unit":"mg"},"high":{"value":3,"unit":"mg"}}'
+    predicates = (
+        "cqlDateTimeEqual", "cqlBefore", "cqlAfter",
+        "cqlSameOrBefore", "cqlSameOrAfter",
+    )
+    py = _python_only_connection()
+    cpp = _cpp_connection()
+    try:
+        for fn in predicates:
+            for operand in (period, range_json, "not-a-date"):
+                sql = f"SELECT {fn}(?, ?)"
+                py_row = py.execute(sql, [operand, "2026-10-10"]).fetchone()[0]
+                cpp_row = cpp.execute(sql, [operand, "2026-10-10"]).fetchone()[0]
+                assert py_row is None, (fn, operand, py_row)
+                assert cpp_row is None, (fn, operand, cpp_row)
+        # Control: a real DateTime comparison is unaffected.
+        assert py.execute(
+            "SELECT cqlDateTimeEqual('2024-01-01', '2024-01-01')"
+        ).fetchone()[0] is True
+    finally:
+        py.close()
+        cpp.close()

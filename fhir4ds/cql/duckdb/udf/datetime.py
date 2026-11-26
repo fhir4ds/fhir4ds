@@ -2178,11 +2178,24 @@ def cqlAfter(a: str | None, b: str | None) -> bool | None:
 
 
 def cqlDateTimeEqual(a: str | None, b: str | None) -> bool | None:
-    """CQL DateTime equality (§12.1). Returns null if uncertain."""
+    """CQL DateTime equality (§12.1). Returns null if uncertain.
+
+    A non-temporal operand (a FHIR Period/Range/interval JSON document, or any
+    value the temporal parser rejects) is **not** an error here: CQL §12.1
+    signatures are same-type, so a Period is not a DateTime point and the
+    comparison is UNKNOWN. Every sibling predicate (cqlBefore, cqlAfter,
+    cqlSameOrBefore, cqlSameOrAfter, the list-element helpers) already answers
+    None for these operands; this function was the lone asymmetry (FHIR4-59),
+    which made a Period reaching it surface as a ValueError from the UDF layer
+    instead of SQL NULL.
+    """
     if a is None or b is None:
         return None
     a_s, b_s = str(a), str(b)
-    cmp, certain = _compare_at_min_precision(a_s, b_s)
+    try:
+        cmp, certain = _compare_at_min_precision(a_s, b_s)
+    except (ValueError, KeyError, OverflowError):
+        return None
     if cmp != 0:
         return False
     if not certain:
