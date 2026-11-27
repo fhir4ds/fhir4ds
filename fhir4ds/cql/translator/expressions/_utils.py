@@ -319,6 +319,52 @@ def _fold_list_start_sql(agg: Any) -> str:
     return "CAST([] AS VARCHAR[])"
 
 
+#: SQL type of a scalar fold's accumulator, by the CQL type of its starting value. A type that
+#: is not listed keeps the starting value's own SQL type.
+_FOLD_ACCUMULATOR_SQL_TYPES = {
+    "Integer": "INTEGER",
+    "Long": "BIGINT",
+    "Decimal": "DECIMAL(38,8)",
+    "String": "VARCHAR",
+    "Boolean": "BOOLEAN",
+    "Date": "VARCHAR",
+    "DateTime": "VARCHAR",
+    "Time": "VARCHAR",
+}
+
+#: An integral start whose body is statically a wider numeric type (FHIR4-76).
+_FOLD_NUMERIC_WIDENING = {
+    ("Integer", "Long"): "Long",
+    ("Integer", "Decimal"): "Decimal",
+    ("Long", "Decimal"): "Decimal",
+}
+
+
+def _fold_accumulator_sql_type(
+    start_cql_type: str | None, body_cql_type: str | None
+) -> str | None:
+    """The SQL type of a scalar fold's accumulator column (FHIR4-76).
+
+    Every step's result is cast back to the accumulator's type, so the type must cover the
+    whole CQL type of the starting value: an Integer start is INT32 (overflow then reaches the
+    body's ``TRY`` guard and is null per spec), a Decimal start is DECIMAL(38,8). The first
+    shape cast every multi-source start to BIGINT (``starting 0.5`` over six rows with
+    ``R + 1`` answered 7, not 6.5) and carried a single-source accumulator inside the element
+    list, so each step was rounded to the element type. An integral start whose body is
+    statically Long or Decimal is widened: the body's type is what the steps compute, and
+    truncating each step was silently wrong.
+    """
+    if start_cql_type is None:
+        return None
+    kind = _FOLD_NUMERIC_WIDENING.get((start_cql_type, body_cql_type), start_cql_type)
+    return _FOLD_ACCUMULATOR_SQL_TYPES.get(kind)
+
+
+def _fold_anchor_sql(starting_sql: str, sql_type: str | None) -> str:
+    """The anchor (first accumulator value) of a scalar fold, cast to its accumulator type."""
+    return starting_sql if sql_type is None else f"CAST({starting_sql} AS {sql_type})"
+
+
 def _coerce_query_rows_to_list(node):
     """Convert a row-producing single-column query into a scalar DuckDB list."""
     inner_select = None
