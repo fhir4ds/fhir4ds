@@ -339,6 +339,32 @@
   `SQLRecursiveCTEFold` in `translator/types.py` still documents the old shape
   but has no constructor call sites (a dead emitter).
 
+- **A multi-source fold is a query with clauses, not a bare cross join
+  (FHIR4-73, 2026-11-26)**: `from (…) P, (…) Q aggregate …` lowers through the
+  same `_fold_sql` with one working-table column per source alias
+  (`__c0..__cN`, each a `struct_extract` of the current element). Three rules,
+  each violated before this fix: (1) the anchor follows the STARTING VALUE —
+  a typed null or empty list (`null as List<T>` / `{} as List<T>`,
+  `_fold_start_is_typed_list` in `expressions/_utils.py`) gets
+  `CAST(NULL AS VARCHAR[])` / `CAST([] AS VARCHAR[])` and
+  `result_type = "List<Any>"`; the multi-source path used to cast every anchor
+  to BIGINT, so a list accumulator never bound. (2) The query's WHERE clause
+  filters the cross-joined rows inside the element-list subquery (`__d`
+  columns); it used to be dropped, so the fold ran over rows the query had
+  excluded — a wrong answer, not an error. (3) A list-accumulator aggregate is
+  already ONE list value per patient: `_is_query_list_source` in
+  `_operators._translate_binary_expression` must not coerce its row
+  rows-to-list again, or `"X" contains e` tests a one-element list of the whole
+  list. Assert CONTENT in fold tests (which elements), never a length. Known
+  limits of the multi-source fold, NOT fixed here (each reproduces on dev):
+  a LET clause does not bind (`Referenced column "P" not found`); a non-integer
+  scalar starting value still gets the BIGINT anchor (`starting 0.5` with the
+  body `R + 1` over six rows answers 7 where 6.5 is right, a String start is a
+  conversion error); retrieve-typed sources do not lower. Separate finding:
+  `exists <list-valued define>` answers TRUE for an empty list (also for
+  `define L: {} as List<String>`). Tests:
+  `duckdb/tests/integration/test_fhir4_73_multi_source_list_fold.py`.
+
 - **Lateral-dedup portability (FHIR4-15 / CQL20-F, 2026-11-19)**: the
   lateral-dedup pass (`translator/types.py::_dedup_select`) must NEVER nest
   a correlated scalar subquery inside a `CROSS JOIN LATERAL` projection —

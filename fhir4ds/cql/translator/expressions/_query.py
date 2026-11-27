@@ -66,6 +66,8 @@ from ...translator.expressions._utils import (
     _canonical_fhir_r4_type_name,
     _contains_sql_subquery,
     _ensure_scalar_body,
+    _fold_list_start_sql,
+    _fold_start_is_typed_list,
     _is_list_returning_sql,
 )
 
@@ -7738,19 +7740,47 @@ class QueryMixin:
                 _body_sql = agg_body.to_sql()
                 _start_sql = starting_sql.to_sql() if starting_sql else "NULL"
 
+                # The query's WHERE clause filters the cross-joined rows before the fold
+                # sees them. It used to be dropped here, so the fold ran over rows the query
+                # had excluded (FHIR4-73: `from (…) P, (…) Q where P > 1 aggregate …` folded
+                # every pair). Each source alias is the matching column of the joined row.
+                _where_sql = None
+                if node.where is not None:
+                    self.context.push_scope()
+                    try:
+                        for _ms_alias in _all_aliases:
+                            self.context.add_alias(
+                                _ms_alias,
+                                ast_expr=SQLQualifiedIdentifier(parts=["__d", _ms_alias]),
+                            )
+                        _where_expr = getattr(node.where, "expression", node.where)
+                        _where_sql = _demote_audit_struct_to_bool(
+                            self.translate(_where_expr, usage=ExprUsage.BOOLEAN)
+                        ).to_sql()
+                    finally:
+                        self.context.pop_scope()
+
                 # The cross join of the sources becomes ONE list of structs in the
                 # working table; the recursive term reads nothing else (WP-11).
                 _items_fields = ", ".join(f"{a} := __d.{a}" for a in _all_aliases)
                 _items_sql = (
                     f"(SELECT list(struct_pack({_items_fields})) FROM "
-                    f"(SELECT {_distinct_kw}* FROM (SELECT * FROM {_xj_from}) __src) __d)"
+                    f"(SELECT {_distinct_kw}* FROM (SELECT * FROM {_xj_from}) __src) __d"
+                    f"{f' WHERE {_where_sql}' if _where_sql else ''})"
                 )
                 # Recursive CTE for the multi-source fold, built as an SQL string.
                 # The alias bindings above are AST nodes (SQLQualifiedIdentifier),
                 # so the body expression is translated through the AST pipeline.
+                # A list accumulator gets a list-typed anchor (FHIR4-73); every other
+                # starting value keeps the integer anchor this path always used.
+                _anchor_sql = (
+                    _fold_list_start_sql(agg)
+                    if _fold_start_is_typed_list(agg)
+                    else f"CAST({_start_sql} AS BIGINT)"
+                )
                 result = SQLRaw(
                     _fold_sql(
-                        start_sql=f"CAST({_start_sql} AS BIGINT)",
+                        start_sql=_anchor_sql,
                         items_sql=_items_sql,
                         body_sql=_body_sql,
                         current=[
@@ -7764,6 +7794,8 @@ class QueryMixin:
                         ],
                     )
                 )
+                if _fold_start_is_typed_list(agg):
+                    result.result_type = "List<Any>"
             else:
                 # ── Single-source aggregate ───────────────────────────────
                 # Detect typed-list starting values.
@@ -7773,27 +7805,8 @@ class QueryMixin:
                 # error.  Route these through the same recursive-CTE fold used
                 # for multi-source aggregates so the accumulator is typed as a
                 # list from the outset.  (CQL §19.27)
-                from ...parser.ast_nodes import (
-                    ListExpression as _ListExpression,
-                    ListTypeSpecifier as _ListTypeSpec,
-                    Literal as _ASTLiteral,
-                )
-                _starting_is_typed_list = (
-                    agg.starting is not None
-                    and isinstance(agg.starting, BinaryExpression)
-                    and agg.starting.operator == 'as'
-                    and isinstance(agg.starting.right, _ListTypeSpec)
-                    and (
-                        (
-                            isinstance(agg.starting.left, _ASTLiteral)
-                            and agg.starting.left.value is None
-                        )
-                        or (
-                            isinstance(agg.starting.left, _ListExpression)
-                            and not agg.starting.left.elements
-                        )
-                    )
-                )
+                from ...parser.ast_nodes import Literal as _ASTLiteral
+                _starting_is_typed_list = _fold_start_is_typed_list(agg)
 
                 if _starting_is_typed_list and alias:
                     # ── Single-source list-accumulator aggregate: recursive CTE fold ──
@@ -7853,11 +7866,7 @@ class QueryMixin:
                         self.context.pop_scope()
 
                     _body_sql = agg_body.to_sql()
-                    _start_sql = (
-                        "CAST(NULL AS VARCHAR[])"
-                        if isinstance(agg.starting.left, _ASTLiteral)
-                        else "CAST([] AS VARCHAR[])"
-                    )
+                    _start_sql = _fold_list_start_sql(agg)
                     # The element list becomes ONE column of the working table;
                     # ``distinct`` keeps its place (the list is built from the
                     # de-duplicated elements).

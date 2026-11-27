@@ -5,7 +5,7 @@ imported by mixin modules to avoid circular imports with the package __init__.
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from ...translator.types import (
     SQLAlias,
@@ -251,6 +251,43 @@ def _is_list_valued_projection(expr) -> bool:
         if expr.name == "COALESCE" and expr.args:
             return _is_list_valued_projection(expr.args[0])
     return False
+
+
+def _fold_start_is_typed_list(agg: Any) -> bool:
+    """True when an aggregate starts from a typed null or empty list.
+
+    ``aggregate R starting (null as List<T>)`` / ``starting ({} as List<T>)`` makes the accumulator
+    a list, so the fold needs a list-typed anchor instead of the integer one a scalar accumulator
+    gets (FHIR4-73: the multi-source fold cast every anchor to BIGINT and did not bind).
+    """
+    from ...parser.ast_nodes import (
+        BinaryExpression,
+        ListExpression,
+        ListTypeSpecifier,
+        Literal,
+    )
+
+    starting = agg.starting
+    return (
+        starting is not None
+        and isinstance(starting, BinaryExpression)
+        and starting.operator == "as"
+        and isinstance(starting.right, ListTypeSpecifier)
+        and (
+            (isinstance(starting.left, Literal) and starting.left.value is None)
+            or (isinstance(starting.left, ListExpression) and not starting.left.elements)
+        )
+    )
+
+
+def _fold_list_start_sql(agg: Any) -> str:
+    """The anchor of a list-accumulator fold: SQL NULL for ``null as List<T>`` and an empty list
+    for ``{} as List<T>``."""
+    from ...parser.ast_nodes import Literal
+
+    if isinstance(agg.starting.left, Literal):
+        return "CAST(NULL AS VARCHAR[])"
+    return "CAST([] AS VARCHAR[])"
 
 
 def _coerce_query_rows_to_list(node):
