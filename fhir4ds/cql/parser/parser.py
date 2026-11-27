@@ -174,6 +174,11 @@ class CQLParser:
         """
         self.tokens = tokens
         self.pos = 0
+        # FHIR4-85: ratio literal construction (`<qty>:<qty>`) is disabled while
+        # re-reading an aggregate clause's `starting` expression, whose clause
+        # colon is otherwise stolen by a numeric anchor followed by a numeric
+        # body (`starting 0: 1 + R` read as the Ratio `0:1`).
+        self._ratio_literals_enabled = True
 
     # =========================================================================
     # Helper Methods
@@ -2457,7 +2462,15 @@ class CQLParser:
         string-delimited UCUM unit. Otherwise, leave the COLON in the
         token stream and return the numerator unchanged so the caller's
         context-specific parser handles it.
+
+        That lookahead cannot decide the aggregate-clause case, because a
+        numeric anchor followed by a numeric body looks exactly like a Ratio.
+        ``parse_aggregate_clause`` therefore re-reads the anchor with
+        ``_ratio_literals_enabled`` cleared when the greedy reading does not
+        reach the clause colon (FHIR4-85).
         """
+        if not self._ratio_literals_enabled:
+            return numerator
         if not self.match(TokenType.COLON):
             return numerator
         # Peek at the token *after* the COLON. Only commit to Ratio if it
@@ -3739,7 +3752,7 @@ class CQLParser:
         # Check for 'starting' clause
         starting = None
         if self.match_and_advance(TokenType.STARTING):
-            starting = self.parse_expression()
+            starting = self._parse_aggregate_starting_expression()
 
         # Expect colon and parse the aggregation expression
         self.expect(TokenType.COLON, "Expected ':' after aggregate clause")
@@ -3752,6 +3765,40 @@ class CQLParser:
             distinct=distinct,
             all_=all_
         )
+
+    def _parse_aggregate_starting_expression(self) -> Expression:
+        """Parse an aggregate clause's ``starting`` expression (FHIR4-85).
+
+        The anchor is the one place where a greedy expression parse is followed
+        by ``expect(COLON)``, and a Ratio literal (``<quantity>:<quantity>``)
+        starts with the same two tokens a numeric anchor and a numeric fold body
+        do: ``aggregate R starting 0: 1 + R`` read ``0:1`` as a Ratio, consumed
+        the clause colon and failed at EOF with an error naming a Ratio the
+        author never wrote.
+
+        Ratio construction is therefore tried FIRST (a genuine Ratio anchor such
+        as ``starting 1:8:`` keeps working), and only when that reading does not
+        land on the clause colon is the anchor re-read with ratio literals
+        disabled. The re-read can only turn a former ParseError into a parse, so
+        no anchor that parses today changes meaning.
+
+        KNOWN BOUNDARY (unchanged by this fix): a Ratio literal that is the
+        FIRST thing in the fold body directly after a numeric anchor
+        (``starting 0: 1:8 + R``) still raises "Expected Quantity after ':'",
+        because the greedy anchor reading nests ``1:8`` as the denominator. An
+        explicit paren (``starting 0: (1:8) + R``) parses.
+        """
+        saved_pos = self.pos
+        starting = self.parse_expression()
+        if self.match(TokenType.COLON):
+            return starting
+        self.pos = saved_pos
+        saved_flag = self._ratio_literals_enabled
+        self._ratio_literals_enabled = False
+        try:
+            return self.parse_expression()
+        finally:
+            self._ratio_literals_enabled = saved_flag
 
     # =========================================================================
     # Type Specifier Parsing

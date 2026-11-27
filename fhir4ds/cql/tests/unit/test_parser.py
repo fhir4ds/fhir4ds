@@ -1708,3 +1708,103 @@ class TestExternalReviewB22SingletonFromString:
         )
         sql = CQLToSQLTranslator(con).translate_library_to_sql(lib, final_definition="X")
         assert con.execute(sql).fetchall() == [(5,)]
+
+
+class TestFhir4_85RatioLiteralStealsAggregateColon:
+    """FHIR4-85: a numeric fold anchor must not swallow the aggregate clause colon.
+
+    ``_maybe_parse_ratio_literal`` commits to a Ratio literal whenever the token
+    after a ``:`` can start a Quantity, so the fold clause
+
+        aggregate R starting 0: 1 + R
+
+    read the anchor ``0`` and the body's first term ``1`` as the Ratio ``0:1``.
+    The clause colon was consumed, so ``parse_aggregate_clause``'s
+    ``expect(COLON)`` failed at EOF and the author got an error naming a Ratio
+    they never wrote. Only the ``starting`` expression has this shape (it is the
+    one greedy expression parse followed by ``expect(COLON)``): the fix re-reads
+    it with ratio literals disabled when the greedy reading does not reach the
+    colon. A GENUINE ratio literal (``1:8``) still parses as a Ratio, and the
+    numeric-literal junk doctrines (``1LL``/``1.0L``/``1day``/``1e3`` errors,
+    uppercase-``L`` only, no exponent form) are unchanged.
+    """
+
+    def test_integer_anchor_with_numeric_body_parses(self):
+        query = parse_expression("({1,2,3}) A aggregate R starting 0: 1 + R")
+        assert isinstance(query, Query)
+        clause = query.aggregate
+        assert clause is not None and clause.identifier == "R"
+        assert isinstance(clause.starting, Literal) and clause.starting.value == 0
+        assert isinstance(clause.expression, BinaryExpression)
+        assert clause.expression.operator == "+"
+        assert isinstance(clause.expression.left, Literal)
+        assert clause.expression.left.value == 1
+        assert isinstance(clause.expression.right, Identifier)
+        assert clause.expression.right.name == "R"
+
+    def test_decimal_anchor_with_decimal_body_parses(self):
+        query = parse_expression("({1,2,3}) A aggregate R starting 0.5: 0.5 + R")
+        clause = query.aggregate
+        assert isinstance(clause.starting, Literal) and clause.starting.value == 0.5
+        assert isinstance(clause.expression, BinaryExpression)
+        assert isinstance(clause.expression.left, Literal)
+        assert clause.expression.left.value == 0.5
+
+    def test_signed_numeric_body_parses(self):
+        # A body that STARTS with a signed number hits the same ratio commit
+        # (the parser accepts a signed denominator).
+        query = parse_expression("({1,2,3}) A aggregate R starting 0: -1 + R")
+        clause = query.aggregate
+        assert isinstance(clause.starting, Literal) and clause.starting.value == 0
+        assert isinstance(clause.expression, BinaryExpression)
+        assert clause.expression.operator == "+"
+        assert isinstance(clause.expression.left, UnaryExpression)
+        assert clause.expression.left.operator == "-"
+        assert isinstance(clause.expression.right, Identifier)
+
+    def test_quantity_anchor_with_numeric_body_parses(self):
+        query = parse_expression("({1,2,3}) A aggregate R starting 0 'mg': 1 'mg' + R")
+        clause = query.aggregate
+        assert isinstance(clause.starting, Literal) or hasattr(clause.starting, "unit")
+        assert getattr(clause.starting, "unit", None) == "mg"
+        assert isinstance(clause.expression, BinaryExpression)
+
+    def test_multi_source_fold_with_clauses_parses(self):
+        # The reported shape: a multi-source fold whose anchor is a number and
+        # whose body starts with a number, behind let/where.
+        query = parse_expression(
+            "from ({1,2}) P, ({3,4}) Q let z: P + Q where z > 3 "
+            "aggregate R starting 0: 1 + z"
+        )
+        assert isinstance(query, Query)
+        assert query.where is not None and query.let_clauses
+        assert query.aggregate is not None
+        assert isinstance(query.aggregate.starting, Literal)
+        assert query.aggregate.starting.value == 0
+
+    def test_genuine_ratio_literals_still_parse(self):
+        for source, text in (
+            ("1:8", "1 '1':8 '1'"),
+            ("1 'mg':8 'mg'", "1 'mg':8 'mg'"),
+            ("0.00001 'mg':1 'mg'", "0.00001 'mg':1 'mg'"),
+        ):
+            expr = parse_expression(source)
+            assert isinstance(expr, FunctionRef) and expr.name == "ToRatio"
+            assert expr.arguments[0].value == text
+
+    def test_ratio_anchor_read_greedily_before_the_clause_colon(self):
+        # `starting 1:8:` — the anchor IS a Ratio and the second colon is the
+        # clause separator. The greedy-first reading is what keeps this working.
+        query = parse_expression("({1,2}) A aggregate R starting 1:8: R + 1")
+        anchor = query.aggregate.starting
+        assert isinstance(anchor, FunctionRef) and anchor.name == "ToRatio"
+        assert anchor.arguments[0].value == "1 '1':8 '1'"
+
+    def test_numeric_literal_junk_doctrines_unchanged(self):
+        from ...parser.lexer import LexerError
+
+        for source in ("1LL", "1.0L", "1.5L", "1day", "1e3"):
+            with pytest.raises(LexerError):
+                parse_expression(source)
+        long_literal = parse_expression("1L")
+        assert isinstance(long_literal, Literal) and long_literal.type == "Long"
