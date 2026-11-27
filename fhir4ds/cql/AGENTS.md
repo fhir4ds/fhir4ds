@@ -317,6 +317,17 @@
 
 ## Known Fragile Areas
 
+- **A fold's `let` and `where` apply to the source rows, not to the list (FHIR4-77,
+  2026-11-27)**: each `let` of an aggregate is computed in its own derived-table level over
+  the cross-joined sources (`__l0` … `__lN`); earlier lets are visible to later lets and to the
+  `where`. The values travel in the working table (one `__cN` column per let) and the body reads
+  them as plain columns. A `where` on a SINGLE-source fold filters the elements inside the items
+  subquery and is never pushed into an unnest-only derived table (DuckDB rejects
+  `SELECT unnest(…) AS X WHERE X > 1`). Before this a multi-source `let N: X * 2` was a Binder
+  Error (`Referenced column "X" not found`), a single-source let bound the name to the WHOLE
+  source list, and a single-source `where` over a list literal did not bind. Folds without a
+  `let` keep their previous SQL byte for byte. Not covered: `sort by` or `return` before
+  `aggregate` (a ParseError, as before).
 - **A fold's accumulator is typed by its starting value (FHIR4-76, 2026-11-27)**: the
   anchor of a fold's working table is `CAST(<starting value> AS T)` with T from the
   CQL type of the starting value (`expressions/_utils.py::_fold_accumulator_sql_type`:
