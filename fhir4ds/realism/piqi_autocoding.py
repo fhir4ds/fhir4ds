@@ -72,6 +72,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import os
 import json
 import sys
 from collections import Counter
@@ -121,6 +122,35 @@ DUCKDB_THREADS_ENV = "FHIR4DS_PIQI_DUCKDB_THREADS"
 #: per-attempt failure rate here is 4 in 6, and a crashed attempt only costs
 #: the 2-5 minutes it survived.
 AUTOCODING_ATTEMPTS = 3
+
+#: Wall-clock ceiling for ONE isolated auto-coding attempt (FHIR4-51).
+#: The native ML stack can HANG as well as crash: the medterm4ds lane captured a
+#: single-threaded 100%-CPU spin that sat inside one `search_text` call for ~26
+#: hours, with `kill -ABRT` silently swallowed because the thread never returned
+#: to the interpreter. A blocking `Pipe.recv()` would have waited just as long.
+#: A leg that normally finishes in ~700 s gets a generous hour, then the child is
+#: killed and retried exactly like a crash. Override with PIQI_AUTOCODING_TIMEOUT.
+AUTOCODING_TIMEOUT_SECONDS = 3600
+AUTOCODING_TIMEOUT_ENV = "PIQI_AUTOCODING_TIMEOUT"
+
+
+def autocoding_timeout_seconds() -> float:
+    """Wall-clock ceiling for one isolated auto-coding attempt.
+
+    ``PIQI_AUTOCODING_TIMEOUT`` overrides it (seconds); ``0`` or a negative
+    value disables the ceiling, which is only sensible when something OUTSIDE
+    this process already bounds the run.
+    """
+    raw = os.environ.get(AUTOCODING_TIMEOUT_ENV)
+    if raw is None:
+        return float(AUTOCODING_TIMEOUT_SECONDS)
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise ValueError(
+            f"{AUTOCODING_TIMEOUT_ENV} must be a number of seconds, got {raw!r}"
+        ) from exc
+    return value
 
 
 def default_duckdb_threads() -> int:
@@ -1181,6 +1211,35 @@ def _autocoding_child(conn, resources: list[dict], kwargs: dict) -> None:
     conn.close()
 
 
+def _child_answered(parent_conn, proc, timeout: float) -> bool:
+    """True when the child sent something within ``timeout`` seconds.
+
+    FHIR4-51: the medterm4ds native stack can HANG as well as crash. A captured
+    spin ran on ONE thread at 100% CPU for ~26 hours inside a single
+    ``search_text`` call, and ``kill -ABRT`` was silently swallowed because the
+    thread never returned to the interpreter to run Python-level handlers — so
+    the only reliable ceiling is a wall-clock deadline plus a hard kill.
+
+    A blocked ``Pipe.recv()`` has no such deadline, which is why the parent used
+    to wait forever. ``terminate()`` alone is not enough for a thread spinning
+    inside native code, so escalate to ``kill()`` and reap.
+
+    ``timeout <= 0`` disables the ceiling and blocks (the pre-FHIR4-51
+    behaviour), which is only sensible when something OUTSIDE this process
+    already bounds the run.
+    """
+    if timeout <= 0:
+        return True
+    if parent_conn.poll(timeout):
+        return True
+    proc.terminate()
+    proc.join(30)
+    if proc.is_alive():          # a native spin can ignore SIGTERM
+        proc.kill()
+        proc.join(30)
+    return False
+
+
 def _autocoding_leg_isolated(resources: list[dict], kwargs: dict,
                              attempts: int = AUTOCODING_ATTEMPTS
                              ) -> tuple[list[dict], dict]:
@@ -1202,6 +1261,17 @@ def _autocoding_leg_isolated(resources: list[dict], kwargs: dict,
                            name="piqi-autocoding")
         proc.start()
         child_conn.close()
+        timeout = autocoding_timeout_seconds()
+        if not _child_answered(parent_conn, proc, timeout):
+            # FHIR4-51: a HANG, not a crash. See _child_answered.
+            last = (f"no answer within {timeout:.0f}s (hung child killed)")
+            _logger.warning(
+                "auto-coding leg STOPPED RESPONDING and was killed after "
+                "%.0f s on attempt %d/%d — a native hang, not a crash; "
+                "retrying in a fresh process",
+                timeout, attempt, attempts)
+            parent_conn.close()
+            continue
         try:
             message = parent_conn.recv()
         except EOFError:

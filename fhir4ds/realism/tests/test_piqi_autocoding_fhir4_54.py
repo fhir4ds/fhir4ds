@@ -179,6 +179,82 @@ class TestZeroCodingLegIsNotASuccess(_CorpusCase):
                          "TypeError: range_iterator")
 
 
+class TestHangCeiling(unittest.TestCase):
+    """FHIR4-51: a HUNG child must be killed, not waited on forever.
+
+    The medterm4ds lane captured a spin that ran ~26 h inside one search_text
+    call with kill -ABRT swallowed (the thread never returns to the
+    interpreter). A blocking Pipe.recv() waits just as long, so the leg needs a
+    wall-clock deadline and a hard kill.
+    """
+
+    class _Conn:
+        def __init__(self, ready):
+            self.ready = ready
+            self.closed = False
+
+        def poll(self, timeout=None):
+            return self.ready
+
+        def close(self):
+            self.closed = True
+
+    class _Proc:
+        def __init__(self, terminates=True):
+            self.terminates = terminates
+            self.calls = []
+
+        def terminate(self):
+            self.calls.append("terminate")
+
+        def join(self, timeout=None):
+            self.calls.append(("join", timeout))
+
+        def is_alive(self):
+            return not self.terminates
+
+        def kill(self):
+            self.calls.append("kill")
+
+    def test_a_child_that_answers_is_not_killed(self):
+        proc = self._Proc()
+        self.assertTrue(pa._child_answered(self._Conn(ready=True), proc, 5))
+        self.assertEqual(proc.calls, [])
+
+    def test_a_hung_child_is_terminated_and_reaped(self):
+        proc = self._Proc()
+        conn = self._Conn(ready=False)
+        self.assertFalse(pa._child_answered(conn, proc, 0.01))
+        self.assertIn("terminate", proc.calls)
+        self.assertFalse(proc.is_alive())
+
+    def test_a_native_spin_that_ignores_sigterm_is_killed(self):
+        proc = self._Proc(terminates=False)
+        self.assertFalse(pa._child_answered(self._Conn(ready=False), proc, 0.01))
+        self.assertEqual(proc.calls[0], "terminate")
+        self.assertIn("kill", proc.calls,
+                      "a spin inside native code can ignore SIGTERM")
+
+    def test_zero_timeout_keeps_the_old_blocking_behaviour(self):
+        proc = self._Proc()
+        self.assertTrue(pa._child_answered(self._Conn(ready=False), proc, 0))
+        self.assertEqual(proc.calls, [])
+
+    def test_timeout_is_env_overridable_and_rejects_junk(self):
+        import os
+        os.environ["PIQI_AUTOCODING_TIMEOUT"] = "42"
+        try:
+            self.assertEqual(pa.autocoding_timeout_seconds(), 42.0)
+        finally:
+            del os.environ["PIQI_AUTOCODING_TIMEOUT"]
+        os.environ["PIQI_AUTOCODING_TIMEOUT"] = "soon"
+        try:
+            with self.assertRaises(ValueError):
+                pa.autocoding_timeout_seconds()
+        finally:
+            del os.environ["PIQI_AUTOCODING_TIMEOUT"]
+
+
 class TestEndpointDegradationCounters(unittest.TestCase):
     """The adapter counters are what make a degraded leg reportable."""
 
