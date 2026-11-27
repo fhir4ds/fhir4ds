@@ -336,6 +336,27 @@
   source list, and a single-source `where` over a list literal did not bind. Folds without a
   `let` keep their previous SQL byte for byte. Not covered: `sort by` or `return` before
   `aggregate` (a ParseError, as before).
+- **The indexer over a define alias reads the define's whole list (FHIR4-81,
+  2026-11-27)**: `_translate_indexer_expression` (`expressions/_lists.py`)
+  must materialize the source before `LIST_EXTRACT`, exactly where the
+  element-rows gate already sat (`meta.shape == RESOURCE_ROWS`): an
+  element-rows, resource-rows or inline-query source goes through
+  `_list_operator_full_list_source` (the same per-patient list
+  Tail/Take/Skip/Length use), and a stored-list define whose element type is
+  known (`List<T>`, T != Any) or whose body is not a navigation `Property`
+  is indexed in its CTE value column
+  (`_stored_list_define_is_a_list`). Indexing the demoted scalar
+  (`(SELECT sub.value ... LIMIT 1)`) character-slices the first element
+  (`{'abc','d'}[1]` answered 'b') or raises "More than one row returned by a
+  subquery". Literal Strings and scalar String-valued defines keep the public
+  `Indexer` macro — `_is_string_index_source` is unchanged and
+  `test_cql_string_indexer_over_scalar_string_define` pins it. KNOWN LIMIT: a
+  stored-list NAVIGATION define (`define Given: Patient.name.given`,
+  `cql_type List<Any>`, body is a `Property`) and a scalar define holding
+  `First([Patient]).name.family` are still string-indexed (`Given[0]` = 'J');
+  CQL says both are `List<String>`, but the fix needs multiplicity-aware
+  property typing (ARCH-001), so do not flip it from the indexer.
+
 - **A fold's accumulator is typed by its starting value (FHIR4-76, 2026-11-27)**: the
   anchor of a fold's working table is `CAST(<starting value> AS T)` with T from the
   CQL type of the starting value (`expressions/_utils.py::_fold_accumulator_sql_type`:
