@@ -620,6 +620,25 @@ _FOLD_CUR_SINGLE = "list_extract({seed}, {step})"
 _FOLD_CUR_MULTI = "struct_extract(list_extract({seed}, {step}), '{alias}')"
 
 
+def _select_unnests_only(select) -> bool:
+    """True when a select's FROM is a derived table that only UNNESTs an expression.
+
+    Such a source (`SELECT X FROM (SELECT unnest([1, 2, 3]) AS X) AS _list`) comes from a
+    list literal: it has no patient column, so a patient correlation on it cannot bind.
+    """
+    from_clause = getattr(select, "from_clause", None)
+    if isinstance(from_clause, SQLAlias):
+        from_clause = from_clause.expr
+    if isinstance(from_clause, SQLSubquery):
+        from_clause = from_clause.query
+    if not isinstance(from_clause, SQLSelect):
+        return False
+    columns = [c.expr if isinstance(c, SQLAlias) else c for c in (from_clause.columns or [])]
+    return bool(columns) and all(
+        isinstance(c, SQLFunctionCall) and c.name == "unnest" for c in columns
+    )
+
+
 def _fold_accumulator_type(context: Any, agg: Any) -> str | None:
     """SQL type of a scalar fold's accumulator column, from the CQL types of its starting value
     and its body (FHIR4-76). The expression layer has no ``_infer_cql_type``: the
@@ -7477,6 +7496,75 @@ class QueryMixin:
                     setattr(swapped, field, _fold_marker_swap(value))
                 return swapped
 
+            def _fold_rows_source_table(node):
+                """The FROM text of a rows-shaped fold source, else None (FHIR4-78).
+
+                A retrieve is an unresolved placeholder swapped for a ``__f4ds_ph_N__`` marker
+                (Phase 2 turns the marker into the quoted CTE name); a resource-rows define
+                alias is ``SELECT * FROM "Define" AS a``. Lists and scalars answer None.
+                """
+                if isinstance(node, SQLIdentifier) and node.name.startswith("__f4ds_ph_"):
+                    return node.name
+                if (
+                    isinstance(node, SQLSelect)
+                    and not node.joins
+                    and node.where is None
+                    and len(node.columns) == 1
+                    and isinstance(node.columns[0], SQLIdentifier)
+                    and node.columns[0].name == "*"
+                    and isinstance(node.from_clause, SQLAlias)
+                    and isinstance(node.from_clause.expr, (SQLIdentifier, SQLQualifiedIdentifier))
+                ):
+                    return node.from_clause.expr.to_sql()
+                return None
+
+            def _fold_let_levels(source_aliases, base_from):
+                """Translate the query's LET clauses, one derived-table level each (FHIR4-77).
+
+                ``base_from`` is the per-row source as a FROM item whose alias is ``__l0``.
+                A let reads the source aliases and the lets before it as COLUMNS of its own
+                level. Returns ``[(alias, level)]`` in clause order and the FROM item that
+                exposes every source column and every let.
+                """
+                _lets = []
+                _from = base_from
+                for _i, _let in enumerate(getattr(node, "let_clauses", None) or [], start=1):
+                    _level = f"__l{_i - 1}"
+                    self.context.push_scope()
+                    try:
+                        for _name in list(source_aliases) + [a for a, _ in _lets]:
+                            self.context.add_alias(
+                                _name, ast_expr=SQLQualifiedIdentifier(parts=[_level, _name])
+                            )
+                        _expr = _fold_marker_swap(
+                            self.translate(_let.expression, usage=ExprUsage.SCALAR)
+                        )
+                    finally:
+                        self.context.pop_scope()
+                    _from = (
+                        f'(SELECT {_level}.*, ({_expr.to_sql()}) AS "{_let.alias}" '
+                        f"FROM {_from}) AS __l{_i}"
+                    )
+                    _lets.append((_let.alias, f"__l{_i}"))
+                return _lets, _from
+
+            def _fold_where_sql(level, names):
+                """The query's WHERE clause as SQL over the columns of ``level``."""
+                if node.where is None:
+                    return None
+                self.context.push_scope()
+                try:
+                    for _name in names:
+                        self.context.add_alias(
+                            _name, ast_expr=SQLQualifiedIdentifier(parts=[level, _name])
+                        )
+                    _where_expr = getattr(node.where, "expression", node.where)
+                    return _demote_audit_struct_to_bool(
+                        self.translate(_where_expr, usage=ExprUsage.BOOLEAN)
+                    ).to_sql()
+                finally:
+                    self.context.pop_scope()
+
             # Placeholder-shaped rows source (CMS136
             # `([MedicationRequest: "Atomoxetine"]).isMedicationOrder()
             # ...` inlined through a list-accumulator aggregate): the
@@ -7582,7 +7670,12 @@ class QueryMixin:
                         # derived table (with-clause chains) BEFORE the
                         # rows-to-list coercion — it references the primary
                         # alias which binds only inside the derived select.
-                        _push_where_into_derived_source(_sel)
+                        # A WHERE on an unnest-derived source stays in the select that
+                        # reads the unnested column: DuckDB rejects
+                        # `SELECT unnest(…) AS X WHERE X > 1` ("UNNEST not supported here"),
+                        # and the fold's list source then binder-failed (FHIR4-77).
+                        if not _select_unnests_only(_sel):
+                            _push_where_into_derived_source(_sel)
                         _coerced = _coerce_query_rows_to_list(source_list)
                         if _coerced is not source_list:
                             source_list = _coerced
@@ -7599,10 +7692,15 @@ class QueryMixin:
                                     and isinstance(_w_from.expr.query, SQLSelect)
                                 ):
                                     _proj = _w_from.expr.query
-                                if _proj is not None:
+                                # A list-literal source (`({1, 2, 3}) X where X > 1
+                                # aggregate …`) has no patient column: correlating it was
+                                # a binder error (FHIR4-77).
+                                if _proj is not None and not _select_unnests_only(_proj):
                                     _proj.where = _patient_correlated_where(
                                         _proj.where, _row_alias, _outer_pid
                                     )
+                                elif _proj is not None:
+                                    pass
                                 else:
                                     source_list.query.where = _patient_correlated_where(
                                         source_list.query.where, _row_alias, _outer_pid
@@ -7680,8 +7778,36 @@ class QueryMixin:
                 _all_from_parts = []
                 for idx, (_ms_alias, _ms_from) in enumerate(_multi_source_info):
                     _ms_from = _fold_marker_swap(_ms_from)
+                    _rows_table = _fold_rows_source_table(_ms_from)
+                    if _rows_table is not None:
+                        # A retrieve or a resource-rows define is a TABLE (patient_id,
+                        # resource), not a list. Its elements are the patient's resources
+                        # as JSON text, as in the single-source rows path; wrapped in a
+                        # single-element array it used to be a binder error (FHIR4-78).
+                        _row = f"__ms{idx}"
+                        _elements = SQLFunctionCall(
+                            name="list_transform",
+                            args=[
+                                SQLFunctionCall(
+                                    name="list",
+                                    args=[SQLQualifiedIdentifier(parts=[_row, "resource"])],
+                                ),
+                                SQLLambda(
+                                    param="__agg_e",
+                                    body=SQLCast(
+                                        expression=SQLIdentifier(name="__agg_e"),
+                                        target_type="VARCHAR",
+                                    ),
+                                ),
+                            ],
+                        )
+                        _arr_sql = (
+                            f"(SELECT COALESCE({_elements.to_sql()}, []) "
+                            f"FROM {_rows_table} AS {_row} "
+                            f"WHERE {_patient_correlated_where(None, _row, _outer_pid).to_sql()})"
+                        )
                     # Extract the array expression for proper column-named unnest
-                    if isinstance(_ms_from, SQLFunctionCall) and _ms_from.name == "unnest":
+                    elif isinstance(_ms_from, SQLFunctionCall) and _ms_from.name == "unnest":
                         _arr_sql = _ms_from.args[0].to_sql()
                     elif isinstance(_ms_from, SQLArray):
                         _arr_sql = _ms_from.to_sql()
@@ -7698,6 +7824,20 @@ class QueryMixin:
                 # source alias is the working table's column that holds the
                 # element of the current step (a plain column reference).
                 _cur_cols = [f"__c{idx}" for idx in range(len(_multi_source_info))]
+
+                # The query's WHERE and LET clauses apply to the cross-joined rows before
+                # the fold sees them. The WHERE used to be dropped here, so the fold ran over
+                # rows the query had excluded (FHIR4-73: `from (…) P, (…) Q where P > 1
+                # aggregate …` folded every pair). A LET was never part of the fold: its
+                # expression had been translated against the whole source list, so the body
+                # answered `Referenced column "X" not found` (FHIR4-77). Each LET is one
+                # derived-table level over the joined rows; the WHERE reads the source
+                # aliases and every let as columns of the level it filters.
+                _ms_lets, _ms_rows_from = _fold_let_levels(
+                    _all_aliases, f"(SELECT * FROM {_xj_from}) AS __l0"
+                )
+                _ms_let_names = [n for n, _ in _ms_lets]
+                _let_cols = [f"__c{len(_cur_cols) + i}" for i in range(len(_ms_lets))]
                 self.context.push_scope()
                 try:
                     self.context.add_alias(
@@ -7709,6 +7849,11 @@ class QueryMixin:
                             _ms_alias,
                             ast_expr=SQLQualifiedIdentifier(parts=["__fold", _cur_col]),
                         )
+                    for _let_alias, _cur_col in zip(_ms_let_names, _let_cols, strict=True):
+                        self.context.add_alias(
+                            _let_alias,
+                            ast_expr=SQLQualifiedIdentifier(parts=["__fold", _cur_col]),
+                        )
                     agg_body = self.translate(agg.expression, usage=ExprUsage.SCALAR)
                 finally:
                     self.context.pop_scope()
@@ -7716,34 +7861,26 @@ class QueryMixin:
                 _body_sql = agg_body.to_sql()
                 _start_sql = starting_sql.to_sql() if starting_sql else "NULL"
 
-                # The query's WHERE clause filters the cross-joined rows before the fold
-                # sees them. It used to be dropped here, so the fold ran over rows the query
-                # had excluded (FHIR4-73: `from (…) P, (…) Q where P > 1 aggregate …` folded
-                # every pair). Each source alias is the matching column of the joined row.
-                _where_sql = None
-                if node.where is not None:
-                    self.context.push_scope()
-                    try:
-                        for _ms_alias in _all_aliases:
-                            self.context.add_alias(
-                                _ms_alias,
-                                ast_expr=SQLQualifiedIdentifier(parts=["__d", _ms_alias]),
-                            )
-                        _where_expr = getattr(node.where, "expression", node.where)
-                        _where_sql = _demote_audit_struct_to_bool(
-                            self.translate(_where_expr, usage=ExprUsage.BOOLEAN)
-                        ).to_sql()
-                    finally:
-                        self.context.pop_scope()
+                if _ms_lets:
+                    _where_sql = _fold_where_sql("__lw", _all_aliases + _ms_let_names)
+                    _rows_inner = f"(SELECT {_distinct_kw}* FROM {_ms_rows_from}) AS __lw"
+                    if _where_sql:
+                        _rows_item = f"(SELECT * FROM {_rows_inner} WHERE {_where_sql}) AS __d"
+                    else:
+                        _rows_item = f"{_rows_inner[:-len(' AS __lw')]} AS __d"
+                else:
+                    _where_sql = _fold_where_sql("__d", _all_aliases)
+                    _rows_item = (
+                        f"(SELECT {_distinct_kw}* FROM (SELECT * FROM {_xj_from}) __src) __d"
+                    )
+                    if _where_sql:
+                        _rows_item = f"{_rows_item} WHERE {_where_sql}"
 
                 # The cross join of the sources becomes ONE list of structs in the
                 # working table; the recursive term reads nothing else (WP-11).
                 _items_fields = ", ".join(f"{a} := __d.{a}" for a in _all_aliases)
-                _items_sql = (
-                    f"(SELECT list(struct_pack({_items_fields})) FROM "
-                    f"(SELECT {_distinct_kw}* FROM (SELECT * FROM {_xj_from}) __src) __d"
-                    f"{f' WHERE {_where_sql}' if _where_sql else ''})"
-                )
+                _items_fields += "".join(f', "{n}" := __d."{n}"' for n in _ms_let_names)
+                _items_sql = f"(SELECT list(struct_pack({_items_fields})) FROM {_rows_item})"
                 # Recursive CTE for the multi-source fold, built as an SQL string.
                 # The alias bindings above are AST nodes (SQLQualifiedIdentifier),
                 # so the body expression is translated through the AST pipeline.
@@ -7774,6 +7911,15 @@ class QueryMixin:
                                 ),
                             )
                             for a, cur_col in zip(_all_aliases, _cur_cols, strict=True)
+                        ]
+                        + [
+                            (
+                                cur_col,
+                                _FOLD_CUR_MULTI.format(
+                                    alias=n, seed="{seed}", step="{step}"
+                                ),
+                            )
+                            for n, cur_col in zip(_ms_let_names, _let_cols, strict=True)
                         ],
                     )
                 )
@@ -7836,18 +7982,39 @@ class QueryMixin:
 
                     _distinct_kw = "DISTINCT " if agg.distinct else ""
 
+                    # The element list becomes ONE column of the working table; ``distinct``
+                    # keeps its place (the list is built from the de-duplicated elements).
+                    _elements_from = (
+                        f"(SELECT {_distinct_kw}{alias} FROM unnest({_arr_sql}) AS __t0({alias}))"
+                    )
+                    # A LET clause is evaluated per element, one derived-table level each,
+                    # and travels beside the element in the working table (FHIR4-77). It
+                    # used to be translated against the WHOLE source list, so the body
+                    # multiplied the list itself (`TRY([1, 2, 3] * 2)`).
+                    _ss_lets, _ss_rows_from = _fold_let_levels([alias], f"{_elements_from} AS __l0")
+                    _ss_let_names = [n for n, _ in _ss_lets]
+                    if _ss_lets:
+                        _ss_cols = ["__c0"] + [f"__c{1 + i}" for i in range(len(_ss_lets))]
+                    else:
+                        _ss_cols = ["__cur"]
+
                     self.context.push_scope()
                     try:
                         self.context.add_alias(
                             accum_name,
                             ast_expr=SQLQualifiedIdentifier(parts=["__fold", "__acc"]),
                         )
-                        # The element alias is the working table's column for the
-                        # element of the current step (a plain column reference).
+                        # The element alias (and every let) is a working-table column for
+                        # the current step (a plain column reference).
                         self.context.add_alias(
                             alias,
-                            ast_expr=SQLQualifiedIdentifier(parts=["__fold", "__cur"]),
+                            ast_expr=SQLQualifiedIdentifier(parts=["__fold", _ss_cols[0]]),
                         )
+                        for _let_alias, _col in zip(_ss_let_names, _ss_cols[1:], strict=True):
+                            self.context.add_alias(
+                                _let_alias,
+                                ast_expr=SQLQualifiedIdentifier(parts=["__fold", _col]),
+                            )
                         agg_body = self.translate(agg.expression, usage=ExprUsage.SCALAR)
                     finally:
                         self.context.pop_scope()
@@ -7860,19 +8027,30 @@ class QueryMixin:
                             self.translate(agg.starting, usage=ExprUsage.SCALAR).to_sql(),
                             _fold_accumulator_type(self.context, agg),
                         )
-                    # The element list becomes ONE column of the working table;
-                    # ``distinct`` keeps its place (the list is built from the
-                    # de-duplicated elements).
-                    _items_sql = (
-                        f"(SELECT list({alias}) FROM "
-                        f"(SELECT {_distinct_kw}{alias} FROM unnest({_arr_sql}) AS __t0({alias})) __d)"
-                    )
+                    if _ss_lets:
+                        _items_fields = f'"{alias}" := __d."{alias}"' + "".join(
+                            f', "{n}" := __d."{n}"' for n in _ss_let_names
+                        )
+                        _top_suffix = f" AS __l{len(_ss_lets)}"
+                        assert _ss_rows_from.endswith(_top_suffix)
+                        _items_sql = (
+                            f"(SELECT list(struct_pack({_items_fields})) "
+                            f"FROM {_ss_rows_from[:-len(_top_suffix)]} AS __d)"
+                        )
+                        _current = [("__c0", _FOLD_CUR_MULTI.format(
+                            alias=alias, seed="{seed}", step="{step}"))] + [
+                            (col, _FOLD_CUR_MULTI.format(alias=n, seed="{seed}", step="{step}"))
+                            for n, col in zip(_ss_let_names, _ss_cols[1:], strict=True)
+                        ]
+                    else:
+                        _items_sql = f"(SELECT list({alias}) FROM {_elements_from} __d)"
+                        _current = [("__cur", _FOLD_CUR_SINGLE)]
                     result = SQLRaw(
                         _fold_sql(
                             start_sql=_start_sql,
                             items_sql=_items_sql,
                             body_sql=_body_sql,
-                            current=[("__cur", _FOLD_CUR_SINGLE)],
+                            current=_current,
                         )
                     )
                     if _starting_is_typed_list:
