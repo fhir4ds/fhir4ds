@@ -14,6 +14,8 @@ clusters; the runner writes singleton rows only when the caller opts in
 
 from __future__ import annotations
 
+import weakref
+
 import json
 
 import duckdb
@@ -39,11 +41,20 @@ CREATE TABLE IF NOT EXISTS dedup_audit (
 """
 
 
+# FHIR4-55: called once per CLUSTER (and once per singleton in audit mode), so
+# the idempotent DDL was re-issued for every row written. Remember it per
+# connection; see the same note in `linkage.create_dedup_linkage_table`.
+_DDL_APPLIED: "weakref.WeakSet" = weakref.WeakSet()
+
+
 def create_dedup_audit_table(conn: duckdb.DuckDBPyConnection) -> None:
     from ._conn import require_open_connection
 
     require_open_connection(conn, "create dedup audit table")
+    if conn in _DDL_APPLIED:
+        return
     conn.execute(DEDUP_AUDIT_DDL)
+    _DDL_APPLIED.add(conn)
 
 
 def record_dedup_audit(

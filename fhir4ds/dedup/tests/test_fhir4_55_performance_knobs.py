@@ -137,6 +137,60 @@ class TestDeterministicCap:
                [sorted(c, key=lambda r: r.rid) for c in capped.clusters]
 
 
+class TestIdempotentDdlIsIssuedOncePerConnection:
+    """fhir4px measured 900-6,280 small statements per run at ~0.6 ms each.
+
+    Two of those per cluster were the idempotent `CREATE TABLE IF NOT EXISTS`
+    DDLs, re-issued for every cluster (and, in audit mode, every singleton).
+    """
+
+    def test_linkage_ddl_is_memoised_per_connection(self):
+        from fhir4ds.dedup.linkage import (
+            _DDL_APPLIED, create_dedup_linkage_table)
+
+        conn = duckdb.connect()
+        try:
+            create_dedup_linkage_table(conn)
+            assert conn in _DDL_APPLIED
+            # proving the second call really skips: drop the table, and a
+            # memoised second call must NOT recreate it.
+            conn.execute("DROP TABLE dedup_linkage")
+            create_dedup_linkage_table(conn)
+            assert conn.execute(
+                "SELECT count(*) FROM information_schema.tables "
+                "WHERE table_name = 'dedup_linkage'").fetchone()[0] == 0
+        finally:
+            conn.close()
+
+    def test_audit_ddl_is_memoised_per_connection(self):
+        from fhir4ds.dedup.audit import _DDL_APPLIED as AUDIT_APPLIED
+        from fhir4ds.dedup.audit import create_dedup_audit_table
+
+        conn = duckdb.connect()
+        try:
+            create_dedup_audit_table(conn)
+            assert conn in AUDIT_APPLIED
+        finally:
+            conn.close()
+
+    def test_a_new_connection_still_gets_its_own_tables(self):
+        from fhir4ds.dedup.audit import create_dedup_audit_table
+        from fhir4ds.dedup.linkage import create_dedup_linkage_table
+
+        for _ in range(2):
+            conn = duckdb.connect()
+            try:
+                create_dedup_linkage_table(conn)
+                create_dedup_audit_table(conn)
+                n = conn.execute(
+                    "SELECT count(*) FROM information_schema.tables "
+                    "WHERE table_name IN ('dedup_linkage', 'dedup_audit')"
+                ).fetchone()[0]
+                assert n == 2
+            finally:
+                conn.close()
+
+
 class TestProgressAndCancel:
     def test_progress_is_reported_at_every_boundary(self):
         events: list[dict] = []

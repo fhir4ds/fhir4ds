@@ -25,6 +25,8 @@ touched).
 
 from __future__ import annotations
 
+import weakref
+
 import json
 from typing import Any, Optional
 
@@ -149,11 +151,23 @@ def build_linkage_resource(
     }
 
 
+# FHIR4-55: the writer calls this once per CLUSTER, so a 900-record corpus with
+# hundreds of clusters issued hundreds of `CREATE TABLE IF NOT EXISTS`
+# statements (fhir4px measured 900-6,280 small statements per run at ~0.6 ms
+# each). The DDL is idempotent per connection, so remember which connections
+# have it instead of re-issuing it. WeakSet: a closed connection is collected,
+# and a NEW connection (a fresh run) always gets its own create.
+_DDL_APPLIED: "weakref.WeakSet" = weakref.WeakSet()
+
+
 def create_dedup_linkage_table(conn: duckdb.DuckDBPyConnection) -> None:
     from ._conn import require_open_connection
 
     require_open_connection(conn, "create dedup linkage table")
+    if conn in _DDL_APPLIED:
+        return
     conn.execute(DEDUP_LINKAGE_DDL)
+    _DDL_APPLIED.add(conn)
 
 
 def upsert_dedup_linkage(
