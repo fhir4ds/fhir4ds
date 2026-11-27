@@ -66,6 +66,17 @@ FHIR_TYPE_TO_CQL_TYPE: Dict[str, str] = {
 }
 
 
+#: Element types that must keep ``List<Any>``: they have no meaningful CQL
+#: definition type (``Any``/``Object``) or are structural backbone containers
+#: whose list element type says nothing a consumer can use.
+_UNLISTABLE_ELEMENT_TYPES = frozenset({"Any", "Object", "BackboneElement"})
+
+#: Operator spellings of a CQL set operation (keyword and symbolic forms). Used
+#: by ``_navigation_list_element_type`` to decide whether argument typing may
+#: answer for a definition body.
+_SET_OPERATOR_SPELLINGS = frozenset({"union", "|", "intersect", "except"})
+
+
 def fhir_type_names_for_cql_type(cql_type: str) -> List[str]:
     """FHIR primitive type names whose values are of the given CQL type."""
     return [
@@ -1159,6 +1170,54 @@ class InferenceMixin:
         from .type_map import infer_cql_type_compat
 
         return infer_cql_type_compat(self._context, ast_node)
+
+    def _navigation_list_element_type(self, ast_node: Any) -> Optional[str]:
+        """CQL element type of a stored-list FHIR navigation definition, or ``None``.
+
+        The single place that turns the FHIR schema's multi-valued metadata into
+        definition typing (FHIR4-89). ``_navigation_list_element_type`` answers
+        only for a navigation ``Property`` body (or a set operation over them)
+        whose schema path is multi-valued, and returns the element type in the
+        same spelling every other definition type uses — ``string`` renders as
+        ``String`` via the canonical ``FHIR_TYPE_TO_CQL_TYPE`` table, a complex
+        type keeps its FHIR name (``HumanName``).
+
+        ``None`` means "keep ``List<Any>``": a single-valued path (typing it as a
+        list would disagree with its physical scalar shape), an untypeable chain
+        (``First([Patient]).name.family`` — the chain root is not a FHIR type
+        name), a choice/tuple/interval element, or a body that is not navigation
+        at all. The gate is deliberately narrow so it can only ever REPLACE the
+        ``List<Any>`` placeholder, never a type inferred elsewhere.
+        """
+        from ..parser.ast_nodes import (
+            BinaryExpression as _NavBinary,
+            Property as _NavProperty,
+        )
+
+        is_navigation = isinstance(ast_node, _NavProperty)
+        if not is_navigation and isinstance(ast_node, _NavBinary):
+            # ``_set_type`` (argument typing) already answers only when both
+            # operands are typed identically, so a heterogeneous union keeps
+            # ``List<Any>`` here too.
+            is_navigation = str(ast_node.operator).lower() in _SET_OPERATOR_SPELLINGS
+        if not is_navigation:
+            return None
+
+        from .argument_types import argument_type
+        from .overload import ListType, NamedType
+
+        cql_type = argument_type(self._context, ast_node)
+        if not isinstance(cql_type, ListType):
+            return None
+        element = cql_type.element
+        if not isinstance(element, NamedType):
+            # Choice<T...> / Interval<T> / Tuple{...} elements are not a plain
+            # ``List<Named>`` and have no established definition-type spelling.
+            return None
+        name = element.name
+        if not name or name in _UNLISTABLE_ELEMENT_TYPES:
+            return None
+        return FHIR_TYPE_TO_CQL_TYPE.get(name, name)
 
     def _infer_cardinality(self, ast_node: Any) -> str:
         """

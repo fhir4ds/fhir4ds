@@ -2304,6 +2304,23 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                         )
                     from .context import RowShape as _AliasRowShape
                     shape = _AliasRowShape.PATIENT_SCALAR
+            # FHIR4-89: the schema already knows the element type of a
+            # navigation path; DISCARDING it here is what forced every
+            # consumer that asks "is this a List<String>?" to fall back to
+            # its untyped path. `_infer_cql_type` cannot answer for a FHIR
+            # navigation body (type_map.infer_cql_type_compat returns `Any`),
+            # so both stored-list sites below used to hardcode `List<Any>` —
+            # `define Given: Patient.name.given` was filed as
+            # `List<Any>` and `Given[0]` answered the first CHARACTER of the
+            # first name. `argument_types.argument_type` already steps the
+            # FHIR schema (`get_element_type` + `is_multi_valued_element`,
+            # the same helper ARGUMENT typing uses), so consult THAT instead
+            # of adding a second typing layer. None means "not a navigation
+            # body, or not statically multi-valued" and keeps `List<Any>`.
+            _navigation_element_type = self._navigation_list_element_type(
+                definition.expression
+            )
+
             if _definition_is_dynamic_list or _definition_is_query_list:
                 if _definition_is_query_list and not _definition_is_dynamic_list:
                     from .expressions._utils import _coerce_query_rows_to_list
@@ -2311,7 +2328,11 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 from .expressions._utils import _promote_fhirpath_text_list
                 from ..translator.context import RowShape as _RowShape
                 result = _promote_fhirpath_text_list(result)
-                cql_type = "List<Any>"
+                cql_type = (
+                    f"List<{_navigation_element_type}>"
+                    if _navigation_element_type
+                    else "List<Any>"
+                )
                 _definition_stores_list_value = True
                 # The CTE stores ONE row per patient whose value column holds
                 # the full element list — the same physical shape as a static
@@ -2328,7 +2349,11 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 # PATIENT_SCALAR path, which keeps the `_pt` correlation that
                 # the PATIENT_MULTI_VALUE wrap would destroy.
                 from ..translator.context import RowShape as _RowShape
-                cql_type = "List<Any>"
+                cql_type = (
+                    f"List<{_navigation_element_type}>"
+                    if _navigation_element_type
+                    else "List<Any>"
+                )
                 _definition_stores_list_value = True
                 shape = _RowShape.PATIENT_SCALAR
             # has_resource should reflect whether the CTE OUTPUT has a resource column,
