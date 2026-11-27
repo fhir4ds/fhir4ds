@@ -317,6 +317,28 @@
 
 ## Known Fragile Areas
 
+- **A recursive fold's recursive term reads only the working table (WP-11,
+  2026-11-26)**: the CQL `aggregate` lowering (`expressions/_query.py`,
+  `_fold_sql`) keeps the accumulator, the step counter, the whole element list
+  and the current element as columns of `__fold`, so the recursive term is a
+  filter and a projection over `__fold`. Never reintroduce a JOIN, an `unnest`
+  of the (correlated) source or a window inside the recursion: the first shape
+  joined `__fold` to an `unnest` + `ROW_NUMBER()` table and nothing guaranteed
+  that join's build side was complete when the recursion read it, so the same
+  SQL answered NULL (the anchor-only row survives an empty element list) or a
+  truncated list in about half of its executions at `threads=4` and in 3-9%
+  at the default thread count on duckdb-python 1.5.6 — and was always right at
+  `threads=1`. The variance is per EXECUTION inside one connection, which is
+  what makes the regression test cheap
+  (`duckdb/tests/integration/test_wp11_recursive_fold.py`, 200 executions per
+  engine) and what hid it from every translate-once, run-once gate. Do not pin
+  `threads=1` in a test to make it pass. Keep the current element a plain
+  column rather than an inline `list_extract(...)`: the arithmetic overflow
+  guard (`TRY(...)`, `_operators._contains_function_call`) and numeric type
+  inference apply only to function-call-free operands.
+  `SQLRecursiveCTEFold` in `translator/types.py` still documents the old shape
+  but has no constructor call sites (a dead emitter).
+
 - **Lateral-dedup portability (FHIR4-15 / CQL20-F, 2026-11-19)**: the
   lateral-dedup pass (`translator/types.py::_dedup_select`) must NEVER nest
   a correlated scalar subquery inside a `CROSS JOIN LATERAL` projection —
