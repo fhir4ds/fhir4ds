@@ -390,12 +390,16 @@
   (`{'abc','d'}[1]` answered 'b') or raises "More than one row returned by a
   subquery". Literal Strings and scalar String-valued defines keep the public
   `Indexer` macro — `_is_string_index_source` is unchanged and
-  `test_cql_string_indexer_over_scalar_string_define` pins it. KNOWN LIMIT: a
-  stored-list NAVIGATION define (`define Given: Patient.name.given`,
-  `cql_type List<Any>`, body is a `Property`) and a scalar define holding
-  `First([Patient]).name.family` are still string-indexed (`Given[0]` = 'J');
-  CQL says both are `List<String>`, but the fix needs multiplicity-aware
-  property typing (ARCH-001), so do not flip it from the indexer.
+  `test_cql_string_indexer_over_scalar_string_define` pins it.
+  RESOLVED for navigation defines by FHIR4-89 (4cd9420f5ab), 2026-11-27: a
+  stored-list navigation define now carries its element type
+  (`define Given: Patient.name.given` is `List<String>`), so `Given[0]` is
+  **'Joel'**, not 'J', and the element-type branch above claims it. STILL a
+  known limit, and now the ONLY one: a chain whose root is not a FHIR type name
+  (`define Fam: First([Patient]).name.family`) stays `List<Any>` and keeps the
+  string Indexer — deleting the `body is not Property` half of
+  `_stored_list_define_is_a_list` would turn `Fam[0]` from a character slice into
+  a binder error. Revisit when the chain root can be typed.
 
 - **A fold's accumulator is typed by its starting value (FHIR4-76, 2026-11-27)**: the
   anchor of a fold's working table is `CAST(<starting value> AS T)` with T from the
@@ -5981,7 +5985,9 @@ composition, and temporal boundary paths all verified correct.
   string Indexer. Regression:
   test_cql_string_indexer_over_fhirpath_chain_is_list_indexing. The
   ARCH-001 chained-typing drift entry remains open for the general typing
-  question, but its string-Indexer manifestation is closed.
+  question, but its string-Indexer manifestation is closed — and as of FHIR4-89
+  the same is true for navigation defines (`Given[0]` = 'Joel'); only untypeable
+  CHAINS remain.
 - CQL-14 EXPLORER fragile-area additions (2026-08-21, QA of timing-phrase
   qualifiers): (1) `starts/ends same <prec> or after|or before` — the parser
   branch at fhir4ds/cql/parser/parser.py (~L739 starts / ~L802 ends)

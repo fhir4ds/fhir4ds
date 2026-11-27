@@ -115,10 +115,18 @@ def _stored_list_define_is_a_list(meta: Any, body_ast: Any) -> bool:
     a list literal, a typed list cast) or when the define's body is not property navigation (a
     query with a ``return`` clause, a list function).
 
-    Navigation is the exception and keeps the behavior it has always had: a define such as
-    ``define Fam: First([Patient]).name.family`` lowers to a one-element list around a value
-    the translator cannot type (``List<Any>``), and that spelling is indexed with the string
-    Indexer (the CQL-12 doctrine, pinned by ``test_cql_string_indexer_over_scalar_string_define``).
+    Navigation used to be the whole exception; since FHIR4-89 it is only the UNTYPEABLE part of
+    it. A navigation define now carries its element type (``Patient.name.given`` is
+    ``List<String>``) and is therefore claimed by the element-type branch above. What still
+    falls through is a chain whose root is not a FHIR type name — ``define Fam:
+    First([Patient]).name.family`` stays ``List<Any>`` — and that spelling keeps the string
+    Indexer (the CQL-12 doctrine, pinned by
+    ``test_cql_string_indexer_over_scalar_string_define``).
+
+    So this OR-half is NOT dead code left over from the typing gap: it is the only thing keeping
+    untypeable chains on the string Indexer, and deleting it would turn ``Fam[0]`` from a
+    character slice (wrong, but defined) into a binder error. Revisit only when the chain root
+    can itself be typed.
     """
     cql_type = str(getattr(meta, "cql_type", "") or "")
     element_type = ""
