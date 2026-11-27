@@ -695,6 +695,112 @@ def _fold_element_cql_type(translator: Any, query: Any, alias: str) -> str | Non
     return None
 
 
+def _fold_quote_ident(name: Any) -> str:
+    """A definition/column name as a quoted SQL identifier (the fold SQL is composed as text)."""
+    return '"' + str(name).replace('"', '""') + '"'
+
+
+def _fold_source_definition_name(select: Any, _depth: int = 0):
+    """The definition CTE a fold source's FROM ultimately reads, else None.
+
+    ``SELECT * FROM "D" [AS a]`` is the plain form, but the query layer wraps a stored-list
+    define in a derived table of its own (an ``unnest`` expansion) when the query has a
+    ``where`` or ``return`` clause — the fold must still recognize the definition behind that
+    wrapper, because it applies the query's ``where`` to the ELEMENTS itself.
+    """
+    if not isinstance(select, SQLSelect) or _depth > 2:
+        return None
+    from_clause = select.from_clause
+    table = from_clause.expr if isinstance(from_clause, SQLAlias) else from_clause
+    if isinstance(table, SQLSubquery):
+        table = table.query
+    if isinstance(table, SQLSelect):
+        return _fold_source_definition_name(table, _depth + 1)
+    if isinstance(table, SQLIdentifier) and table.quoted:
+        return table.name
+    return None
+
+
+def _fold_source_element_sql(
+    source: Any, definition_meta: Any, outer_pid: str, *, where_is_reapplied: bool = False
+):
+    """The element LIST a fold iterates when its source names a DEFINITION (FHIR4-86/87).
+
+    A fold source is not always a list, and a definition CTE is not always a rows table.
+    ``DefinitionMeta`` is the single discriminator (CQL-18 doctrine: never an SQL-text guess):
+
+    * **resource rows** (``has_resource``): one row per resource, so the elements are the
+      patient's resources as JSON text — exactly what a retrieve contributes (FHIR4-78);
+    * **stored list** (``stores_list_value``): the value column holds the patient's WHOLE
+      element list, so the list IS the elements;
+    * **value rows** (a query define: ``PATIENT_MULTI_VALUE``): one element per row in the
+      value column.
+
+    Deciding from the SQL text alone sent every shape down the rows path, so a stored list was
+    read through a ``.resource`` column it does not have (FHIR4-86: `Binder Error: Referenced
+    table "N" not found`), and a LIST-valued define used as one source of a multi-source fold
+    was wrapped as ONE element (FHIR4-87), which is the wrong multiplicity with no error.
+
+    Returns ``(array_sql, elements_are_json)``, or None when ``source`` is not a definition
+    table reference (the caller keeps its own list/scalar rules).
+
+    ``where_is_reapplied`` says the fold translates the query's own ``where`` against the
+    ELEMENTS itself, so a predicate the query layer already attached to this source select is
+    the same predicate and can be left behind with the select. Without it a source select that
+    carries a ``where`` is not claimed — dropping an unrelated predicate would change the
+    answer instead of failing.
+    """
+    select = source
+    if isinstance(select, SQLAlias):
+        select = select.expr
+    if isinstance(select, SQLSubquery):
+        select = select.query
+    if not isinstance(select, SQLSelect):
+        return None
+    if (select.where is not None and not where_is_reapplied) or (
+        select.joins
+        or select.group_by
+        or select.having
+        or select.order_by
+        or select.limit is not None
+        or select.distinct
+    ):
+        return None
+    columns = select.columns or []
+    if len(columns) != 1 or not isinstance(columns[0], SQLIdentifier):
+        return None
+    if columns[0].name != "*":
+        return None
+    cte_name = _fold_source_definition_name(select)
+    if cte_name is None:
+        return None
+    meta = definition_meta.get(cte_name)
+    if meta is None:
+        return None
+    cte = _fold_quote_ident(cte_name)
+    column = _fold_quote_ident(getattr(meta, "value_column", "value") or "value")
+    key = _fold_quote_ident(getattr(meta, "patient_key_col", "patient_id") or "patient_id")
+    correlation = f"{cte}.{key} = {outer_pid}.{key}"
+    if getattr(meta, "has_resource", False):
+        return (
+            f"(SELECT COALESCE(list_transform(list({cte}.{column}), "
+            f"lambda __agg_e: CAST(__agg_e AS VARCHAR)), []) "
+            f"FROM {cte} WHERE {correlation})",
+            True,
+        )
+    if getattr(meta, "stores_list_value", False):
+        return f"(SELECT {cte}.{column} FROM {cte} WHERE {correlation})", False
+    is_list = getattr(meta, "shape", None) == RowShape.PATIENT_MULTI_VALUE or str(
+        getattr(meta, "cql_type", "") or ""
+    ).startswith("List<")
+    if is_list:
+        return (
+            f"(SELECT COALESCE(list({cte}.{column}), []) FROM {cte} WHERE {correlation})",
+            False,
+        )
+    return None
+
+
 def _push_where_into_derived_source(select_node) -> bool:
     """EXP2-008: push a translated query WHERE into a derived-table source.
 
@@ -7609,6 +7715,21 @@ class QueryMixin:
                 finally:
                     self.context.pop_scope()
 
+            # FHIR4-86/87: ONE decision about what this fold source contributes as elements.
+            # A definition CTE holds one of three shapes (see `_fold_source_element_sql`);
+            # reading all of them as (patient_id, resource) rows made a stored list a binder
+            # error and a list-valued source a single element. None means "not a definition
+            # table", so the shape rules below still apply.
+            # The enclosing patient alias is the correlation target of every fold source;
+            # the shape branches below keep their own "_pt" spelling.
+            _outer_pid = self.context.patient_alias or "_pt"
+            _fold_plan = _fold_source_element_sql(
+                source_list,
+                self.context.definition_meta,
+                _outer_pid,
+                where_is_reapplied=node.where is not None,
+            )
+
             # Placeholder-shaped rows source (CMS136
             # `([MedicationRequest: "Atomoxetine"]).isMedicationOrder()
             # ...` inlined through a list-accumulator aggregate): the
@@ -7618,7 +7739,7 @@ class QueryMixin:
             # subquery whose FROM keeps the placeholder as an AST node —
             # Phase 2 discovers it there, builds the retrieve CTE, and
             # resolve_placeholders swaps it in (QA-013 convention).
-            if isinstance(source_list, RetrievePlaceholder):
+            if _fold_plan is None and isinstance(source_list, RetrievePlaceholder):
                 _outer_pid = "_pt"
                 _row_alias = alias or "__agg_row"
                 _inner = SQLSelect(
@@ -7663,7 +7784,7 @@ class QueryMixin:
             # returns 6 columns - expected 1"). Materialize the per-patient
             # element LIST first: keep the single value column when the
             # query projects one; otherwise fold over the resource column.
-            if (
+            if _fold_plan is None and (
                 isinstance(source_list, SQLFunctionCall)
                 and source_list.name in (
                     "expand", "expand1", "expand_points", "expand_points1",
@@ -7682,7 +7803,7 @@ class QueryMixin:
                 # the _lt_ prefix convention so Property access routes
                 # through fhirpath (consistent with the retrieve fold path).
                 _agg_element_is_json = True
-            elif isinstance(source_list, (SQLSelect, SQLSubquery)):
+            elif _fold_plan is None and isinstance(source_list, (SQLSelect, SQLSubquery)):
                 _sel = source_list.query if isinstance(source_list, SQLSubquery) else source_list
                 if isinstance(_sel, SQLSelect):
                     # Correlate against the outer patient row. NOTE: the
@@ -7822,8 +7943,24 @@ class QueryMixin:
                 _all_from_parts = []
                 for idx, (_ms_alias, _ms_from) in enumerate(_multi_source_info):
                     _ms_from = _fold_marker_swap(_ms_from)
-                    _rows_table = _fold_rows_source_table(_ms_from)
-                    if _rows_table is not None:
+                    # A definition source contributes the elements its metadata declares
+                    # (FHIR4-86/87): a stored list / value rows are LIST-shaped, so every
+                    # ELEMENT joins; only resource rows are a table. Deciding from the SQL
+                    # text wrapped a list-valued define as ONE element, which folded the
+                    # wrong multiplicity with no error (FHIR4-87).
+                    _ms_plan = _fold_source_element_sql(
+                        _ms_from,
+                        self.context.definition_meta,
+                        self.context.patient_alias or "_pt",
+                        where_is_reapplied=node.where is not None,
+                    )
+                    _rows_table = (
+                        None if _ms_plan is not None else _fold_rows_source_table(_ms_from)
+                    )
+                    if _ms_plan is not None:
+                        _arr_sql, _plan_is_json = _ms_plan
+                        _agg_element_is_json = _agg_element_is_json or _plan_is_json
+                    elif _rows_table is not None:
                         # A retrieve or a resource-rows define is a TABLE (patient_id,
                         # resource), not a list. Its elements are the patient's resources
                         # as JSON text, as in the single-source rows path; wrapped in a
@@ -8006,7 +8143,12 @@ class QueryMixin:
                         # which is the enclosing "_patients AS _pt" scope.
                         self.context.patient_alias or "_pt",
                     )
-                    if isinstance(source_list, SQLArray):
+                    if _fold_plan is not None:
+                        # A definition source contributes the elements its metadata declares
+                        # (FHIR4-86): its stored list, its value rows or its resources.
+                        _arr_sql, _plan_is_json = _fold_plan
+                        _agg_element_is_json = _agg_element_is_json or _plan_is_json
+                    elif isinstance(source_list, SQLArray):
                         _arr_sql = source_list.to_sql()
                     elif isinstance(source_list, SQLFunctionCall) and source_list.name == "unnest":
                         _arr_sql = source_list.args[0].to_sql()
@@ -8077,6 +8219,15 @@ class QueryMixin:
                         self.context.pop_scope()
 
                     _body_sql = agg_body.to_sql()
+                    # FHIR4-86: over a definition source the query's WHERE filters the
+                    # define's ELEMENTS (and the let values computed from them), never the
+                    # source select — that select is not part of the fold any more.
+                    _plan_where = (
+                        _fold_where_sql("__d", [alias] + _ss_let_names)
+                        if _fold_plan is not None
+                        else None
+                    )
+                    _plan_where_suffix = f" WHERE {_plan_where}" if _plan_where else ""
                     if _starting_is_typed_list:
                         _start_sql = _fold_list_start_sql(agg)
                     else:
@@ -8092,7 +8243,8 @@ class QueryMixin:
                         assert _ss_rows_from.endswith(_top_suffix)
                         _items_sql = (
                             f"(SELECT list(struct_pack({_items_fields})) "
-                            f"FROM {_ss_rows_from[:-len(_top_suffix)]} AS __d)"
+                            f"FROM {_ss_rows_from[:-len(_top_suffix)]} AS __d"
+                            f"{_plan_where_suffix})"
                         )
                         _current = [("__c0", _FOLD_CUR_MULTI.format(
                             alias=alias, seed="{seed}", step="{step}"))] + [
@@ -8100,7 +8252,10 @@ class QueryMixin:
                             for n, col in zip(_ss_let_names, _ss_cols[1:], strict=True)
                         ]
                     else:
-                        _items_sql = f"(SELECT list({alias}) FROM {_elements_from} __d)"
+                        _items_sql = (
+                            f"(SELECT list({alias}) FROM {_elements_from} __d"
+                            f"{_plan_where_suffix})"
+                        )
                         _current = [("__cur", _FOLD_CUR_SINGLE)]
                     result = SQLRaw(
                         _fold_sql(
@@ -8114,6 +8269,21 @@ class QueryMixin:
                         result.result_type = "List<Any>"
                 else:
                     # ── Single-source aggregate WITHOUT a starting value: list_reduce ──
+                    if _fold_plan is not None:
+                        # FHIR4-86: list_reduce reads the definition's element LIST, not the
+                        # (patient_id, resource) rows it used to be handed. The query's own
+                        # WHERE still filters the ELEMENTS (the inline form always did).
+                        _ns_alias = alias or "__fold_e"
+                        _ns_list = _fold_plan[0]
+                        _ns_where = _fold_where_sql("__d", [_ns_alias]) if alias else None
+                        if _ns_where:
+                            _ns_list = (
+                                f"(SELECT list(__d.{_ns_alias}) FROM "
+                                f"(SELECT {_ns_alias} FROM unnest({_ns_list}) "
+                                f"AS __t0({_ns_alias})) AS __d WHERE {_ns_where})"
+                            )
+                        source_list = SQLRaw(_ns_list)
+                        _agg_element_is_json = _agg_element_is_json or _fold_plan[1]
                     # Apply distinct/all modifiers
                     if agg.distinct:
                         source_list = SQLFunctionCall(name="list_distinct", args=[source_list])

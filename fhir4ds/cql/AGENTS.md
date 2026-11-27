@@ -323,8 +323,36 @@
   VARCHAR)), []) FROM <retrieve CTE> AS <row> WHERE <row>.patient_id = _pt.patient_id))`),
   exactly as in the single-source fold. The multi-source lowering wrapped every non-list source
   in a single-element array, so the table reference landed inside a list and the fold was a
-  binder error. Property access on such an element routes through `fhirpath_text`. Not covered:
-  a LIST-valued define as a multi-source source is still wrapped as one element.
+  binder error. Property access on such an element routes through `fhirpath_text`.
+  A LIST-valued define is the OTHER shape and contributes per ELEMENT — see FHIR4-86/87 below.
+- **A fold source is classified by its DEFINE's metadata, never by its SQL text (FHIR4-86/87,
+  2026-11-27)**: `expressions/_query.py::_fold_source_element_sql` is the ONE decision both
+  fold lowerings use (the single-source working table and the multi-source cross join). It is
+  keyed on `DefinitionMeta`, the single discriminator (CQL-18 doctrine): `has_resource` -> the
+  patient's resources as JSON text, one element per resource (FHIR4-78); `stores_list_value`
+  -> the define's value column IS the element list (static lists, `{} as List<T>`, navigation
+  defines such as `Patient.name.given`); otherwise a list-valued define (a query define,
+  `PATIENT_MULTI_VALUE`) -> one element per value ROW. Reading every definition CTE as
+  `(patient_id, resource)` rows made `define "L": {1, 2, 3, 4, 5, 6}` +
+  `define "R": "L" N aggregate A starting 0.5: A + 1` a Binder Error
+  (`Referenced table "N" not found` — DuckDB's message for a missing COLUMN, not a missing
+  table), and in a multi-source fold it wrapped a list-valued define as ONE element, so the
+  cross join ran once per patient instead of once per element: a plausible number over the
+  wrong multiplicity, which is worse than an error. The helper resolves the definition through
+  ONE derived-table wrapper because the query layer unnest-expands a stored-list source when the
+  query has a `where`/`return` clause; the fold then applies the query's own `where` to the
+  ELEMENTS (`_plan_where`), and `where_is_reapplied` refuses to claim a source select whose
+  `where` is not that predicate (dropping it would change an answer instead of failing).
+  `distinct`, `sort by`, `let`, quantities, strings, empty lists and resource defines all keep
+  working. Tests: `duckdb/tests/integration/test_fhir4_86_define_fold_source.py`,
+  `test_fhir4_87_multi_source_list_define.py`.
+  STILL OPEN (observed while probing, separate defects, untouched): a multi-source QUERY over
+  list sources (`define "M": from ({1,2,3}) A, ({4,5,6}) B return A + B`) does not translate
+  at all (it correlates the second source to the first: `A.patient_id` / `B.resource` over an
+  `unnest`), so a fold over such a define cannot be exercised yet; and a nested INLINE query as
+  the single fold source (`([Condition] C return C.id) X aggregate A starting 0: A + 1`)
+  correlates to the aggregate's alias `X` instead of the projection's own FROM alias
+  (`Referenced table "X" not found`).
 - **A fold's `let` and `where` apply to the source rows, not to the list (FHIR4-77,
   2026-11-27)**: each `let` of an aggregate is computed in its own derived-table level over
   the cross-joined sources (`__l0` … `__lN`); earlier lets are visible to later lets and to the
