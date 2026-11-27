@@ -42,7 +42,7 @@ from conformance_log import _collect_stats, log_file  # noqa: E402
 # Every entry here is part of the release gate. The DQM runner is invoked once
 # per content suite so BOTH measure suites are covered:
 #   qi-core-2025 = ecqm-content-qicore-2025 (the historical 47-measure gate)
-#   us-core-2025 = dqm-content-cms-2025     (the CMS US Core 73-measure suite)
+#   us-core-2025 = dqm-content-cms-2025     (the CMS US Core 74-measure suite)
 SCRIPTS = [
     ("ViewDefinition", "conformance/scripts/run_viewdef.py", "conformance/reports/viewdef_report.json", ()),
     ("FHIRPath (R4)", "conformance/scripts/run_fhirpath_r4.py", "conformance/reports/fhirpath_report.json", ()),
