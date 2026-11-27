@@ -346,13 +346,34 @@
   `distinct`, `sort by`, `let`, quantities, strings, empty lists and resource defines all keep
   working. Tests: `duckdb/tests/integration/test_fhir4_86_define_fold_source.py`,
   `test_fhir4_87_multi_source_list_define.py`.
-  STILL OPEN (observed while probing, separate defects, untouched): a multi-source QUERY over
-  list sources (`define "M": from ({1,2,3}) A, ({4,5,6}) B return A + B`) does not translate
+- **A list source gets no patient-id correlation, and an aggregate gets no EXISTS wrapper
+  (FHIR4-98, 2026-11-27)**: the multi-source query handler builds `<secondary>.patient_id =
+  <primary alias>.patient_id` predicates for its sources and, when there is no `return` clause,
+  an `EXISTS (SELECT 1 FROM <secondaries> …)` filter over the PRIMARY. Both were gated on
+  `isinstance(ast, ListExpression)` — a list LITERAL — so a list-valued DEFINE got the predicate
+  even though its alias names the unnested ELEMENT, and an AGGREGATE query got the wrapper even
+  though the fold cross-joins the sources itself. Over an INCLUDED list define
+  (`from Base."Nums" N, [Condition] C aggregate A starting 0: A + N`) that read
+  `Binder Error: Referenced table "N" not found`; and because the single-source rows-source
+  preparation block also ran for multi-source queries, it pushed the wrapper's WHERE into the
+  primary's derived subquery IN PLACE — the same object held in `_multi_source_info` — so the
+  fold could no longer recognise a definition table (the sibling symptom there is
+  `Subquery returns 2 columns`). `_source_contributes_a_list` (`_query.py`, DefinitionMeta
+  keyed: `stores_list_value`) now decides, and it is consulted for AGGREGATE queries only, so
+  non-aggregate multi-source queries keep their previous SQL byte for byte (their
+  tuple-existence EXISTS filter binds for a local define and stays as it was). Two retrieves
+  keep their correlation — dropping it would cross patients. Tests:
+  `duckdb/tests/integration/test_fhir4_98_included_list_define_fold.py`.
+  STILL OPEN (separate, untouched, same binder error on HEAD): a multi-source QUERY over list
+  sources (`define "M": from ({1,2,3}) A, ({4,5,6}) B return A + B`) does not translate
   at all (it correlates the second source to the first: `A.patient_id` / `B.resource` over an
-  `unnest`), so a fold over such a define cannot be exercised yet; and a nested INLINE query as
+  `unnest`), so a fold over such a define cannot be exercised yet; a nested INLINE query as
   the single fold source (`([Condition] C return C.id) X aggregate A starting 0: A + 1`)
   correlates to the aggregate's alias `X` instead of the projection's own FROM alias
-  (`Referenced table "X" not found`).
+  (`Referenced table "X" not found`); and an INCLUDED ROWS define as a fold source
+  (`from Base."Obs" O, [Condition] C aggregate A starting 0: A + 1`) fails with
+  `Referenced column "Observation" not found in FROM clause` while its local spelling works
+  (`from "O2" O, …` → 2) — the include path's retrieve-define source, not the list discriminator.
 - **A fold's `let` and `where` apply to the source rows, not to the list (FHIR4-77,
   2026-11-27)**: each `let` of an aggregate is computed in its own derived-table level over
   the cross-joined sources (`__l0` … `__lN`); earlier lets are visible to later lets and to the
@@ -411,13 +432,35 @@
   inside the ELEMENT list through `list_reduce`) truncated or rounded each step:
   `starting 0.5` with `R + 1` answered 7, `starting 0` with `R + 0.5` answered 6,
   Integer and Long overflow raised instead of answering null, and String, Boolean and
-  Date starts did not bind. Every fold WITH a starting value now uses the working
-  table (`_fold_sql`); only a fold without one stays on `list_reduce`, where a Decimal
-  body over Integer elements is still rounded per step (known limit). The element the
+  Date starts did not bind. Every fold now uses the working table
+  (`_fold_sql`) — including a fold WITHOUT a starting value, whose accumulator is
+  typed from its BODY (FHIR4-84, see below). The element the
   body reads is a plain column (`__fold.__cur`), which is what keeps `TRY(...)` and
   numeric typing in the body. A Quantity starting value is not supported (the `+`
   dispatch lowers it to `dateAddQuantity` and answers null). Tests:
   `duckdb/tests/integration/test_fhir4_76_scalar_starting_value.py`.
+- **A fold with NO starting value starts from null, typed from its BODY (FHIR4-84,
+  2026-11-27)**: CQL 1.5 §Aggregate Queries — "if no starting clause is specified, the
+  aggregation result is initially null", which is why the spec's own no-start example is
+  `aggregate Result: Coalesce(Result, 1) * Num`; the official fixture
+  `AggregateEmptySourceNoStart` answers null, not the body's zero. So the anchor is a
+  typed NULL and the type comes from `_fold_body_cql_type` (the translator's static
+  inference, NOT `infer_cql_type_compat`, whose missing Coalesce rule answers Any for the
+  canonical shape) through `_fold_body_accumulator_sql_type`. That inference failing
+  (unknown/Any body, no source alias) keeps the pre-FHIR4-84 `list_reduce` lowering. Two
+  defects this closed: the no-start fold was the last one on `list_reduce`, whose
+  accumulator lives INSIDE the element list and so was cast to the ELEMENT type on every
+  step (`Coalesce(R, 0.0) + 0.5` over `{1,2,3}` answered 0 where `starting 0.0` answers
+  1.5; a Decimal body over Integer elements, a Long body answered as INTEGER, a Boolean
+  body as 1, a Quantity accumulator as NULL, a list accumulator a binder error), and its
+  `let` was translated against the WHOLE source list (binder error). The multi-source
+  no-start anchor had the sibling defect — a fixed `CAST(NULL AS BIGINT)` — and now takes
+  the body type too. A no-start fold that answers null is CORRECT when the body does not
+  normalise the null: it equals the same fold with `starting (null as T)`. Do not "fix"
+  that to zero-init, and do not pin the population-surface reading of it (a null
+  accumulator reads FALSE at a Boolean define, by the standing null→FALSE encoding).
+  Tests: `duckdb/tests/integration/test_fhir4_84_no_start_fold.py` (every case asserts
+  the VALUE and the with-start control).
 - **A retrieve that appears only inside a fold gets its CTE (FHIR4-82, 2026-11-27)**:
   a fold body cannot carry a `RetrievePlaceholder` (the branches serialize
   `to_sql()` eagerly), so Phase 1 of `retrieve_optimizer.py` moves the placeholder

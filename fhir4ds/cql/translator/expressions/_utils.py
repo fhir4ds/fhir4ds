@@ -365,6 +365,38 @@ def _fold_anchor_sql(starting_sql: str, sql_type: str | None) -> str:
     return starting_sql if sql_type is None else f"CAST({starting_sql} AS {sql_type})"
 
 
+#: SQL transport of a list-typed fold accumulator that has NO starting value. A list
+#: accumulator is a DuckDB list of the element TEXT form, exactly as the element lists are.
+_FOLD_LIST_ACCUMULATOR_SQL_TYPE = "VARCHAR[]"
+
+#: SQL types of a fold accumulator whose type comes from its BODY, for the CQL types whose
+#: transport differs from the starting-value table (FHIR4-84). A Quantity accumulator travels
+#: as its JSON text; the starting-value table has no Quantity entry because a Quantity ANCHOR
+#: is written as the literal itself, which is already that text.
+_FOLD_BODY_ACCUMULATOR_SQL_TYPES = {"Quantity": "VARCHAR"}
+
+
+def _fold_body_accumulator_sql_type(body_cql_type: str | None) -> str | None:
+    """The SQL type of a fold accumulator that has NO starting value, from the BODY (FHIR4-84).
+
+    ``aggregate R: Coalesce(R, 0.0) + N`` has no anchor to take a type from, so the type comes
+    from the fold body — which is the accumulator's own type, because the body's result is what
+    the next step reads. Leaving the anchor untyped is not an option: DuckDB binds an untyped
+    ``CAST(NULL AS ...)``/``NULL`` anchor as INTEGER and coerces every recursive step to it, so
+    a Decimal body was truncated (`Coalesce(R, 0.0) + 0.5` over ``{1, 2, 3}`` answered 0, where
+    the same fold with ``starting 0.0`` answers 1.5).
+
+    None — an unknown or untyped body — leaves the fold on the older ``list_reduce`` lowering.
+    """
+    if not body_cql_type or body_cql_type == "Any":
+        return None
+    if body_cql_type.startswith("List<"):
+        return _FOLD_LIST_ACCUMULATOR_SQL_TYPE
+    if body_cql_type in _FOLD_BODY_ACCUMULATOR_SQL_TYPES:
+        return _FOLD_BODY_ACCUMULATOR_SQL_TYPES[body_cql_type]
+    return _FOLD_ACCUMULATOR_SQL_TYPES.get(body_cql_type)
+
+
 def _coerce_query_rows_to_list(node):
     """Convert a row-producing single-column query into a scalar DuckDB list."""
     inner_select = None

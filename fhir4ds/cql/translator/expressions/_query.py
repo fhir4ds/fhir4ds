@@ -70,6 +70,7 @@ from ...translator.expressions._utils import (
     _ensure_scalar_body,
     _fold_accumulator_sql_type,
     _fold_anchor_sql,
+    _fold_body_accumulator_sql_type,
     _fold_list_start_sql,
     _fold_start_is_typed_list,
     _is_list_returning_sql,
@@ -695,9 +696,63 @@ def _fold_element_cql_type(translator: Any, query: Any, alias: str) -> str | Non
     return None
 
 
+def _fold_body_cql_type(translator: Any, agg: Any) -> str | None:
+    """The CQL type of a fold accumulator that has NO starting value, from its BODY (FHIR4-84).
+
+    With no anchor there is nothing else to type the accumulator from, and the accumulator's
+    type IS the body's type: the body's result is what the next step reads. The translator's
+    static inference is used rather than ``infer_cql_type_compat`` because the canonical
+    no-start shape is ``Coalesce(R, <default>) <op> …`` (CQL 1.5 §Aggregate Queries: "if no
+    starting clause is specified, the aggregation result is initially null, and Coalesce must
+    be used to provide the default value"), and only the translator's inference knows that a
+    Coalesce's type is the common type of its arguments — the compat port has no Coalesce rule
+    and answers Any, which left the anchor untyped and every step cast to it.
+    """
+    infer = getattr(translator, "_infer_static_cql_type_for_logical_operand", None)
+    static = infer(agg.expression) if infer is not None else None
+    if not static or static == "Any":
+        from ...translator.type_map import infer_cql_type_compat
+
+        static = infer_cql_type_compat(translator.context, agg.expression)
+    return static
+
+
 def _fold_quote_ident(name: Any) -> str:
     """A definition/column name as a quoted SQL identifier (the fold SQL is composed as text)."""
     return '"' + str(name).replace('"', '""') + '"'
+
+
+def _source_contributes_a_list(node: Any, ast_expr: Any, definition_meta: Any) -> bool:
+    """True when a multi-source query source contributes LIST elements, not patient-keyed rows.
+
+    ``<alias>.patient_id`` is a ROW column reference; a LIST source's alias names the unnested
+    ELEMENT (`unnest([1, 2, 3]) AS N`), so a patient-id correlation on it cannot bind. FHIR4-98:
+    a multi-source fold over an INCLUDED list define died with `Referenced table "N" not found`
+    because the include path injected `C.patient_id = N.patient_id` into the source select — and
+    the WHERE-push then moved that predicate INSIDE the derived select, where the fold's own
+    metadata classification could no longer see a plain definition table.
+
+    A list LITERAL is a list; so is a stored-list DEFINE (``DefinitionMeta.stores_list_value``,
+    the single discriminator — CQL-18 / FHIR4-86-87: never decide this from the SQL text). A
+    definition whose elements are ROWs (``has_resource``, a query define) keeps its correlation.
+    """
+    from ...parser.ast_nodes import ListExpression as _ListExpression
+
+    if isinstance(ast_expr, _ListExpression):
+        return True
+    if isinstance(node, SQLSubquery):
+        node = node.query
+    if isinstance(node, SQLFunctionCall) and node.name == "unnest" and node.args:
+        node = node.args[0]
+    if isinstance(node, SQLSubquery):
+        node = node.query
+    if not isinstance(node, SQLSelect):
+        return False
+    definition_name = _fold_source_definition_name(node)
+    if definition_name is None:
+        return False
+    meta = definition_meta.get(definition_name)
+    return bool(meta is not None and getattr(meta, "stores_list_value", False))
 
 
 def _fold_source_definition_name(select: Any, _depth: int = 0):
@@ -5567,9 +5622,26 @@ class QueryMixin:
                             on_condition=None,
                         ))
 
-                    # Patient-id correlations — skip for list literal sources
+                    # Patient-id correlations — never for a LIST fold source (FHIR4-98).
+                    # `<alias>.patient_id` is a ROW column reference: a list source's alias names
+                    # the unnested ELEMENT, so the predicate cannot bind. The gate used to be
+                    # `isinstance(ast, ListExpression)` (list LITERALS only), which let every
+                    # list-valued DEFINE through — and over an INCLUDED one that predicate was
+                    # also what killed the fold (`Referenced table "N" not found`), because the
+                    # WHERE-push then moved it inside the derived select so the fold could no
+                    # longer recognise the definition table. The list/rows decision comes from
+                    # DefinitionMeta (CQL-18 / FHIR4-86-87), never from the SQL text, and it is
+                    # consulted for AGGREGATE queries only: a non-aggregate multi-source query's
+                    # EXISTS filter is tuple-existence semantics and binds for a local define,
+                    # so its SQL is deliberately left byte for byte as it was.
                     _all_list_sources = isinstance(_pi_expr, _ListExpr) and all(
                         isinstance(info[3], _ListExpr) for info in _sec_infos
+                    )
+                    _aggregate_over_list_primary = (
+                        _source_contributes_a_list(
+                            source_expr, _pi_expr, self.context.definition_meta
+                        )
+                        and getattr(node, "aggregate", None) is not None
                     )
                     _conds: list = []
                     if _sec_where_sql and not (
@@ -5578,12 +5650,13 @@ class QueryMixin:
                         _conds.append(_sec_where_sql)
                     if not _all_list_sources:
                         for _sa, _, _, _ast_expr in _sec_infos:
-                            if not isinstance(_ast_expr, _ListExpr):
-                                _conds.append(SQLBinaryOp(
-                                    left=SQLQualifiedIdentifier(parts=[_sa, "patient_id"]),
-                                    operator="=",
-                                    right=SQLQualifiedIdentifier(parts=[_outer_alias, "patient_id"]),
-                                ))
+                            if _aggregate_over_list_primary or isinstance(_ast_expr, _ListExpr):
+                                continue
+                            _conds.append(SQLBinaryOp(
+                                left=SQLQualifiedIdentifier(parts=[_sa, "patient_id"]),
+                                operator="=",
+                                right=SQLQualifiedIdentifier(parts=[_outer_alias, "patient_id"]),
+                            ))
                     if _conds:
                         _full_cond = _conds[0]
                         for _c in _conds[1:]:
@@ -5746,31 +5819,39 @@ class QueryMixin:
                             ),
                         ))
                     else:
-                        # No return clause + resource sources: use EXISTS pattern
-                        _exists_sub = SQLSubquery(query=SQLSelect(
-                            columns=[SQLLiteral(value=1)],
-                            from_clause=_from_clause,
-                            where=_full_cond,
-                            joins=_joins if _joins else None,
-                        ))
-                        _exists_expr = SQLExists(subquery=_exists_sub)
+                        # No return clause + resource sources: use EXISTS pattern. An AGGREGATE
+                        # query is the exception (FHIR4-98): the fold cross-joins the sources
+                        # itself, so there is no primary ROW for an EXISTS to filter — and for a
+                        # LIST primary the wrapper is not merely useless, it is damage: the
+                        # wrapper's WHERE is pushed into the primary's derived subquery IN PLACE,
+                        # and that subquery is the SAME object the fold holds in
+                        # `_multi_source_info`, so the fold stops recognising a plain definition
+                        # table and binder-fails (`Subquery returns 2 columns`).
+                        if not _aggregate_over_list_primary:
+                            _exists_sub = SQLSubquery(query=SQLSelect(
+                                columns=[SQLLiteral(value=1)],
+                                from_clause=_from_clause,
+                                where=_full_cond,
+                                joins=_joins if _joins else None,
+                            ))
+                            _exists_expr = SQLExists(subquery=_exists_sub)
 
-                        if isinstance(source_expr, SQLSelect):
-                            source_expr = SQLSelect(
-                                columns=source_expr.columns,
-                                from_clause=source_expr.from_clause,
-                                where=(
-                                    SQLBinaryOp(left=source_expr.where, operator="AND", right=_exists_expr)
-                                    if source_expr.where else _exists_expr
-                                ),
-                                joins=source_expr.joins,
-                            )
-                        else:
-                            source_expr = SQLSelect(
-                                columns=[SQLIdentifier(name="*")],
-                                from_clause=SQLAlias(expr=source_expr, alias=alias) if alias else source_expr,
-                                where=_exists_expr,
-                            )
+                            if isinstance(source_expr, SQLSelect):
+                                source_expr = SQLSelect(
+                                    columns=source_expr.columns,
+                                    from_clause=source_expr.from_clause,
+                                    where=(
+                                        SQLBinaryOp(left=source_expr.where, operator="AND", right=_exists_expr)
+                                        if source_expr.where else _exists_expr
+                                    ),
+                                    joins=source_expr.joins,
+                                )
+                            else:
+                                source_expr = SQLSelect(
+                                    columns=[SQLIdentifier(name="*")],
+                                    from_clause=SQLAlias(expr=source_expr, alias=alias) if alias else source_expr,
+                                    where=_exists_expr,
+                                )
                 _multi_source_done = True
         else:
             # Single source
@@ -8019,6 +8100,9 @@ class QueryMixin:
                 )
                 _ms_let_names = [n for n, _ in _ms_lets]
                 _let_cols = [f"__c{len(_cur_cols) + i}" for i in range(len(_ms_lets))]
+                # FHIR4-84: with no starting value the accumulator has no anchor to take a
+                # type from, so the type comes from the BODY (see `_fold_body_cql_type`).
+                _ms_body_type = _fold_body_cql_type(self, agg) if agg.starting is None else None
                 self.context.push_scope()
                 try:
                     self.context.add_alias(
@@ -8027,7 +8111,8 @@ class QueryMixin:
                         # FHIR4-83: the accumulator's CQL type is its starting value's
                         # type, so the body's arithmetic dispatch sees a Quantity
                         # accumulator instead of guessing "temporal" from the peer.
-                        cql_type=_fold_start_cql_type(self.context, agg),
+                        # FHIR4-84: a no-start fold's accumulator type is its BODY's.
+                        cql_type=_fold_start_cql_type(self.context, agg) or _ms_body_type,
                     )
                     for _ms_alias, _cur_col in zip(_all_aliases, _cur_cols, strict=True):
                         self.context.add_alias(
@@ -8074,9 +8159,7 @@ class QueryMixin:
                 # so the body expression is translated through the AST pipeline.
                 # A list accumulator gets a list-typed anchor (FHIR4-73). A scalar starting
                 # value is cast to ITS type (FHIR4-76): the working table's accumulator column
-                # takes the anchor's type and every step is cast back to it. Without a starting
-                # value the accumulator starts null; that keeps the integer anchor this path
-                # always used.
+                # takes the anchor's type and every step is cast back to it.
                 if _fold_start_is_typed_list(agg):
                     _anchor_sql = _fold_list_start_sql(agg)
                 elif agg.starting is not None:
@@ -8085,7 +8168,17 @@ class QueryMixin:
                         _fold_accumulator_type(self.context, agg),
                     )
                 else:
-                    _anchor_sql = f"CAST({_start_sql} AS BIGINT)"
+                    # FHIR4-84: no starting value — the aggregation result is initially null
+                    # (CQL 1.5 §Aggregate Queries) and takes its type from the BODY. The fixed
+                    # BIGINT anchor this path always used truncated a Decimal body exactly as
+                    # the single-source element list did; a body whose type cannot be inferred
+                    # keeps it.
+                    _ms_anchor_type = _fold_body_accumulator_sql_type(_ms_body_type)
+                    _anchor_sql = (
+                        f"CAST(NULL AS {_ms_anchor_type})"
+                        if _ms_anchor_type is not None
+                        else f"CAST({_start_sql} AS BIGINT)"
+                    )
                 result = SQLRaw(
                     _fold_sql(
                         start_sql=_anchor_sql,
@@ -8125,12 +8218,35 @@ class QueryMixin:
                 from ...parser.ast_nodes import Literal as _ASTLiteral
                 _starting_is_typed_list = _fold_start_is_typed_list(agg)
 
-                # A starting value always goes through the working table (FHIR4-76): its
-                # accumulator column takes the starting value's type, whereas list_reduce
-                # carries the accumulator inside the element list and rounds every step to
-                # the element type. Only a fold WITHOUT a starting value stays on list_reduce.
-                if (_starting_is_typed_list or agg.starting is not None) and alias:
-                    # ── Single-source fold with a starting value: recursive CTE ──
+                # FHIR4-84: a fold with NO starting value joins the SAME working-table lowering.
+                # Its accumulator is typed from the BODY — which is the accumulator's own type,
+                # because the body's result is what the next step reads — the anchor is a typed
+                # NULL, and the query's LET/WHERE apply to the source rows exactly as they do
+                # for a fold with a start. Before this the no-start fold was the only one left on
+                # `list_reduce`, whose accumulator lives INSIDE the element list and is therefore
+                # cast to the ELEMENT type on every step (`Coalesce(R, 0.0) + 0.5` over {1,2,3}
+                # answered 0, where the same fold with `starting 0.0` answers 1.5), and whose
+                # `let` was translated against the WHOLE source list (a binder error). A body
+                # whose type cannot be inferred keeps the `list_reduce` lowering.
+                #
+                # A starting value goes through the working table for the same reason (FHIR4-76):
+                # its accumulator column takes the starting value's type, whereas list_reduce
+                # carries the accumulator inside the element list and rounds every step to the
+                # element type.
+                _fold_body_type = (
+                    _fold_body_cql_type(self, agg) if agg.starting is None else None
+                )
+                _no_start_sql_type = _fold_body_accumulator_sql_type(_fold_body_type)
+                _accumulator_is_list = _starting_is_typed_list or str(
+                    _fold_body_type or ""
+                ).startswith("List<")
+
+                if (
+                    _starting_is_typed_list
+                    or agg.starting is not None
+                    or _no_start_sql_type is not None
+                ) and alias:
+                    # ── Single-source fold over typed elements: recursive CTE ──
                     # source_list is the array expression (SQLArray or SQLFunctionCall).
                     source_list = _fold_marker_swap(source_list)
                     from ...translator.ast_helpers import ASTHelpersMixin as _AHM
@@ -8197,8 +8313,13 @@ class QueryMixin:
                             accum_name,
                             ast_expr=SQLQualifiedIdentifier(parts=["__fold", "__acc"]),
                             # FHIR4-83: the accumulator takes its starting value's CQL
-                            # type (see the multi-source fold above).
-                            cql_type=_fold_start_cql_type(self.context, agg),
+                            # type (see the multi-source fold above). FHIR4-84: a fold with
+                            # no starting value has no anchor to type it, so the BODY's type
+                            # is the accumulator's type (its result is what the next step
+                            # reads) — which is what lets a Quantity or Decimal accumulator
+                            # reach the body's arithmetic dispatch at all.
+                            cql_type=_fold_start_cql_type(self.context, agg)
+                            or _fold_body_type,
                         )
                         # The element alias (and every let) is a working-table column for
                         # the current step (a plain column reference).
@@ -8230,11 +8351,16 @@ class QueryMixin:
                     _plan_where_suffix = f" WHERE {_plan_where}" if _plan_where else ""
                     if _starting_is_typed_list:
                         _start_sql = _fold_list_start_sql(agg)
-                    else:
+                    elif agg.starting is not None:
                         _start_sql = _fold_anchor_sql(
                             self.translate(agg.starting, usage=ExprUsage.SCALAR).to_sql(),
                             _fold_accumulator_type(self.context, agg),
                         )
+                    else:
+                        # FHIR4-84: no starting value — the aggregation result is initially
+                        # null (CQL 1.5 §Aggregate Queries), and the null carries the
+                        # accumulator type inferred from the body.
+                        _start_sql = f"CAST(NULL AS {_no_start_sql_type})"
                     if _ss_lets:
                         _items_fields = f'"{alias}" := __d."{alias}"' + "".join(
                             f', "{n}" := __d."{n}"' for n in _ss_let_names
@@ -8265,10 +8391,11 @@ class QueryMixin:
                             current=_current,
                         )
                     )
-                    if _starting_is_typed_list:
+                    if _accumulator_is_list:
                         result.result_type = "List<Any>"
                 else:
-                    # ── Single-source aggregate WITHOUT a starting value: list_reduce ──
+                    # ── Single-source aggregate WITHOUT a starting value whose BODY type is
+                    # unknown (or without a source alias): the list_reduce shape ──
                     if _fold_plan is not None:
                         # FHIR4-86: list_reduce reads the definition's element LIST, not the
                         # (patient_id, resource) rows it used to be handed. The query's own
