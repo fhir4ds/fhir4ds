@@ -1726,6 +1726,16 @@ def run_optimization_phases(
             phase1_result.placeholders.extend(fn_placeholders)
             stats.num_retrieves += len(fn_placeholders)
 
+    # The aggregate fold lowering serializes its source to raw SQL text and swaps
+    # unresolved RetrievePlaceholder nodes for text markers (see _fold_marker_swap
+    # in expressions/_query.py). Those nodes are then part of no definition AST,
+    # so a retrieve that appears ONLY inside a fold never got its CTE and the
+    # final SQL kept the marker. Collect them here; the final SQL assembly swaps
+    # each marker for the quoted CTE name.
+    for placeholder in getattr(context, "_fold_marker_placeholders", None) or ():
+        phase1_result.placeholders.append(placeholder)
+        stats.num_retrieves += 1
+
     # ========================================================================
     # PHASE 2: Build CTEs
     # ========================================================================

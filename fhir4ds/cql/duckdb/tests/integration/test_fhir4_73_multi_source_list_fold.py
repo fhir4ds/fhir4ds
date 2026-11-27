@@ -230,7 +230,11 @@ def test_the_where_clause_filters_the_rows_the_fold_sees(
 
 
 def test_a_scalar_starting_value_keeps_its_integer_anchor():
-    """The pre-existing scalar case is unchanged: content and anchor."""
+    """The scalar case keeps its content, with an anchor of the starting value's type.
+
+    FHIR4-76 replaced the BIGINT cast every scalar start used to get by the starting value's own
+    type, so an Integer start anchors as INTEGER (and Integer overflow is null, per CQL).
+    """
     library = _library(
         start="0", body="R + P + Q", consumers=False,
         sources_p="1, 2, 3", sources_q="10, 20",
@@ -240,7 +244,7 @@ def test_a_scalar_starting_value_keeps_its_integer_anchor():
         sql = _translate(con, library, {"Initial Population": "Initial Population", "Value": "Value"})
         folds = _FOLD_SQL.findall(sql)
         assert folds and all(
-            "SELECT CAST(0 AS BIGINT) AS __acc, CAST(0 AS BIGINT) AS __rn" in fold for fold in folds
+            "SELECT CAST(0 AS INTEGER) AS __acc, CAST(0 AS BIGINT) AS __rn" in fold for fold in folds
         ), folds[0][:300]
         values = _value_column(con, library, "Value")
     assert values == [102, 102], values

@@ -1158,7 +1158,17 @@ class Lexer:
                     break
                 datetime_chars += char
                 self._advance()
-            elif char.isalnum() or char in "-T:+Z":
+            elif char == ":":
+                # A ':' continues the literal only between two digits (`T12:30`,
+                # an offset `+05:30`). Otherwise it is the NEXT token — e.g. the
+                # clause colon in `aggregate R starting @2024-01-01: R + 1 day`,
+                # which greedy lexing swallowed into an invalid-literal error.
+                nxt = self.source[self.pos + 1] if self.pos + 1 < len(self.source) else ""
+                if not (nxt.isdigit() and datetime_chars[-1:].isdigit()):
+                    break
+                datetime_chars += char
+                self._advance()
+            elif char.isalnum() or char in "-T+Z":
                 datetime_chars += char
                 self._advance()
             else:

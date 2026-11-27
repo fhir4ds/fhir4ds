@@ -1,6 +1,8 @@
 """Query translation mixin for CQL to SQL."""
 from __future__ import annotations
 
+import copy
+import dataclasses
 from typing import TYPE_CHECKING, Any, Optional, Tuple
 
 from ...parser.ast_nodes import (
@@ -66,6 +68,8 @@ from ...translator.expressions._utils import (
     _canonical_fhir_r4_type_name,
     _contains_sql_subquery,
     _ensure_scalar_body,
+    _fold_accumulator_sql_type,
+    _fold_anchor_sql,
     _fold_list_start_sql,
     _fold_start_is_typed_list,
     _is_list_returning_sql,
@@ -614,6 +618,18 @@ def _fold_sql(
 _FOLD_CUR_SINGLE = "list_extract({seed}, {step})"
 #: Column templates of the elements a multi-source fold consumes (one struct field per alias).
 _FOLD_CUR_MULTI = "struct_extract(list_extract({seed}, {step}), '{alias}')"
+
+
+def _fold_accumulator_type(context: Any, agg: Any) -> str | None:
+    """SQL type of a scalar fold's accumulator column, from the CQL types of its starting value
+    and its body (FHIR4-76). The expression layer has no ``_infer_cql_type``: the
+    lowering-authority inference is the standalone function over the shared context."""
+    from ...translator.type_map import infer_cql_type_compat
+
+    return _fold_accumulator_sql_type(
+        infer_cql_type_compat(context, agg.starting),
+        infer_cql_type_compat(context, agg.expression),
+    )
 
 
 def _push_where_into_derived_source(select_node) -> bool:
@@ -7429,14 +7445,13 @@ class QueryMixin:
             _agg_element_is_json = False
 
             def _fold_marker_swap(node):
-                """Replace RetrievePlaceholder nodes with text markers.
+                """Replace every RetrievePlaceholder below ``node`` with a text marker.
 
-                The fold branches below serialize source expressions to raw
-                SQL strings, which cannot carry unresolved placeholders. The
-                real placeholder stays registered on the context so Phase 1/2
-                builds its retrieve CTE; the final SQL assembly substitutes
-                the marker text with the quoted CTE name (CMS136 aggregate
-                over an inlined parenthesized retrieve).
+                The fold branches below serialize source expressions to raw SQL strings,
+                which cannot carry unresolved placeholders. The walk is generic (every field
+                of every node below the source): the first version enumerated node types by
+                hand and left a placeholder untouched whenever it sat under one it did not
+                know, such as the ``EXISTS`` of a ``with ... such that`` clause.
                 """
                 if isinstance(node, RetrievePlaceholder):
                     if not hasattr(self.context, "_fold_marker_placeholders"):
@@ -7447,58 +7462,20 @@ class QueryMixin:
                             return SQLIdentifier(name=f"__f4ds_ph_{_i}__")
                     reg.append(node)
                     return SQLIdentifier(name=f"__f4ds_ph_{len(reg) - 1}__")
-                if isinstance(node, SQLFunctionCall):
-                    return SQLFunctionCall(
-                        name=node.name,
-                        args=[_fold_marker_swap(a) for a in node.args],
-                    )
-                if isinstance(node, SQLCast):
-                    return SQLCast(
-                        expression=_fold_marker_swap(node.expression),
-                        target_type=node.target_type,
-                    )
-                if isinstance(node, SQLSubquery):
-                    return SQLSubquery(query=_fold_marker_swap(node.query))
-                if isinstance(node, SQLSelect):
-                    # Every clause survives: this rewrite only renames
-                    # placeholders, and a rebuilt select that drops ORDER BY
-                    # (or a join) silently changes what the fold iterates.
-                    return SQLSelect(
-                        columns=[_fold_marker_swap(c) for c in node.columns] if node.columns else node.columns,
-                        from_clause=_fold_marker_swap(node.from_clause) if node.from_clause else node.from_clause,
-                        where=_fold_marker_swap(node.where) if node.where else node.where,
-                        joins=[
-                            SQLJoin(
-                                join_type=join.join_type,
-                                table=_fold_marker_swap(join.table),
-                                alias=join.alias,
-                                on_condition=(
-                                    _fold_marker_swap(join.on_condition)
-                                    if join.on_condition is not None
-                                    else None
-                                ),
-                            )
-                            for join in (node.joins or [])
-                        ],
-                        group_by=(
-                            [_fold_marker_swap(group) for group in node.group_by]
-                            if node.group_by
-                            else None
-                        ),
-                        having=_fold_marker_swap(node.having) if node.having else node.having,
-                        order_by=[
-                            (_fold_marker_swap(sort_expr), direction)
-                            for sort_expr, direction in node.order_by
-                        ] if node.order_by else None,
-                        limit=node.limit,
-                        distinct=node.distinct,
-                    )
-                if isinstance(node, SQLAlias):
-                    return SQLAlias(
-                        expr=_fold_marker_swap(node.expr),
-                        alias=node.alias,
-                    )
-                return node
+                if isinstance(node, list):
+                    return [_fold_marker_swap(item) for item in node]
+                if isinstance(node, tuple):
+                    return tuple(_fold_marker_swap(item) for item in node)
+                if isinstance(node, dict):
+                    return {key: _fold_marker_swap(value) for key, value in node.items()}
+                if not dataclasses.is_dataclass(node):
+                    return node
+                # A shallow copy keeps every field (and every clause of a select); only the
+                # children that hold a placeholder are replaced.
+                swapped = copy.copy(node)
+                for field, value in vars(swapped).items():
+                    setattr(swapped, field, _fold_marker_swap(value))
+                return swapped
 
             # Placeholder-shaped rows source (CMS136
             # `([MedicationRequest: "Atomoxetine"]).isMedicationOrder()
@@ -7509,7 +7486,6 @@ class QueryMixin:
             # subquery whose FROM keeps the placeholder as an AST node —
             # Phase 2 discovers it there, builds the retrieve CTE, and
             # resolve_placeholders swaps it in (QA-013 convention).
-            from ..placeholder import contains_placeholder as _contains_ph
             if isinstance(source_list, RetrievePlaceholder):
                 _outer_pid = "_pt"
                 _row_alias = alias or "__agg_row"
@@ -7771,13 +7747,20 @@ class QueryMixin:
                 # Recursive CTE for the multi-source fold, built as an SQL string.
                 # The alias bindings above are AST nodes (SQLQualifiedIdentifier),
                 # so the body expression is translated through the AST pipeline.
-                # A list accumulator gets a list-typed anchor (FHIR4-73); every other
-                # starting value keeps the integer anchor this path always used.
-                _anchor_sql = (
-                    _fold_list_start_sql(agg)
-                    if _fold_start_is_typed_list(agg)
-                    else f"CAST({_start_sql} AS BIGINT)"
-                )
+                # A list accumulator gets a list-typed anchor (FHIR4-73). A scalar starting
+                # value is cast to ITS type (FHIR4-76): the working table's accumulator column
+                # takes the anchor's type and every step is cast back to it. Without a starting
+                # value the accumulator starts null; that keeps the integer anchor this path
+                # always used.
+                if _fold_start_is_typed_list(agg):
+                    _anchor_sql = _fold_list_start_sql(agg)
+                elif agg.starting is not None:
+                    _anchor_sql = _fold_anchor_sql(
+                        _start_sql,
+                        _fold_accumulator_type(self.context, agg),
+                    )
+                else:
+                    _anchor_sql = f"CAST({_start_sql} AS BIGINT)"
                 result = SQLRaw(
                     _fold_sql(
                         start_sql=_anchor_sql,
@@ -7808,8 +7791,12 @@ class QueryMixin:
                 from ...parser.ast_nodes import Literal as _ASTLiteral
                 _starting_is_typed_list = _fold_start_is_typed_list(agg)
 
-                if _starting_is_typed_list and alias:
-                    # ── Single-source list-accumulator aggregate: recursive CTE fold ──
+                # A starting value always goes through the working table (FHIR4-76): its
+                # accumulator column takes the starting value's type, whereas list_reduce
+                # carries the accumulator inside the element list and rounds every step to
+                # the element type. Only a fold WITHOUT a starting value stays on list_reduce.
+                if (_starting_is_typed_list or agg.starting is not None) and alias:
+                    # ── Single-source fold with a starting value: recursive CTE ──
                     # source_list is the array expression (SQLArray or SQLFunctionCall).
                     source_list = _fold_marker_swap(source_list)
                     from ...translator.ast_helpers import ASTHelpersMixin as _AHM
@@ -7866,7 +7853,13 @@ class QueryMixin:
                         self.context.pop_scope()
 
                     _body_sql = agg_body.to_sql()
-                    _start_sql = _fold_list_start_sql(agg)
+                    if _starting_is_typed_list:
+                        _start_sql = _fold_list_start_sql(agg)
+                    else:
+                        _start_sql = _fold_anchor_sql(
+                            self.translate(agg.starting, usage=ExprUsage.SCALAR).to_sql(),
+                            _fold_accumulator_type(self.context, agg),
+                        )
                     # The element list becomes ONE column of the working table;
                     # ``distinct`` keeps its place (the list is built from the
                     # de-duplicated elements).
@@ -7882,9 +7875,10 @@ class QueryMixin:
                             current=[("__cur", _FOLD_CUR_SINGLE)],
                         )
                     )
-                    result.result_type = "List<Any>"
+                    if _starting_is_typed_list:
+                        result.result_type = "List<Any>"
                 else:
-                    # ── Single-source scalar aggregate: list_reduce pattern ──────────
+                    # ── Single-source aggregate WITHOUT a starting value: list_reduce ──
                     # Apply distinct/all modifiers
                     if agg.distinct:
                         source_list = SQLFunctionCall(name="list_distinct", args=[source_list])
