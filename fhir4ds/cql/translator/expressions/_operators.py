@@ -2597,6 +2597,16 @@ class OperatorsMixin:
                 return True
             if meta and self._bare_cql_type_name(meta.cql_type) == "Quantity":
                 return True
+            # A scope symbol carrying a statically known CQL type: an aggregate
+            # accumulator bound to its starting value's type (FHIR4-83). Without
+            # this, `aggregate R starting 0 'mg': R + 1 'mg'` could not see that
+            # `R` is a Quantity and the step fell into the DateTime + Quantity
+            # path (dateAddQuantity), answering NULL.
+            _symbol = self.context.lookup_symbol(node.name)
+            if _symbol is not None and self._bare_cql_type_name(
+                getattr(_symbol, "cql_type", None)
+            ) == "Quantity":
+                return True
             # Let-clause alias: look through to the let's CQL AST (CMS156
             # MedicationStrength -> medicationStrengthPerUnit() Quantity).
             let_ast = self.context._let_clause_asts.get(node.name)

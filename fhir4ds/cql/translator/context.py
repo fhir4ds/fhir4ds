@@ -857,7 +857,7 @@ class SQLTranslationContext:
 
         return None
 
-    def add_alias(self, alias: str, sql_expr: Optional[str] = None, union_expr: Any = None, ast_expr: Any = None, table_alias: Optional[str] = None, cte_name: Optional[str] = None) -> None:
+    def add_alias(self, alias: str, sql_expr: Optional[str] = None, union_expr: Any = None, ast_expr: Any = None, table_alias: Optional[str] = None, cte_name: Optional[str] = None, cql_type: Optional[str] = None) -> None:
         """
         Add a query alias to the current scope.
 
@@ -868,9 +868,11 @@ class SQLTranslationContext:
             ast_expr: AST expression object (set during Phase 1, should not call to_sql() until Phase 3).
             table_alias: Table alias for CTE references (e.g., "ESRDEncounter" -> table alias in JOIN).
             cte_name: CTE name this alias points to (e.g., "Encounter: ValueSet").
+            cql_type: The CQL type of the alias' value when it is statically known
+                (an aggregate accumulator takes its starting value's type, FHIR4-83).
         """
         self.scopes[-1].aliases.add(alias)
-        self.add_symbol(alias, "alias", sql_expr=sql_expr, union_expr=union_expr, ast_expr=ast_expr, table_alias=table_alias, cte_name=cte_name)
+        self.add_symbol(alias, "alias", sql_expr=sql_expr, cql_type=cql_type, union_expr=union_expr, ast_expr=ast_expr, table_alias=table_alias, cte_name=cte_name)
 
     def is_alias(self, name: str) -> bool:
         """

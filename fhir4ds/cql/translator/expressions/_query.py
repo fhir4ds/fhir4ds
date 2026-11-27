@@ -651,6 +651,50 @@ def _fold_accumulator_type(context: Any, agg: Any) -> str | None:
     )
 
 
+def _fold_start_cql_type(context: Any, agg: Any) -> str | None:
+    """The CQL type of a fold accumulator, taken from its starting value (FHIR4-83).
+
+    The fold binds the accumulator alias to ``__fold.__acc``; without its CQL type the
+    arithmetic dispatch cannot see that the accumulator is a Quantity, so
+    ``aggregate R starting 0 'mg': R + 1 'mg'`` lowered the step to ``dateAddQuantity``
+    ("the other operand is a Quantity, so the accumulator must be a date") and every
+    step answered NULL instead of ``3 'mg'``.
+    """
+    from ...translator.type_map import infer_cql_type_compat
+
+    if agg.starting is None:
+        return None
+    return infer_cql_type_compat(context, agg.starting)
+
+
+def _fold_element_cql_type(translator: Any, query: Any, alias: str) -> str | None:
+    """The CQL type of a fold source's element, when it is statically a Quantity (FHIR4-83).
+
+    The element alias is a working-table column of the fold; without a CQL type the
+    arithmetic dispatch cannot tell a Quantity element from a temporal one, so
+    ``aggregate R starting 0 'mg': R + X`` over ``{1 'g', 2 'g'}`` lowered to
+    ``dateAddQuantity`` and answered NULL. Only a STATICALLY Quantity-typed element is
+    declared here: a resource element must keep its alias untyped (resource property
+    navigation depends on that), and an unknown element type stays unknown.
+    """
+    sources = getattr(query, "source", None) or []
+    if not isinstance(sources, list):
+        sources = [sources]
+    for source in sources:
+        if not isinstance(source, QuerySource) or getattr(source, "alias", None) != alias:
+            continue
+        static = translator._static_structural_type_name(
+            getattr(source, "expression", None)
+        )
+        if static == "Quantity":
+            return "Quantity"
+        if isinstance(static, str) and static.startswith("List<") and static.endswith(">"):
+            if static[len("List<") : -1] == "Quantity":
+                return "Quantity"
+        return None
+    return None
+
+
 def _push_where_into_derived_source(select_node) -> bool:
     """EXP2-008: push a translated query WHERE into a derived-table source.
 
@@ -7843,11 +7887,18 @@ class QueryMixin:
                     self.context.add_alias(
                         accum_name,
                         ast_expr=SQLQualifiedIdentifier(parts=["__fold", "__acc"]),
+                        # FHIR4-83: the accumulator's CQL type is its starting value's
+                        # type, so the body's arithmetic dispatch sees a Quantity
+                        # accumulator instead of guessing "temporal" from the peer.
+                        cql_type=_fold_start_cql_type(self.context, agg),
                     )
                     for _ms_alias, _cur_col in zip(_all_aliases, _cur_cols, strict=True):
                         self.context.add_alias(
                             _ms_alias,
                             ast_expr=SQLQualifiedIdentifier(parts=["__fold", _cur_col]),
+                            # FHIR4-83: a statically Quantity-typed element is a
+                            # Quantity operand in the body's arithmetic.
+                            cql_type=_fold_element_cql_type(self, node, _ms_alias),
                         )
                     for _let_alias, _cur_col in zip(_ms_let_names, _let_cols, strict=True):
                         self.context.add_alias(
@@ -8003,12 +8054,18 @@ class QueryMixin:
                         self.context.add_alias(
                             accum_name,
                             ast_expr=SQLQualifiedIdentifier(parts=["__fold", "__acc"]),
+                            # FHIR4-83: the accumulator takes its starting value's CQL
+                            # type (see the multi-source fold above).
+                            cql_type=_fold_start_cql_type(self.context, agg),
                         )
                         # The element alias (and every let) is a working-table column for
                         # the current step (a plain column reference).
                         self.context.add_alias(
                             alias,
                             ast_expr=SQLQualifiedIdentifier(parts=["__fold", _ss_cols[0]]),
+                            # FHIR4-83: a statically Quantity-typed element is a
+                            # Quantity operand in the body's arithmetic.
+                            cql_type=_fold_element_cql_type(self, node, alias),
                         )
                         for _let_alias, _col in zip(_ss_let_names, _ss_cols[1:], strict=True):
                             self.context.add_alias(
