@@ -19,7 +19,7 @@ from .types import (
     SQLBinaryOp, SQLUnaryOp, SQLCase, SQLList, SQLArray, SQLLambda,
     SQLLambda2, SQLStructFieldAccess, SQLInterval, SQLCast, SQLExtract,
     SQLUnion, SQLIntersect, SQLExcept, SQLSubquery, SQLRaw, SQLExists,
-    SQLRecursiveCTEFold, SQLWindowFunction, SQLEvidenceItem, SQLAuditStruct,
+    SQLWindowFunction, SQLEvidenceItem, SQLAuditStruct,
     CTEDefinition,
 )
 from .column_registry import ColumnRegistry, ColumnInfo
@@ -856,11 +856,6 @@ def _walk_for_from_clauses(node, visitor):
     elif isinstance(node, SQLExists):
         visitor(node.subquery)
 
-    elif isinstance(node, SQLRecursiveCTEFold):
-        visitor(node.source_expr)
-        visitor(node.anchor)
-        visitor(node.body)
-
     elif isinstance(node, SQLWindowFunction):
         for arg in node.function_args:
             visitor(arg)
@@ -1554,16 +1549,6 @@ def _recurse_ast(
     elif isinstance(ast, SQLExists):
         return SQLExists(
             subquery=_optimize_fhirpath_calls(ast.subquery, registry, alias_to_cte)
-        )
-
-    elif isinstance(ast, SQLRecursiveCTEFold):
-        return SQLRecursiveCTEFold(
-            source_expr=_optimize_fhirpath_calls(ast.source_expr, registry, alias_to_cte),
-            source_alias=ast.source_alias,
-            anchor=_optimize_fhirpath_calls(ast.anchor, registry, alias_to_cte),
-            body=_optimize_fhirpath_calls(ast.body, registry, alias_to_cte),
-            distinct=ast.distinct,
-            accum_alias=ast.accum_alias,
         )
 
     elif isinstance(ast, SQLWindowFunction):

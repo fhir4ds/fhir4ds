@@ -922,6 +922,7 @@ from ...translator.expressions._utils import (
     BINARY_OPERATOR_MAP,
     UNARY_OPERATOR_MAP,
     _coerce_query_rows_to_list,
+    _fold_start_is_typed_list,
     _is_fhir_r4_type_name,
     _is_list_returning_sql,
     _contains_sql_subquery,
@@ -3108,7 +3109,13 @@ class OperatorsMixin:
         }:
             def _is_query_list_source(node: object) -> bool:
                 source = self._definition_ast_for_identifier(node) or node
-                return isinstance(source, Query) and self._is_list_typed_ast(source)
+                if not isinstance(source, Query) or not self._is_list_typed_ast(source):
+                    return False
+                # A list-accumulator aggregate is already ONE list value per patient. Its
+                # single row must not be coerced rows-to-list again, or every membership test
+                # sees a one-element list of the whole list (FHIR4-73).
+                aggregate = getattr(source, "aggregate", None)
+                return aggregate is None or not _fold_start_is_typed_list(aggregate)
 
             if _is_query_list_source(expr.left):
                 left = _coerce_query_rows_to_list(left)
