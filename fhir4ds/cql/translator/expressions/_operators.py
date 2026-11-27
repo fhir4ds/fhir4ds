@@ -1764,6 +1764,7 @@ class OperatorsMixin:
                 "isfalse": "Boolean",
                 "alltrue": "Boolean",
                 "anytrue": "Boolean",
+                "empty": "Boolean",
                 "allfalse": "Boolean",
                 "anyfalse": "Boolean",
                 "tostring": "String",
@@ -1861,7 +1862,10 @@ class OperatorsMixin:
                 return "Any"
         if isinstance(operand, UnaryExpression):
             op = operand.operator.lower() if isinstance(operand.operator, str) else operand.operator
-            if op in {"not", "is null", "is not null", "is true", "is false", "exists"}:
+            if op in {
+                "not", "is null", "is not null", "is true", "is false", "exists",
+                "is empty", "is not empty",
+            }:
                 return "Boolean"
             # CQL-04 SKEPTIC QA-001: unary +/-/predecessor of/successor of
             # preserve the operand's static type. Mirror inference.py:1378-1379
@@ -11183,6 +11187,14 @@ class OperatorsMixin:
         # `_translate_function_call`); apply the same inlining here so that
         # `MyVal is true` (where `define MyVal: true`) emits `IsTrue(TRUE)`
         # rather than treating the alias as a resource retrieve.
+        if operator in ("is empty", "is not empty"):
+            # CQL 1.5 §Empty, infix spelling.
+            operand_node = self._static_conversion_source_node(expr.operand)
+            return self._translate_empty_source(
+                operand_node if operand_node is not None else expr.operand,
+                negated=(operator == "is not empty"),
+            )
+
         if operator in {
             "is null", "is not null",
             "is true", "is false",

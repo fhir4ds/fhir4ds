@@ -465,6 +465,8 @@ class TypeMapBuilder:
 
         if func_name in ("count", "indexof"):
             return _shared_simple("Integer")
+        if func_name == "empty":
+            return _shared_simple("Boolean")
 
         if func_name in _TO_FUNCTION_TYPES:
             return _shared_simple(_TO_FUNCTION_TYPES[func_name])
@@ -1234,6 +1236,13 @@ def infer_cql_type_compat(context: Any, ast_node: Any) -> str:
     if isinstance(ast_node, ExistsExpression):
         return "Boolean"
 
+    # CQL 1.5 §Empty returns Boolean (`empty(X)`, `X.empty()`, `X is [not] empty`)
+    from ..parser.ast_nodes import MethodInvocation as _MethodInvocation
+    if isinstance(ast_node, (FunctionRef, _MethodInvocation)):
+        _empty_name = getattr(ast_node, "name", None) or getattr(ast_node, "method", None)
+        if str(_empty_name or "").lower() == "empty":
+            return "Boolean"
+
     if isinstance(ast_node, DistinctExpression):
         return infer_cql_type_compat(context, ast_node.source)
 
@@ -1501,7 +1510,7 @@ def infer_cql_type_compat(context: Any, ast_node: Any) -> str:
     # Unary NOT returns Boolean; "singleton from" extracts element type
     if isinstance(ast_node, UnaryExpression):
         op = getattr(ast_node, 'operator', '').lower()
-        if op in ('not', 'is null', 'is not null'):
+        if op in ('not', 'is null', 'is not null', 'is empty', 'is not empty'):
             return "Boolean"
         if op in ('+', '-', 'predecessor of', 'successor of'):
             return infer_cql_type_compat(context, ast_node.operand)

@@ -1712,12 +1712,26 @@ class CQLParser:
                         left = UnaryExpression(operator="is not true", operand=left)
                     elif self.match_and_advance(TokenType.FALSE):
                         left = UnaryExpression(operator="is not false", operand=left)
+                    elif (
+                        self.current().type == TokenType.IDENTIFIER
+                        and self.current().value.lower() == "empty"
+                    ):
+                        # CQL 1.5 §Empty: `X is not empty`
+                        self.advance()
+                        left = UnaryExpression(operator="is not empty", operand=left)
                     else:
                         token = self.current()
                         raise ParseError(
-                            f"Expected 'null', 'true', or 'false' after 'is not', got {token.type.name} '{token.value}'",
+                            f"Expected 'null', 'true', 'false', or 'empty' after 'is not', got {token.type.name} '{token.value}'",
                             position=(token.line, token.column),
                         )
+                elif (
+                    self.current().type == TokenType.IDENTIFIER
+                    and self.current().value.lower() == "empty"
+                ):
+                    # CQL 1.5 §Empty: `X is empty` (not a type check)
+                    self.advance()
+                    left = UnaryExpression(operator="is empty", operand=left)
                 else:
                     # Type check
                     type_spec = self.parse_type_specifier()

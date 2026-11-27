@@ -2262,6 +2262,23 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             shape = self._infer_row_shape(definition.expression)
             cql_type = self._infer_cql_type(definition.expression)
 
+            # FHIR4-75: a define whose body is a list cast to a list type —
+            # `({} as List<String>)`, `(null as List<String>)` — IS a stored
+            # list; the cast only names the element type. The body alone
+            # inferred as Any, so the define was filed as a resource (value
+            # column `resource`): `exists(X)` answered TRUE and `Count(X)`
+            # answered 1 for an EMPTY list.
+            from .expressions._utils import _typed_list_cast_is_null, _typed_list_cast_type
+            _typed_list_element = _typed_list_cast_type(definition.expression)
+            if _typed_list_element is not None:
+                cql_type = f"List<{_typed_list_element}>"
+                _definition_stores_list_value = True
+                from ..translator.context import RowShape as _CastRowShape
+                shape = _CastRowShape.PATIENT_SCALAR
+                if _typed_list_cast_is_null(definition.expression):
+                    # Keep the stored null list-typed, like any other stored list.
+                    result = SQLCast(expression=SQLNull(), target_type="VARCHAR[]")
+
             # CQL-19 EXPLORER QA-001: an alias define (`define B: A`) whose
             # target is a stored-list define is itself a stored-list define —
             # its CTE value column holds the same whole element list. Without

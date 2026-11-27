@@ -253,6 +253,35 @@ def _is_list_valued_projection(expr) -> bool:
     return False
 
 
+def _typed_list_cast_type(ast_node: Any) -> Optional[str]:
+    """The element type of ``<expression> as List<T>``, else None.
+
+    A cast to a list type only names the element type: the value is the (possibly empty or null)
+    list the operand evaluates to. Used for define metadata (FHIR4-75: `({} as List<String>)`
+    inferred as Any and the define was filed as a resource).
+    """
+    from ...parser.ast_nodes import BinaryExpression, ListTypeSpecifier
+
+    if (
+        isinstance(ast_node, BinaryExpression)
+        and ast_node.operator == "as"
+        and isinstance(ast_node.right, ListTypeSpecifier)
+    ):
+        return getattr(ast_node.right.element_type, "name", None) or "Any"
+    return None
+
+
+def _typed_list_cast_is_null(ast_node: Any) -> bool:
+    """True for ``(null as List<T>)``."""
+    from ...parser.ast_nodes import Literal
+
+    return (
+        _typed_list_cast_type(ast_node) is not None
+        and isinstance(ast_node.left, Literal)
+        and ast_node.left.value is None
+    )
+
+
 def _fold_start_is_typed_list(agg: Any) -> bool:
     """True when an aggregate starts from a typed null or empty list.
 

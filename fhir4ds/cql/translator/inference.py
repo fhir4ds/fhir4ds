@@ -441,6 +441,19 @@ class InferenceMixin:
         from .expressions._utils import _is_list_returning_sql
         return _is_list_returning_sql(result)
 
+    @staticmethod
+    def _is_empty_test(ast_node: Any) -> bool:
+        """True for the three spellings of the CQL 1.5 §Empty operator."""
+        from ..parser.ast_nodes import FunctionRef, MethodInvocation, UnaryExpression
+
+        if isinstance(ast_node, UnaryExpression):
+            return str(ast_node.operator).lower() in ("is empty", "is not empty")
+        if isinstance(ast_node, FunctionRef):
+            return str(ast_node.name or "").lower() == "empty"
+        return isinstance(ast_node, MethodInvocation) and str(
+            ast_node.method or ""
+        ).lower() == "empty"
+
     def _infer_row_shape(self, ast_node: Any, _visited: set | None = None) -> "RowShape":
         """
         Infer the row shape of an expression from its AST.
@@ -490,6 +503,12 @@ class InferenceMixin:
 
         # Existence check produces scalar boolean
         if isinstance(ast_node, ExistsExpression):
+            return RowShape.PATIENT_SCALAR
+
+        # CQL 1.5 §Empty (`empty(X)`, `X.empty()`, `X is [not] empty`) is a
+        # per-patient Boolean whatever its source: a method call over a
+        # multi-row source must not inherit the source's row shape.
+        if self._is_empty_test(ast_node):
             return RowShape.PATIENT_SCALAR
 
         if isinstance(ast_node, DistinctExpression):
