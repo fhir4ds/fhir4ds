@@ -898,7 +898,8 @@ def _near_miss_entry(records_by_rid: dict[str, list[DedupRecord]],
     return entry
 
 
-def _cross_bucket_near_misses(records: list[DedupRecord]) -> list[dict]:
+def _cross_bucket_near_misses(records: list[DedupRecord],
+                              limit: Optional[int] = None) -> list[dict]:
     """Same-patient, same-type record pairs sharing a tier-2 text whose
     concept keys (authored codings + confident resolutions) are
     disjoint/empty but which landed in DIFFERENT Stage-1 buckets
@@ -912,6 +913,14 @@ def _cross_bucket_near_misses(records: list[DedupRecord]) -> list[dict]:
             by_text.setdefault(
                 (record.patient_ref or "", record.rtype, text),
                 []).append(record)
+    # FHIR4-55: the pair loop below is quadratic in the size of a text group
+    # and used to rebuild `_sort_key(record)` for BOTH sides of every pair —
+    # two `_partition_date()` parses per pair, which dominated the profile
+    # (one step was ~70% of a 3,225-record run). The key depends only on the
+    # record, so compute it once per record. Keyed by id() rather than rid:
+    # a rid is unique per TYPE, and one record object per (rid, type) is what
+    # by_text already holds.
+    sort_keys: dict[int, tuple] = {}
     records_by_rid = _records_by_rid_multimap(records)
     # QA-D15E-001 (v0.0.26 D15 EXPLORER): dedup the pair per resource
     # TYPE. FHIR ids are unique per type only, so keying on the bare rid
@@ -920,13 +929,26 @@ def _cross_bucket_near_misses(records: list[DedupRecord]) -> list[dict]:
     # already fixes the rtype; record it in the seen key.
     seen: set[tuple[str, str, str]] = set()
     entries: list[dict] = []
+    # FHIR4-55: a large shared-text group yields one curation entry per PAIR
+    # (400 records in one group -> ~78k entries), so the sweep is quadratic in
+    # TIME and in OUTPUT. `limit` bounds both deterministically: iteration is
+    # over `sorted(by_text)` with groups sorted by rid, so truncation keeps the
+    # same PREFIX a full run would produce.
     for key in sorted(by_text):
+        if limit is not None and len(entries) >= limit:
+            break
         group = sorted(by_text[key], key=lambda r: r.rid)
         if len(group) < 2:
             continue
         for i, left in enumerate(group):
+            left_key = sort_keys.get(id(left))
+            if left_key is None:
+                left_key = sort_keys[id(left)] = _sort_key(left)
             for right in group[i + 1:]:
-                if _sort_key(left) == _sort_key(right):
+                right_key = sort_keys.get(id(right))
+                if right_key is None:
+                    right_key = sort_keys[id(right)] = _sort_key(right)
+                if left_key == right_key:
                     continue  # same bucket — handled by the union path
                 if left.concept_keys and right.concept_keys \
                         and not left.concept_keys.isdisjoint(
@@ -944,6 +966,8 @@ def _cross_bucket_near_misses(records: list[DedupRecord]) -> list[dict]:
                 entries.append(_near_miss_entry(
                     records_by_rid, edge, "cross_bucket", None,
                     rtype=key[1]))
+                if limit is not None and len(entries) >= limit:
+                    break
     return entries
 
 
@@ -1048,7 +1072,9 @@ def _attach_match_keys(records: list[DedupRecord], index,
 
 def dedup_pass(resources: list[dict], *, default_tz: str = DEFAULT_TZ,
                code_fallback: str = "on", concept_index=None,
-               medication_resolver=None
+               medication_resolver=None,
+               cross_bucket_near_misses: bool = True,
+               cross_bucket_near_miss_limit: Optional[int] = None
                ) -> DedupResult:
     """Full pipeline: normalize → partition → escalate.
 
@@ -1130,8 +1156,17 @@ def dedup_pass(resources: list[dict], *, default_tz: str = DEFAULT_TZ,
         near_misses.append(_near_miss_entry(
             records_by_rid, edge, "mode_suppressed", edge["bucket"],
             rtype=edge["bucket"][1]))
-    if mode in ("on", "audit_only"):
-        near_misses.extend(_cross_bucket_near_misses(records))
+    # FHIR4-55: the cross-bucket near-miss sweep is the quadratic stage
+    # (~70% of a large run) and it only feeds the CURATION QUEUE — it cannot
+    # move a merge decision. Callers that only need clusters can skip it.
+    truncated_cross_bucket = False
+    if mode in ("on", "audit_only") and cross_bucket_near_misses:
+        _cross_entries = _cross_bucket_near_misses(
+            records, limit=cross_bucket_near_miss_limit)
+        if (cross_bucket_near_miss_limit is not None
+                and len(_cross_entries) >= cross_bucket_near_miss_limit):
+            truncated_cross_bucket = True
+        near_misses.extend(_cross_entries)
 
     # Tier-3 queue: unmatched = the never-canonical population (empty
     # canonical code key), regardless of tier-2 eligibility. A medication
@@ -1207,6 +1242,7 @@ def dedup_pass(resources: list[dict], *, default_tz: str = DEFAULT_TZ,
                 len(r.resolved_concepts) for r in records),
             "curation_unmatched": len(unmatched),
             "curation_near_miss": len(near_misses),
+            "curation_near_miss_truncated": truncated_cross_bucket,
             # AMUX-150 chunk A stats
             "reference_resolved_records": sum(
                 1 for r in records if r.reference_resolved_keys),

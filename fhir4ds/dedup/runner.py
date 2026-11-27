@@ -30,7 +30,18 @@ from .survivorship import (
     survivor_rule_tuple,
 )
 
-__all__ = ["DedupRunResult", "run_dedup"]
+__all__ = ["DedupCancelled", "DedupRunResult", "run_dedup"]
+
+
+class DedupCancelled(RuntimeError):
+    """A deduplication run stopped because ``should_cancel()`` returned True.
+
+    FHIR4-55: a caller that runs dedup in the background (the browser app runs
+    it behind a request) needs to be able to stop it. Raising a TYPED error —
+    rather than returning a partial result — keeps a cancelled run from ever
+    being mistaken for a complete one: the audit rows written so far stay, and
+    nothing after the cancellation point is written.
+    """
 
 
 @dataclass
@@ -99,6 +110,10 @@ def run_dedup(
     medication_resolver=None,
     output_dir: Optional[str] = None,
     dedup_proposer=None,
+    cross_bucket_near_misses: bool = True,
+    cross_bucket_near_miss_limit: Optional[int] = None,
+    progress=None,
+    should_cancel=None,
 ) -> DedupRunResult:
     """Run the full temporal dedup pass over ``resources``.
 
@@ -120,6 +135,23 @@ def run_dedup(
       :class:`~fhir4ds.dedup.curation.DedupCodeProposer` (default-off);
       may only APPEND proposal entries to the queue — it can never
       affect merge decisions.
+    - ``cross_bucket_near_misses`` (FHIR4-55): the cross-bucket sweep is the
+      quadratic stage and feeds ONLY the curation queue (it cannot change a
+      merge decision). ``False`` skips it; clusters and survivors are
+      identical either way.
+    - ``cross_bucket_near_miss_limit`` (FHIR4-55): cap the sweep's OUTPUT.
+      A shared-text group produces one curation entry per PAIR (400 records in
+      one group -> ~78k entries), so both time and queue size are quadratic.
+      The cap is deterministic: iteration is over sorted keys and rid-sorted
+      groups, so a truncated run emits the same PREFIX a full run would, and
+      ``stats["curation_near_miss_truncated"]`` says it was cut.
+    - ``progress`` (FHIR4-55): optional ``callable(dict)`` invoked at each
+      stage boundary with ``{"stage": str, "done": int, "total": int}``, so
+      a background caller can render a bar. Never raises into the pipeline.
+    - ``should_cancel`` (FHIR4-55): optional ``callable() -> bool`` polled at
+      the same boundaries; when it returns True the run stops and raises
+      :class:`DedupCancelled` (a ``RuntimeError``) BEFORE writing further
+      audit rows, so a cancelled run never looks like a complete one.
 
     Returns survivors (sorted by survivor id), Linkage resources (sorted
     by dedup id), and stats. Idempotent: re-running on the same corpus
@@ -135,10 +167,28 @@ def run_dedup(
 
         require_open_connection(conn, "run dedup")
 
+    def _report(stage: str, done: int, total: int) -> None:
+        if progress is not None:
+            try:
+                progress({"stage": stage, "done": done, "total": total})
+            except Exception:  # noqa: BLE001 - a progress sink must not
+                # abort a deduplication run; that would make observability a
+                # correctness risk.
+                pass
+        if should_cancel is not None and should_cancel():
+            raise DedupCancelled(
+                f"deduplication cancelled during {stage!r} "
+                f"({done}/{total}) — no further audit rows were written")
+
+    _report("normalize+cluster", 0, len(resources))
     result = dedup_pass(resources, default_tz=default_tz,
                         code_fallback=code_fallback,
                         concept_index=concept_index,
-                        medication_resolver=medication_resolver)
+                        medication_resolver=medication_resolver,
+                        cross_bucket_near_misses=cross_bucket_near_misses,
+                        cross_bucket_near_miss_limit=(
+                            cross_bucket_near_miss_limit))
+    _report("clustered", len(result.clusters), len(result.clusters))
     survivors: list[dict] = []
     linkage_resources: list[dict] = []
     try:
@@ -200,6 +250,7 @@ def run_dedup(
         if own_connection:
             conn.close()
 
+    _report("linkage+audit", len(survivors), len(survivors))
     queue_path = None
     if output_dir is not None:
         from .curation import CURATION_QUEUE_FILENAME, write_curation_queue
