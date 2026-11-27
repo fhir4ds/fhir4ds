@@ -573,6 +573,47 @@ def _patient_correlated_where(existing_where, row_alias: str, outer_pid: str):
     return SQLBinaryOp(operator="AND", left=existing_where, right=correlation)
 
 
+def _fold_sql(
+    *, start_sql: str, items_sql: str, body_sql: str, current: list[tuple[str, str]]
+) -> str:
+    """A CQL ``aggregate`` fold as a recursive CTE whose recursive term reads ONLY the working
+    table (WP-11).
+
+    The working table carries the accumulator (``__acc``), the step number (``__rn``), the whole
+    element list (``__items``) and the element the row's step consumes: one ``(column, template)``
+    per source alias in ``current``, where the template names its element with ``{seed}`` (the
+    list) and ``{step}`` (its 1-based position). Each is a plain column of the working table, so
+    the body's arithmetic keeps its overflow guard.
+    The recursive term is a filter and a projection over ``__fold``: no join with a second table,
+    no ``unnest`` and no window inside the recursion.
+
+    The first shape joined the working table to a second table built by an ``unnest`` of the
+    (correlated) source and a ``ROW_NUMBER()`` window, and nothing guaranteed that join's build
+    side was complete when the recursion read it. On duckdb-python 1.5.6 the same SQL then
+    answered NULL (the anchor-only row survives when the element list comes back empty) or a
+    truncated list in about half of its executions at ``threads=4`` and in 3-9% at the default
+    thread count, and was always right at ``threads=1``.
+    """
+    return (
+        f"(WITH RECURSIVE __fold(__acc, __rn, __items, {', '.join(c for c, _ in current)}) AS ("
+        f"SELECT __seed0.__acc, __seed0.__rn, __seed0.__items, "
+        f"{', '.join(tpl.format(seed='__seed0.__items', step='1') for _, tpl in current)} "
+        f"FROM (SELECT {start_sql} AS __acc, CAST(0 AS BIGINT) AS __rn, {items_sql} AS __items) "
+        f"AS __seed0 "
+        f"UNION ALL "
+        f"SELECT {body_sql}, __fold.__rn + 1, __fold.__items, "
+        f"{', '.join(tpl.format(seed='__fold.__items', step='__fold.__rn + 2') for _, tpl in current)} "
+        f"FROM __fold WHERE __fold.__rn < len(__fold.__items)"
+        f") SELECT __acc FROM __fold ORDER BY __rn DESC LIMIT 1)"
+    )
+
+
+#: Column template of the element a single-source fold consumes in its current step.
+_FOLD_CUR_SINGLE = "list_extract({seed}, {step})"
+#: Column templates of the elements a multi-source fold consumes (one struct field per alias).
+_FOLD_CUR_MULTI = "struct_extract(list_extract({seed}, {step}), '{alias}')"
+
+
 def _push_where_into_derived_source(select_node) -> bool:
     """EXP2-008: push a translated query WHERE into a derived-table source.
 
@@ -7675,17 +7716,20 @@ class QueryMixin:
                 _distinct_kw = "DISTINCT " if agg.distinct else ""
                 _all_aliases = [a for a, _ in _multi_source_info]
 
-                # Translate the aggregate body with proper alias mappings
+                # Translate the aggregate body with proper alias mappings. Each
+                # source alias is the working table's column that holds the
+                # element of the current step (a plain column reference).
+                _cur_cols = [f"__c{idx}" for idx in range(len(_multi_source_info))]
                 self.context.push_scope()
                 try:
                     self.context.add_alias(
                         accum_name,
                         ast_expr=SQLQualifiedIdentifier(parts=["__fold", "__acc"]),
                     )
-                    for _ms_alias, _ in _multi_source_info:
+                    for _ms_alias, _cur_col in zip(_all_aliases, _cur_cols, strict=True):
                         self.context.add_alias(
                             _ms_alias,
-                            ast_expr=SQLQualifiedIdentifier(parts=["__xjn", _ms_alias]),
+                            ast_expr=SQLQualifiedIdentifier(parts=["__fold", _cur_col]),
                         )
                     agg_body = self.translate(agg.expression, usage=ExprUsage.SCALAR)
                 finally:
@@ -7694,22 +7738,31 @@ class QueryMixin:
                 _body_sql = agg_body.to_sql()
                 _start_sql = starting_sql.to_sql() if starting_sql else "NULL"
 
-                # Recursive CTE for multi-source fold: no SQLRecursiveCTE AST node
-                # exists yet, so we build the SQL string. The alias bindings above
-                # are proper AST nodes (SQLQualifiedIdentifier), ensuring the body
-                # expression is translated through the AST pipeline.
+                # The cross join of the sources becomes ONE list of structs in the
+                # working table; the recursive term reads nothing else (WP-11).
+                _items_fields = ", ".join(f"{a} := __d.{a}" for a in _all_aliases)
+                _items_sql = (
+                    f"(SELECT list(struct_pack({_items_fields})) FROM "
+                    f"(SELECT {_distinct_kw}* FROM (SELECT * FROM {_xj_from}) __src) __d)"
+                )
+                # Recursive CTE for the multi-source fold, built as an SQL string.
+                # The alias bindings above are AST nodes (SQLQualifiedIdentifier),
+                # so the body expression is translated through the AST pipeline.
                 result = SQLRaw(
-                    f"(WITH RECURSIVE __xj AS ("
-                    f"SELECT {_distinct_kw}{', '.join(_all_aliases)} FROM "
-                    f"(SELECT * FROM {_xj_from}) __src"
-                    f"), __xjn AS ("
-                    f"SELECT ROW_NUMBER() OVER () AS __rn, * FROM __xj"
-                    f"), __fold(__acc, __rn) AS ("
-                    f"SELECT CAST({_start_sql} AS BIGINT), CAST(0 AS BIGINT) "
-                    f"UNION ALL "
-                    f"SELECT {_body_sql}, __xjn.__rn "
-                    f"FROM __fold JOIN __xjn ON __xjn.__rn = __fold.__rn + 1"
-                    f") SELECT __acc FROM __fold ORDER BY __rn DESC LIMIT 1)"
+                    _fold_sql(
+                        start_sql=f"CAST({_start_sql} AS BIGINT)",
+                        items_sql=_items_sql,
+                        body_sql=_body_sql,
+                        current=[
+                            (
+                                cur_col,
+                                _FOLD_CUR_MULTI.format(
+                                    alias=a, seed="{seed}", step="{step}"
+                                ),
+                            )
+                            for a, cur_col in zip(_all_aliases, _cur_cols, strict=True)
+                        ],
+                    )
                 )
             else:
                 # ── Single-source aggregate ───────────────────────────────
@@ -7789,9 +7842,11 @@ class QueryMixin:
                             accum_name,
                             ast_expr=SQLQualifiedIdentifier(parts=["__fold", "__acc"]),
                         )
+                        # The element alias is the working table's column for the
+                        # element of the current step (a plain column reference).
                         self.context.add_alias(
                             alias,
-                            ast_expr=SQLQualifiedIdentifier(parts=["__xjn", alias]),
+                            ast_expr=SQLQualifiedIdentifier(parts=["__fold", "__cur"]),
                         )
                         agg_body = self.translate(agg.expression, usage=ExprUsage.SCALAR)
                     finally:
@@ -7803,18 +7858,20 @@ class QueryMixin:
                         if isinstance(agg.starting.left, _ASTLiteral)
                         else "CAST([] AS VARCHAR[])"
                     )
+                    # The element list becomes ONE column of the working table;
+                    # ``distinct`` keeps its place (the list is built from the
+                    # de-duplicated elements).
+                    _items_sql = (
+                        f"(SELECT list({alias}) FROM "
+                        f"(SELECT {_distinct_kw}{alias} FROM unnest({_arr_sql}) AS __t0({alias})) __d)"
+                    )
                     result = SQLRaw(
-                        f"(WITH RECURSIVE __xj AS ("
-                        f"SELECT {_distinct_kw}{alias} FROM "
-                        f"unnest({_arr_sql}) AS __t0({alias})"
-                        f"), __xjn AS ("
-                        f"SELECT ROW_NUMBER() OVER () AS __rn, * FROM __xj"
-                        f"), __fold(__acc, __rn) AS ("
-                        f"SELECT {_start_sql}, CAST(0 AS BIGINT) "
-                        f"UNION ALL "
-                        f"SELECT {_body_sql}, __xjn.__rn "
-                        f"FROM __fold JOIN __xjn ON __xjn.__rn = __fold.__rn + 1"
-                        f") SELECT __acc FROM __fold ORDER BY __rn DESC LIMIT 1)"
+                        _fold_sql(
+                            start_sql=_start_sql,
+                            items_sql=_items_sql,
+                            body_sql=_body_sql,
+                            current=[("__cur", _FOLD_CUR_SINGLE)],
+                        )
                     )
                     result.result_type = "List<Any>"
                 else:
