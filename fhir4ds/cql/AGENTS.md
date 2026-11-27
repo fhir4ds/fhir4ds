@@ -317,6 +317,34 @@
 
 ## Known Fragile Areas
 
+- **A fold's accumulator is typed by its starting value (FHIR4-76, 2026-11-27)**: the
+  anchor of a fold's working table is `CAST(<starting value> AS T)` with T from the
+  CQL type of the starting value (`expressions/_utils.py::_fold_accumulator_sql_type`:
+  Integer -> INTEGER, Long -> BIGINT, Decimal -> DECIMAL(38,8), String/Date/DateTime/
+  Time -> VARCHAR, Boolean -> BOOLEAN; an integral start whose body is statically Long
+  or Decimal is widened). Every step's result is cast back to T, so the first shape
+  (every multi-source start cast to BIGINT; a single-source accumulator carried
+  inside the ELEMENT list through `list_reduce`) truncated or rounded each step:
+  `starting 0.5` with `R + 1` answered 7, `starting 0` with `R + 0.5` answered 6,
+  Integer and Long overflow raised instead of answering null, and String, Boolean and
+  Date starts did not bind. Every fold WITH a starting value now uses the working
+  table (`_fold_sql`); only a fold without one stays on `list_reduce`, where a Decimal
+  body over Integer elements is still rounded per step (known limit). The element the
+  body reads is a plain column (`__fold.__cur`), which is what keeps `TRY(...)` and
+  numeric typing in the body. A Quantity starting value is not supported (the `+`
+  dispatch lowers it to `dateAddQuantity` and answers null). Tests:
+  `duckdb/tests/integration/test_fhir4_76_scalar_starting_value.py`.
+- **A retrieve that appears only inside a fold gets its CTE (FHIR4-82, 2026-11-27)**:
+  a fold body cannot carry a `RetrievePlaceholder` (the branches serialize
+  `to_sql()` eagerly), so Phase 1 of `retrieve_optimizer.py` moves the placeholder
+  into the FROM of a per-patient list subquery. That collection must ALSO walk
+  `context._fold_marker_placeholders`, and the fold placeholder swap
+  (`expressions/_query.py::_fold_marker_swap`) must copy EVERY dataclass node type —
+  the two walks are independent, so fixing one alone leaves
+  `Unresolved aggregate-fold retrieve placeholder(s) after Phase 2` (aggregate over a
+  retrieve, evol-it8) or a binder error on the placeholder (multi-source WHERE,
+  B17). Tests: `test_evol_it8_domain3_historian.py`, `test_parser.py::
+  TestExternalReviewB17AggregateWhereAndAuditDemotion`.
 - **An empty stored list is empty (FHIR4-75, 2026-11-26)**: a define whose value
   is a list stored in ONE row per patient (`DefinitionMeta.stores_list_value`:
   `{} as List<T>`, `null as List<T>`, a multi-valued property such as
