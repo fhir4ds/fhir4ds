@@ -186,13 +186,10 @@ def upsert_dedup_linkage(
     overwrite, keeping decision history in the audit table.
     """
     create_dedup_linkage_table(conn)
-    dedup_id = survivor_dedup_id([survivor] + list(alternates))
-    category = category or survivor.category
-    window_rule = window_rule or infer_window_rule([survivor] +
-                                                   list(alternates))
-    resource = build_linkage_resource(dedup_id, survivor,
-                                      sorted(alternates, key=lambda m: m.rid),
-                                      category, window_rule)
+    resource, params = build_linkage_row(survivor, alternates,
+                                         category=category,
+                                         window_rule=window_rule)
+    dedup_id = params[0]
     existing = conn.execute(
         "SELECT resource FROM dedup_linkage WHERE dedup_id = ?", [dedup_id]
     ).fetchone()
@@ -203,12 +200,66 @@ def upsert_dedup_linkage(
         action = "overwritten"
     else:
         action = "created"
-    conn.execute(
-        "INSERT OR REPLACE INTO dedup_linkage VALUES (?, ?, ?, ?)",
-        [dedup_id, json.dumps(resource, sort_keys=True), category,
-         1 + len(alternates)],
-    )
+    conn.execute(_LINKAGE_WRITE, params)
     return {"action": action, "dedup_id": dedup_id, "resource": resource}
+
+
+#: One statement for every Linkage row (FHIR4-55). Shared by the single
+#: upsert and the batched writer so the column order cannot drift.
+_LINKAGE_WRITE = "INSERT OR REPLACE INTO dedup_linkage VALUES (?, ?, ?, ?)"
+
+
+def build_linkage_row(survivor: DedupRecord, alternates: list[DedupRecord], *,
+                      category: Optional[str] = None,
+                      window_rule: Optional[str] = None
+                      ) -> tuple[dict[str, Any], list]:
+    """``(linkage_resource, bound_parameters)`` for one cluster (FHIR4-55).
+
+    Pure: no I/O. Lets a caller that writes many clusters build every row
+    first and then issue ONE ``executemany``, instead of a SELECT + INSERT per
+    cluster (fhir4px measured 900-6,280 small statements per run).
+    """
+    dedup_id = survivor_dedup_id([survivor] + list(alternates))
+    category = category or survivor.category
+    window_rule = window_rule or infer_window_rule([survivor] +
+                                                   list(alternates))
+    resource = build_linkage_resource(dedup_id, survivor,
+                                      sorted(alternates, key=lambda m: m.rid),
+                                      category, window_rule)
+    return resource, [dedup_id, json.dumps(resource, sort_keys=True),
+                      category, 1 + len(alternates)]
+
+
+def prefetch_linkage(conn: duckdb.DuckDBPyConnection,
+                     dedup_ids: list[str],
+                     chunk: int = 500) -> dict[str, str]:
+    """``{dedup_id: stored_resource_json}`` in as few statements as possible.
+
+    Replaces the per-cluster ``SELECT resource FROM dedup_linkage WHERE
+    dedup_id = ?``. Chunked so a long corpus does not build one enormous IN
+    list. Missing ids are simply absent from the result.
+    """
+    create_dedup_linkage_table(conn)
+    out: dict[str, str] = {}
+    ids = list(dedup_ids)
+    for start in range(0, len(ids), max(1, chunk)):
+        part = ids[start:start + chunk]
+        placeholders = ", ".join("?" for _ in part)
+        rows = conn.execute(
+            f"SELECT dedup_id, resource FROM dedup_linkage "
+            f"WHERE dedup_id IN ({placeholders})", part).fetchall()
+        for dedup_id, resource in rows:
+            out[dedup_id] = resource
+    return out
+
+
+def write_linkage_many(conn: duckdb.DuckDBPyConnection,
+                       rows: list[list]) -> None:
+    """Write many Linkage rows in one statement (FHIR4-55)."""
+    if not rows:
+        return
+    create_dedup_linkage_table(conn)
+    conn.executemany(_LINKAGE_WRITE, rows)
 
 
 def delete_linkage(conn: duckdb.DuckDBPyConnection,

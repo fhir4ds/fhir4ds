@@ -17,10 +17,17 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
+import json
+
 import duckdb
 
-from .audit import record_dedup_audit
-from .linkage import infer_window_rule, upsert_dedup_linkage
+from .audit import audit_params, record_dedup_audit_many
+from .linkage import (
+    build_linkage_row,
+    infer_window_rule,
+    prefetch_linkage,
+    write_linkage_many,
+)
 from .pipeline import DEFAULT_TZ, DedupRecord, dedup_pass
 from .survivorship import (
     merge_resources,
@@ -191,27 +198,41 @@ def run_dedup(
     _report("clustered", len(result.clusters), len(result.clusters))
     survivors: list[dict] = []
     linkage_resources: list[dict] = []
+    # FHIR4-55: this loop used to issue ~4 small statements PER CLUSTER (DDL,
+    # SELECT-exists, INSERT, audit INSERT). fhir4px measured 900-6,280 such
+    # statements per run at ~0.6 ms each. Everything below is now derived
+    # first and written in two batched statements; the per-cluster decisions
+    # (created / noop / overwritten) and their ORDER are unchanged.
+    plans: list[tuple] = []
+    for cluster, edges in zip(result.clusters, result.cluster_edges):
+        survivor = select_survivor(cluster)
+        alternates = [m for m in cluster if m.rid != survivor.rid]
+        rule = infer_window_rule(cluster)
+        non_canonical = [e for e in edges if e.get("tier") != "canonical"]
+        if non_canonical:
+            lead = non_canonical[0]
+            rule = (f"{rule}|{lead['tier'].upper()}:"
+                    f"{lead['subtype']}")
+        resource, params = build_linkage_row(
+            survivor, alternates, category=survivor.category,
+            window_rule=rule)
+        plans.append((cluster, edges, survivor,
+                      merge_resources(cluster, survivor), resource, params,
+                      rule))
+    existing = prefetch_linkage(conn, [plan[5][0] for plan in plans])
+    audit_rows: list[list] = []
     try:
-        for cluster, edges in zip(result.clusters, result.cluster_edges):
-            survivor = select_survivor(cluster)
-            merged = merge_resources(cluster, survivor)
-            dedup_id = survivor_dedup_id(cluster)
-            alternates = [m for m in cluster if m.rid != survivor.rid]
-            rule = infer_window_rule(cluster)
-            non_canonical = [e for e in edges if e.get("tier") != "canonical"]
-            if non_canonical:
-                lead = non_canonical[0]
-                rule = (f"{rule}|{lead['tier'].upper()}:"
-                        f"{lead['subtype']}")
-            upsert = upsert_dedup_linkage(
-                conn, survivor, alternates,
-                category=survivor.category,
-                window_rule=rule,
-            )
-            record_dedup_audit(
-                conn,
+        writes: list[list] = []
+        for cluster, edges, survivor, merged, resource, params, rule in plans:
+            prior = existing.get(params[0])
+            if prior is None:
+                writes.append(params)          # created
+            elif json.loads(prior) != resource:
+                writes.append(params)          # overwritten (corpus drift)
+            # identical stored resource -> noop: no write, same as before
+            audit_rows.append(audit_params(
                 run_id,
-                dedup_id,
+                params[0],
                 survivor.category,
                 len(cluster),
                 survivor.rid,
@@ -224,14 +245,13 @@ def run_dedup(
                 # embeds the authored timestamp; a doc/behavior mismatch.
                 survivor_rule_tuple(survivor),
                 _cluster_evidence(cluster, survivor, edges),
-            )
+            ))
             survivors.append(merged)
-            linkage_resources.append(upsert["resource"])
+            linkage_resources.append(resource)
+        write_linkage_many(conn, writes)
         if include_singletons_in_audit:
-            from .audit import record_dedup_audit as _record
             for record in result.emitted:
-                _record(
-                    conn,
+                audit_rows.append(audit_params(
                     run_id,
                     None,
                     record.category,
@@ -245,7 +265,8 @@ def run_dedup(
                                        if record.nd is not None else None),
                          "rankingKey": None}],
                      "survivor": f"{record.rtype}/{record.rid}"},
-                )
+                ))
+        record_dedup_audit_many(conn, audit_rows)
     finally:
         if own_connection:
             conn.close()

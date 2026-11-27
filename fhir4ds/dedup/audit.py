@@ -74,24 +74,57 @@ def record_dedup_audit(
     (:func:`survivorship.survivor_rule_tuple`); ``cluster_evidence`` is the
     per-member evidence (references + signatures + ranking keys).
     """
+    params = audit_params(run_id, dedup_id, category, member_count,
+                          survivor_rid, rule, rule_data, cluster_evidence)
+    create_dedup_audit_table(conn)
+    conn.execute(_AUDIT_INSERT, params)
+
+
+#: One INSERT for every audit row; ``record_dedup_audit`` and
+#: ``record_dedup_audit_many`` share it so the column order can never drift.
+_AUDIT_INSERT = (
+    "INSERT INTO dedup_audit (run_id, dedup_id, category, "
+    "member_count, survivor_rid, rule, rule_json, cluster_evidence) "
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+)
+
+
+def audit_params(run_id: str, dedup_id: Optional[str], category: str,
+                 member_count: int, survivor_rid: str, rule: str,
+                 rule_data: list, cluster_evidence: dict) -> list:
+    """The bound-parameter list for one audit row (FHIR4-55).
+
+    Split out so a caller that writes MANY rows can collect the parameters and
+    issue one ``executemany`` instead of one round trip per cluster — fhir4px
+    measured 900-6,280 small statements per run, and the audit INSERT was one
+    of them.
+    """
     if not isinstance(run_id, str) or not run_id:
         raise ValueError("run_id must be a non-empty string")
+    return [
+        run_id,
+        dedup_id,
+        category,
+        member_count,
+        survivor_rid,
+        rule,
+        json.dumps(rule_data, sort_keys=True),
+        json.dumps(cluster_evidence, sort_keys=True),
+    ]
+
+
+def record_dedup_audit_many(conn: duckdb.DuckDBPyConnection,
+                            rows: list[list]) -> None:
+    """Write many audit rows in ONE statement (FHIR4-55).
+
+    Order is irrelevant to the contract: ``load_dedup_audit`` orders by
+    ``(dedup_id, survivor_rid)``, so the batch cannot change what a reader
+    sees.
+    """
+    if not rows:
+        return
     create_dedup_audit_table(conn)
-    conn.execute(
-        "INSERT INTO dedup_audit (run_id, dedup_id, category, "
-        "member_count, survivor_rid, rule, rule_json, cluster_evidence) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        [
-            run_id,
-            dedup_id,
-            category,
-            member_count,
-            survivor_rid,
-            rule,
-            json.dumps(rule_data, sort_keys=True),
-            json.dumps(cluster_evidence, sort_keys=True),
-        ],
-    )
+    conn.executemany(_AUDIT_INSERT, rows)
 
 
 def load_dedup_audit(conn: duckdb.DuckDBPyConnection,
