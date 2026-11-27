@@ -106,6 +106,29 @@ from ...translator.fhirpath_builder import (
     FHIRPathBuilder,
 )
 
+
+def _stored_list_define_is_a_list(meta: Any, body_ast: Any) -> bool:
+    """FHIR4-81: does a stored-list define hold a LIST for the indexer to index?
+
+    A stored-list define keeps its whole value in ONE CTE row per patient. For the indexer that
+    value is a list, and is indexed as one, when its element type is known (``List<String>``,
+    a list literal, a typed list cast) or when the define's body is not property navigation (a
+    query with a ``return`` clause, a list function).
+
+    Navigation is the exception and keeps the behavior it has always had: a define such as
+    ``define Fam: First([Patient]).name.family`` lowers to a one-element list around a value
+    the translator cannot type (``List<Any>``), and that spelling is indexed with the string
+    Indexer (the CQL-12 doctrine, pinned by ``test_cql_string_indexer_over_scalar_string_define``).
+    """
+    cql_type = str(getattr(meta, "cql_type", "") or "")
+    element_type = ""
+    if cql_type.startswith("List<") and cql_type.endswith(">"):
+        element_type = cql_type[5:-1].split(".")[-1]
+    if element_type and element_type != "Any":
+        return True
+    return body_ast is not None and not isinstance(body_ast, Property)
+
+
 class ListsMixin:
     """Mixin providing list operations, method invocations, and aggregation."""
     def _translate_interval(self, interval: Interval, boolean_context: bool = False) -> SQLExpression:
@@ -1243,39 +1266,7 @@ class ListsMixin:
         # ``L[0].status``) must index the per-patient element LIST; generic
         # identifier translation scalarizes the reference (LIMIT-1 row or a
         # multi-row scalar-subquery binder error).
-        if isinstance(expr.source, Identifier):
-            _rows_list = self._definition_resource_rows_list(expr.source.name)
-            if _rows_list is not None:
-                index = self.translate(expr.index, boolean_context=False)
-                adjusted_index = SQLCast(
-                    expression=SQLBinaryOp(
-                        operator="+",
-                        left=index,
-                        right=SQLLiteral(value=1),
-                    ),
-                    target_type="BIGINT",
-                )
-                return SQLFunctionCall(
-                    name="list_extract", args=[_rows_list, adjusted_index]
-                )
-        source = self.translate(expr.source, boolean_context=False)
         index = self.translate(expr.index, boolean_context=False)
-
-        # Stored-list defines hold the element(s) as a per-patient LIST in
-        # the CTE value column; scalar string indexing (CQL §17.6) unwraps
-        # element 1 so the Indexer macro receives a VARCHAR (array_extract:
-        # the list_extract alias — empty/absent lists yield NULL, so
-        # out-of-range stays null per the Indexer contract).
-        if isinstance(expr.source, Identifier):
-            _src_meta = self.context.definition_meta.get(expr.source.name)
-            if _src_meta is not None and getattr(_src_meta, "stores_list_value", False):
-                source = SQLFunctionCall(
-                    name="array_extract", args=[source, SQLLiteral(value=1)]
-                )
-
-        if self._is_string_index_source(expr.source, source):
-            return SQLFunctionCall(name="Indexer", args=[source, index])
-
         # DuckDB uses 1-based indexing, CQL uses 0-based
         adjusted_index = SQLCast(
             expression=SQLBinaryOp(
@@ -1285,6 +1276,42 @@ class ListsMixin:
             ),
             target_type="BIGINT",
         )
+        if isinstance(expr.source, Identifier):
+            _rows_list = self._definition_resource_rows_list(expr.source.name)
+            if _rows_list is not None:
+                return SQLFunctionCall(
+                    name="list_extract", args=[_rows_list, adjusted_index]
+                )
+        # FHIR4-81: every other source that is a LIST of rows — an element-rows define
+        # alias (`define Ids: ([Condition] C return C.id) X; Ids[0]`), an inline
+        # query with a return clause, a bare retrieve, a retrieve union — is
+        # indexed as the per-patient element list, the same materialization
+        # Tail/Take/Skip/Length use. The generic path below consumed such a
+        # define through its scalar lookup and indexed one kept row.
+        _full_list = self._list_operator_full_list_source(expr.source)
+        if _full_list is not None:
+            return SQLFunctionCall(name="LIST_EXTRACT", args=[_full_list, adjusted_index])
+        source = self.translate(expr.source, boolean_context=False)
+
+        # Stored-list defines hold the element(s) as a per-patient LIST in
+        # the CTE value column; scalar string indexing (CQL §17.6) unwraps
+        # element 1 so the Indexer macro receives a VARCHAR (array_extract:
+        # the list_extract alias — empty/absent lists yield NULL, so
+        # out-of-range stays null per the Indexer contract).
+        if isinstance(expr.source, Identifier):
+            _src_meta = self.context.definition_meta.get(expr.source.name)
+            if _src_meta is not None and getattr(_src_meta, "stores_list_value", False):
+                _body_of = getattr(self, "_definition_ast_for_identifier", None)
+                _src_body = _body_of(expr.source) if callable(_body_of) else None
+                if _stored_list_define_is_a_list(_src_meta, _src_body):
+                    # FHIR4-81: the value column holds the whole list — index it.
+                    return SQLFunctionCall(name="LIST_EXTRACT", args=[source, adjusted_index])
+                source = SQLFunctionCall(
+                    name="array_extract", args=[source, SQLLiteral(value=1)]
+                )
+
+        if self._is_string_index_source(expr.source, source):
+            return SQLFunctionCall(name="Indexer", args=[source, index])
 
         # When the source is a JSON string (from json_extract_string, json_extract,
         # fhirpath, or fhirpath_text), convert it to a DuckDB list before calling
