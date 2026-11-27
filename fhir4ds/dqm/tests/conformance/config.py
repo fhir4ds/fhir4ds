@@ -103,10 +103,12 @@ def get_suite_paths(suite: str = SUITE_QI_CORE_2025) -> dict:
     }
 
 
-# Measures that may fail and should be skipped
-SKIP_ON_FAILURE = {
-    "CMS139",   # Not in submodule
-}
+# Measures known to hang or to be absent from their suite: the CLI never runs them, even
+# without --skip-errors. A measure that IS in a suite must not be listed here — that silently
+# shrinks the gate (CMS139 sat here as "Not in submodule" while passing 29/29, so the US-Core
+# gate scored 73 of 74 measures) — and a measure that fails belongs in KNOWN_FAILURES with a
+# reason. Guarded by test_skip_on_failure_never_names_a_measure_the_suite_contains.
+SKIP_ON_FAILURE: set[str] = set()
 
 # Known failures with documented root causes (all external test-data issues).
 # These are tracked separately in the benchmark summary.

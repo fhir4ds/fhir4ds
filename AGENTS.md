@@ -6821,7 +6821,7 @@ The DQM suites are named for WHAT they are, not for the content-package year:
 | canonical | content package | gate result |
 |---|---|---|
 | `qi-core-2025` | ecqm-content-qicore-2025 | 47/47 |
-| `us-core-2025` | dqm-content-cms-2025 (CMS US Core) | 73/73 |
+| `us-core-2025` | dqm-content-cms-2025 (CMS US Core) | 74/74 |
 | `qi-core-2026` | dqm-content-qicore-2026 | not gated |
 
 Names carry the RELEASE YEAR because more content releases are expected — a bare
@@ -6839,9 +6839,20 @@ us-core-2025), so the
 master run is now:
 
     ViewDefinition 144 + FHIRPath 935 + CQL 1706 + DQM qi-core-2025 47
-    + DQM us-core-2025 73 + OMOP 38 = 2943/2943
+    + DQM us-core-2025 74 + OMOP 38 = 2944/2944
 
 `run_dqm.py` also takes `--output` if a different report path is needed.
+
+## A DQM gate must not skip a measure that exists (WP-12, 2026-11-26)
+
+`SKIP_ON_FAILURE` in `fhir4ds/dqm/tests/conformance/config.py` is for measures known to hang or
+to be absent; the CLI never runs them, even without `--skip-errors`. CMS139 sat in it as "Not in
+submodule" after the us-core fixture pin had moved past that: the measure WAS in the submodule
+and passed 29/29, so the US-Core gate scored 73 of its 74 measures and every "73/73" further up
+this file was one measure short. The entry is gone (the gate is 74/74), and
+`test_skip_on_failure_never_names_a_measure_the_suite_contains`
+(`fhir4ds/dqm/tests/unit/test_conformance_discovery.py`) fails when an entry names a measure its
+suite contains. A measure that fails belongs in `KNOWN_FAILURES` with a reason.
 
 ## The DQM gate must actually load the shipped extension (2026-11-12)
 
