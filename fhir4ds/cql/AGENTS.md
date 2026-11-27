@@ -336,8 +336,8 @@
   column rather than an inline `list_extract(...)`: the arithmetic overflow
   guard (`TRY(...)`, `_operators._contains_function_call`) and numeric type
   inference apply only to function-call-free operands.
-  `SQLRecursiveCTEFold` in `translator/types.py` still documents the old shape
-  but has no constructor call sites (a dead emitter).
+  `SQLRecursiveCTEFold` was deleted (FHIR4-74, 2026-11-26): it had no constructor call
+  sites and documented the old join shape — `_fold_sql` is the only fold emitter.
 
 - **A multi-source fold is a query with clauses, not a bare cross join
   (FHIR4-73, 2026-11-26)**: `from (…) P, (…) Q aggregate …` lowers through the
