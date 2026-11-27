@@ -8668,3 +8668,83 @@ the branch now does that (and restates the amount in the input unit, so
 `@T12:00:00 + 1500 milliseconds` is 'T12:00:01', not 'T12:00:00'). Pinned by
 `test_datetime_part1_parity.py::
 test_cql_datetime_part1_time_subprecision_quantity_truncation_parity`.
+
+## FHIR4-79 — reciprocal per-volume units: a null is a RESULT, not a warning
+
+`1 / microliter` is per-volume (`1/uL`); the value a measure can meet in real
+data is the exact UCUM code `1/uL`, the FHIR `unit` display promoted to a code
+by FHIRHelpers' `Coalesce(code, unit, '1')` (`1 / microliter`), and the JSON code
+the engine itself normalizes a CQL literal to (`1/microliter`). All three now
+convert on the desktop engine: `quantityConvert(5 '1/uL', '1/L')` = 5,000,000
+per litre instead of NULL.
+
+- **The C++ quantity layer answers NULL for every compound/reciprocal
+  conversion** (it is a flat table: `to_base`/`from_base` need BOTH unit codes
+  to share a table base unit; `mg/dL -> g/L` fails too). This is the
+  CQL-03 HISTORIAN QA-004 deferred family. `quantityConvert`/`quantity_convert`
+  therefore joined `_PYTHON_PREFERRED_CPP_CONFLICTS` (same doctrine and
+  precedent as `ratioCompare`, `CanConvertQuantity`, `ConvertsToQuantity`): the
+  pint-backed Python UDF is the desktop authority, the C++ implementation stays
+  the WASM/no-Python surface until a native compound-unit converter exists.
+  Do NOT "fix" a desktop NULL for a compound unit by rerouting only the
+  browser — check this list first.
+- **`quantityConvert` preserves the authored target unit code verbatim**
+  (`_format_quantity_with_code`). Routing the pint result back through
+  `_pint_to_ucum_unit` invents a spelling for units the reverse table does not
+  name (pint renders `1/uL` as `1 / microliter`, so a round-trip returned code
+  `1/microliter`) and diverges from the C++ implementation, which emits
+  `target_unit` verbatim.
+- **A conversion CQL defines as NULL must not be logged at WARNING.** CQL 1.5
+  Appendix B §ConvertQuantity: "if the units are not comparable, the result is
+  null". `DimensionalityError`/`UndefinedUnitError` are that null and now log
+  at DEBUG; `ValueError` (malformed input) keeps the WARNING. Reason it
+  matters: `fhir4ds/dedup/values.py` probes nine canonical targets per
+  quantity, so an incommensurable unit (per-volume against mass/length/time)
+  produced 9 WARNINGs per value — 13,758 lines in one fhir4px dedup run. A
+  row-resilient UDF that logs its SPECIFIED nulls at WARNING makes a normal
+  data shape look like a defect.
+- Known gaps (measured, unchanged, both engines agree where noted):
+  identical-unit comparison of the DISPLAY spelling stays NULL
+  (`1 / microliter` vs itself — `microliter` is the UCUM *name*, not the code
+  `uL`, and CQL §Equal nulls invalid units) while `1/uL` compares by value;
+  CROSS-unit reciprocal comparison (`5 '1/uL' > 1 '1/L'`) answers TRUE in the
+  Python authority and NULL natively (`units_compatible` cannot resolve a
+  reciprocal) — flipping `quantityCompare` to Python is a much larger card
+  because it is every Quantity measure's per-row comparison primitive.
+  Tests: `fhir4ds/cql/duckdb/tests/integration/test_fhir4_79_reciprocal_units.py`.
+
+## FHIR4-83 — a fold accumulator's CQL type is its STARTING VALUE's type
+
+`({1, 2, 3}) X aggregate R starting 0 'mg': R + 1 'mg'` answered NULL: the fold
+bound the accumulator alias to `__fold.__acc` with NO CQL type, so the `+`
+dispatch could not see that `R` is a Quantity and took the "the peer is a
+Quantity, so this operand must be a temporal" branch — every step lowered to
+`dateAddQuantity('{"value":0,"unit":"mg",…}', …)` and nulled.
+
+- The accumulator alias (`add_alias(..., cql_type=<starting value's CQL type>)`)
+  and each fold ELEMENT alias whose source is statically `Quantity` now carry
+  their CQL type; `_is_cql_quantity_expr` consults `lookup_symbol(name).cql_type`
+  for an Identifier (a Quantity-typed PARAMETER benefits too). The element alias
+  is typed ONLY for a statically `Quantity` source: a resource element must keep
+  its alias untyped (resource property navigation depends on it) and an unknown
+  element type must stay unknown.
+- Answers, dual-engine (`fhir4ds/cql/duckdb/tests/integration/
+  test_fhir4_83_quantity_fold_starting_value.py`): `3 'mg'` for the referee;
+  `3000 'mg'` for `({1 'g', 2 'g'}) X … R + X` (unit-aware cross-unit fold);
+  the starting value for an empty source; NULL for incompatible units
+  (`+ 1 'cm'`, CQL §Add); Date/Integer/Decimal/String/Boolean accumulator
+  typing (FHIR4-76) unchanged; the fold body contains `quantity_add` and no
+  `dateAddQuantity` (SQL-shape pin). `R + X` over INTEGER elements is still
+  NULL — that is CQL-correct (the Integer promotes to unit `'1'`, which is
+  incompatible with `'mg'`), not a regression.
+- Quantities are transported as float JSON, so three `0.1 'mg'` steps answer
+  `0.30000000000000004` and `= 0.3 'mg'` is false — the engine-wide Quantity
+  transport doctrine, NOT a fold defect (plain `0.0 'mg' + 0.1 'mg' + 0.1 'mg'
+  + 0.1 'mg'` answers identically).
+- Corpus gate for this change: 121-measure population-SQL content diff
+  (CTE-order-normalised digests, qi-core-2025 + us-core-2025) = 0; DQM 47/47 and
+  74/74. MEASUREMENT NOTE: capture the digest with `PYTHONHASHSEED=0` on BOTH
+  trees. CTE emission order is hash-seed dependent for at least two large
+  measures (us-core CMS145, CMS506: identical SQL length, different CTE order
+  across processes), and a hand-rolled `WITH`-member sort does not fully
+  normalise them, so an unpinned corpus diff shows 2 phantom measures.

@@ -130,6 +130,14 @@ _PYTHON_PREFERRED_CPP_CONFLICTS = {
     # metric prefixes inside compound units (CQL-03 HISTORIAN QA-004
     # deferred family), so Python stays the desktop authority.
     "ratioCompare",
+    # FHIR4-79: the same C++ limitation makes quantityConvert answer NULL for
+    # every compound/reciprocal unit code ('1/uL', '1 / microliter',
+    # 'mg/dL' -> 'g/L'), while the pint-backed Python implementation converts
+    # them correctly — a null VALUE in a measure, which is worse than an
+    # error. The C++ implementation remains the WASM/no-Python surface until
+    # a native compound-unit converter lands (CQL-03 HISTORIAN QA-004).
+    "quantityConvert",
+    "quantity_convert",
     "HighBoundary",
     "LowBoundary",
     "predecessorOf",

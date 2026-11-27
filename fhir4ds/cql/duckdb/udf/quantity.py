@@ -226,6 +226,59 @@ def _to_kelvin(value: float, unit: str) -> float | None:
     return None
 
 
+def _to_celsius(value: float, unit: str) -> float | None:
+    """Convert an offset-temperature value to Celsius (the affine pivot)."""
+    if unit == "Cel":
+        return value
+    if unit == "[degF]":
+        return (value - 32.0) * 5.0 / 9.0
+    if unit == "K":
+        return value - 273.15
+    return None
+
+
+def _from_celsius(value: float, unit: str) -> float | None:
+    """Convert a Celsius value to an offset-temperature unit."""
+    if unit == "Cel":
+        return value
+    if unit == "[degF]":
+        return value * 9.0 / 5.0 + 32.0
+    if unit == "K":
+        return value + 273.15
+    return None
+
+
+def _convert_offset_temperature(value, from_code: str | None, to_unit: str | None):
+    """Convert an offset-temperature value, or report that the pair is not one.
+
+    Returns `_OFFSET_NOT_APPLICABLE` when NEITHER unit is an offset temperature
+    (the caller falls through to the pint path), `None` when only one is (an
+    incompatible pair, i.e. a null result), and the converted float otherwise.
+
+    Pint refuses offset-temperature conversion entirely ("Ambiguous operation
+    with offset unit") — including the SAME-unit case — so CQL §ConvertQuantity
+    computes it here. The Celsius pivot mirrors the native C++ to_base/from_base
+    special cases exactly (5 '[degF]' -> 'Cel' is -15.0, not the
+    -15.000000000000028 a Kelvin round-trip would produce).
+    """
+    canon_from = _OFFSET_TEMPERATURE_ALIASES.get((from_code or "").strip().lower())
+    canon_to = _OFFSET_TEMPERATURE_ALIASES.get((to_unit or "").strip().lower())
+    if canon_from is None and canon_to is None:
+        return _OFFSET_NOT_APPLICABLE
+    if canon_from is None or canon_to is None:
+        return None
+    if value is None or isinstance(value, (bool, str)):
+        return None
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    celsius = _to_celsius(numeric, canon_from)
+    if celsius is None:
+        return None
+    return _from_celsius(celsius, canon_to)
+
+
 def _compare_offset_temperature(q1_dict: dict, q2_dict: dict, op: str):
     """Compare two quantities when at least one is an offset-temperature unit.
 
@@ -684,17 +737,22 @@ def _format_quantity_with_code(pint_q, code: str) -> str | None:
         return None
 
     try:
-        value = float(pint_q.magnitude)
-        result = {
-            "value": value,
+        return _format_quantity_value_with_code(float(pint_q.magnitude), code)
+    except (TypeError, ValueError, AttributeError) as e:
+        _logger.warning("_format_quantity_with_code failed: %s", e)
+        return None
+
+
+def _format_quantity_value_with_code(value: float, code: str) -> str:
+    """Render FHIR Quantity JSON for an already-computed magnitude and unit code."""
+    return orjson.dumps(
+        {
+            "value": float(value),
             "unit": code,
             "code": code,
             "system": "http://unitsofmeasure.org",
         }
-        return orjson.dumps(result).decode("utf-8")
-    except (TypeError, ValueError, AttributeError) as e:
-        _logger.warning("_format_quantity_with_code failed: %s", e)
-        return None
+    ).decode("utf-8")
 
 
 def _most_granular_compatible_unit(code1: str, code2: str) -> str | None:
@@ -1194,6 +1252,18 @@ def quantityConvert(q_json: str | None, target_unit: str) -> str | None:
     if not q_dict:
         return None
 
+    # Offset temperatures are affine: pint refuses them outright ("Ambiguous
+    # operation with offset unit", even same-unit), while the native C++
+    # quantity_convert answers them. With the Python UDF as the desktop
+    # authority (FHIR4-79) this must be handled here, before the pint path.
+    offset_value = _convert_offset_temperature(
+        q_dict.get("value"), q_dict.get("code"), target_unit
+    )
+    if offset_value is not _OFFSET_NOT_APPLICABLE:
+        if offset_value is None:
+            return None
+        return _format_quantity_value_with_code(offset_value, target_unit)
+
     pint_q = _quantity_to_pint(q_dict)
 
     if pint_q is None:
@@ -1206,8 +1276,31 @@ def quantityConvert(q_json: str | None, target_unit: str) -> str | None:
     try:
         target_pint_unit = _ucum_to_pint_unit(target_unit)
         result = pint_q.to(ureg(target_pint_unit))
-        return _format_quantity(result)
-    except (DimensionalityError, UndefinedUnitError, ValueError) as e:
+        # Preserve the authored target-unit code verbatim. Routing the result
+        # back through _pint_to_ucum_unit would invent a spelling for units
+        # the reverse table does not name (pint renders '1/uL' as
+        # '1 / microliter', so a round-trip returned code '1/microliter'),
+        # and the native quantity_convert emits target_unit verbatim too.
+        return _format_quantity_with_code(result, target_unit)
+    except (DimensionalityError, UndefinedUnitError) as e:
+        # CQL 1.5 Appendix B §ConvertQuantity: "If the units are not
+        # comparable, the result is null" — an incommensurable or unknown
+        # target unit is the SPECIFIED null result, not a failure, so it must
+        # not be logged at WARNING. Callers legitimately probe candidate
+        # targets: fhir4ds/dedup/values.py walks nine canonical units per
+        # quantity, and one fhir4px dedup run therefore produced 13,758
+        # "UDF quantityConvert failed" lines for per-volume values that are
+        # incommensurable with every candidate (FHIR4-79).
+        _logger.debug(
+            "quantityConvert: %s -> %s is not a convertible pair: %s",
+            q_dict.get("code") or "1",
+            target_unit,
+            e,
+        )
+        return None
+    except ValueError as e:
+        # Malformed input (unparseable target unit expression, bad magnitude)
+        # is a real data problem, not a spec-defined null.
         _logger.warning("UDF quantityConvert failed: %s", e)
         return None
 
