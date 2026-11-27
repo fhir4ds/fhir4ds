@@ -317,6 +317,14 @@
 
 ## Known Fragile Areas
 
+- **A retrieve is a table, not a list (FHIR4-78, 2026-11-27)**: a retrieve, or a define of
+  retrieves, used as a source of a multi-source aggregate becomes the patient's own resources
+  as JSON text (`unnest((SELECT COALESCE(list_transform(list(<row>.resource), e -> CAST(e AS
+  VARCHAR)), []) FROM <retrieve CTE> AS <row> WHERE <row>.patient_id = _pt.patient_id))`),
+  exactly as in the single-source fold. The multi-source lowering wrapped every non-list source
+  in a single-element array, so the table reference landed inside a list and the fold was a
+  binder error. Property access on such an element routes through `fhirpath_text`. Not covered:
+  a LIST-valued define as a multi-source source is still wrapped as one element.
 - **A fold's `let` and `where` apply to the source rows, not to the list (FHIR4-77,
   2026-11-27)**: each `let` of an aggregate is computed in its own derived-table level over
   the cross-joined sources (`__l0` … `__lN`); earlier lets are visible to later lets and to the
