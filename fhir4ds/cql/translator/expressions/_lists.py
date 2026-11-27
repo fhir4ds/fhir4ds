@@ -801,6 +801,10 @@ class ListsMixin:
             return self._translate_function_ref(qualified_func, boolean_context=boolean_context)
 
         method = expr.method
+        # CQL 1.5 §Empty, method spelling: `X.empty()`.
+        if method.lower() == "empty":
+            return self._translate_empty_source(expr.source)
+
         # RESOURCE_ROWS definition aliases must surface the per-patient
         # element LIST for element-selection methods (CQL 1.5 Appendix B
         # First/Last/SingletonFrom); generic identifier translation
@@ -3108,6 +3112,43 @@ class ListsMixin:
         """
         return placeholder.sql_expr
 
+    def _stored_list_define_name(self, node: Any) -> Optional[str]:
+        """The define name when ``node`` references a stored-list define, else None.
+
+        A stored-list define's CTE holds ONE row per patient whose value column is the whole
+        element list (`stores_list_value`), so consumers must look at the list, never at row
+        presence.
+        """
+        from ...parser.ast_nodes import Identifier, QualifiedIdentifier
+
+        name = None
+        if isinstance(node, Identifier):
+            name = node.name
+        elif isinstance(node, QualifiedIdentifier) and node.parts:
+            name = node.parts[-1]
+        if not name:
+            return None
+        meta = self.context.definition_meta.get(name)
+        if meta is None or not getattr(meta, "stores_list_value", False):
+            return None
+        if getattr(meta, "has_resource", False):
+            return None
+        return name
+
+    def _list_is_non_empty(self, source: SQLExpression) -> SQLExpression:
+        """``COALESCE(list_count(source), 0) > 0`` — non-emptiness of a list VALUE.
+
+        Null elements do not count (the `exists` doctrine) and a null list is empty.
+        """
+        return SQLBinaryOp(
+            operator=">",
+            left=SQLFunctionCall(
+                name="COALESCE",
+                args=[SQLFunctionCall(name="list_count", args=[source]), SQLLiteral(value=0)],
+            ),
+            right=SQLLiteral(value=0),
+        )
+
     def _translate_exists_expression(self, node: ExistsExpression, usage: ExprUsage = ExprUsage.LIST) -> SQLExpression:
         """Handle: exists [Condition: "Diabetes"]
 
@@ -3137,6 +3178,11 @@ class ListsMixin:
 
         if self._is_list_typed_ast(node.source) and not isinstance(node.source, ListExpression):
             source = self.translate(node.source, usage=ExprUsage.SCALAR)
+            # FHIR4-75: a stored-list define is ONE row per patient whose value
+            # is the whole element list. Row presence therefore says nothing
+            # about emptiness: `exists(X)` was TRUE for `[]`. Test the list.
+            if self._stored_list_define_name(node.source) is not None:
+                return self._list_is_non_empty(source)
             # Queries with WHERE clauses lower to row subqueries; DuckDB has no
             # scalar list_count over a subquery and a multi-row scalar subquery
             # errors at run time.  EXISTS is the faithful non-empty test.

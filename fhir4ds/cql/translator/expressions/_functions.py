@@ -1285,19 +1285,17 @@ class FunctionsMixin:
         if element_types is None:
             element_types = set()
 
-        # Count: number of non-null elements (CQL Appendix B Count).
+        # Count: number of non-null elements (CQL Appendix B Count); a null
+        # list counts 0 (official CountNullSource).
         if lower == "count":
-            return SQLFunctionCall(
-                name="len",
-                args=[SQLFunctionCall(
-                    name="list_filter",
-                    args=[list_sql, SQLLambda(param="_v", body=SQLUnaryOp(
-                        operator="IS NOT NULL",
-                        operand=SQLIdentifier(name="_v"),
-                        prefix=False,
-                    ))],
-                )],
-            )
+            return self._count_non_null(SQLFunctionCall(
+                name="list_filter",
+                args=[list_sql, SQLLambda(param="_v", body=SQLUnaryOp(
+                    operator="IS NOT NULL",
+                    operand=SQLIdentifier(name="_v"),
+                    prefix=False,
+                ))],
+            ))
 
         # Mode: statistical mode over the element list, ties -> null.
         if lower == "mode":
@@ -2907,7 +2905,7 @@ class FunctionsMixin:
                             prefix=False,
                         ))],
                     )
-                    return SQLFunctionCall(name="len", args=[filtered])
+                    return self._count_non_null(filtered)
                 list_func = {
                     "min": "list_min",
                     "max": "list_max",
@@ -3006,7 +3004,7 @@ class FunctionsMixin:
                             prefix=False,
                         ))],
                     )
-                    return SQLFunctionCall(name="len", args=[filtered])
+                    return self._count_non_null(filtered)
                 _def_list_func = {
                     "min": "list_min",
                     "max": "list_max",
@@ -3589,7 +3587,7 @@ class FunctionsMixin:
                             prefix=False,
                         ))],
                     )
-                    return SQLFunctionCall(name="len", args=[filtered])
+                    return self._count_non_null(filtered)
                 # For other aggregates (Sum, Min, Max, etc.) on distinct list literals
                 _list_agg_fn = {
                     "sum": "list_sum", "min": "list_min", "max": "list_max",
@@ -3614,7 +3612,7 @@ class FunctionsMixin:
                                 prefix=False,
                             ))],
                         )
-                        return SQLFunctionCall(name="len", args=[filtered])
+                        return self._count_non_null(filtered)
                     _list_agg_fn = {
                         "sum": "list_sum", "min": "list_min", "max": "list_max",
                         "avg": "list_avg",
@@ -3802,7 +3800,7 @@ class FunctionsMixin:
                             prefix=False,
                         ))],
                     )
-                    return SQLFunctionCall(name="len", args=[filtered])
+                    return self._count_non_null(filtered)
                 _list_agg = {
                     "sum": "sum", "avg": "avg", "median": "median",
                     "mode": "mode", "stddev": "stddev_samp",
@@ -4235,8 +4233,30 @@ class FunctionsMixin:
 
         return SQLFunctionCall(name="COALESCE", args=args)
 
+    @staticmethod
+    def _count_non_null(filtered: SQLExpression) -> SQLExpression:
+        """``COALESCE(len(filtered), 0)`` — finish a Count over a list VALUE.
+
+        A null list counts 0 (official ``CountNullSource``): a stored null list define must not
+        surface NULL (FHIR4-75).
+        """
+        return SQLFunctionCall(
+            name="COALESCE", args=[SQLFunctionCall(name="len", args=[filtered]), SQLLiteral(value=0)]
+        )
+
+    def _is_static_null_operand(self, sql_expr: SQLExpression) -> bool:
+        """True when ``sql_expr`` is statically NULL (a null literal or the typed-null CASE of
+        ``(null as T)``)."""
+        return isinstance(sql_expr, SQLNull) or bool(self._is_static_null_case(sql_expr))
+
     def _translate_count(self, args: list) -> SQLExpression:
         """Translate CQL Count to SQL."""
+        # FHIR4-75: a statically null list has no elements — Count is 0
+        # (official CountNullSource). The typed-null CASE otherwise fell
+        # through to the row aggregate `COUNT(CASE ...)`, which breaks
+        # population SQL (patient_id outside GROUP BY).
+        if args and self._is_static_null_operand(args[0]):
+            return SQLLiteral(value=0)
         if args and isinstance(args[0], SQLFunctionCall) and args[0].name in ('fhirpath_text', 'fhirpath_scalar'):
             # fhirpath_text returns only the FIRST element of a multi-valued
             # path, and json_array_length over that scalar text is always
@@ -4296,6 +4316,47 @@ class FunctionsMixin:
             return SQLFunctionCall(name=func_name, args=args, distinct=use_distinct)
 
         return SQLFunctionCall(name="COUNT", args=args, distinct=False)
+
+    def _translate_empty_source(self, source_ast: Any, negated: bool = False) -> SQLExpression:
+        """CQL 1.5 §Empty: true when the list has no (non-null) element.
+
+        Shared by ``empty(X)``, ``X.empty()``, ``X is empty`` and ``X is not empty`` — the
+        operator did not exist and every spelling failed (a Catalog Error for the call forms,
+        an unknown-type error for ``is empty``, a ParseError for ``is not empty``).
+
+        A list VALUE answers ``list_count(x) = 0``: a null list stays null, as the spec says. A
+        row-shaped source (a query, a retrieve, an element-rows define) answers ``NOT EXISTS``.
+        """
+        from ...parser.ast_nodes import BinaryExpression, ExistsExpression, ListExpression
+        from ...parser.ast_nodes import ListTypeSpecifier
+
+        is_value = isinstance(source_ast, ListExpression) or (
+            isinstance(source_ast, BinaryExpression)
+            and source_ast.operator == "as"
+            and isinstance(source_ast.right, ListTypeSpecifier)
+        )
+        if not is_value:
+            is_value = self._stored_list_define_name(source_ast) is not None
+        if is_value:
+            source = self.translate(source_ast, usage=ExprUsage.SCALAR)
+            empty_test = SQLBinaryOp(
+                operator="=",
+                left=SQLFunctionCall(name="list_count", args=[source]),
+                right=SQLLiteral(value=0),
+            )
+            if negated:
+                return SQLUnaryOp(operator="NOT", operand=empty_test, prefix=True)
+            return empty_test
+        exists_sql = self._translate_exists_expression(ExistsExpression(source=source_ast))
+        if negated:
+            return exists_sql
+        return SQLUnaryOp(operator="NOT", operand=exists_sql, prefix=True)
+
+    def _translate_empty_pre(self, func: FunctionRef, translator) -> Optional[SQLExpression]:
+        """Pre-translate CQL ``empty(argument List<T>)`` (needs the AST argument)."""
+        if len(func.arguments) == 1:
+            return self._translate_empty_source(func.arguments[0])
+        return None
 
     def _translate_exists_func(self, args: list) -> SQLExpression:
         """Translate CQL exists() function."""
@@ -4653,6 +4714,10 @@ class FunctionsMixin:
 
     def _translate_simple_aggregate(self, sql_name: str, args: list) -> SQLExpression:
         """Translate a simple CQL aggregate (Sum, Avg) to SQL."""
+        # FHIR4-75: a statically null list has no elements — the result is null, never the row
+        # aggregate `SUM(NULL)` over the patient table.
+        if args and self._is_static_null_operand(args[0]):
+            return SQLNull()
         return SQLFunctionCall(name=sql_name, args=args)
 
     @staticmethod

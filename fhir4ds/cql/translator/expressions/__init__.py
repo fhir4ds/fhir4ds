@@ -267,6 +267,7 @@ class ExpressionTranslator(
         registry.register("coalesce", lambda args, ctx: self._translate_coalesce(args))
         registry.register("count", lambda args, ctx: self._translate_count(args))
         registry.register("exists", lambda args, ctx: self._translate_exists_func(args))
+        registry.register_pre_translate("empty", self._translate_empty_pre)
         registry.register("not exists", lambda args, ctx: self._translate_not_exists_func(args))
 
         # List functions

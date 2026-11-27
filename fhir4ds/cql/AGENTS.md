@@ -317,6 +317,37 @@
 
 ## Known Fragile Areas
 
+- **An empty stored list is empty (FHIR4-75, 2026-11-26)**: a define whose value
+  is a list stored in ONE row per patient (`DefinitionMeta.stores_list_value`:
+  `{} as List<T>`, `null as List<T>`, a multi-valued property such as
+  `Patient.name.given`) answers `exists(X)` from the list's CONTENT
+  (`COALESCE(list_count(X), 0) > 0`), never from row presence —
+  `EXISTS (SELECT sub.value … WHERE sub.value IS NOT NULL)` was TRUE for `[]`.
+  `Count(X)` of an empty or null list is `0` (`COALESCE(len(x), 0)`), not 1 or
+  NULL. `({} as List<T>)` / `(null as List<T>)` defines are stored-list,
+  patient-scalar CTEs (value column `value`), not resources. A null-list
+  LITERAL in `Count`/`Sum` is the constant `0`/NULL, never a row aggregate over
+  `_patients`. `X is null` over a stored-list define keeps the strict-spec
+  list-never-null rule (empty list: `is null` False) — an intentional asymmetry
+  with the query-valued existential doctrine, left alone.
+  `expressions/_lists.py::_stored_list_define_name`,
+  `expressions/_functions.py::_count_non_null`, `translator.py` (typed-list
+  cast defines). Tests:
+  `duckdb/tests/integration/test_fhir4_75_empty_list_semantics.py`.
+- **`empty` is an operator (FHIR4-75, 2026-11-26)**: the four spellings
+  `empty(X)`, `X.empty()`, `X is empty`, `X is not empty` lower through
+  `expressions/_functions.py::_translate_empty_source` — a list VALUE becomes
+  `list_count(x) = 0` (a null list is null), a row-shaped source becomes `NOT`
+  of its exists lowering. It is registered as the pre-translate `empty`
+  (`expressions/__init__.py`), as the unary `is empty` / `is not empty`
+  (`parser.py::parse_type_expression`, `_operators.py`), and typed Boolean in
+  `inference.py::_is_empty_test` and BOTH type maps (`type_map.py`: builder
+  `_function_type` and the compat typing — keep them together or the
+  differential-drift tripwire fires). At the Boolean population surface a null
+  list reads FALSE for every spelling (pinned in the test). Before FHIR4-75 the
+  operator did not exist at all (Catalog Error / TranslationError /
+  ParseError); the official and DQM corpora contain no use of it.
+
 - **A recursive fold's recursive term reads only the working table (WP-11,
   2026-11-26)**: the CQL `aggregate` lowering (`expressions/_query.py`,
   `_fold_sql`) keeps the accumulator, the step counter, the whole element list
