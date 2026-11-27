@@ -334,8 +334,20 @@
   `SELECT unnest(…) AS X WHERE X > 1`). Before this a multi-source `let N: X * 2` was a Binder
   Error (`Referenced column "X" not found`), a single-source let bound the name to the WHOLE
   source list, and a single-source `where` over a list literal did not bind. Folds without a
-  `let` keep their previous SQL byte for byte. Not covered: `sort by` or `return` before
-  `aggregate` (a ParseError, as before).
+  `let` keep their previous SQL byte for byte.
+  CORRECTED 2026-11-27 (FGIR4-88 was filed on the note below and the note was wrong): the CQL
+  grammar makes `aggregateClause` and `returnClause` ALTERNATIVES and puts `sortClause` AFTER
+  them (`query : sourceClause letClause? queryInclusionClause* whereClause?
+  (aggregateClause | returnClause)? sortClause?`, identical in 1.5.0 and 2.0.0 R2), so
+  `sort by`/`return` BEFORE `aggregate` is NOT spec-legal and a ParseError is correct. 192
+  permutations of {let, where, sort by, return} before `aggregate` all parse on HEAD apart from
+  the `starting <number>: <number>` shape, which was FHIR4-85's Ratio greediness (fixed in
+  9cd012f0a5a) wearing a `sort by`. The grammar-legal order works today:
+  `from (...) A, (...) B aggregate R starting 0: R + A sort by R`.
+  STILL OPEN, and separate: this parser is MORE PERMISSIVE than the grammar (it accepts
+  `return … aggregate`, and `sort by` in any position) — a language-surface question, carded;
+  and a nested query as a SINGLE `from` source loses its clause binding
+  (`Catalog Error: Table with name D does not exist`), also carded.
 - **The indexer over a define alias reads the define's whole list (FHIR4-81,
   2026-11-27)**: `_translate_indexer_expression` (`expressions/_lists.py`)
   must materialize the source before `LIST_EXTRACT`, exactly where the
