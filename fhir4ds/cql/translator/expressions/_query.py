@@ -7496,6 +7496,28 @@ class QueryMixin:
                     setattr(swapped, field, _fold_marker_swap(value))
                 return swapped
 
+            def _fold_rows_source_table(node):
+                """The FROM text of a rows-shaped fold source, else None (FHIR4-78).
+
+                A retrieve is an unresolved placeholder swapped for a ``__f4ds_ph_N__`` marker
+                (Phase 2 turns the marker into the quoted CTE name); a resource-rows define
+                alias is ``SELECT * FROM "Define" AS a``. Lists and scalars answer None.
+                """
+                if isinstance(node, SQLIdentifier) and node.name.startswith("__f4ds_ph_"):
+                    return node.name
+                if (
+                    isinstance(node, SQLSelect)
+                    and not node.joins
+                    and node.where is None
+                    and len(node.columns) == 1
+                    and isinstance(node.columns[0], SQLIdentifier)
+                    and node.columns[0].name == "*"
+                    and isinstance(node.from_clause, SQLAlias)
+                    and isinstance(node.from_clause.expr, (SQLIdentifier, SQLQualifiedIdentifier))
+                ):
+                    return node.from_clause.expr.to_sql()
+                return None
+
             def _fold_let_levels(source_aliases, base_from):
                 """Translate the query's LET clauses, one derived-table level each (FHIR4-77).
 
@@ -7756,8 +7778,36 @@ class QueryMixin:
                 _all_from_parts = []
                 for idx, (_ms_alias, _ms_from) in enumerate(_multi_source_info):
                     _ms_from = _fold_marker_swap(_ms_from)
+                    _rows_table = _fold_rows_source_table(_ms_from)
+                    if _rows_table is not None:
+                        # A retrieve or a resource-rows define is a TABLE (patient_id,
+                        # resource), not a list. Its elements are the patient's resources
+                        # as JSON text, as in the single-source rows path; wrapped in a
+                        # single-element array it used to be a binder error (FHIR4-78).
+                        _row = f"__ms{idx}"
+                        _elements = SQLFunctionCall(
+                            name="list_transform",
+                            args=[
+                                SQLFunctionCall(
+                                    name="list",
+                                    args=[SQLQualifiedIdentifier(parts=[_row, "resource"])],
+                                ),
+                                SQLLambda(
+                                    param="__agg_e",
+                                    body=SQLCast(
+                                        expression=SQLIdentifier(name="__agg_e"),
+                                        target_type="VARCHAR",
+                                    ),
+                                ),
+                            ],
+                        )
+                        _arr_sql = (
+                            f"(SELECT COALESCE({_elements.to_sql()}, []) "
+                            f"FROM {_rows_table} AS {_row} "
+                            f"WHERE {_patient_correlated_where(None, _row, _outer_pid).to_sql()})"
+                        )
                     # Extract the array expression for proper column-named unnest
-                    if isinstance(_ms_from, SQLFunctionCall) and _ms_from.name == "unnest":
+                    elif isinstance(_ms_from, SQLFunctionCall) and _ms_from.name == "unnest":
                         _arr_sql = _ms_from.args[0].to_sql()
                     elif isinstance(_ms_from, SQLArray):
                         _arr_sql = _ms_from.to_sql()
