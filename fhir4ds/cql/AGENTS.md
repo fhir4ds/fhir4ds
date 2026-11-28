@@ -364,13 +364,34 @@
   tuple-existence EXISTS filter binds for a local define and stays as it was). Two retrieves
   keep their correlation — dropping it would cross patients. Tests:
   `duckdb/tests/integration/test_fhir4_98_included_list_define_fold.py`.
-  STILL OPEN (separate, untouched, same binder error on HEAD): a multi-source QUERY over list
-  sources (`define "M": from ({1,2,3}) A, ({4,5,6}) B return A + B`) does not translate
-  at all (it correlates the second source to the first: `A.patient_id` / `B.resource` over an
-  `unnest`), so a fold over such a define cannot be exercised yet; a nested INLINE query as
-  the single fold source (`([Condition] C return C.id) X aggregate A starting 0: A + 1`)
-  correlates to the aggregate's alias `X` instead of the projection's own FROM alias
-  (`Referenced table "X" not found`); and an INCLUDED ROWS define as a fold source
+  RESOLVED since this note was written — the first two items below are FHIR4-96 and FHIR4-97
+  (2026-11-28). Both were a source being shaped as a ROW when it was a LIST, and both are now
+  fixed; the third is genuinely separate and remains open.
+
+  * A multi-source QUERY over list sources (`define "M": from ({1,2,3}) A, ({4,5,6}) B
+    return A + B`) did not translate. THREE layers each assumed a query source is a row
+    table: the multi-source branch put the unnested list straight into the FROM
+    (`FROM unnest([1,2,3]) AS A`), which in DuckDB makes `A` a `STRUCT(unnest INTEGER)` — a
+    column called `unnest`, not a table alias — so every `A.<something>` failed, including
+    `A.patient_id`; a SECONDARY alias was registered without its source AST while the primary
+    got one, so `return A + B` spelled `A` as the element and `B` as `B.resource` in one
+    query; and `cte_manager._add_patient_id` took the patient key from the FIRST from-alias,
+    which a list source does not have. `_element_source_item` now binds each element source as
+    `(SELECT unnest AS <alias> FROM unnest(<arr>)) AS <alias>` (and the stored-list define
+    form keeps the patient key so correlation still binds), a `stores_list_value` define is
+    read as its ELEMENTS rather than as one row (it used to answer the concatenated list — a
+    silent wrong multiplicity), and `_derived_from_is_patient_independent` extends the
+    existing patient-independent doctrine to an unnest element source. Note the tuple branch
+    had ALWAYS wrapped the source correctly: two paths of one branch disagreed, which is why
+    the bug looked like a correlation problem.
+  * A nested INLINE query as the single fold source (`([Condition] C return C.id) X
+    aggregate A starting 0: A + 1`) correlated to the aggregate's alias `X` instead of the
+    projection's own FROM alias (`Referenced table "X" not found`). The fold's rows→list
+    coercion passed the QUERY alias while the projection's rows come from `C`; `X` names the
+    query's RESULT and is not in scope inside the element list. `_row_source_alias` now reads
+    the alias the select's rows actually answer to (`from_clause.alias`), matching what the
+    multi-column-rows branch always did.
+  * An INCLUDED ROWS define as a fold source
   (`from Base."Obs" O, [Condition] C aggregate A starting 0: A + 1`) fails with
   `Referenced column "Observation" not found in FROM clause` while its local spelling works
   (`from "O2" O, …` → 2) — the include path's retrieve-define source, not the list discriminator.
@@ -402,8 +423,14 @@
   which also pins the grammar-legal spellings so a tightening has an alternative to point
   callers at: change the decision and that file together, never delete the tests to go green.
   Being lenient about CLAUSE ORDER is not leniency about syntax: malformed folds still raise.
-  STILL OPEN, and separate: a nested query as a SINGLE `from` source loses its clause binding
-  (`Catalog Error: Table with name D does not exist`) — carded as FHIR4-92.
+  STILL OPEN, and separate (FHIR4-92): a nested query as a SINGLE `from` source is lowered to
+  a SCALAR subquery by `cte_manager`'s scalar path, so any more than one row is
+  `More than one row returned by a subquery used as an expression`. This is WIDER than the
+  `Catalog Error: Table with name D does not exist` originally recorded here: the fold shapes
+  now work (FHIR4-84/98), and the plain literal form fails too
+  (`from ({3,1,2}) D return D`), while the expression form is fine
+  (`return all D * 10`). Its natural hook is `_derived_from_is_patient_independent`; the shape
+  never reaches `_add_patient_id` because it is classified scalar first.
 - **The indexer over a define alias reads the define's whole list (FHIR4-81,
   2026-11-27)**: `_translate_indexer_expression` (`expressions/_lists.py`)
   must materialize the source before `LIST_EXTRACT`, exactly where the

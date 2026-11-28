@@ -18,6 +18,33 @@ if TYPE_CHECKING:
 
 
 
+def _derived_from_is_patient_independent(derived) -> bool:
+    """True when a derived-table source cannot supply a ``patient_id`` column.
+
+    Two shapes reach a definition CTE's FROM as a derived table and carry no patient key:
+
+    * a projection with NO FROM at all — the ``_lt_unnest`` shape (d3-EXPLORER QA-D3E-003);
+    * an ELEMENT source, ``SELECT unnest AS A FROM unnest(<list>)`` (FHIR4-96): the only
+      "table" is an ``unnest`` function call, so the alias names an element of a list, not a
+      patient's row.
+
+    Neither may be qualified as ``<alias>.patient_id``; the definition CTE cross-joins
+    ``_patients`` and projects ``_pt.patient_id`` instead.
+    """
+    from ..translator.types import SQLAlias, SQLFunctionCall, SQLSelect  # noqa: PLC0415
+
+    if not isinstance(derived, SQLSelect):
+        return False
+    from_clause = derived.from_clause
+    if from_clause is None:
+        return True
+    if isinstance(from_clause, SQLAlias):
+        from_clause = from_clause.expr
+    return isinstance(from_clause, SQLFunctionCall) and (
+        (from_clause.name or "").lower() == "unnest"
+    )
+
+
 def _flatten_audit_tree(expr: "SQLExpression") -> "SQLExpression":
     """Flatten nested audit_or/audit_and chains into a single flat struct_pack.
 
@@ -1481,9 +1508,8 @@ class CTEManagerMixin:
                         and isinstance(_from_alias_obj.expr, SQLSubquery)
                         else None
                     )
-                    _patient_independent_source = (
-                        isinstance(_inner_derived, SQLSelect)
-                        and _inner_derived.from_clause is None
+                    _patient_independent_source = _derived_from_is_patient_independent(
+                        _inner_derived
                     )
                     _pt_join = None
                     if _patient_independent_source:

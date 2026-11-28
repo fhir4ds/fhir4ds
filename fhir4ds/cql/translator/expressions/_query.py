@@ -562,6 +562,25 @@ def _correlate_inlined_aggregate_source(
     return node
 
 
+def _row_source_alias(select, fallback: str) -> str:
+    """The alias the ROW source of *select* answers to (its FROM alias).
+
+    ``_patient_correlated_where`` qualifies a column of the select's row source, so the name it
+    takes must be the alias that source is bound to. A consumer's own alias for the select's
+    RESULT is a different name and is not in scope in the select's WHERE: FHIR4-97 correlated a
+    fold source whose inner query supplies rows under ``C`` with the fold's query alias ``X``,
+    emitting ``X.patient_id = _pt.patient_id`` (``Referenced table "X" not found``). The
+    multi-column rows branch below has always read the alias from ``from_clause``; this keeps the
+    value-projection branch on the same rule.
+    """
+    from_clause = getattr(select, "from_clause", None)
+    if isinstance(from_clause, SQLAlias) and from_clause.alias:
+        return from_clause.alias
+    if isinstance(from_clause, SQLIdentifier) and from_clause.name:
+        return from_clause.name
+    return fallback
+
+
 def _patient_correlated_where(existing_where, row_alias: str, outer_pid: str):
     """AND a patient correlation predicate onto an existing WHERE.
 
@@ -753,6 +772,88 @@ def _source_contributes_a_list(node: Any, ast_expr: Any, definition_meta: Any) -
         return False
     meta = definition_meta.get(definition_name)
     return bool(meta is not None and getattr(meta, "stores_list_value", False))
+
+
+def _element_source_item(source_expr, alias: str, definition_meta: Any):
+    """The FROM item that binds *alias* to each ELEMENT of a LIST-valued query source.
+
+    CQL 1.5 §Query binds a source alias to each ELEMENT of the source collection, so a source
+    that contributes a list must expose those elements as the alias' COLUMN. Two shapes reach
+    here (FHIR4-96):
+
+    * a list LITERAL / list-valued expression, already unnested as ``unnest(<array>)``. Putting
+      that call in the FROM as ``AS A`` makes ``A`` a ``STRUCT(unnest T)`` — DuckDB names the
+      unnested value with a column called ``unnest`` — so every alias reference binder-failed
+      (``Table "A" does not have a column named "patient_id"``, and even ``where A > 1``:
+      ``Cannot compare values of type STRUCT(unnest INTEGER)``);
+    * a stored-list DEFINE, whose CTE is ONE row per patient holding the WHOLE list. ``AS A``
+      then names a ROW, so a two-source query crossed two rows instead of the elements and
+      answered the CONCATENATED list — a plausible number over the wrong multiplicity.
+
+    Returns ``SQLAlias(expr=<derived select>, alias=alias)`` exposing ``<alias>`` as the element
+    column (and the patient key, when the source is a define row, so the per-patient correlation
+    still binds), or None when the source is not one of these shapes.
+    """
+    if not alias:
+        return None
+    source = source_expr.expr if isinstance(source_expr, SQLAlias) else source_expr
+
+    if isinstance(source, SQLFunctionCall) and (source.name or "").lower() == "unnest":
+        inner = SQLSelect(
+            columns=[SQLAlias(expr=SQLIdentifier(name="unnest"), alias=alias)],
+            from_clause=source,
+        )
+        return SQLAlias(expr=SQLSubquery(query=inner), alias=alias)
+
+    if isinstance(source, SQLSubquery):
+        source = source.query
+    if not isinstance(source, SQLSelect):
+        return None
+    # Only a PLAIN definition row (`SELECT * FROM "<CTE>"`) is re-read as elements; a select
+    # carrying its own clauses is someone else's projection and is left alone.
+    if (
+        source.where is not None
+        or source.joins
+        or source.group_by
+        or source.having
+        or source.order_by
+        or source.limit is not None
+        or source.distinct
+    ):
+        return None
+    if len(source.columns or []) != 1:
+        return None
+    only_column = source.columns[0]
+    if not (isinstance(only_column, SQLIdentifier) and only_column.name == "*"):
+        return None
+    definition_name = _fold_source_definition_name(source)
+    if definition_name is None:
+        return None
+    meta = definition_meta.get(definition_name)
+    if meta is None or not getattr(meta, "stores_list_value", False):
+        return None
+    value_col = getattr(meta, "value_column", "value") or "value"
+    key_col = getattr(meta, "patient_key_col", "patient_id") or "patient_id"
+    row = "__src"
+    columns = [
+        SQLAlias(
+            expr=SQLFunctionCall(
+                name="unnest",
+                args=[SQLQualifiedIdentifier(parts=[row, value_col])],
+            ),
+            alias=alias,
+        )
+    ]
+    if key_col != value_col:
+        columns.append(SQLQualifiedIdentifier(parts=[row, key_col]))
+    inner = SQLSelect(
+        columns=columns,
+        from_clause=SQLAlias(
+            expr=SQLIdentifier(name=definition_name, quoted=True),
+            alias=row,
+        ),
+    )
+    return SQLAlias(expr=SQLSubquery(query=inner), alias=alias)
 
 
 def _fold_source_definition_name(select: Any, _depth: int = 0):
@@ -5506,6 +5607,34 @@ class QueryMixin:
                         self.context.add_alias(alias, table_alias=alias)
                         self.context._alias_source_asts[alias] = _pi_expr
 
+                # FHIR4-96: a source that contributes ELEMENTS (a list literal, a list-valued
+                # expression, or a stored-list define) binds its alias to each element, so the
+                # FROM item must expose the alias as a COLUMN. `_list_sources` carries that
+                # decision — and only that decision — for the correlation/projection rules
+                # below; everything else keeps the row shape it had.
+                _list_sources: set[str] = set()
+                _from_items: dict[str, SQLAlias] = {}
+
+                def _register_element_source(src_expr, src_alias):
+                    item = _element_source_item(
+                        src_expr, src_alias, self.context.definition_meta
+                    )
+                    if item is None:
+                        return
+                    _list_sources.add(src_alias)
+                    _from_items[src_alias] = item
+                    # The alias IS the element column: reference it bare, never
+                    # `<alias>.resource` / `<alias>.value` (a row column the element
+                    # does not have).
+                    self.context.add_alias(
+                        src_alias,
+                        table_alias=src_alias,
+                        ast_expr=SQLIdentifier(name=src_alias),
+                    )
+
+                if alias:
+                    _register_element_source(source_expr, alias)
+
                 # --- 2. Build a single EXISTS with all secondary sources ---
                 # Only the LAST source carries WHERE/RETURN/LET; intermediate
                 # sources are plain alias+definition wrappers.  Put all secondary
@@ -5540,6 +5669,8 @@ class QueryMixin:
                             _sec_from_sql = SQLFunctionCall(name="unnest", args=[_sec_from_sql])
 
                     _sec_infos.append((_sec_alias, _sec_from_sql, _sec_cte_name, _sec_expr_node))
+                    if _sec_alias:
+                        _register_element_source(_sec_from_sql, _sec_alias)
 
                 # Save multi-source info for aggregate handler
                 _multi_source_info.append((alias, source_expr))
@@ -5567,6 +5698,16 @@ class QueryMixin:
                     _multi_return_alias_is_let = False
                     try:
                         for _sa, _, _scn, _ in _sec_infos:
+                            if _sa in _list_sources:
+                                # FHIR4-96: an element source's alias is the element column
+                                # itself; registering it as a CTE row would make `<alias>`
+                                # read `<alias>.value` / `<alias>.resource`.
+                                self.context.add_alias(
+                                    _sa,
+                                    table_alias=_sa,
+                                    ast_expr=SQLIdentifier(name=_sa),
+                                )
+                                continue
                             self.context.add_alias(
                                 _sa, table_alias=_sa, cte_name=_scn,
                             )
@@ -5613,16 +5754,18 @@ class QueryMixin:
                     # Build FROM clause: first secondary, then CROSS JOINs
                     _outer_alias = alias or self.context.resource_alias or "_pt"
                     _first_alias, _first_from, _, _ = _sec_infos[0]
-                    _from_clause = SQLAlias(expr=_first_from, alias=_first_alias)
+                    _from_clause = _from_items.get(
+                        _first_alias, SQLAlias(expr=_first_from, alias=_first_alias)
+                    )
                     _joins: list = []
                     for _sa, _sf, _, _ in _sec_infos[1:]:
                         _joins.append(SQLJoin(
                             join_type="CROSS JOIN",
-                            table=SQLAlias(expr=_sf, alias=_sa),
+                            table=_from_items.get(_sa, SQLAlias(expr=_sf, alias=_sa)),
                             on_condition=None,
                         ))
 
-                    # Patient-id correlations — never for a LIST fold source (FHIR4-98).
+                    # Patient-id correlations — never for a LIST source (FHIR4-98, FHIR4-96).
                     # `<alias>.patient_id` is a ROW column reference: a list source's alias names
                     # the unnested ELEMENT, so the predicate cannot bind. The gate used to be
                     # `isinstance(ast, ListExpression)` (list LITERALS only), which let every
@@ -5630,12 +5773,21 @@ class QueryMixin:
                     # also what killed the fold (`Referenced table "N" not found`), because the
                     # WHERE-push then moved it inside the derived select so the fold could no
                     # longer recognise the definition table. The list/rows decision comes from
-                    # DefinitionMeta (CQL-18 / FHIR4-86-87), never from the SQL text, and it is
-                    # consulted for AGGREGATE queries only: a non-aggregate multi-source query's
-                    # EXISTS filter is tuple-existence semantics and binds for a local define,
-                    # so its SQL is deliberately left byte for byte as it was.
-                    _all_list_sources = isinstance(_pi_expr, _ListExpr) and all(
-                        isinstance(info[3], _ListExpr) for info in _sec_infos
+                    # DefinitionMeta (CQL-18 / FHIR4-86-87), never from the SQL text.
+                    _all_list_sources = bool(alias) and all(
+                        source_alias in _list_sources
+                        for source_alias in [alias] + [info[0] for info in _sec_infos]
+                    )
+                    # The alias that supplies patient_id: the first ROWS-shaped source. None
+                    # when every source contributes elements, in which case the select is
+                    # patient-independent and nothing may be correlated to `<list>.patient_id`.
+                    _row_party = next(
+                        (
+                            source_alias
+                            for source_alias in [alias] + [info[0] for info in _sec_infos]
+                            if source_alias and source_alias not in _list_sources
+                        ),
+                        None,
                     )
                     _aggregate_over_list_primary = (
                         _source_contributes_a_list(
@@ -5650,12 +5802,17 @@ class QueryMixin:
                         _conds.append(_sec_where_sql)
                     if not _all_list_sources:
                         for _sa, _, _, _ast_expr in _sec_infos:
-                            if _aggregate_over_list_primary or isinstance(_ast_expr, _ListExpr):
+                            if (
+                                _aggregate_over_list_primary
+                                or _sa in _list_sources
+                                or isinstance(_ast_expr, _ListExpr)
+                                or _sa == _row_party
+                            ):
                                 continue
                             _conds.append(SQLBinaryOp(
                                 left=SQLQualifiedIdentifier(parts=[_sa, "patient_id"]),
                                 operator="=",
-                                right=SQLQualifiedIdentifier(parts=[_outer_alias, "patient_id"]),
+                                right=SQLQualifiedIdentifier(parts=[_row_party, "patient_id"]),
                             ))
                     if _conds:
                         _full_cond = _conds[0]
@@ -5679,24 +5836,37 @@ class QueryMixin:
                         if _multi_return_sql is None:
                             # Alias return (e.g., `return GlucoseTest`): project that alias's correct column
                             # Determine if the alias's CTE uses 'resource' or 'value' column
-                            _ret_col = "resource"
-                            # Check primary source first
-                            if _multi_return_alias == alias and isinstance(_pi_expr, Identifier) and _pi_expr.name in self.context._definition_names:
-                                _ret_col = self._get_definition_value_column(_pi_expr.name)
+                            if _multi_return_alias in _list_sources:
+                                # FHIR4-96: an ELEMENT source's alias IS the element column;
+                                # `<alias>.resource` / `<alias>.value` are row columns the
+                                # element does not have.
+                                _multi_return_sql = SQLIdentifier(name=_multi_return_alias)
+                                _multi_return_output_alias = "value"
                             else:
-                                # Check secondary sources
-                                for _sa, _, _scn, _ in _sec_infos:
-                                    if _sa == _multi_return_alias and _scn:
-                                        _ret_col = self._get_definition_value_column(_scn)
-                                        break
-                            _multi_return_sql = SQLQualifiedIdentifier(parts=[_multi_return_alias, _ret_col])
-                            _multi_return_output_alias = _ret_col
+                                _ret_col = "resource"
+                                # Check primary source first
+                                if _multi_return_alias == alias and isinstance(_pi_expr, Identifier) and _pi_expr.name in self.context._definition_names:
+                                    _ret_col = self._get_definition_value_column(_pi_expr.name)
+                                else:
+                                    # Check secondary sources
+                                    for _sa, _, _scn, _ in _sec_infos:
+                                        if _sa == _multi_return_alias and _scn:
+                                            _ret_col = self._get_definition_value_column(_scn)
+                                            break
+                                _multi_return_sql = SQLQualifiedIdentifier(parts=[_multi_return_alias, _ret_col])
+                                _multi_return_output_alias = _ret_col
 
-                        _prim_from = source_expr.from_clause if isinstance(source_expr, SQLSelect) else (
-                            SQLAlias(expr=source_expr, alias=alias) if alias else source_expr
+                        _prim_from = _from_items.get(alias) or (
+                            source_expr.from_clause if isinstance(source_expr, SQLSelect) else (
+                                SQLAlias(expr=source_expr, alias=alias) if alias else source_expr
+                            )
                         )
-                        _prim_where = source_expr.where if isinstance(source_expr, SQLSelect) else None
-                        _prim_joins = source_expr.joins if isinstance(source_expr, SQLSelect) else None
+                        _prim_where = None if alias in _from_items else (
+                            source_expr.where if isinstance(source_expr, SQLSelect) else None
+                        )
+                        _prim_joins = None if alias in _from_items else (
+                            source_expr.joins if isinstance(source_expr, SQLSelect) else None
+                        )
 
                         # Add primary→secondary CROSS JOINs
                         _all_joins = list(_prim_joins or [])
@@ -5720,8 +5890,15 @@ class QueryMixin:
                                 alias=_multi_return_output_alias,
                             ),
                         ]
-                        if not _all_list_sources:
-                            _columns.insert(0, SQLQualifiedIdentifier(parts=[_outer_alias, "patient_id"]))
+                        # FHIR4-96: patient_id comes from a ROW source. A list source has no
+                        # such column, so a list primary takes it from the first rows-sourced
+                        # peer; when EVERY source is a list the select is patient-independent
+                        # and CTEManager cross-joins _patients for it.
+                        _patient_id_alias = _outer_alias
+                        if _patient_id_alias in _list_sources:
+                            _patient_id_alias = _row_party
+                        if _patient_id_alias is not None:
+                            _columns.insert(0, SQLQualifiedIdentifier(parts=[_patient_id_alias, "patient_id"]))
 
                         source_expr = SQLSelect(
                             columns=_columns,
@@ -5758,8 +5935,9 @@ class QueryMixin:
                         #     CROSS JOIN (SELECT unnest AS B FROM unnest([5,6])) _t1
                         #     ORDER BY A, B
                         #   ) t)
-                        # Each unnest source is wrapped in a subquery that renames
-                        # the DuckDB ``unnest`` column to the CQL alias name.
+                        # Each unnest source is exposed as a subquery whose ELEMENT column
+                        # carries the CQL alias name (FHIR4-96: the element source item
+                        # already does this; the literal wrap below is the same shape).
                         # ORDER BY ensures deterministic cross-product ordering.
                         _json_obj_args: list = []
                         _all_aliases = [alias] + [si[0] for si in _sec_infos]
@@ -5781,7 +5959,9 @@ class QueryMixin:
                             )],
                             from_clause=_prim_inner,
                         ))
-                        _prim_from_t = SQLAlias(expr=_prim_wrapped, alias="_t0")
+                        _prim_from_t = _from_items.get(alias) or SQLAlias(
+                            expr=_prim_wrapped, alias="_t0"
+                        )
                         # Wrap each secondary unnest similarly
                         _all_joins_t: list = []
                         for _idx, (_sa, _sf, _, _) in enumerate(_sec_infos):
@@ -5794,7 +5974,9 @@ class QueryMixin:
                             ))
                             _all_joins_t.append(SQLJoin(
                                 join_type="CROSS JOIN",
-                                table=SQLAlias(expr=_sec_wrapped, alias=f"_t{_idx + 1}"),
+                                table=_from_items.get(_sa) or SQLAlias(
+                                    expr=_sec_wrapped, alias=f"_t{_idx + 1}"
+                                ),
                                 on_condition=None,
                             ))
                         # Inner SELECT: rows with tuple JSON, ordered by aliases
@@ -7943,13 +8125,17 @@ class QueryMixin:
                                 # a binder error (FHIR4-77).
                                 if _proj is not None and not _select_unnests_only(_proj):
                                     _proj.where = _patient_correlated_where(
-                                        _proj.where, _row_alias, _outer_pid
+                                        _proj.where,
+                                        _row_source_alias(_proj, _row_alias),
+                                        _outer_pid,
                                     )
                                 elif _proj is not None:
                                     pass
                                 else:
                                     source_list.query.where = _patient_correlated_where(
-                                        source_list.query.where, _row_alias, _outer_pid
+                                        source_list.query.where,
+                                        _row_source_alias(source_list.query, _row_alias),
+                                        _outer_pid,
                                     )
                     else:
                         # Retrieve/multi-column rows: fold over the resource

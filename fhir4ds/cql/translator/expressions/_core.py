@@ -683,6 +683,14 @@ class CoreMixin:
                 source_ast = getattr(self.context, "_alias_source_asts", {}).get(name)
                 if isinstance(source_ast, ListExpression):
                     return SQLIdentifier(name=table_alias)
+                # FHIR4-96: an alias registered with itself as its own AST is bound to a
+                # COLUMN (a query source that contributes ELEMENTS, e.g. `from {1,2,3} A`),
+                # not to a (patient_id, resource) row — `<alias>.resource` would be a
+                # nonexistent field.
+                if isinstance(getattr(symbol, "ast_expr", None), SQLIdentifier):
+                    registered = symbol.ast_expr
+                    if registered.name == table_alias:
+                        return SQLIdentifier(name=table_alias)
                 if isinstance(source_ast, Query):
                     # Nested query source (``[X] x return e a``): the alias
                     # iterates element VALUES of the inner query's projection,
