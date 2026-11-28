@@ -6854,6 +6854,20 @@ this file was one measure short. The entry is gone (the gate is 74/74), and
 (`fhir4ds/dqm/tests/unit/test_conformance_discovery.py`) fails when an entry names a measure its
 suite contains. A measure that fails belongs in `KNOWN_FAILURES` with a reason.
 
+## A DQM run records what it answered (FHIR4-110, 2026-11-28)
+
+Pass/fail against the fixtures cannot show whether two runs of the same tree answer the same
+thing. Every conformance run therefore records a content digest per measure and per suite
+(`content_digests.json`, `stats/<ID>.json` under `"content"`, `dqm_report.json` under
+`_summary.content_digest`), in two forms: **normalised** (patients, columns and list elements
+sorted — compare this one across runs) and **exact** (output order kept). The cell comparison is
+the Tier C comparator (`wasm_parity/tier_c.py`), not a second one.
+`python -m fhir4ds.dqm.tests.conformance.repeat_compare --suite S --measures A B --runs 2
+--attempts N` runs the CLI in fresh processes on one tree and compares the runs; it never retries.
+Its referees (`test_content_digest_fhir4_110.py`): ONE changed constant must move exactly one
+named cell in one run, and five clean run pairs of one real measure must agree. A difference that
+is the same multiset is reported as `order` (FHIR4-109); anything else is `content`.
+
 ## The DQM gate must actually load the shipped extension (2026-11-12)
 
 `fhir4ds/dqm/tests/conformance/database.py` used to hand-pick

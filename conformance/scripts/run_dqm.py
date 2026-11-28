@@ -26,6 +26,10 @@ from fhir4ds.dqm.tests.conformance.config import (  # noqa: E402
     SUITE_QI_CORE_2025,
     normalize_suite,
 )
+from fhir4ds.dqm.tests.conformance.content_digest import (  # noqa: E402
+    measure_content,
+    suite_content,
+)
 from fhir4ds.dqm.tests.conformance.database import BenchmarkDatabase  # noqa: E402
 from fhir4ds.dqm.tests.conformance.loader import load_test_suite  # noqa: E402
 from fhir4ds.dqm.tests.conformance.runner import run_measure  # noqa: E402
@@ -237,6 +241,10 @@ def main():
                 "accuracy_pct": accuracy,
                 "sql_size_bytes": len(result.sql),
                 "timings_ms": timings,
+                # FHIR4-110: the output's own digest. Two runs of one tree share
+                # ``digest_normalised``; a pair that differs only in ``digest_exact``
+                # moved on order.
+                "content": measure_content(result.results),
             }
 
         except Exception as e:
@@ -270,6 +278,13 @@ def main():
         "total_patients": total_patients,
         "library_cache_entries": len(library_cache),
         "timings_ms": suite_timings,
+        "content_digest": suite_content(
+            {
+                measure_id: measure["content"]
+                for measure_id, measure in report.items()
+                if not measure_id.startswith("_") and "content" in measure
+            }
+        ),
     }
 
     # Save report
@@ -279,6 +294,11 @@ def main():
 
     print(f"\nConformance report generated at {output_file}")
     print(f"Summary: {passed_measures}/{total_measures} measures passed ({passed_measures/total_measures:.1%})")
+    content_digest = report["_summary"]["content_digest"]
+    print(
+        f"Content digest ({content_digest['cells']} cells in {content_digest['measures']} measures): "
+        f"normalised {content_digest['digest_normalised']} | exact {content_digest['digest_exact']}"
+    )
     print("\nSuite timings:")
     for key, value in suite_timings.items():
         if key.endswith("_ms"):

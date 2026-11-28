@@ -15,6 +15,7 @@ from .config import (
     SUITE_US_CORE_2025,
     normalize_suite,
 )
+from .content_digest import measure_content, suite_content, write_digest_file
 
 
 def _normalize_suite_arg(value: str) -> str:
@@ -109,6 +110,16 @@ def main():
         ),
     )
     parser.add_argument(
+        "--cell-digests",
+        action="store_true",
+        help=(
+            "Also write each measure's result cells as text rows "
+            "(results/<ID>.cells.json) so a repeat-compare can name the cells that "
+            "moved between two runs. The content digests themselves are always written "
+            "(content_digests.json)."
+        ),
+    )
+    parser.add_argument(
         "--verbose", "-v",
         action="store_true",
         help="Print verbose output",
@@ -130,7 +141,7 @@ def main():
     from .config import KNOWN_FAILURES, OUTPUT_CQL_PY_DIR, SKIP_ON_FAILURE
     from .database import BenchmarkDatabase
     from .loader import load_test_suite
-    from .result_writer import write_results
+    from .result_writer import write_cell_rows, write_results
     from .runner import run_measure
 
     # Set output directory
@@ -214,6 +225,7 @@ def main():
 
     # Track results for summary
     results_summary = []
+    content_by_measure = {}
     successful = 0
     failed = 0
     skipped = 0
@@ -260,6 +272,18 @@ def main():
 
             # Write outputs
             paths = write_results(result, output_dir, args.sql_format)
+            if args.cell_digests:
+                write_cell_rows(
+                    result, output_dir / "results" / f"{result.measure_id}.cells.json"
+                )
+
+            # FHIR4-110: digest the output itself. ``normalised`` is the one two runs of one
+            # tree must share; ``exact`` also keeps order, so a run pair that differs only
+            # there moved on order, not on content.
+            content = measure_content(result.results)
+            content_by_measure[config.id] = content
+            print(f"\nContent digest ({content['cells']} cells): "
+                  f"normalised {content['digest_normalised']} | exact {content['digest_exact']}")
 
             # Print summary
             print("\nResults:")
@@ -300,6 +324,7 @@ def main():
                 "total_ms": result.timings.get('total_ms', 0),
                 "audit_fallback": getattr(result, 'audit_fallback', False),
                 "audit_tier": getattr(result, 'audit_tier', None),
+                "content": content,
             })
             successful += 1
 
@@ -328,6 +353,18 @@ def main():
         finally:
             if len(configs) > 1:
                 db.unscope_resources()
+
+    # FHIR4-110: the run's content digest. Two runs of one tree share ``digest_normalised``.
+    suite_digest = suite_content(content_by_measure)
+    digest_path = output_dir / "content_digests.json"
+    write_digest_file(digest_path, content_by_measure, suite=args.suite)
+    print(f"\n{'='*60}")
+    print("CONTENT DIGEST (FHIR4-110)")
+    print(f"  Measures: {suite_digest['measures']} | patients: {suite_digest['patients']} | "
+          f"cells: {suite_digest['cells']}")
+    print(f"  normalised: {suite_digest['digest_normalised']}")
+    print(f"  exact:      {suite_digest['digest_exact']}")
+    print(f"  per measure: {digest_path}")
 
     # Print summary if running multiple measures
     if len(configs) > 1:
@@ -423,6 +460,7 @@ def main():
                 "known_failures": len(known),
                 "regressions": len(regressions),
                 "library_cache_entries": len(library_cache),
+                "content_digest": suite_digest,
                 "measures": results_summary
             }, f, indent=2)
         print(f"\nSummary written to: {summary_path}")

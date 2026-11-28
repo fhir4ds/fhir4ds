@@ -27,6 +27,7 @@ python3 -m fhir4ds.dqm.tests.conformance --measure CMS165 --output ./my-results
 | `--verbose` | `-v` | Print verbose output including generated SQL path |
 | `--audit` | | Run with three-tier audit: full → population-only → non-audit |
 | `--skip-errors` | | Continue on errors instead of stopping |
+| `--cell-digests` | | Also write the text rows a cell comparison uses (`results/<ID>.cells.json`) |
 
 ## Example: Running CMS165
 
@@ -70,6 +71,31 @@ Outputs:
   csv: tests/output/results/CMS165.csv
   stats: tests/output/stats/CMS165.json
 ```
+
+## Content digests and repeat-compare (FHIR4-110)
+
+Every run records WHAT it answered, not only whether it passed, so a second run of the same tree
+can be compared cell by cell:
+
+- `cli.py` prints `Content digest (N cells): normalised <sha> | exact <sha>` per measure and writes
+  `content_digests.json` into the output directory (per measure: patients, cells and a digest per
+  column). `stats/<ID>.json` carries the same content under `"content"`.
+- `conformance/scripts/run_dqm.py` records the content under each measure in `dqm_report.json` and
+  the suite digest under `_summary.content_digest`.
+- Two digests per measure. **normalised** sorts patients, columns and list elements: compare this
+  one across runs. **exact** keeps output order: it changes when only the row order changes.
+- `--cell-digests` also writes the text rows a cell comparison reads (`results/<ID>.cells.json`).
+
+To run measures twice on one tree and compare them (fresh process per run, no retries):
+
+```bash
+python3 -m fhir4ds.dqm.tests.conformance.repeat_compare \
+    --suite us-core-2025 --measures CMS139 CMS68 --runs 2 --attempts 5 --cell-digests
+```
+
+Exit status 0: every pair agrees. 1: a pair moved (the columns and cells are printed; a
+list-only difference that is the same multiset is reported as `order`). 2: a run failed or died.
+Two runs that already exist can be compared with `--compare <dir-or-file> <dir-or-file>`.
 
 ## Architecture
 

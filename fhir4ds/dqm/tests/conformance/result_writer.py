@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .content_digest import measure_content, text_rows
+
 if TYPE_CHECKING:
     from .runner import MeasureResult
 
@@ -142,6 +144,21 @@ def write_csv(measure_result: "MeasureResult", path: Path) -> None:
         writer.writeheader()
         writer.writerows(rows)
 
+def write_cell_rows(measure_result: "MeasureResult", path: Path) -> None:
+    """Write the results as the text rows the Tier C cell comparator takes.
+
+    Only with ``--cell-digests``: the repeat-compare helper reads these to name the cells
+    that moved between two runs.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = text_rows(measure_result.results)
+    with open(path, "w") as f:
+        json.dump({"columns": payload["columns"]}, f)
+        f.write("\n")
+        for row in payload["rows"]:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
 def write_stats(measure_result: "MeasureResult", path: Path) -> None:
     """Write performance stats as JSON."""
     stats = {
@@ -153,6 +170,9 @@ def write_stats(measure_result: "MeasureResult", path: Path) -> None:
             (measure_result.timings.get("total_ms", 1) / 1000)
         ),
     }
+
+    # FHIR4-110: the output's own digest, so two runs of one tree can be compared.
+    stats["content"] = measure_content(measure_result.results)
 
     if measure_result.comparison:
         stats["comparison"] = {
