@@ -107,6 +107,32 @@ CMS integration tests that need include resolution should use
 libraries such as `FHIRHelpers`, `QICoreCommon`, `Status`, `Hospice`, `SDE`,
 `AHA`, and `AdultOutpatientEncounters` are exercised instead of skipped.
 
+### ML Tests Run in a Child Process (FHIR4-103, 2026-11-28)
+
+A test module that imports the native ML stack (torch, faiss, spaCy, …) must carry
+`pytest.mark.ml` at module level (`pytestmark = [pytest.mark.integration, pytest.mark.ml]`).
+The plugin `fhir4ds/cql/tests/integration/ml_isolation.py` then runs that module in a CHILD
+pytest process — one child to list its tests, one per run — so the parent process never imports
+it. An ABI-broken stack in this workspace surfaces as a segfault or a `MemoryError` at some later
+allocation, i.e. inside whichever unrelated test allocates next, which reads as a defect in code
+that is merely nearby.
+
+- A crash is reported, never swallowed. Tests the child did not report FAIL with the reason the
+  child stopped (`Segmentation fault`, `Aborted`, `Fatal Python error`, exit status 139/134,
+  "produced no results", timeout). An ML test can no longer end the session or raise
+  `INTERNALERROR`.
+- `--ml-in-process` turns the isolation off; `--ml-child-timeout` bounds one child (default
+  1800 s). There are no retries.
+- `conftest.py` in that directory re-exports the plugin's hooks by name. pytest rejects
+  `pytest_plugins` in a non-top-level conftest when the run starts from the repo root (what CI
+  does) although it accepts it when the run starts inside the directory.
+- `pytester` points `HOME` at its own temporary directory, so an inner Python loses a pytest that
+  is installed in the user site; a test that uses `runpytest_subprocess` must put pytest's own
+  directory on `PYTHONPATH`.
+- Two test files with the same basename in directories that are not packages break bare
+  `python -m pytest` collection (FHIR4-110): run `python3 -m pytest --collect-only -q` from the
+  repo root before every push.
+
 ### Source Adapter SQL Safety
 
 Source adapters must quote identifiers and string literals separately. Use

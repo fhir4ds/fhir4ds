@@ -32,7 +32,9 @@ import pytest
 pytest.importorskip("medterm4ds")
 
 # Module-level marker so ``-m "not integration"`` skips us cheaply.
-pytestmark = pytest.mark.integration
+# ``ml`` keeps this module out of the shared pytest process: it imports the native ML stack
+# (FHIR4-103, see ``ml_isolation.py``).
+pytestmark = [pytest.mark.integration, pytest.mark.ml]
 
 
 # ---------------------------------------------------------------------------

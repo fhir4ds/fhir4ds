@@ -224,6 +224,7 @@ markers = [
     "slow: marks tests as slow",
     "compliance: FHIRPath compliance tests",
     "integration: integration tests",
+    "ml: imports the native ML stack; the module is collected and run in a child process (FHIR4-103)",
 ]
 norecursedirs = ["_archived_v1", "cql-tests", "spec_tests", "fixtures", "data"]
 
