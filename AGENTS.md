@@ -122,7 +122,12 @@ that is merely nearby.
   "produced no results", timeout). An ML test can no longer end the session or raise
   `INTERNALERROR`.
 - `--ml-in-process` turns the isolation off; `--ml-child-timeout` bounds one child (default
-  1800 s). There are no retries.
+  1800 s). There are no retries. Under `--ml-in-process` exactly one test is skipped by design
+  (the self-test that the parent never imports an ML module), so a whole-directory run reports
+  271 passed / 6 skipped instead of 272 / 5.
+- The abort in a shared process is intermittent: across two sessions the whole directory with the
+  isolation off aborted once (exit 134) and passed once. The isolation is justified by the
+  hazard, not by a rate; do not quote either run as one.
 - `conftest.py` in that directory re-exports the plugin's hooks by name. pytest rejects
   `pytest_plugins` in a non-top-level conftest when the run starts from the repo root (what CI
   does) although it accepts it when the run starts inside the directory.

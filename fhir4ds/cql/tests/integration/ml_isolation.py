@@ -22,7 +22,17 @@ with the child's text, and every test the child did not report FAILS with the re
 stopped (segfault, abort, fatal Python error, no results, timeout). Nothing is retried, and no
 other test is taken down.
 
-``--ml-in-process`` turns the isolation off; the marker is then only a label.
+Whether the shared-process run actually aborts is intermittent, so the isolation is justified
+by the hazard, not by a rate. Two whole-directory runs of ``fhir4ds/cql/tests/integration`` with
+the isolation off, one per session on the same commit, gave ``Fatal Python error: Aborted``
+(exit 134) once and a clean 271 passed / 6 skipped once. With the isolation on the same command
+gave 272 passed / 5 skipped.
+
+``--ml-in-process`` turns the isolation off; the marker is then only a label. One test is
+skipped under it by design — this plugin's own check that the parent never imports an ML module
+(``test_the_parent_never_imports_the_ml_module``) — so a whole-directory run reports 271 passed /
+6 skipped instead of 272 / 5. The 277 tests are the same; do not read the lower pass count as
+lost coverage, or the run as evidence that the stack is safe to share.
 """
 
 from __future__ import annotations
@@ -416,7 +426,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         OPT_IN_PROCESS,
         action="store_true",
         default=False,
-        help="run ml-marked tests in this process instead of a child process (FHIR4-103)",
+        help="run ml-marked tests in this process instead of a child process (FHIR4-103); skips this plugin's own isolation self-test",
     )
     group.addoption(
         OPT_TIMEOUT,
