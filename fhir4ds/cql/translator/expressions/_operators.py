@@ -4606,6 +4606,17 @@ class OperatorsMixin:
                     else self._ensure_interval_varchar(right),
                 ],
             )
+        # FHIR4-65 (mirror of the `in` fix): a multi-row list-valued define on
+        # the CONTAINER side must be tested as its WHOLE per-patient list.
+        # FHIR4-92: this gate runs BEFORE the SQL-shape test — a define's own
+        # translation can already LOOK list-like while being built over a
+        # `LIMIT 1` scalar lookup, i.e. a one-element list that answers FALSE
+        # for every other member.
+        container_list = self._multi_row_define_list(getattr(expr, "left", None))
+        if container_list is not None:
+            return self._list_contains_call(
+                container_list, right, expr.left, expr.right
+            )
         if self._is_list_operands(left, right, expr):
             # CQL-15 EXPLORER QA-001: element selection over an interval
             # list (First/Last/indexer → LIST_EXTRACT) is interval-typed
@@ -4624,14 +4635,6 @@ class OperatorsMixin:
                     ],
                 )
             return self._list_contains_call(left, right, expr.left, expr.right)
-        # FHIR4-65 (mirror of the `in` fix): a multi-row list-valued define on
-        # the CONTAINER side is the scalar `LIMIT 1` lookup here too, so
-        # `<Ids> contains X` inspected one element. Test the whole list.
-        container_list = self._multi_row_define_list(getattr(expr, "left", None))
-        if container_list is not None:
-            return self._list_contains_call(
-                container_list, right, expr.left, expr.right
-            )
         if isinstance(left, SQLSubquery):
             # Check if the CQL type system indicates this should be an interval
             cql_left = getattr(expr, 'left', None) if expr else None
@@ -5567,18 +5570,20 @@ class OperatorsMixin:
                         name="fhirpath_bool",
                         args=[resource_arg, SQLLiteral(fhirpath_expr)],
                     )
-        if self._is_list_operands(right, left, expr):
-            return self._list_contains_call(right, left, expr.right, expr.left)
         # FHIR4-65: a multi-row list-valued define (`define Ids: ([Condition]
-        # C return C.id) X`) reaches here as the SCALAR identifier lookup
-        # `(SELECT sub.value ... LIMIT 1)`, so `x in Ids` inspected ONE
-        # element. Materialize the whole per-patient element list and test
-        # the full list (same macro family the other list paths use).
+        # C return C.id) X`) must be tested as its WHOLE per-patient element
+        # list. FHIR4-92: this gate runs BEFORE the SQL-shape test — a define's
+        # own translation can already LOOK list-like (the element list wrapped
+        # around a `LIMIT 1` scalar lookup), which is a ONE-element list that
+        # answers FALSE for every other member; the shape test accepted it and
+        # short-circuited the gate, turning `2 in <{1,2,3}>` into false.
         container_list = self._multi_row_define_list(getattr(expr, "right", None))
         if container_list is not None:
             return self._list_contains_call(
                 container_list, left, expr.right, expr.left
             )
+        if self._is_list_operands(right, left, expr):
+            return self._list_contains_call(right, left, expr.right, expr.left)
         if isinstance(expr.right, ListExpression):
             # IN list - translate left as SCALAR, list elements as LIST context
             left = self.translate(expr.left, usage=ExprUsage.SCALAR)

@@ -2879,6 +2879,17 @@ class ListsMixin:
                 # Element-rows value CTE: LIST()-aggregate the value column
                 # rows per patient.
                 _col = meta.value_column or "value"
+                # FHIR4-92: when the define's own body reads no CTE its rows
+                # are patient-independent, so build the list from the BODY —
+                # a scan of the define's rows CTE buys nothing there and costs
+                # a `_cse_deflist_…` shared-evaluation CTE that an
+                # expression-only consumer cannot emit (translate_cql returns
+                # bare expressions with no WITH clause). CTE-backed bodies
+                # (retrieves, other defines' rows) keep the CTE scan, which is
+                # what carries the per-patient correlation.
+                _body_list = self._inline_element_rows_define_list(node.name)
+                if _body_list is not None:
+                    return _shared((node.name, _col), _body_list)
                 return _shared(
                     (node.name, _col),
                     _patient_list(SQLIdentifier(name=node.name, quoted=True), col=_col),
@@ -2923,6 +2934,57 @@ class ListsMixin:
                     )
 
         return None
+
+    def _inline_element_rows_define_list(self, name: str) -> Optional[SQLExpression]:
+        """FHIR4-92: an element-rows define's list, built from its OWN body.
+
+        Returns ``None`` unless the body translates to a list that reads no CTE
+        (``_rows_come_from_a_cte``). Such rows are PATIENT-INDEPENDENT, so the
+        list is deterministic per patient and a scan of the define's rows CTE
+        adds nothing — while it does add a ``_cse_deflist_…`` shared-evaluation
+        CTE (FHIR4-109) that an EXPRESSION-ONLY consumer cannot emit:
+        ``translate_cql``/``translate_library`` return bare expressions with no
+        WITH clause, so ``Last(define)`` over a literal-list query used to
+        dangle with ``Catalog Error: Table with name _cse_deflist_… does not
+        exist``.
+
+        CTE-backed bodies (retrieves, another define's rows, retrieve unions)
+        deliberately keep the CTE scan: that is what carries the per-patient
+        correlation, and inlining them would leak rows across patients — the
+        same rule the aggregate path applies when it prefers an inlined
+        definition expression.
+        """
+        from ._utils import _rows_come_from_a_cte
+
+        ast_def = getattr(self.context, "_definition_cql_asts", {}).get(name)
+        if ast_def is None:
+            return None
+        stack = getattr(self.context, "_inlined_element_define_stack", None)
+        if stack is None:
+            stack = set()
+            self.context._inlined_element_define_stack = stack
+        if name in stack:  # pragma: no cover - CQL forbids definition cycles
+            return None
+        stack.add(name)
+        try:
+            body = self.translate(ast_def, usage=ExprUsage.LIST)
+        except Exception:  # noqa: BLE001 - fall back to the CTE scan
+            return None
+        finally:
+            stack.discard(name)
+        if body is None or isinstance(body, RetrievePlaceholder):
+            return None
+        inner = body.query if isinstance(body, SQLSubquery) else body
+        if not isinstance(inner, SQLSelect) or not inner.columns:
+            # Already a scalar list value (a list macro, a stored array): leave
+            # it to the CTE scan, which reads the define's value column.
+            return None
+        if _rows_come_from_a_cte(inner.from_clause):
+            return None
+        wrapped = self._wrap_list_aggregate("list", body)
+        if wrapped is None:
+            return None
+        return SQLFunctionCall(name="COALESCE", args=[wrapped, SQLArray(elements=[])])
 
     def _apply_singleton_from_list_value(self, source: SQLExpression) -> SQLExpression:
         """Element-cardinality CASE for an SQL expression that EVALUATES to

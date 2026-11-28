@@ -291,6 +291,38 @@ def _canonical_fhir_r4_type_name(type_name: str | None) -> str | None:
     return _FHIR_R4_TYPE_NAMES_BY_LOWER.get(bare.lower())
 
 
+def _rows_come_from_a_cte(expr) -> bool:
+    """True when a translated expression's rows are read from a CTE / retrieve.
+
+    A body that reads no CTE is PATIENT-INDEPENDENT: its rows are the same for
+    every patient, so a list built from it is deterministic and needs neither
+    the per-patient correlation a CTE scan adds nor the FHIR4-109 shared
+    single-evaluation CTE. That distinction decides whether an element-rows
+    define's list is built from the define's own BODY or from a scan of its rows
+    CTE (`_lists._list_operator_full_list_source`, FHIR4-92).
+    """
+    from ...translator.types import SQLUnion
+
+    if isinstance(expr, SQLAlias):
+        return _rows_come_from_a_cte(expr.expr)
+    if isinstance(expr, SQLIdentifier) and expr.quoted:
+        return True
+    if isinstance(expr, SQLUnion):
+        return True
+    if isinstance(expr, SQLSelect):
+        return expr.from_clause is not None and _rows_come_from_a_cte(expr.from_clause)
+    if isinstance(expr, SQLSubquery):
+        inner = expr.query
+        if isinstance(inner, SQLSelect) and inner.from_clause is not None:
+            return _rows_come_from_a_cte(inner.from_clause)
+        return isinstance(inner, SQLUnion)
+    try:
+        from ..placeholder import RetrievePlaceholder
+    except ImportError:  # pragma: no cover - import cycle guard
+        return False
+    return isinstance(expr, RetrievePlaceholder)
+
+
 def _is_list_valued_projection(expr) -> bool:
     """True when a projected expression already evaluates to a LIST value.
 

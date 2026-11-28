@@ -695,7 +695,23 @@ class InferenceMixin:
                     for source in sources:
                         if hasattr(source, "alias") and source.alias == ret_expr.name:
                             source_expr = getattr(source, "expression", source)
-                            return self._infer_row_shape(source_expr, _visited)
+                            source_shape = self._infer_row_shape(source_expr, _visited)
+                            if source_shape in (
+                                RowShape.RESOURCE_ROWS,
+                                RowShape.PATIENT_MULTI_VALUE,
+                            ):
+                                return source_shape
+                            # FHIR4-92: a LIST source binds its alias to ONE ELEMENT at a
+                            # time (CQL 1.5 §Query), so `return <alias>` is one row per
+                            # ELEMENT. Inheriting the list's own "one list per patient"
+                            # shape sent the element rows into cte_manager's SCALAR path,
+                            # whose value column is a single-row subquery — a `List<T>`
+                            # define that could only ever hold one element (and raised
+                            # "More than one row returned by a subquery" for any list with
+                            # more than one).
+                            if self._query_source_contributes_elements(source_expr, _visited):
+                                return RowShape.PATIENT_MULTI_VALUE
+                            return source_shape
                 if self._query_return_expr_is_resource(ast_node, ret_expr, _visited):
                     return RowShape.RESOURCE_ROWS
                 return RowShape.PATIENT_MULTI_VALUE
@@ -1005,6 +1021,64 @@ class InferenceMixin:
             if isinstance(source, QuerySource) and source.alias:
                 alias_sources[source.alias] = source.expression
         return alias_sources
+
+    def _query_source_contributes_elements(
+        self, source_expr: Any, _visited: set | None = None
+    ) -> bool:
+        """True when a query source is a LIST whose alias names one ELEMENT at a time.
+
+        CQL 1.5 §Query binds a source alias to each ELEMENT of the source collection, so
+        ``return <alias>`` over a list source is ONE ROW PER ELEMENT — not the source's own
+        "one list value per patient" shape (FHIR4-92).
+
+        The discriminators are the ones the rest of the translator already uses: a list
+        LITERAL, or a define whose ``DefinitionMeta.stores_list_value`` is set (CQL-18
+        doctrine — never decide this from ``List<`` typing or from SQL text). A RETRIEVE and
+        a ``PATIENT_MULTI_VALUE`` define are rows already and are handled by the caller; a
+        plain scalar source genuinely contributes ONE value and is left alone.
+        """
+        from ..parser.ast_nodes import (
+            Identifier as _Identifier,
+            ListExpression as _ListExpression,
+            Property as _Property,
+            QualifiedIdentifier as _QualifiedIdentifier,
+        )
+
+        if isinstance(source_expr, _ListExpression):
+            return True
+
+        names: list[str] = []
+        if isinstance(source_expr, _Identifier):
+            names.append(source_expr.name)
+        elif isinstance(source_expr, _QualifiedIdentifier) and source_expr.parts:
+            names.append(".".join(source_expr.parts))
+            names.append(source_expr.parts[-1])
+        elif (
+            isinstance(source_expr, _Property)
+            and isinstance(source_expr.source, _Identifier)
+            and source_expr.path
+        ):
+            # Library-qualified definition reference: CQMCommon."Some Def"
+            names.append(f"{source_expr.source.name}.{source_expr.path}")
+
+        if not names:
+            return False
+
+        _seen = set(_visited) if _visited else set()
+        for name in names:
+            meta = self._context.definition_meta.get(name)
+            if meta is not None:
+                return bool(getattr(meta, "stores_list_value", False))
+            # Forward reference: decide from the definition's own AST.
+            if name in _seen:
+                return False
+            _seen.add(name)
+            ast_def = self._definition_ast(name)
+            if ast_def is not None and self._query_source_contributes_elements(
+                ast_def, _seen
+            ):
+                return True
+        return False
 
     def _definition_tuple_field_type(
         self,

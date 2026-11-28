@@ -475,14 +475,14 @@
   which also pins the grammar-legal spellings so a tightening has an alternative to point
   callers at: change the decision and that file together, never delete the tests to go green.
   Being lenient about CLAUSE ORDER is not leniency about syntax: malformed folds still raise.
-  STILL OPEN, and separate (FHIR4-92): a nested query as a SINGLE `from` source is lowered to
-  a SCALAR subquery by `cte_manager`'s scalar path, so any more than one row is
-  `More than one row returned by a subquery used as an expression`. This is WIDER than the
-  `Catalog Error: Table with name D does not exist` originally recorded here: the fold shapes
-  now work (FHIR4-84/98), and the plain literal form fails too
-  (`from ({3,1,2}) D return D`), while the expression form is fine
-  (`return all D * 10`). Its natural hook is `_derived_from_is_patient_independent`; the shape
-  never reaches `_add_patient_id` because it is classified scalar first.
+  RESOLVED (FHIR4-92, 2026-11-28): a list-valued query was lowered to a SCALAR
+  subquery by `cte_manager`'s scalar path, so any list with more than one element was
+  `More than one row returned by a subquery used as an expression` — the plain literal
+  form (`from ({3,1,2}) D return D`) while the expression form (`return all D * 10`) was
+  fine. The cause was ONE shape decision (`_infer_row_shape`: a bare-alias `return`
+  inherited the LIST source's own "one list per patient" shape instead of one row per
+  element), not `_derived_from_is_patient_independent`; see "A bare-alias `return` over a
+  LIST source is one row per ELEMENT" below.
 - **The indexer over a define alias reads the define's whole list (FHIR4-81,
   2026-11-27)**: `_translate_indexer_expression` (`expressions/_lists.py`)
   must materialize the source before `LIST_EXTRACT`, exactly where the
@@ -9140,3 +9140,66 @@ define 89-90/200 -> 0/200; aggregate + `First` sharing 6 -> 1. At
 exactly ONE measure changes (us-core CMS136, +242 bytes, the same aggregate
 moved into a CTE); qi-core-2025 47/47 and us-core-2025 74/74 at 100% with
 per-patient/per-column equality on the changed measure.
+
+## A bare-alias `return` over a LIST source is one row per ELEMENT (FHIR4-92)
+
+`define Result: from ({3,1,2}) D return D` is a three-element CQL value. It
+translated to a SCALAR CTE — `SELECT _pt.patient_id, (SELECT D FROM (SELECT
+unnest([3,1,2]) AS D) AS _list) AS value` — and every multi-element list died at
+execution with `More than one row returned by a subquery used as an expression`.
+The tell was a contradiction the translator produced itself: shape
+`PATIENT_SCALAR`, `cql_type List<Integer>`. The `return all D * 10` twin was
+correct (`PATIENT_MULTI_VALUE`), so the defect was never "a nested query source"
+— it was the bare-alias RETURN.
+
+ROOT CAUSE (`inference.py::_infer_row_shape`, Query/return branch): a bare
+`return <alias>` inherited the SOURCE EXPRESSION's shape, and a list source is
+classified `PATIENT_SCALAR` (a list literal is one value per patient). But a
+query source binds its alias to ONE ELEMENT at a time (CQL 1.5 §Query), so
+`return <alias>` over a list source is one row per ELEMENT. The new
+`_query_source_contributes_elements` distinguishes the two list source shapes a
+scalar-typed expression can hide: a list LITERAL, and a define whose
+`DefinitionMeta.stores_list_value` is set (CQL-18 doctrine — never from `List<`
+typing or SQL text). `RESOURCE_ROWS` and `PATIENT_MULTI_VALUE` sources keep
+their shape (`return <resource alias>` is the resource itself).
+
+Consequence, and the reason `in`/`contains` moved too: once the define is an
+element-rows define, its generic LIST translation can be a list that is built
+around a `LIMIT 1` scalar lookup — one element wearing a list's clothes.
+`_translate_in_op` / `_translate_contains_op` therefore run the FHIR4-65
+`_multi_row_define_list` gate BEFORE `_is_list_operands`; the SQL-shape test
+accepts that one-element list and short-circuited the gate, so
+`2 in <{1,2,3}>` answered FALSE (it ERRORED before the shape fix, so the
+regression would have been a silent wrong answer).
+
+Element-rows LIST construction (`_lists._list_operator_full_list_source`) now
+builds the list from the define's OWN BODY when that body reads no CTE
+(`_utils._rows_come_from_a_cte`): such rows are patient-independent, so the
+`_cse_deflist_…` shared-evaluation CTE (FHIR4-109) buys nothing and an
+EXPRESSION-ONLY consumer cannot emit it — `translate_cql` returns bare
+expressions with no WITH clause, so `Last(<literal-list query define>)` dangled
+(`Catalog Error: Table with name _cse_deflist_… does not exist`). CTE-backed
+bodies keep the CTE scan, which carries the per-patient correlation. NOT A BUG
+(eventually): `'c1' in <retrieve-backed define>` still dangles on that surface —
+identical at HEAD, because the FHIR4-109 CTE is the shared list by design.
+
+SEPARATE, PRE-EXISTING (observed here, deliberately NOT fixed): implicit
+`return` de-duplication never fires for ANY query-form definition. The parser
+wraps a definition body that is a query in an OUTER single-source `Query`, so
+`_return_clause_is_distinct`'s `root_ast is node` test is false for the inner
+query that carries the return clause — `from ({3,1,3,2}) D return D` keeps the
+duplicate (as does `define R: ([Condition] C return C.status) X` on a shape this
+card never touched). Turning it on changes the SQL of every query define, so it
+needs its own card and the FHIR4-136 root-scoping doctrine in hand. Pinned
+`xfail(strict=False)`.
+
+Tests: `duckdb/tests/integration/test_fhir4_92_scalar_query_source.py`
+(multiset assertions only — a multi-row define's list is materialised per
+consumer and its ORDER is not a contract, FHIR4-109). Referees: 510-test
+`-k "fhir4_ or list or query or aggregate"` selection, `cql/tests/unit` +
+`cql/tests/translator` (2286), `dqm/tests` (277), DQM qi-core-2025 47/47 and
+us-core-2025 74/74, and the 121-measure population-SQL digest diff (0 diffs,
+`PYTHONHASHSEED=0`, CTE-order-normalised). MEASUREMENT NOTE: the corpus digest
+is VACUOUS here — instrumenting `_query_source_contributes_elements` over all
+121 measures shows 10 consultations and ZERO True answers (CMS1218, CMS832), so
+no measure takes this path; the digest proves "nothing else moved", not coverage.
