@@ -2096,11 +2096,17 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             # `extension.where(url='...').value`) are by-URL 0..1 scalars —
             # keeping them scalar fhirpath_text yields NULL on a non-
             # matching URL (CQL null semantics) instead of an empty list.
+            #
+            # FHIR4-91: a navigation over a SINGLE element (`X[i].id`,
+            # `First(X).id`, `(singleton from X).id`) is the same scalar case —
+            # the property translator marks it `scalar_navigation`, and the
+            # heuristic must not rewrap it as a multi-valued property.
             _definition_is_dynamic_list = False
             if (
                 isinstance(result, SQLFunctionCall)
                 and result.name == "fhirpath_text"
                 and len(result.args) == 2
+                and not getattr(result, "scalar_navigation", False)
             ):
                 _dyn_path = (
                     result.args[1].value
@@ -2261,6 +2267,20 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
             # Populate DefinitionMeta for this definition
             shape = self._infer_row_shape(definition.expression)
             cql_type = self._infer_cql_type(definition.expression)
+
+            # FHIR4-91: a definition that selects ONE element — `X[i]`, `First(X)`,
+            # `Last(X)`, `(singleton from X)`, or a navigation over one of them — holds
+            # ONE value per patient, typed by that element (CQL 1.5 §17.6 Indexer
+            # returns `T`). `_infer_cql_type` cannot answer for these (an indexer body
+            # is `Any`), and `Any` is read as a RESOURCE type below, so the define was
+            # filed `has_resource=True`: every META-consulting consumer then treated the
+            # alias as a rows source and measured a list (`Length(<alias of X[0]>)` = 1
+            # while `Length(<inline>)` = 2). Type it here, from the element's own type.
+            _single_element_type = self._single_element_cql_type(definition.expression)
+            if _single_element_type is not None:
+                from ..translator.context import RowShape as _ScalarNavRowShape
+                cql_type = _single_element_type
+                shape = _ScalarNavRowShape.PATIENT_SCALAR
 
             # FHIR4-75: a define whose body is a list cast to a list type —
             # `({} as List<String>)`, `(null as List<String>)` — IS a stored

@@ -33,6 +33,20 @@ The referees that must hold at the same time — and did not before the fix:
 * the projected column has the SHAPE of a scalar (DuckDB type ``VARCHAR``, not
   ``VARCHAR[]``) — a value-only assertion passes on the wrapped form, which is how this hid.
 
+The CONSUMER half of the card (added after the first, PARTIAL fix): the projected value was
+scalar but the define's META was not — ``DefinitionMeta.cql_type`` stayed ``Any`` with
+``has_resource`` True (and, before that, ``List<Any>`` with ``stores_list_value``), so every
+consumer that consults the META still measured a list:
+
+    Length(<alias of X[0]>)   = 1        -- the list length, not the String length
+    Length([Condition][0].id) = 2        -- the inline spelling was already right
+
+``_list_operator_source_is_retrieve_shaped`` treats a ``has_resource`` define as a rows source
+and ``_list_operator_full_list_source`` then materializes its value column as a per-patient
+list, so the alias answered a one-element list even though its column held one String. The
+define therefore has to be typed as its ELEMENT (``String`` here) — that is the layer that
+decides, and these tests assert the consumer side, not just the projection.
+
 A genuine list source must keep yielding lists: ``"Rows"`` itself, ``First("Rows")`` (one
 resource), ``Nums`` stored lists, ``Flatten``.
 """
@@ -56,6 +70,8 @@ context Patient
 
 define "Rows": [Condition]
 define "Single": [Condition] C where C.id = 'c2'
+define "Lit": ({'c2'}) X
+define "Given": { 'Joel', 'Ann' }
 define "Nums": {10, 20, 30}
 """
 
@@ -88,6 +104,23 @@ _CONSUMERS = {
     "SingleIdxLength": 'Length("Single"[0].id)',
     # the same scalar consumers over the ORDER-DEPENDENT list, asserted only for cardinality
     "CountOfRowsIdx": 'Count({ "Rows"[1].id })',
+    # CONSUMER SIDE (partial-fix gap): the alias of a single-element navigation must measure
+    # like the value it holds, not like a one-element list.
+    "LitIdx": '"Lit"[0]',
+    "G0": '"Given"[0]',
+    "LitAliasLength": 'Length("LitIdx")',
+    "GivenAliasLength": 'Length("G0")',
+    "LitInlineLength": 'Length("Lit"[0])',
+    "GivenInlineLength": 'Length("Given"[0])',
+    "LitAliasFirst": 'First({ "LitIdx" })',
+    "LitAliasLast": 'Last({ "LitIdx" })',
+    "LitAliasSingleton": 'singleton from { "LitIdx" }',
+    "LitAliasDistinctCount": 'Count(Distinct({ "LitIdx" }))',
+    "LitAliasIndexOf": 'IndexOf({ "LitIdx" }, \'c2\')',
+    "LitAliasCount": 'Count({ "LitIdx" })',
+    "LitAliasEq": '"LitIdx" = \'c2\'',
+    "GivenAliasEq": '"G0" = \'Joel\'',
+    "LitAliasToUpper": 'Upper("LitIdx")',
     # genuine list sources
     "RowsItself": '"Rows"',
     "NumsItself": 'Nums',
@@ -281,6 +314,84 @@ def test_the_single_element_selectors_share_the_scalar_shape():
                 f"navigated with .id is a String"
             )
             assert types[column].upper().startswith("VARCHAR"), label
+
+
+def test_a_single_element_navigation_define_is_typed_as_its_element():
+    """CONSUMER SIDE: the define's META is the element type, not a list and not a resource.
+
+    The first (partial) fix made the projected VALUE scalar while
+    ``DefinitionMeta.cql_type`` stayed ``Any`` — and ``Any`` is treated as a resource type
+    (``has_resource=True``), which is enough for ``_list_operator_full_list_source`` to
+    materialize the define's value column as a per-patient LIST. Hence
+    ``Length(<alias>)`` answered 1 while ``Length(<inline>)`` answered 2.
+    """
+    expected = {"LitIdx": "String", "G0": "String", "RowsIdx": "Any"}
+    for label, _by_patient, _types, translator in _run_both_engines():
+        for name, want in expected.items():
+            meta = translator.context.definition_meta[name]
+            assert meta.stores_list_value is False, label
+            assert not str(meta.cql_type).startswith("List<"), (
+                f"{label}: {name} is typed {meta.cql_type}; a single-element navigation holds "
+                f"ONE value"
+            )
+            if want != "Any":
+                assert str(meta.cql_type) == want, (
+                    f"{label}: {name} cql_type = {meta.cql_type!r}, expected {want!r} "
+                    f"(the element's CQL type)"
+                )
+            assert meta.has_resource is False, (
+                f"{label}: {name} claims has_resource=True, so list consumers treat it as a "
+                f"rows source"
+            )
+            assert meta.value_column == "value", f"{label}: {name} value column {meta.value_column}"
+
+
+def test_a_define_alias_of_a_single_element_navigation_measures_like_its_value():
+    """REFEREE (consumer): ``Length(<alias>)`` = ``Length(<inline>)`` = the String length."""
+    for label, by_patient, _types, _translator in _run_both_engines():
+        p1 = by_patient["p1"]
+        assert p1["LitIdx"] == "c2" and p1["G0"] == "Joel", (
+            f"{label}: LitIdx = {p1['LitIdx']!r}, G0 = {p1['G0']!r}"
+        )
+        assert p1["LitInlineLength"] == 2, f"{label}: Length(\"Lit\"[0]) = {p1['LitInlineLength']!r}"
+        assert p1["LitAliasLength"] == 2, (
+            f"{label}: Length(\"LitIdx\") = {p1['LitAliasLength']!r}; it must equal the "
+            f"inline spelling ({p1['LitInlineLength']!r}), not the one-element list length"
+        )
+        assert p1["GivenInlineLength"] == 4, label
+        assert p1["GivenAliasLength"] == 4, (
+            f"{label}: Length(\"G0\") = {p1['GivenAliasLength']!r} vs inline "
+            f"{p1['GivenInlineLength']!r}"
+        )
+
+
+def test_the_other_list_consumers_of_the_alias_treat_it_as_one_value():
+    """``First``/``Last``/``singleton from``/``Distinct``/``IndexOf``/``Count``/``=``/``Upper``.
+
+    Each is the LIST form over a one-element list literal ``{ <alias> }``, so a scalar alias
+    has to behave exactly like the same literal built from the inline navigation.
+    """
+    for label, by_patient, _types, _translator in _run_both_engines():
+        p1 = by_patient["p1"]
+        assert p1["LitAliasFirst"] == "c2", f"{label}: First = {p1['LitAliasFirst']!r}"
+        assert p1["LitAliasLast"] == "c2", f"{label}: Last = {p1['LitAliasLast']!r}"
+        assert p1["LitAliasSingleton"] == "c2", (
+            f"{label}: singleton from = {p1['LitAliasSingleton']!r}"
+        )
+        assert p1["LitAliasDistinctCount"] == 1, (
+            f"{label}: Count(Distinct({{alias}})) = {p1['LitAliasDistinctCount']!r}"
+        )
+        assert p1["LitAliasIndexOf"] == 0, (
+            f"{label}: IndexOf = {p1['LitAliasIndexOf']!r}; the list is ['c2'] so 'c2' is at 0"
+        )
+        assert p1["LitAliasCount"] == 1, f"{label}: Count = {p1['LitAliasCount']!r}"
+        assert p1["LitAliasEq"] is True, (
+            f"{label}: \"LitIdx\" = 'c2' = {p1['LitAliasEq']!r}; a String comparison"
+        )
+        assert p1["GivenAliasEq"] is True, label
+        assert p1["LitAliasToUpper"] == "C2", (
+            f"{label}: Upper(\"LitIdx\") = {p1['LitAliasToUpper']!r}; a String operator"
+        )
 
 
 def test_a_genuine_list_source_keeps_its_list():

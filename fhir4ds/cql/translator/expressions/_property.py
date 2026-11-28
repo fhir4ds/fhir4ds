@@ -442,58 +442,40 @@ class PropertyMixin:
         below this point still take ``boolean_context`` as a bool; we derive
         it once here so they don't all need to change.
 
-        FHIR4-91: the RESULT is then classified by the source's cardinality (see
-        ``_scalar_navigation_projection``) so a navigation over a single-element source stays
-        a scalar at a definition root.
+        FHIR4-91: the RESULT is then MARKED when the source is a single element (see
+        ``_scalar_navigation_projection``).
         """
         return self._scalar_navigation_projection(
             prop, self._translate_property_core(prop, usage)
         )
 
-    def _is_definition_body(self, node) -> bool:
-        """True when *node* is the top-level expression of the definition being translated.
-
-        ``context._definition_cql_asts`` maps every definition name to its AST (populated
-        before translation by the retrieve optimizer) and ``_current_definition`` names the
-        one being translated, so this is an identity check — no shape or naming heuristics.
-        """
-        name = getattr(self.context, "_current_definition", None)
-        if not name:
-            return False
-        asts = getattr(self.context, "_definition_cql_asts", None) or {}
-        return asts.get(name) is node
-
     def _scalar_navigation_projection(self, prop: Property, result: SQLExpression) -> SQLExpression:
-        """FHIR4-91: a navigation over ONE element is a scalar at a definition root.
+        """FHIR4-91: a navigation over ONE element is a SCALAR, and says so.
 
         ``"Rows"[1].id``, ``First("Rows").id`` and ``(singleton from "Rows").id`` navigate a
         single selected element, so the accessor is a scalar and the definition holds a
         scalar (CQL 1.5 §17.6 Indexer returns ``T``, not ``List<T>``).
 
-        The define-materialisation heuristic in ``translator.py`` cannot see that: it treats
-        ANY define whose body is a bare 2-arg ``fhirpath_text`` as a dynamic MULTI-VALUED
-        FHIR property and rewraps it as the list projection
-        ``from_json(fhirpath(...), '["VARCHAR"]')``, filing the define ``List<Any>`` with
-        ``DefinitionMeta.stores_list_value``. The value looked right (``'c2'``) inside a
-        one-element list — which is exactly how it hid, because a one-element list where CQL
-        says a scalar changes what a downstream comparison does.
+        Three layers keyed on the node NAME/type alone and mistook it for a multi-valued FHIR
+        property — and the value looked right (``'c2'``) inside a one-element list, which is
+        exactly how it hid:
 
-        Two things happen here, and the marker is the load-bearing one:
+        * the define-materialisation heuristic in ``translator.py`` rewrapped the bare
+          ``fhirpath_text`` body as ``from_json(fhirpath(...), '["VARCHAR"]')``, filing the
+          define ``List<Any>`` + ``stores_list_value``;
+        * the CQL-18 list-operator promotions (``_promote_fhirpath_text_list``) did the same
+          to operands, so ``Length("Rows"[1].id)`` was the LIST length (1) instead of 2;
+        * the FHIR4-72 hoist moved the operand into a value CTE typed ``List<Any>``, routing
+          ``"Rows"[1].id = 'c2'`` to the LIST equality macro over a VARCHAR
+          (``BinderException: array_length(VARCHAR)``).
 
-        * the scalar accessor is MARKED (``scalar_navigation``) so the CQL-18 list-operator
-          promotions (``_promote_fhirpath_text_list``) and the FHIR4-72 correlated-list hoist
-          (``_hoist_correlated_list_operands``) stop treating it as a multi-valued property.
-          Both keyed on the node NAME alone, so ``Length("Rows"[1].id)`` promoted the id to a
-          list (length 1 instead of 2) and ``"Rows"[1].id = 'c2'`` hoisted it into a value CTE
-          typed ``List<Any>``, which routed the comparison to the LIST equality macro over a
-          VARCHAR (``BinderException: array_length(VARCHAR)``).
-        * at a DIRECT definition body the scalar is wrapped in a ``CAST(... AS VARCHAR)`` —
-          an identity on ``fhirpath_text``'s own result — so the define-materialisation
-          heuristic above no longer sees the bare ``fhirpath_text`` it rewraps, and the CTE
-          builder's scalar path aliases it into the definition's value column. Deliberately
-          scoped to a definition root: a nested navigation keeps its inline form so
-          chained-path flattening (``fhirpath_text(fhirpath_text(x, 'a'), 'b')`` →
-          ``fhirpath_text(x, 'a.b')``) is untouched.
+        The fix is ONE marker on the scalar accessor (``scalar_navigation``) that every one of
+        those sites honours, plus the META typed from the same cardinality rule in
+        ``inference.py::_single_element_cql_type`` (a define that selects one element is typed
+        as that element, ``String`` here, not ``List<Any>``/``Any``). The value expression is
+        NOT reshaped: an earlier revision wrapped it in ``CAST(... AS VARCHAR)`` to hide the
+        bare ``fhirpath_text`` from the heuristic, which became dead weight once the metadata
+        was typed and has been deleted.
         """
         from ._utils import _navigation_source_is_single_element
 
@@ -506,13 +488,7 @@ class PropertyMixin:
         if not _navigation_source_is_single_element(prop.source):
             return result
         result.scalar_navigation = True
-        if not self._is_definition_body(prop):
-            return result
-        # A VARCHAR cast is an identity on ``fhirpath_text``'s own result, and it is what keeps
-        # the define scalar: ``translator.py``'s dynamic-list heuristic keys on the node NAME
-        # (bare ``fhirpath_text`` ⇒ multi-valued property), and the CTE builder's scalar path
-        # aliases whatever non-relational node it is handed into the definition's value column.
-        return SQLCast(expression=result, target_type="VARCHAR")
+        return result
 
     def _translate_property_core(
         self, prop: Property, usage: ExprUsage = ExprUsage.LIST

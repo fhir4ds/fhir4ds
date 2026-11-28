@@ -1219,6 +1219,108 @@ class InferenceMixin:
             return None
         return FHIR_TYPE_TO_CQL_TYPE.get(name, name)
 
+    def _single_element_cql_type(self, ast_node: Any) -> Optional[str]:
+        """CQL type of an expression that selects ONE element (FHIR4-91), or ``None``.
+
+        CQL 1.5 §17.6 ``Indexer(source List<T>, index Integer) T`` returns ONE element, and
+        ``First`` / ``Last`` / ``singleton from`` are the same cardinality class — so
+        ``"Given"[0]``, ``First("Rows")`` and ``(singleton from X)`` each hold ONE value, and
+        a navigation over one of them (``"Rows"[1].id``) holds one value of that PATH's type.
+
+        The type comes from where every other definition type comes from: this module's own
+        ``_infer_cql_type`` for the source collection, then the canonical
+        ``FHIR_TYPE_TO_CQL_TYPE`` table, stepping a navigation leaf through the FHIR schema.
+        ``None`` means "leave the caller's inference alone": an untypeable source (a chain
+        root that is not a typed collection) or an unresolvable schema path.
+
+        Why it matters: mistyping these defines as ``List<Any>`` (or as ``Any``, which the
+        definition materialisation reads as a RESOURCE type) made every META-consulting
+        consumer measure a list — ``Length(<alias of X[0]>)`` answered the one-element list
+        length (1) while the inline spelling answered the String length (2).
+        """
+        from ..parser.ast_nodes import (
+            FirstExpression as _NavFirst,
+            FunctionRef as _NavFunctionRef,
+            IndexerExpression as _NavIndexer,
+            LastExpression as _NavLast,
+            Property as _NavProperty,
+            SingletonExpression as _NavSingleton,
+            UnaryExpression as _NavUnary,
+        )
+        from .expressions._utils import _navigation_source_is_single_element
+
+        schema = getattr(self._context, "fhir_schema", None)
+
+        def _source_collection(source: Any) -> Optional[Any]:
+            """The collection expression *source* selects one element FROM."""
+            if isinstance(source, (_NavIndexer, _NavFirst, _NavLast, _NavSingleton)):
+                return getattr(source, "source", None)
+            if isinstance(source, _NavUnary):
+                return getattr(source, "operand", None)
+            if isinstance(source, _NavFunctionRef):
+                arguments = getattr(source, "arguments", []) or []
+                return arguments[0] if len(arguments) == 1 else None
+            return None
+
+        def _element_cql_type(source: Any) -> Optional[str]:
+            collection = _source_collection(source)
+            if collection is None:
+                return None
+            listed = str(self._infer_cql_type(collection))
+            if not (listed.startswith("List<") and listed.endswith(">")):
+                return None
+            element = listed[len("List<") : -1].split(".")[-1]
+            if element in _UNLISTABLE_ELEMENT_TYPES:
+                # An UNTYPED list define — a query over a list source
+                # (`define Lit: ({'c2'}) X`) is filed `List<Any>` by the
+                # query-list branch even though its own body infers
+                # `List<String>`. Ask the body before giving up, so the
+                # element of an indexed untyped define is still typed.
+                from ..parser.ast_nodes import Identifier as _NavIdentifier
+
+                if isinstance(collection, _NavIdentifier):
+                    definitions = getattr(self._context, "_definition_cql_asts", None) or {}
+                    body = definitions.get(collection.name)
+                    if body is not None and body is not collection:
+                        body_listed = str(self._infer_cql_type(body))
+                        if body_listed.startswith("List<") and body_listed.endswith(">"):
+                            element = body_listed[len("List<") : -1].split(".")[-1]
+            if not element or element in _UNLISTABLE_ELEMENT_TYPES:
+                return None
+            typed = FHIR_TYPE_TO_CQL_TYPE.get(element, element)
+            if typed == "Boolean":
+                # DELIBERATELY NOT TYPED (FHIR4-91 boundary): a `cql_type` of Boolean puts a
+                # definition on the population BOOLEAN encoding, which collapses CQL null to
+                # FALSE at that boundary (the CQL-04 doctrine, pinned by
+                # test_cql_logical_null_propagates_in_lowered_sql_...). `singleton from
+                # (<query> return <boolean>)` keeps an uncertain NULL today
+                # (test_cql_interval_part2_dynamic_partial_fhir_points_keep_precision_uncertainty),
+                # so typing it here would silently change an expression-level NULL into FALSE
+                # — a different card. Nothing list-shaped is at stake for a Boolean value.
+                return None
+            return typed
+
+        if isinstance(ast_node, _NavProperty) and _navigation_source_is_single_element(
+            ast_node.source
+        ):
+            element = _element_cql_type(ast_node.source)
+            path = getattr(ast_node, "path", None)
+            if not element or not path:
+                return element
+            stepped = (
+                schema.get_element_type(element, path) if schema is not None else None
+            )
+            if stepped is None:
+                return None
+            leaf = str(stepped).split(".")[-1]
+            leaf_type = FHIR_TYPE_TO_CQL_TYPE.get(leaf, leaf)
+            # Same Boolean boundary as above: typing a define Boolean changes the
+            # population null→FALSE encoding, which is not this card's change.
+            return None if leaf_type == "Boolean" else leaf_type
+        if _navigation_source_is_single_element(ast_node):
+            return _element_cql_type(ast_node)
+        return None
+
     def _infer_cardinality(self, ast_node: Any) -> str:
         """
         Infer cardinality: 0..1, 1, or 0..*

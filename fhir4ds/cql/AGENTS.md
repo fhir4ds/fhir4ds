@@ -432,36 +432,51 @@
 - **A navigation over a SINGLE element is a SCALAR (FHIR4-91, 2026-11-27)**: the indexer
   answers one element (CQL 1.5 §17.6 `Indexer(source List<T>, index Integer) T`), so
   `"Rows"[1].id` is the id of ONE resource — the same cardinality class as
-  `First(X).id`, `Last(X).id` and `(singleton from X).id`. Three classifiers assumed
-  "navigation body ⇒ multi-valued FHIR element" and mistyped all four, and the value
-  looked right (`'c2'`) inside a one-element list, which is how it hid:
-  `translator.py`'s define-materialisation heuristic rewraps any define whose body is a
-  bare 2-arg `fhirpath_text` as the list projection `from_json(fhirpath(...), '["VARCHAR"]')`
+  `First(X).id`, `Last(X).id` and `(singleton from X).id`, and `"Given"[0]` itself. Several
+  layers assumed "navigation/indexer body ⇒ multi-valued FHIR element" and mistyped all of
+  them, and the value looked right (`'c2'`) inside a one-element list, which is how it hid:
+  `translator.py`'s define-materialisation heuristic rewraps any define whose body is a bare
+  2-arg `fhirpath_text` as the list projection `from_json(fhirpath(...), '["VARCHAR"]')`
   (`List<Any>` + `DefinitionMeta.stores_list_value`); `_promote_fhirpath_text_list` did the
   same to list-operator operands (`Length("Rows"[1].id)` was the list length 1, not 2); and
   the FHIR4-72 correlated-list hoist moved the operand into a value CTE typed `List<Any>`,
   which routed `"Rows"[1].id = 'c2'` to the LIST equality macro over a VARCHAR
-  (`BinderException: array_length(VARCHAR)`).
+  (`BinderException: array_length(VARCHAR)`). A FIRST, PARTIAL fix repaired only the
+  projected VALUE (and hid it from the heuristic with a `CAST(... AS VARCHAR)`); the ALIAS
+  still answered a list, because the layer that decides is the META:
+  `_list_operator_source_is_retrieve_shaped` treats a `has_resource` define as a rows source
+  and materializes its value column as a per-patient LIST, so `Length(<alias of X[0]>)` was 1
+  while `Length(<inline>)` was 2. THE LESSON: assert the CONSUMER side (Length/First/Last/
+  singleton-from/Distinct/IndexOf/Count/=/Upper over the alias), not just the projection — a
+  projection-only test passes a half fix.
   ONE predicate, `_utils.py::_navigation_source_is_single_element` (Indexer, First, Last,
-  `singleton from`, `SingletonFrom`), is the single definition of the class. The property
-  translator (`_property.py::_scalar_navigation_projection`) MARKS the scalar accessor
-  (`node.scalar_navigation = True`) — the two promotions skip a marked node — and at a
-  DIRECT definition body it wraps the accessor in `CAST(... AS VARCHAR)`, an identity on
-  `fhirpath_text`'s own result that keeps the define-materialisation heuristic from
-  rewrapping it. The wrap is root-only on purpose: a nested navigation keeps its inline
-  form so chained-path flattening is untouched. `_is_definition_body` is an identity check
-  against `context._definition_cql_asts[current]`, never a shape heuristic.
+  `singleton from`, `SingletonFrom`), is the single definition of the class, and TWO layers
+  consume it: `_property.py::_scalar_navigation_projection` MARKS the scalar accessor
+  (`node.scalar_navigation = True`, honoured by the define-materialisation gate,
+  `_promote_fhirpath_text_list` and the FHIR4-72 hoist), and
+  `inference.py::_single_element_cql_type` types the define as its ELEMENT (`String` for
+  `.id`, `Integer` for an indexed integer list, the FHIR type for a resource element) with
+  `shape = PATIENT_SCALAR` — so `cql_type`/`stores_list_value`/`has_resource` are right for
+  every META-consulting consumer. No value reshaping is done: the `CAST(... AS VARCHAR)`
+  workaround from the partial fix is DELETED (one mechanism, not two). An UNTYPED list
+  source (`define Lit: ({'c2'}) X` is filed `List<Any>` by the query-list branch) is typed by
+  asking its BODY before giving up, so `Lit[0]` is still `String`.
   NOT this card, and do NOT "fix" it by relaxing single-element detection: `_is_list_typed_ast`
   must NOT blanket-return False for `singleton from <List<List<T>>>` (it is a list — the
   clinical `(singleton from { { "Code A" } }) ~ (… "Code B")` transport case depends on it).
-  Corpus impact measured translation-only: the only defines whose AST matches the class are
-  CMS122 "Lowest Glycemic Status Assessment Reading on Most Recent Day", CMS128 "IPSD" and
-  CMS137 "First SUD Episode During Measurement Period" (plus duplicate library versions) and
-  their SQL is BYTE-IDENTICAL before/after — every one of them is a `First(<query> return
-  {tuple})` whose accessor lowers to `json_extract_string`, never a bare `fhirpath_text`.
-  Tests: `duckdb/tests/integration/test_fhir4_91_indexer_scalar_result.py` (both spellings,
-  the DUCKDB COLUMN TYPE as the shape assertion, `Count({…})`, `Length`, and the
-  genuine-list guards).
+  Referees on the completed tree: 121-measure population-SQL digest diff (qi-core-2025 47 +
+  us-core-2025 74, `PYTHONHASHSEED=0`, CTE-order-normalised) = **0 content diffs, 0 size
+  changes**; DQM qi-core-2025 47/47 and us-core-2025 74/74 at 100%. The only defines in
+  either corpus whose AST matches the class are CMS122 "Lowest Glycemic Status Assessment
+  Reading on Most Recent Day", CMS128 "IPSD" and CMS137 "First SUD Episode During Measurement
+  Period" (plus duplicate library versions) — every one is a `First(<query> return {tuple})`
+  whose accessor lowers to `json_extract_string`, never a bare `fhirpath_text`, which is why
+  the corpus cannot move.
+  Tests: `duckdb/tests/integration/test_fhir4_91_indexer_scalar_result.py` (both spellings;
+  the DUCKDB COLUMN TYPE and the definition META as shape assertions; and the CONSUMER
+  matrix over an alias — Length alias == Length inline, First/Last/singleton-from over
+  `{ alias }`, `Count(Distinct({alias}))`, `IndexOf({alias}, …)`, `Count({alias})`,
+  `alias = 'c2'`, `Upper(alias)`).
 
 - **A fold's accumulator is typed by its starting value (FHIR4-76, 2026-11-27)**: the
   anchor of a fold's working table is `CAST(<starting value> AS T)` with T from the
