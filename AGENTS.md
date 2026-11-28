@@ -6843,6 +6843,30 @@ low address space, means the BUGFIX-019 native crash. Address space, not residen
 thing to look at — a Python process holding extension bundles plus caches can reserve tens of GB
 while touching a few.
 
+### `ulimit -c 0` does not stop WSL's core dumps, and they are not free (WP-28, 2026-11-28)
+
+Corrected: an earlier line here claimed `ulimit -c 0` meant "no usable core file is produced". That
+is FALSE on this host. `core_pattern` pipes to `/wsl-capture-crash`, and `core(5)` says
+`RLIMIT_CORE` is not enforced for piped dumps — so a native abort in a test process writes a
+**multi-GB** core to `/mnt/c/Users/joelm/AppData/Local/Temp/wsl-crashes/` regardless of the limit.
+Observed: 16.6 GB from one address-space abort, and 34 GB of dumps deleted from FHIR4-103 runs
+(C: free 565 -> 598 GB after). The directory keeps only the ten newest, so it is bounded, but
+individually large.
+
+The only guard that works is `prctl(PR_SET_DUMPABLE, 0)` **in the process that will die**, set
+immediately before the fault (that is what the FHIR4-103 self-test child does for its DELIBERATE
+crash — it does not protect anything else). Owner decision pending: strict no-core for every test
+child, or a small `LD_PRELOAD` SIGABRT backtrace instead of a core (the BUGFIX-019 tracer below
+extended to SIGABRT), which keeps the diagnostic without the gigabytes.
+
+### Never `git stash` in this repo (2026-11-28)
+
+**The stash stack is shared by every worktree of the clone.** A helper in one session popped
+another session's stash into its own scratch tree (nothing was lost, and it was cleaned up), and
+nothing in `git stash list` tells you whose entry is whose. Multiple agents work this clone from
+separate worktrees; a stash is the one piece of state that ignores that isolation. Restore files
+in place instead, and prove it with `git diff`.
+
 ## Capturing a native crash without root (2026-11-12, BUGFIX-019)
 
 An intermittent SIGSEGV appeared in full QI-Core runs (kernel log:
@@ -6883,8 +6907,7 @@ LD_PRELOAD=$PWD/crashtrace.so python3 -m fhir4ds.dqm.tests.conformance.cli --sui
 ```
 
 Both harnesses are in `/tmp/jm/` for this session only; re-create from these
-commands. Keep `ulimit -c 0` (WSL pipes cores to `wsl-capture-crash`, so no
-usable core file is produced) and `ulimit -s 65536`.
+commands. `ulimit -c 0` does NOT suppress the dump on this host (see the note below) and `ulimit -s 65536`.
 
 ## Conformance suite names: `qi-core` / `us-core` (2026-11-12)
 
