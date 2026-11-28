@@ -2727,7 +2727,18 @@ class FunctionsMixin:
 
             combine_args = list(args)
             source_arg = combine_args[0]
-            if isinstance(source_arg, SQLSubquery) and isinstance(source_arg.query, SQLSelect):
+            # FHIR4-106: a multi-row define (`define Ids: ([Observation] O return O.id)`)
+            # lowers through the generic definition lookup to
+            # `(SELECT sub.value FROM "Ids" … LIMIT 1)` — ONE row wearing a list's
+            # clothes. `_query_rows_as_list` below would then wrap `list(...)` around a
+            # single-row query, so `Combine(Ids, '|')` answered the FIRST id instead of
+            # joining them all (three ids -> 'o1'). Route it through the same FHIR4-65
+            # gate `in`/`contains` use, which materialises the WHOLE per-patient list.
+            _combine_multi_row = self._multi_row_define_list(func.arguments[0])
+            if _combine_multi_row is not None:
+                combine_args[0] = _combine_multi_row
+                source_arg = _combine_multi_row
+            elif isinstance(source_arg, SQLSubquery) and isinstance(source_arg.query, SQLSelect):
                 combine_args[0] = _query_rows_as_list(source_arg.query)
             elif isinstance(source_arg, SQLSelect):
                 combine_args[0] = _query_rows_as_list(source_arg)

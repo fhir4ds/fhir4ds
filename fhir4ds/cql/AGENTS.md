@@ -9078,6 +9078,32 @@ Quantity, so this operand must be a temporal" branch — every step lowered to
   across processes), and a hand-rolled `WITH`-member sort does not fully
   normalise them, so an unpinned corpus diff shows 2 phantom measures.
 
+## A query define is typed by its RETURN, never its source (FHIR4-106, 2026-11-28)
+
+`define "Q": ([Observation] O return O.id)` was typed `List<Observation>`. Two causes, both in
+`type_map.infer_cql_type_compat`'s Query branch:
+
+* **A silent fall-through.** When the return expression's type could not be computed the code
+  dropped through to the "no return clause" branch, which reports the SOURCE's type. The source
+  is a query's INPUT; the define's value is its OUTPUT. A return clause that exists but cannot be
+  typed must yield `List<Any>` (or the bare singular form for a singular source), NEVER the
+  source type.
+* **Base elements were missing from the metadata.** `infer_fhir_property_type_str` answers for
+  resource-SPECIFIC elements (`Observation.status` → String) but the loaded schema carries no
+  base `Resource`/`DomainResource` elements, so `Observation.id` resolved to nothing — which is
+  what triggered the fall-through. `_RESOURCE_BASE_ELEMENT_TYPES` now supplies `id`,
+  `implicitRules` and `language` (all String subtypes). The complex base elements (`meta`,
+  `text`, `contained`, `extension`, `modifierExtension`) are deliberately NOT guessed: an honest
+  `List<Any>` beats an invented element type.
+
+**The consequence is part of the fix, not a follow-up.** With the typing corrected, `Combine(Q,
+',')` stopped being rejected at translate time and started RUNNING — and answered the FIRST id,
+because `Combine` lowered its source through the generic definition lookup, which is
+`(SELECT sub.value FROM "Q" … LIMIT 1)`, one row wearing a list's clothes. `Combine` now routes a
+multi-row define through the same FHIR4-65 `_multi_row_define_list` gate `in`/`contains` use. A
+typing fix that turns a loud rejection into a silent wrong answer is a regression with better
+manners; check what the newly-allowed path ANSWERS before calling the typing fix done.
+
 ## A DEFINE's materialized list is evaluated ONCE (FHIR4-109)
 
 A define denotes ONE value (CQL). The translator MATERIALIZES a multi-row

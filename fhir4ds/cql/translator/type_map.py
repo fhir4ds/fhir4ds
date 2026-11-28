@@ -1110,6 +1110,20 @@ def is_fhir_resource_type(context: Any, cql_type: Optional[str]) -> bool:
     return bool(schema is not None and bare in getattr(schema, "resources", {}))
 
 
+#: Base Resource/DomainResource elements with a CQL-mappable type (FHIR4-106).
+#: The loaded schema metadata describes resource-SPECIFIC elements only, so
+#: ``Observation.id`` resolved to nothing and a query's return type fell back to
+#: the source's type. ``id`` is the FHIR ``id`` primitive (a String subtype),
+#: ``implicitRules`` is uri and ``language`` is code (both String subtypes). The
+#: complex base elements (meta, text, contained, extension, modifierExtension)
+#: are deliberately absent: an honest List<Any> beats an invented type.
+_RESOURCE_BASE_ELEMENT_TYPES = {
+    "id": "String",
+    "implicitRules": "String",
+    "language": "String",
+}
+
+
 def infer_query_return_property_type_str(context: Any, query: Any, return_expr: Any) -> Optional[str]:
     """Infer the property return type STRING for aliased retrieve queries."""
     from ..parser.ast_nodes import QuerySource, Retrieve
@@ -1132,7 +1146,20 @@ def infer_query_return_property_type_str(context: Any, query: Any, return_expr: 
     resource_type = alias_resource_types.get(root_name)
     if not resource_type:
         return None
-    return infer_fhir_property_type_str(context, resource_type, ".".join(path_parts))
+    resolved = infer_fhir_property_type_str(context, resource_type, ".".join(path_parts))
+    if resolved is not None:
+        return resolved
+    # FHIR4-106: the loaded schema metadata does not carry the base
+    # Resource/DomainResource elements, so `Observation.id` resolved to nothing
+    # and the query's return type silently fell back to the SOURCE type. These
+    # three are the only base elements with a useful CQL type (`id` is the FHIR
+    # `id` primitive, a String subtype; `implicitRules` is uri and `language` is
+    # code, both String subtypes). The complex ones — meta, text, contained,
+    # extension, modifierExtension — are deliberately NOT guessed: an honest
+    # List<Any> is better than an invented element type.
+    if len(path_parts) == 1:
+        return _RESOURCE_BASE_ELEMENT_TYPES.get(path_parts[0])
+    return None
 
 
 def static_source_cql_type(source: Any) -> str:
@@ -1624,6 +1651,21 @@ def infer_cql_type_compat(context: Any, ast_node: Any) -> str:
                     ):
                         return return_type
                 return f"List<{return_type}>"
+            # FHIR4-106: a return clause EXISTS but its element type is not
+            # statically knowable. Falling through used to report the SOURCE's
+            # type — a silent lie, because the source describes the query's
+            # INPUT: `define Q: ([Observation] O return O.id)` answered
+            # `List<Observation>` although every element is an id String. The
+            # one observable victim was `Combine(Q, ',')`, rejected at translate
+            # time with "requires List<String>; got List<Observation>".
+            # An unknown element type is List<Any> (or the bare singular form,
+            # matching the singular-source rule above) — never the source type.
+            _any_sources = ast_node.source if isinstance(ast_node.source, list) else [ast_node.source]
+            if len(_any_sources) == 1 and isinstance(_any_sources[0], QuerySource):
+                _any_src = infer_cql_type_compat(context, _any_sources[0].expression)
+                if _any_src != "Any" and not _any_src.startswith("List<"):
+                    return "Any"
+            return "List<Any>"
         # No return clause: type is same as source
         src = ast_node.source
         if isinstance(src, list) and len(src) == 1:
