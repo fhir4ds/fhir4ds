@@ -317,6 +317,36 @@
 
 ## Known Fragile Areas
 
+- **A navigation define reference is the navigation it names (FHIR4-105, 2026-11-28)**: a define
+  whose body is a navigation on the context resource is stored like every navigation define, as a
+  one-row list — but in CQL it is a LIST only when the FHIR schema makes the path multi-valued.
+  `_operators.py::_as_scalar_navigation` asks the schema (`argument_type`, the FHIR4-89 typing) and,
+  when the navigation holds at most ONE element (`define Gen: Patient.gender` is a `String`),
+  substitutes the define's body at the operand: binary operands, unary operands and function
+  arguments lower exactly as the inline spelling (`"Gen" = 'female'` is
+  `fhirpath_text(_pt.patient_resource, 'gender') = 'female'`, `Upper("Gen")` is `'FEMALE'`,
+  `Coalesce("Gen", 'none')` is a String). Only a navigation of a RESOURCE is substituted: a
+  define that merely names an INCLUDED library's define (`define "Initial Population":
+  AHA."Is Adults ..."`, the `"SDE Race": SDE."SDE Race"` re-exports — 225 of them in the two DQM
+  corpora) is also a `Property`, with the library alias as its source, and is left exactly as it
+  was (`_navigation_define_body`); inlining those rewrote the SQL of two measures (CMS135, CMS144)
+  and is pinned by `test_a_define_that_only_aliases_an_included_define_is_left_as_it_is`.
+  Undecoded, the reference reached every consumer as
+  `VARCHAR[]`: `CQLListEqualEq(<list>, 'female')` (`array_length(STRING_LITERAL)`),
+  `upper(VARCHAR[])`, and — silently wrong — `CAST(<list> AS VARCHAR)` on the temporal path
+  (`"BYear" = @1980-02-29` was FALSE for a patient born that day) and a `Coalesce` that answered a
+  list. A list-typed navigation define compared with a single value (`"Given" = 'Jane'`, also
+  `!=`, `~`, `!~`, in either order) has no CQL overload and is a typed `TranslationError` at
+  translate time that names both operand types (`_reject_list_against_single_value`); nothing is
+  rejected when a type is unknown. A list compared with a list is unchanged and IN ORDER for `=` AND
+  for `~` (CQL 1.5 and 2.0 Appendix B §10.4: "for each element in the lists, in order, the elements
+  are equivalent") — the same elements in another order are NOT equivalent, so never write a test
+  that asserts which order a navigation produces. List consumers (`Count`, `exists`, `First`, the
+  indexer) keep reading the stored list. NOT covered: other positions (`year from "B"` is a
+  `DateComponent`; a tuple element, a `let` or a `sort by` key still carries the list), a navigation
+  the schema cannot type from a non-resource root (`First([Patient]).name.family`, `List<Any>`) or
+  through a choice element, and the define-reference `as`/`is List<T>` spelling (WP-20).
+
 - **An inline navigation cast to `List<T>` is the list it already is (FHIR4-90,
   2026-11-28)**: `Patient.name.given as List<String>` (and `is List<String>`) is answered
   by the SCHEMA, not at runtime. `_operators.py::_inline_navigation_conforms_to_list` asks
@@ -333,6 +363,7 @@
   the first element — card WP-20), a choice-typed navigation inline
   (`Patient.extension.value as List<String>` — card WP-22), and a resource define
   (`"Obs" as List<FHIR.Observation>` is still a binder error).
+
 
 - **A Quantity list is aggregated unit-aware, whatever spelling carries its type
   (FHIR4-108, 2026-11-28)**: `_functions.py::_list_element_is_quantity` recognises both

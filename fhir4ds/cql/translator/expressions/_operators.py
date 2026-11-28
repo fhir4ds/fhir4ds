@@ -2943,6 +2943,171 @@ class OperatorsMixin:
             return None
         return self._structural_type_conforms(f"List<{element}>", target_name)
 
+    # ------------------------------------------------------------------
+    # A navigation define reference is the navigation it names (FHIR4-105)
+    # ------------------------------------------------------------------
+
+    #: Comparisons that are defined for two lists (element by element), never for a list and a single value.
+    _LIST_COMPARISONS = frozenset({"=", "!=", "<>", "~", "!~"})
+
+    def _navigation_define_body(self, node: Any, depth: int = 0) -> Any:
+        """The navigation behind the define ``node`` names, following define aliases (``define G2: "G"``).
+
+        Only a navigation of a RESOURCE is meant. A define that merely names an INCLUDED library's
+        define (``define "Initial Population": AHA."Is Adults ..."``) is also a ``Property`` — its
+        source is the library alias — but it is not a navigation, so it is left alone: measures
+        alias included defines on every page, and inlining them rewrote the SQL of measures this
+        card has nothing to do with (FHIR4-105).
+        """
+        if not isinstance(node, Identifier) or depth > 3:
+            return None
+        body = self._definition_source_ast(node.name, node)
+        if isinstance(body, Identifier) and body.name != node.name:
+            return self._navigation_define_body(body, depth + 1)
+        if not isinstance(body, Property):
+            return None
+        root: Any = body
+        while isinstance(root, Property):
+            root = root.source
+        if isinstance(root, Identifier) and root.name in (getattr(self.context, "includes", None) or {}):
+            return None
+        return body
+
+    @staticmethod
+    def _cql_type_text(cql_type: Any) -> str:
+        """A CQL type in the spelling an author uses: ``String``, ``FHIR.HumanName``, ``List<String>``."""
+        from ...translator.inference import FHIR_TYPE_TO_CQL_TYPE
+        from ...translator.overload import ListType, NamedType
+
+        if isinstance(cql_type, ListType):
+            return f"List<{OperatorsMixin._cql_type_text(cql_type.element)}>"
+        if isinstance(cql_type, NamedType):
+            return FHIR_TYPE_TO_CQL_TYPE.get(cql_type.name, cql_type.name)
+        return str(getattr(cql_type, "name", None) or cql_type)
+
+    def _navigation_holds_one_element(self, body: Property) -> bool:
+        """Whether the FHIR schema gives this navigation at most ONE element (``Patient.gender``)."""
+        from ...translator.argument_types import argument_type
+        from ...translator.overload import NamedType
+
+        return isinstance(argument_type(self.context, body), NamedType)
+
+    def _as_scalar_navigation(self, node: Any) -> Any:
+        """A define reference whose navigation holds at most ONE element, as that navigation.
+
+        ``define Gen: Patient.gender`` is a ``String`` in CQL: ``gender`` is 0..1 in the FHIR schema. Like
+        every navigation define it is stored as a one-row list, so a reference that reaches a consumer
+        undecoded is a list there (``upper(VARCHAR[])``, a list equality against a string). The define's
+        BODY is returned instead, so the reference translates exactly as the inline ``Patient.gender``
+        does. None for anything else: a multi-valued navigation (that IS a list), a navigation the schema
+        cannot type (a choice), or an operand that is not a define reference.
+        """
+        body = self._navigation_define_body(node)
+        if body is None or not self._navigation_holds_one_element(body):
+            return None
+        return body
+
+    def _with_scalar_navigations(self, expr: BinaryExpression) -> BinaryExpression:
+        left = self._as_scalar_navigation(expr.left)
+        right = self._as_scalar_navigation(expr.right)
+        if left is None and right is None:
+            return expr
+        return dataclasses.replace(
+            expr, left=expr.left if left is None else left, right=expr.right if right is None else right
+        )
+
+    def _navigation_define_list_type(self, node: Any) -> str | None:
+        """``List<T>`` when ``node`` names a navigation define that is a list in CQL; else None."""
+        body = self._navigation_define_body(node)
+        if body is None:
+            return None
+        from ...translator.argument_types import argument_type
+        from ...translator.overload import ListType
+
+        cql_type = argument_type(self.context, body)
+        if isinstance(cql_type, ListType):
+            return self._cql_type_text(cql_type)
+        declared = str(getattr(self.context.definition_meta.get(node.name), "cql_type", "") or "")
+        # ``List<Any>`` is the placeholder every navigation define carries when nothing better is known.
+        return declared if declared.startswith("List<") and declared != "List<Any>" else None
+
+    def _static_single_value_type(self, node: Any) -> str | None:
+        """The CQL type of an operand that is statically ONE value; None when that is not known."""
+        if isinstance(node, Literal):
+            return str(node.type) if node.type in ("String", "Integer", "Long", "Decimal", "Boolean") else None
+        if isinstance(node, Quantity):
+            return "Quantity"
+        if isinstance(node, DateTimeLiteral):
+            value = str(node.value)
+            return "Time" if value.startswith("T") else "DateTime" if "T" in value else "Date"
+        if isinstance(node, TimeLiteral):
+            return "Time"
+        if isinstance(node, Property):
+            from ...translator.argument_types import argument_type
+            from ...translator.overload import NamedType
+
+            cql_type = argument_type(self.context, node)
+            return self._cql_type_text(cql_type) if isinstance(cql_type, NamedType) else None
+        if isinstance(node, Identifier):
+            declared = str(getattr(self.context.definition_meta.get(node.name), "cql_type", "") or "")
+            if declared and not declared.startswith(("List<", "Interval<", "Choice<", "Tuple")) and declared != "Any":
+                return declared
+        if isinstance(node, BinaryExpression) and str(node.operator) == "as":
+            if isinstance(node.left, Literal) and node.left.value is None:
+                target = str(self._type_specifier_name(node.right) or "").rsplit(".", 1)[-1]
+                return target or None
+        return None
+
+    @staticmethod
+    def _comparison_operand_text(node: Any) -> str:
+        """An operand as its author wrote it: ``"Given"``, ``Patient.gender``, ``'Jane'``, ``@1980``."""
+        if isinstance(node, Identifier):
+            return f'"{node.name}"' if node.quoted else node.name
+        if isinstance(node, Property):
+            root, parts = node, []
+            while isinstance(root, Property):
+                parts.append(root.path)
+                root = root.source
+            return ".".join([str(getattr(root, "name", "?"))] + parts[::-1])
+        if isinstance(node, Literal):
+            if isinstance(node.value, str):
+                return repr(node.value)
+            return str(node.value).lower() if isinstance(node.value, bool) else str(node.value)
+        if isinstance(node, (DateTimeLiteral, TimeLiteral)):
+            return f"@{node.value}"
+        if isinstance(node, Quantity):
+            return f"{node.value} '{node.unit}'"
+        if isinstance(node, BinaryExpression) and str(node.operator) == "as":
+            return "null" if isinstance(node.left, Literal) and node.left.value is None else "the cast"
+        return "the operand"
+
+    def _reject_list_against_single_value(self, expr: BinaryExpression) -> None:
+        """A list compared with a single value is a static type error, said at translate time.
+
+        CQL has no implicit conversion between a list and one element, so ``Given = 'Jane'`` with
+        ``define Given: Patient.name.given`` has no overload. It used to be emitted as
+        ``CQLListEqualEq(<list>, 'Jane')`` and to fail at run time with
+        ``No function matches ... array_length(STRING_LITERAL)``. The message names both operand types.
+        Nothing is rejected when either operand's static type is unknown.
+        """
+        left = self._navigation_define_list_type(expr.left)
+        right = self._navigation_define_list_type(expr.right)
+        if (left is None) == (right is None):
+            return
+        list_is_left = left is not None
+        list_node, list_type, peer = (expr.left, left, expr.right) if list_is_left else (expr.right, right, expr.left)
+        peer_type = self._static_single_value_type(peer)
+        if peer_type is None:
+            return
+        sides = ("left", "right") if list_is_left else ("right", "left")
+        raise TranslationError(
+            f"CQL '{expr.operator}' cannot compare a list with a single value: the {sides[0]} operand "
+            f"{self._comparison_operand_text(list_node)} is {list_type} and the {sides[1]} operand "
+            f"{self._comparison_operand_text(peer)} is {peer_type}. A list is compared with a list, "
+            "element by element; to compare one element, select it first (First, Last or an indexer)."
+        )
+
+
     def _translate_binary_expression(self, expr: BinaryExpression, boolean_context: bool = False) -> SQLExpression:
         """
         Translate a CQL binary expression to SQL.
@@ -2954,6 +3119,11 @@ class OperatorsMixin:
         - IN operator -> left is SCALAR, right is LIST
         """
         operator = expr.operator.lower() if isinstance(expr.operator, str) else expr.operator
+        # FHIR4-105: a reference to a define whose navigation holds at most one element
+        # is that navigation; a list compared with a single value is a typed error.
+        expr = self._with_scalar_navigations(expr)
+        if operator in self._LIST_COMPARISONS:
+            self._reject_list_against_single_value(expr)
 
         # Handle "duration in <unit> of <interval>" pattern before translating operands.
         # Parser produces: BinaryExpression(left=Identifier('duration'), operator='in',
@@ -11280,6 +11450,11 @@ class OperatorsMixin:
     def _translate_unary_expression(self, expr: UnaryExpression, boolean_context: bool = False) -> SQLExpression:
         """Translate a CQL unary expression to SQL."""
         operator = expr.operator.lower() if isinstance(expr.operator, str) else expr.operator
+        # FHIR4-105: a reference to a define whose navigation holds at most one element
+        # is that navigation.
+        _operand = self._as_scalar_navigation(expr.operand)
+        if _operand is not None:
+            expr = dataclasses.replace(expr, operand=_operand)
 
         # Check for singleton from with component filter BEFORE translating operand
         if operator == "singleton from" and self._is_component_filter_query(expr.operand):

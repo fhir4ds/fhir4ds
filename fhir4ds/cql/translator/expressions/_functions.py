@@ -1926,6 +1926,15 @@ class FunctionsMixin:
         )
         name = func.name
         arity = len(func.arguments) if func.arguments else 0
+        # FHIR4-105: a reference to a define whose navigation holds at most one element
+        # is that navigation (``Upper("Gen")`` is ``Upper(Patient.gender)``).
+        _operands = [self._as_scalar_navigation(argument) for argument in (func.arguments or [])]
+        if any(_operand is not None for _operand in _operands):
+            arguments = list(func.arguments)
+            for index, _operand in enumerate(_operands):
+                if _operand is not None:
+                    arguments[index] = _operand
+            func = FunctionRef(name=func.name, arguments=arguments)
         bare_lower = name.rsplit(".", 1)[-1].lower() if "." in name else name.lower()
 
         # CQL 1.5 Appendix B-A: MinValue(T)/MaxValue(T) are compile-time
