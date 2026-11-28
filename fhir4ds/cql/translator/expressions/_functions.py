@@ -483,6 +483,9 @@ class FunctionsMixin:
                 "datetime": "DateTime",
                 "time": "Time",
                 "quantity": "Quantity",
+                # FHIR4-94: a converter with no declared return type is how
+                # mistyping creeps in downstream; ConvertQuantity is a Quantity.
+                "convertquantity": "Quantity",
             }
             if name in conversion_returns:
                 return conversion_returns[name]

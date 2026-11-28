@@ -8846,6 +8846,49 @@ per litre instead of NULL.
   because it is every Quantity measure's per-row comparison primitive.
   Tests: `fhir4ds/cql/duckdb/tests/integration/test_fhir4_79_reciprocal_units.py`.
 
+## FHIR4-94 — a UDF registration is not dead until you check what the TRANSLATOR emits
+
+`ConvertQuantity(argument Quantity, unit String)` is a spec function (CQL 1.5
+Appendix B) and it was listed in the translator's `static_inline_functions`
+set — i.e. KNOWN — but it had **no lowering**, so `_translate_function_ref`
+fell through to raw pass-through and emitted the CQL spelling as a SQL
+identifier. Neither engine registers that name (the implementation is
+`quantityConvert` in both), so every `ConvertQuantity(...)` in real CQL died at
+`CatalogException: Scalar Function with name convertquantity does not exist`.
+
+How it got that way matters more than the fix. `ConvertQuantity` was once a
+Python registration and was deleted as **dead** during the v0.0.14 WASM
+campaign *because nothing seemed to emit it*. Something did — the pass-through.
+**A registration can only be judged dead by looking at what the TRANSLATOR
+emits**, never by looking for other registrations of the same name; a
+pass-through makes any name "unused" right up until a user writes the CQL.
+
+Fixed as a RENAME (`"convertquantity": "quantityConvert"` in
+`_translate_function_ref`'s `_RENAMES`), deliberately, rather than by adding a
+second registration: `quantityConvert` already exists in BOTH engines and is in
+`_PYTHON_PREFERRED_CPP_CONFLICTS` (FHIR4-79), so one rename fixes the desktop
+authority AND the WASM/no-Python surface with no C++ rebuild and no new public
+name. `_function_return_type` now declares it `Quantity` — a converter with an
+undeclared return type is how mistyping creeps in downstream.
+
+**The re-route exposed a second defect and the fix owns it rather than
+introducing it:** `quantityConvert` is registered with
+`null_handling="special"`, so DuckDB passes NULLs straight through and a NULL
+target unit reached `_ucum_to_pint_unit` and raised
+`TypeError: argument of type 'NoneType' is not iterable` →
+`InvalidInputException`. CQL says *"If the unit is not specified ... the result
+is null"*, so both arguments are now guarded at the top of the UDF. When
+re-routing CQL onto an existing UDF, check that UDF's null contract against the
+calling operator's — a rename inherits every weakness of its target.
+
+Referees worth knowing about: NO corpus measure (qi-core 2025, us-core 2025,
+qi-core 2026) and NO vendored official CQL fixture mentions `ConvertQuantity`,
+so both the 121-measure digest and the official conformance count are
+**0-diff by construction** here. The real referees are the unit/translator trees
+and `fhir4ds/cql/duckdb/tests/integration/test_fhir4_94_convert_quantity.py`
+(which pins the SQL text, the values, the nulls, and the CQL-06 UCUM Julian
+factors so a future re-route cannot silently re-implement them).
+
 ## FHIR4-83 — a fold accumulator's CQL type is its STARTING VALUE's type
 
 `({1, 2, 3}) X aggregate R starting 0 'mg': R + 1 'mg'` answered NULL: the fold

@@ -1237,7 +1237,7 @@ def quantitySubtract(q1_json: str | None, q2_json: str | None) -> str | None:
         return None
 
 
-def quantityConvert(q_json: str | None, target_unit: str) -> str | None:
+def quantityConvert(q_json: str | None, target_unit: str | None) -> str | None:
     """Convert a quantity to a different unit.
 
     Args:
@@ -1246,7 +1246,17 @@ def quantityConvert(q_json: str | None, target_unit: str) -> str | None:
 
     Returns:
         JSON string of converted quantity, or None if conversion not possible
+
+    Null-safe on BOTH arguments (FHIR4-94).  This UDF is registered with
+    ``null_handling="special"``, so DuckDB hands NULLs straight through — a null
+    target unit used to reach ``_ucum_to_pint_unit`` and raise
+    ``TypeError: argument of type 'NoneType' is not iterable``, surfacing as a
+    DuckDB ``InvalidInputException``.  CQL 1.5 Appendix B §ConvertQuantity says
+    "If the unit is not specified ... the result is null", so a null unit is a
+    conversion-not-possible and answers None like every other failure in here.
     """
+    if q_json is None or target_unit is None:
+        return None
     q_dict = _parse_quantity(q_json)
 
     if not q_dict:

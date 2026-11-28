@@ -170,6 +170,14 @@ class ExpressionTranslator(
             "stddevpop": "STDDEV_POP",
             "distinct": "list_distinct",
             "flatten": "flatten",
+            # FHIR4-94: `ConvertQuantity(argument Quantity, unit String)` had no
+            # lowering, so it fell through to raw pass-through and emitted the CQL
+            # spelling as a SQL identifier — a Catalog Error, since the
+            # implementation is registered as `quantityConvert` in BOTH engines
+            # (Python is the desktop authority per FHIR4-79, the C++ bundle serves
+            # the browser). Renaming here keeps one implementation and fixes the
+            # desktop and WASM surfaces at once.
+            "convertquantity": "quantityConvert",
         }
         for cql, sql in _RENAMES.items():
             registry.register_rename(cql, sql)
