@@ -360,6 +360,15 @@ def _list_element_is_quantity(cql_type: str) -> bool:
     return element.rsplit(".", 1)[-1].lower() == "quantity"
 
 
+#: DuckDB element cast for a CQL numeric list element type, widest first
+#: (FHIR4-114). Mirrors ``_utils._list_element_sql_type``'s numeric rows.
+_NUMERIC_LIST_ELEMENT_SQL = (
+    ("Decimal", "DECIMAL(38, 8)"),
+    ("Long", "BIGINT"),
+    ("Integer", "INTEGER"),
+)
+
+
 class FunctionsMixin:
     """Mixin providing function reference, exists, and age translations."""
 
@@ -3098,6 +3107,66 @@ class FunctionsMixin:
                         ))],
                     )
                     return self._count_non_null(filtered)
+                # FHIR4-114: the typed dispatcher runs BEFORE the generic
+                # ``list_*`` fallbacks below. Those fallbacks hand the list to
+                # DuckDB's ``list_sum``/``list_avg``, whose normalization casts
+                # every element to DOUBLE — so an aggregate over a stored list
+                # DEFINE answered a DOUBLE while the same aggregate over the
+                # literal spelling answered the CQL result type
+                # (`Sum(List<Integer>) Integer`, Appendix B), and CQL's Integer
+                # overflow-to-null rule stopped applying entirely
+                # (`Sum({2147483647, 1})` was null, `Sum("L")` over the same
+                # elements was 2147483648.0). The define's metadata already
+                # carries the element type; the dispatcher is what restores the
+                # result width, exactly as it does for the literal spelling.
+                # Unknown/dynamic element types keep the previous lowering.
+                _stored_elems = None
+                try:
+                    _stored_elems = self._static_list_element_types(arg)
+                except Exception:  # noqa: BLE001 - conservative inference
+                    _stored_elems = None
+                _concrete_elems = {
+                    t for t in (_stored_elems or set())
+                    if t not in (None, "Null", "Any")
+                }
+                if _concrete_elems:
+                    # The element type is a CQL DECLARATION; the value column's
+                    # physical type is whatever the define's body produced. A
+                    # duration/age list is `List<Integer>` yet transports VARCHAR
+                    # text (`months between …`), and DuckDB has no `sum(VARCHAR)`.
+                    # Cast at the list boundary so the exact aggregate binds and
+                    # compares numerically; TRY_CAST keeps an unrepresentable
+                    # element (an uncertainty interval) out of the aggregate
+                    # instead of failing the query.
+                    if _concrete_elems <= {"Integer", "Long", "Decimal"}:
+                        _numeric_cast = next(
+                            (
+                                sql_type
+                                for cql_type_name, sql_type in _NUMERIC_LIST_ELEMENT_SQL
+                                if cql_type_name in _concrete_elems
+                            ),
+                            None,
+                        )
+                        if _numeric_cast is not None:
+                            source_sql = SQLFunctionCall(
+                                name="list_transform",
+                                args=[
+                                    source_sql,
+                                    SQLLambda(
+                                        param="_v",
+                                        body=SQLCast(
+                                            expression=SQLIdentifier(name="_v"),
+                                            target_type=_numeric_cast,
+                                            try_cast=True,
+                                        ),
+                                    ),
+                                ],
+                            )
+                    _typed = self._translate_list_aggregate_dispatch(
+                        name, source_sql, _stored_elems,
+                    )
+                    if _typed is not None:
+                        return _typed
                 _def_list_func = {
                     "min": "list_min",
                     "max": "list_max",
@@ -3110,11 +3179,6 @@ class FunctionsMixin:
                 # statistical family (Median/Mode/StdDev/Variance/
                 # Population*/Product/GeometricMean-style semantics) through
                 # the list dispatcher; None falls through to legacy paths.
-                _stored_elems = None
-                try:
-                    _stored_elems = self._static_list_element_types(arg)
-                except Exception:  # noqa: BLE001 - conservative inference
-                    _stored_elems = None
                 _dispatched = self._translate_list_aggregate_dispatch(
                     name, source_sql, _stored_elems,
                 )
