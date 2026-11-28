@@ -23,6 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 ML_MODULE = Path(__file__).with_name("test_medterm4ds_in_process.py")
 
 POISONED_MODULE = """
+    import ctypes
     import os
     import signal
 
@@ -34,6 +35,11 @@ POISONED_MODULE = """
         pass
 
     def test_dies():
+        # This crash is DELIBERATE, so it must not leave a core file on the owner's disk
+        # (WSL captures one per fault, about 0.6 GB each; ``ulimit -c 0`` does not stop it).
+        # Only this process is made non-dumpable, right before the fault: a real crash
+        # anywhere else keeps its core, which is evidence.
+        ctypes.CDLL("libc.so.6").prctl(4, 0, 0, 0, 0)  # PR_SET_DUMPABLE = 4, value 0
         os.kill(os.getpid(), signal.SIGSEGV)
 
     def test_is_never_reached():
@@ -115,7 +121,6 @@ def test_the_parent_never_imports_the_ml_module(project: Pytester):
 
         pytestmark = pytest.mark.ml
 
-        os.kill(os.getpid(), signal.SIGSEGV) if False else None
         raise ImportError("the ML stack cannot be imported")
         """
     )
