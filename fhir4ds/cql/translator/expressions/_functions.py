@@ -1946,6 +1946,13 @@ class FunctionsMixin:
                     arg, first=name.lower() == "first"
                 )
             if isinstance(arg, Query):
+                # FHIR4-107: `First/Last(<filtered navigation>)` is ONE navigation.
+                _fused = self._filtered_navigation_list(arg)
+                if _fused is not None:
+                    return SQLFunctionCall(
+                        name="LIST_EXTRACT",
+                        args=[_fused, SQLLiteral(value=1 if name.lower() == "first" else -1)],
+                    )
                 if self._is_list_typed_ast(arg):
                     source = _coerce_query_rows_to_list(self.translate(arg, usage=ExprUsage.LIST))
                     return SQLFunctionCall(
@@ -2820,6 +2827,24 @@ class FunctionsMixin:
         Returns a SQL expression if the aggregate applies to a Query/FunctionRef/
         Property-on-Query, or None to fall through to standard arg translation.
         """
+        # FHIR4-107: `Count(<filtered navigation>)` counts ONE navigation. The
+        # row-aggregate path below lowers the query's scalar value column and
+        # does not bind for a navigation on the context resource.
+        if (
+            len(func.arguments) == 1
+            and func.name.rsplit(".", 1)[-1].lower() == "count"
+            and isinstance(func.arguments[0], Query)
+        ):
+            _fused = self._filtered_navigation_list(func.arguments[0])
+            if _fused is not None:
+                # FHIRPath `count()` of an empty navigation is 0, not null.
+                return SQLFunctionCall(
+                    name="COALESCE",
+                    args=[
+                        SQLFunctionCall(name="ARRAY_LENGTH", args=[_fused, SQLLiteral(value=1)]),
+                        SQLLiteral(value=0),
+                    ],
+                )
         _CQL_AGG_TO_SQL = {
             "anytrue": "bool_or",
             "alltrue": "bool_and",

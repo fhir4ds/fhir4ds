@@ -162,6 +162,12 @@ def _strip_primitive_value_segments(
     return ".".join(output)
 
 
+#: One path segment of a fused navigation (an identifier, never SQL or FHIRPath syntax).
+_NAVIGATION_SEGMENT = _re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+#: A decimal literal rendered as FHIRPath text.
+_NAVIGATION_NUMBER = _re.compile(r"-?[0-9]+(\.[0-9]+)?")
+
+
 class PropertyMixin:
     """Mixin providing FHIR property access and choice-type translations."""
 
@@ -546,6 +552,15 @@ class PropertyMixin:
                 f"translate `([{_union_type}] union ...).{path}`. Rewrite using "
                 f"an explicit query alias over each retrieve."
             )
+
+        # FHIR4-107: `<navigation>.where(<field> = <literal>)` and whatever
+        # follows it is ONE FHIRPath navigation on the resource. Lowered step
+        # by step, the criterion became a bare SQL column (alias-less
+        # spelling: `Referenced column "url" not found`) or filtered nothing
+        # (alias spelling: it kept the FIRST element whenever ANY matched).
+        fused = self._translate_filtered_navigation_property(prop, boolean_context)
+        if fused is not None:
+            return fused
 
         # CQL-02 QA-003: fold member access on statically-known clinical
         # values (Code/Concept literals, named codes/concepts, ToConcept).
@@ -1680,3 +1695,236 @@ class PropertyMixin:
         """Create a fhirpath UDF call, flattening nested fhirpath chains."""
         func_name = "fhirpath_bool" if boolean_context else "fhirpath_text"
         return self._flatten_fhirpath_source(resource_col, path, func_name)
+
+    # ------------------------------------------------------------------
+    # A filtered navigation is ONE navigation (FHIR4-107)
+    # ------------------------------------------------------------------
+
+    def _property_chain(self, expr: Any) -> Tuple[Any, list[str]]:
+        """``A.b.c`` -> ``(A, ['b', 'c'])``; anything else -> ``(expr, [])``."""
+        segments: list[str] = []
+        while isinstance(expr, Property):
+            segments.append(expr.path)
+            expr = expr.source
+        segments.reverse()
+        return expr, segments
+
+    def _filtered_navigation(self, node: Any) -> tuple[SQLExpression, str] | None:
+        """``<path>.where(<predicate>)`` evaluated ONCE on the resource it starts from.
+
+        ``node`` is a query whose only clause is a ``where`` over a plain property chain
+        rooted at a resource (``Patient.extension A where A.url = '...'``, with or without
+        an alias), optionally wrapped in ``First``/``Last``/``singleton from``. Returns the
+        resource's SQL and the FHIRPath navigation, or None for any other shape, in which
+        case the caller keeps the general lowering.
+
+        FHIR4-107: without this the query lowered each step separately. The criterion
+        ``url = '...'`` became a bare SQL column (``Binder Error: Referenced column "url"
+        not found``), and the alias spelling answered with the FIRST extension whenever ANY
+        matched, because the filter ran on the un-filtered collection.
+        """
+        position = ""
+        if isinstance(node, (FunctionRef, MethodInvocation)):
+            # ``First(X)`` and ``X.first()`` are the same expression; so are Last/last.
+            if isinstance(node, FunctionRef):
+                name = node.name.lower()
+                inner = node.arguments[0] if len(node.arguments) == 1 else None
+            else:
+                name = node.method.lower()
+                inner = node.source if not node.arguments else None
+            if name == "first" or name == "singleton from" or name == "singletonfrom":
+                position = ".first()"
+            elif name == "last":
+                position = ".last()"
+            else:
+                return None
+            if inner is None:
+                return None
+            node = inner
+        if not isinstance(node, Query) or node.where is None:
+            return None
+        # Any other clause makes the query more than a filter.
+        if any(
+            getattr(node, _clause, None)
+            for _clause in (
+                "return_clause", "sort", "with_clauses", "let_clauses", "relationships", "aggregate",
+            )
+        ):
+            return None
+        source = node.source
+        if isinstance(source, list):
+            if len(source) != 1:
+                return None
+            source = source[0]
+        if not isinstance(source, QuerySource):
+            return None
+        root, segments = self._property_chain(source.expression)
+        if not segments:
+            return None
+        root_sql = self._navigation_root_sql(root)
+        if root_sql is None:
+            return None
+        predicate = self._filtered_navigation_predicate(
+            node.where.expression, source.alias or "$this"
+        )
+        if predicate is None:
+            return None
+        return root_sql, ".".join(segments) + f".where({predicate})" + position
+
+    def _navigation_root_sql(self, root: Any) -> SQLExpression | None:
+        """The resource a filtered navigation starts from.
+
+        The context resource (``Patient``) or an alias of a retrieve (``C`` in
+        ``[Coverage] C where ...``). An alias bound to an expression is not a resource
+        column, so it is left to the general lowering.
+        """
+        if not isinstance(root, Identifier) or root.quoted:
+            return None
+        if root.name in (getattr(self.context, "includes", None) or {}):
+            return None
+        symbol = self.context.resolve_symbol(root.name)
+        if symbol is not None and symbol.symbol_type == "alias":
+            if symbol.table_alias:
+                return SQLQualifiedIdentifier(parts=[symbol.table_alias, "resource"])
+            return None
+        return self.translate(root, usage=ExprUsage.SCALAR)
+
+    def _filtered_navigation_predicate(self, criterion: Any, alias: str) -> str | None:
+        """A ``where`` criterion as FHIRPath text; None when it needs more than FHIRPath.
+
+        Only a field of the filtered element compared with a literal is rendered
+        (``url = '…'``, ``system != '…'``), combined with ``and`` / ``or`` / ``not``.
+        The field is spelled against the element itself, so the same text serves the
+        alias and the alias-less spelling.
+        """
+        comparison = self._navigation_comparison(criterion, alias)
+        if comparison is not None:
+            return "{} {} {}".format(*comparison)
+        if not isinstance(criterion, BinaryExpression):
+            operator = (getattr(criterion, "operator", "") or "").strip().lower()
+            if isinstance(criterion, UnaryExpression) and operator == "not":
+                return self._negated_navigation_predicate(criterion.operand, alias)
+            return None
+        operator = (criterion.operator or "").strip().lower()
+        if operator in ("and", "or"):
+            left = self._filtered_navigation_predicate(criterion.left, alias)
+            right = self._filtered_navigation_predicate(criterion.right, alias)
+            return f"({left}) {operator} ({right})" if left and right else None
+        return None
+
+    def _negated_navigation_predicate(self, node: Any, alias: str) -> str | None:
+        """``not (<criterion>)`` by negating the criterion itself.
+
+        The negation is rewritten rather than spelled ``not(...)``: FHIRPath ``not`` is a
+        function of a singleton, and inside ``where`` the engine answers nothing for it.
+        """
+        if isinstance(node, UnaryExpression) and (node.operator or "").strip().lower() == "not":
+            return self._filtered_navigation_predicate(node.operand, alias)
+        comparison = self._navigation_comparison(node, alias)
+        if comparison is not None:
+            field, operator, literal = comparison
+            return f"{field} {'=' if operator == '!=' else '!='} {literal}"
+        if isinstance(node, BinaryExpression):
+            operator = (node.operator or "").strip().lower()
+            if operator in ("and", "or"):
+                left = self._negated_navigation_predicate(node.left, alias)
+                right = self._negated_navigation_predicate(node.right, alias)
+                flipped = "or" if operator == "and" else "and"
+                return f"({left}) {flipped} ({right})" if left and right else None
+        return None
+
+    def _navigation_comparison(self, node: Any, alias: str) -> tuple[str, str, str] | None:
+        """``<field> = <literal>`` with the literal on either side as ``(field, op, literal)``."""
+        if not isinstance(node, BinaryExpression):
+            return None
+        operator = (node.operator or "").strip().lower()
+        if operator not in ("=", "!=", "<>"):
+            return None
+        field = self._navigation_field(node.left, alias)
+        literal = self._navigation_literal(node.right)
+        if field is None or literal is None:
+            field = self._navigation_field(node.right, alias)
+            literal = self._navigation_literal(node.left)
+        if field is None or literal is None:
+            return None
+        return field, "!=" if operator == "<>" else operator, literal
+
+    def _navigation_field(self, node: Any, alias: str) -> str | None:
+        """A property of the filtered element: ``url``, ``coding.code``, ``$this.url``."""
+        if isinstance(node, Identifier) and not node.quoted:
+            # Unqualified fields are relative to the element in FHIRPath `where`, which is
+            # exactly what the alias-less CQL spelling means.
+            return node.name if alias == "$this" else None
+        root, segments = self._property_chain(node)
+        if not isinstance(root, Identifier) or root.name != alias or not segments:
+            return None
+        if any(not _NAVIGATION_SEGMENT.fullmatch(segment) for segment in segments):
+            return None
+        return ".".join(segments)
+
+    def _navigation_literal(self, node: Any) -> str | None:
+        """A CQL literal as FHIRPath text; None for anything that is not a literal."""
+        if not isinstance(node, Literal):
+            return None
+        value = node.value
+        kind = (getattr(node, "type", None) or "").lower()
+        if isinstance(value, bool) or kind == "boolean":
+            return "true" if value is True or value == "true" else "false"
+        if kind == "string" and isinstance(value, str):
+            from ...translator.fhirpath_builder import escape_fhirpath_string_literal
+
+            return f"'{escape_fhirpath_string_literal(value)}'"
+        if isinstance(value, (int, float)) and kind in ("integer", "long", "decimal"):
+            return repr(value)
+        if kind == "decimal" and _NAVIGATION_NUMBER.fullmatch(str(value)):
+            return str(value)
+        return None
+
+    def _filtered_navigation_list(self, node: Any) -> SQLFunctionCall | None:
+        """The filtered navigation as the list-returning ``fhirpath`` UDF."""
+        split = self._filtered_navigation(node)
+        if split is None:
+            return None
+        root_sql, navigation = split
+        return SQLFunctionCall(name="fhirpath", args=[root_sql, SQLLiteral(value=navigation)])
+
+    def _translate_filtered_navigation_property(
+        self, prop: Property, boolean_context: bool
+    ) -> SQLExpression | None:
+        """``<filtered navigation>.a.b`` (also around ``First``/``Last``) as ONE navigation."""
+        segments: list[str] = []
+        node: Any = prop
+        while isinstance(node, Property):
+            segments.append(node.path)
+            node = node.source
+        segments.reverse()
+        split = self._filtered_navigation(node)
+        if split is None:
+            return None
+        root_sql, navigation = split
+        call: SQLExpression = SQLFunctionCall(
+            name="fhirpath_text", args=[root_sql, SQLLiteral(value=navigation)]
+        )
+        for index, segment in enumerate(segments):
+            call = self._make_fhirpath_call(
+                call, segment, boolean_context and index == len(segments) - 1
+            )
+        return call
+
+    def _translate_filtered_navigation_exists(self, source: Any) -> SQLExpression | None:
+        """``exists (<filtered navigation>.a.b)`` as one ``fhirpath_bool``."""
+        segments: list[str] = []
+        node: Any = source
+        while isinstance(node, Property):
+            segments.append(node.path)
+            node = node.source
+        segments.reverse()
+        split = self._filtered_navigation(node)
+        if split is None:
+            return None
+        root_sql, navigation = split
+        if segments:
+            navigation += "." + ".".join(segments)
+        return SQLFunctionCall(
+            name="fhirpath_bool", args=[root_sql, SQLLiteral(value=f"{navigation}.exists()")]
+        )

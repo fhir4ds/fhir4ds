@@ -317,6 +317,31 @@
 
 ## Known Fragile Areas
 
+- **A filtered navigation is ONE navigation (FHIR4-107, 2026-11-28)**: a query
+  whose only clause is a `where` over a navigation — the every-day
+  `Patient.extension.where(url = '…').value` — lowers to ONE FHIRPath call on the
+  resource the navigation starts from,
+  `fhirpath_text(_pt.patient_resource, 'extension.where(url = ''…'').value')`
+  (`PropertyMixin._filtered_navigation`, `expressions/_property.py`). It must never
+  be lowered to a per-element list whose alias-less criterion becomes a bare SQL
+  column (`Binder Error: Referenced column "url" not found`, in a define body just
+  as much as inline), nor to a filter applied AFTER taking the first element (the
+  alias spelling `Patient.extension E where E.url = '…'` answered with the FIRST
+  extension whenever ANY matched). Recognised predicates: `=`/`!=`/`<>` with the
+  literal on either side, `and`/`or`, and `not` (rewritten — the engine answers
+  EMPTY for `not` inside `where`); `~`/`!~` are deliberately not rendered and keep
+  the previous lowering. Everything after the query is folded into the same call
+  (`.value`, `.url`, `.exists()`); `First`/`Last`/`first()`/`last()` become
+  `.first()`/`.last()`; `Count`/`count()` become `ARRAY_LENGTH(fhirpath(…))`; and
+  the method spelling `X.exists()` (previously an SQL function literally named
+  `exists`) is `fhirpath_bool(…, '….exists()')` for ANY navigation. Conventions
+  unchanged: a by-URL `.value` is the SCALAR first match (NULL when absent) because
+  `translator.py` keeps `extension.where(…).value` scalar; other tails are stored
+  lists. NOT covered: a bare filtered-navigation query as a define
+  (`define X: Patient.extension.where(url = '…')` — one fused line is needed in
+  `_translate_query`), `.select(…)`, a query with a `return` clause followed by
+  more navigation, `~`/`!~`.
+
 - **A retrieve is a table, not a list (FHIR4-78, 2026-11-27)**: a retrieve, or a define of
   retrieves, used as a source of a multi-source aggregate becomes the patient's own resources
   as JSON text (`unnest((SELECT COALESCE(list_transform(list(<row>.resource), e -> CAST(e AS

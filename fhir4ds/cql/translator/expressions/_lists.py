@@ -846,6 +846,12 @@ class ListsMixin:
         # CQL 1.5 §Empty, method spelling: `X.empty()`.
         if method.lower() == "empty":
             return self._translate_empty_source(expr.source)
+        # CQL 1.5 §10.1: `X.exists()` is `exists (X)`. It fell through to the
+        # generic method call below and emitted an SQL function named `exists`.
+        if method.lower() == "exists":
+            return self._translate_exists_expression(
+                ExistsExpression(source=expr.source), usage=ExprUsage.BOOLEAN
+            )
 
         # RESOURCE_ROWS definition aliases must surface the per-patient
         # element LIST for element-selection methods (CQL 1.5 Appendix B
@@ -919,7 +925,23 @@ class ListsMixin:
                 ),
             ))
         else:
-            source = self.translate(expr.source, usage=source_usage)
+            # FHIR4-107: a filtered navigation as the receiver of a list method
+            # (`X.where(url = '…').first()`, `.count()`) is ONE navigation.
+            _fused = (
+                self._filtered_navigation_list(expr.source)
+                if isinstance(expr.source, Query)
+                else None
+            )
+            if _fused is not None and _method_lower == "count":
+                # FHIRPath `count()` of an empty navigation is 0, not null.
+                return SQLFunctionCall(
+                    name="COALESCE",
+                    args=[
+                        SQLFunctionCall(name="ARRAY_LENGTH", args=[_fused, SQLLiteral(value=1)]),
+                        SQLLiteral(value=0),
+                    ],
+                )
+            source = _fused if _fused is not None else self.translate(expr.source, usage=source_usage)
         args = [self.translate(arg, boolean_context=False) for arg in expr.arguments]
 
         # Element-selection methods need the LIST-returning fhirpath UDF as
@@ -3246,6 +3268,11 @@ class ListsMixin:
             and isinstance(node.source.elements[0], _QueryAST)
         ):
             node = ExistsExpression(source=node.source.elements[0])
+
+        # FHIR4-107: `exists (<filtered navigation>.a.b)` is one fhirpath_bool.
+        fused = self._translate_filtered_navigation_exists(node.source)
+        if fused is not None:
+            return fused
 
         if self._is_list_typed_ast(node.source) and not isinstance(node.source, ListExpression):
             source = self.translate(node.source, usage=ExprUsage.SCALAR)
