@@ -6958,6 +6958,38 @@ ML runtime and DuckDB run with their default thread pools. Facts measured:
   connection. 600 resources / ~350 codes, no crash; the same loop with
   default pools died before the first 100-resource batch finished.
 
+**CORRECTED AND EXTENDED 2026-11-27 (FHIR4-51, with medterm4ds; all verified in
+their source and measured here, not taken on trust):**
+
+- **`MEDTERM4DS_NATIVE_THREADS=1` IS the full pin — do not export the three
+  variables by hand.** In `src/medterm4ds/core/runtime.py` the explicit form
+  exports `OMP_NUM_THREADS`/`MKL_NUM_THREADS`/`OPENBLAS_NUM_THREADS`
+  (`_FORWARDED_VARS`, :42) and then calls `torch.set_num_threads` /
+  `set_num_interop_threads` (:158-160), i.e. BOTH routes. `=0` disables it and
+  exports nothing. Earlier notes in this file implied torch-only pinning; that
+  was wrong.
+- **A "pinned" process on this box still carries numpy's OpenBLAS pool.** That
+  pool is built at `import numpy` — measured `openblas blas num_threads=32`
+  with the three vars stripped from the environment — so the exported
+  `OPENBLAS_NUM_THREADS` arrives too late to size it. Nothing inside a process
+  that has already imported numpy can fix that; only an env var set BEFORE
+  Python starts can. Whether it matters is unproven; do not read "pinned" as
+  "no OpenMP pool above one thread".
+- **The device and the pin are separate axes, and pinning is not sufficient on
+  cuda.** Every FHIR4-51 rate leg that faulted (`f51_rate4/5/5b.sh`,
+  `f51_idle15.sh` — 1/10, 4/34, 0/15) ran with `MEDTERM4DS_NATIVE_THREADS=1`
+  explicitly AND the device unset, which resolves to **cuda** on this host
+  (`env.py`: "auto" picks cuda when available). So those cells were
+  **cuda + pinned**: the pin was already on and they still faulted. The cpu
+  evidence is one 11-24 **cpu + unpinned** smoke test that crashed (no
+  denominator recorded) against cpu + pinned running 600 resources clean once.
+  The 2x2 that actually settles it is medterm4ds's F1/F3 (pinned, cuda/cpu) and
+  F4/F5 (unpinned, cuda/cpu).
+- Shared-scratch hazard, learned twice in one thread: `/tmp/opencode` holds both
+  lanes' artifacts (`f51_farm/` is medterm4ds's; `f51_rate*.sh`/`f51_idle15.sh`
+  are ours). Check owner and mtime before quoting anything from a shared path.
+
+
 So the medterm4ds guidance ("one thread per DuckDB connection") is
 NECESSARY BUT NOT SUFFICIENT here: also pin the torch/faiss OpenMP pools and
 DuckDB's executor. Consequence for pipeline design: the single-pass run
