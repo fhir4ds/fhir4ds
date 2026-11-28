@@ -6826,6 +6826,23 @@ promote the QICoreCommon conversion functions instead of inlining them 1,270
 times. The `test_cms2_disambiguation_macros` size bound is 1.7 MB with this
 history recorded in its docstring, so it still catches the 12.95 MB class.
 
+## An abort inside LOAD of the bundled extension has TWO causes — check the cap first (2026-11-28)
+
+`Fatal Python error: Aborted` raised inside `LOAD` of a bundled extension
+(`fhir4ds/fhirpath/duckdb/extension.py:256`) is the BUGFIX-019 signature, and it has a second,
+far more common cause: **`scripts/capped.sh`'s address-space limit**, not a native crash.
+
+Measured (wasm-parity lane): a 69-file focused list crossed **40 GB of ADDRESS SPACE at 1797 s**
+and peaked at 41.7 GB while its **RSS never passed 2.9 GB**; two runs under the old 40 GB floor
+died at 1894 s and 1933 s with exactly that abort, and the identical list on the identical tree
+under a 100 GB cap passed (1262 passed, 2 xfailed). `capped.sh` now floors the cap at 64 GB and
+takes a larger first argument; pass `100` for a list of more than a few dozen files.
+
+The rule: an abort at that site **late in a long run** means the CAP; an abort **early**, or with
+low address space, means the BUGFIX-019 native crash. Address space, not resident memory, is the
+thing to look at — a Python process holding extension bundles plus caches can reserve tens of GB
+while touching a few.
+
 ## Capturing a native crash without root (2026-11-12, BUGFIX-019)
 
 An intermittent SIGSEGV appeared in full QI-Core runs (kernel log:
