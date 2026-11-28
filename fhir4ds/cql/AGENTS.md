@@ -384,7 +384,7 @@
   Error (`Referenced column "X" not found`), a single-source let bound the name to the WHOLE
   source list, and a single-source `where` over a list literal did not bind. Folds without a
   `let` keep their previous SQL byte for byte.
-  CORRECTED 2026-11-27 (FGIR4-88 was filed on the note below and the note was wrong): the CQL
+  CORRECTED 2026-11-27 (FHIR4-88 was filed on the note below and the note was wrong): the CQL
   grammar makes `aggregateClause` and `returnClause` ALTERNATIVES and puts `sortClause` AFTER
   them (`query : sourceClause letClause? queryInclusionClause* whereClause?
   (aggregateClause | returnClause)? sortClause?`, identical in 1.5.0 and 2.0.0 R2), so
@@ -393,10 +393,17 @@
   the `starting <number>: <number>` shape, which was FHIR4-85's Ratio greediness (fixed in
   9cd012f0a5a) wearing a `sort by`. The grammar-legal order works today:
   `from (...) A, (...) B aggregate R starting 0: R + A sort by R`.
-  STILL OPEN, and separate: this parser is MORE PERMISSIVE than the grammar (it accepts
-  `return … aggregate`, and `sort by` in any position) — a language-surface question, carded;
-  and a nested query as a SINGLE `from` source loses its clause binding
-  (`Catalog Error: Table with name D does not exist`), also carded.
+  DECIDED 2026-11-27 (FHIR4-93, Joel): this parser is MORE PERMISSIVE than the grammar — it
+  accepts `return … aggregate` (the grammar makes `aggregateClause` and `returnClause`
+  ALTERNATIVES) and `sort by` in any position (the grammar puts `sortClause` last) — and that
+  permissiveness is INTENTIONAL, not an oversight. Tightening would be spec-correct but is a
+  ONE-WAY break for any CQL in the wild leaning on the spelling, and nothing in our corpora
+  needs the strictness. Pinned by `fhir4ds/cql/tests/unit/test_parser_permissiveness_pin.py`,
+  which also pins the grammar-legal spellings so a tightening has an alternative to point
+  callers at: change the decision and that file together, never delete the tests to go green.
+  Being lenient about CLAUSE ORDER is not leniency about syntax: malformed folds still raise.
+  STILL OPEN, and separate: a nested query as a SINGLE `from` source loses its clause binding
+  (`Catalog Error: Table with name D does not exist`) — carded as FHIR4-92.
 - **The indexer over a define alias reads the define's whole list (FHIR4-81,
   2026-11-27)**: `_translate_indexer_expression` (`expressions/_lists.py`)
   must materialize the source before `LIST_EXTRACT`, exactly where the
@@ -421,6 +428,40 @@
   string Indexer — deleting the `body is not Property` half of
   `_stored_list_define_is_a_list` would turn `Fam[0]` from a character slice into
   a binder error. Revisit when the chain root can be typed.
+
+- **A navigation over a SINGLE element is a SCALAR (FHIR4-91, 2026-11-27)**: the indexer
+  answers one element (CQL 1.5 §17.6 `Indexer(source List<T>, index Integer) T`), so
+  `"Rows"[1].id` is the id of ONE resource — the same cardinality class as
+  `First(X).id`, `Last(X).id` and `(singleton from X).id`. Three classifiers assumed
+  "navigation body ⇒ multi-valued FHIR element" and mistyped all four, and the value
+  looked right (`'c2'`) inside a one-element list, which is how it hid:
+  `translator.py`'s define-materialisation heuristic rewraps any define whose body is a
+  bare 2-arg `fhirpath_text` as the list projection `from_json(fhirpath(...), '["VARCHAR"]')`
+  (`List<Any>` + `DefinitionMeta.stores_list_value`); `_promote_fhirpath_text_list` did the
+  same to list-operator operands (`Length("Rows"[1].id)` was the list length 1, not 2); and
+  the FHIR4-72 correlated-list hoist moved the operand into a value CTE typed `List<Any>`,
+  which routed `"Rows"[1].id = 'c2'` to the LIST equality macro over a VARCHAR
+  (`BinderException: array_length(VARCHAR)`).
+  ONE predicate, `_utils.py::_navigation_source_is_single_element` (Indexer, First, Last,
+  `singleton from`, `SingletonFrom`), is the single definition of the class. The property
+  translator (`_property.py::_scalar_navigation_projection`) MARKS the scalar accessor
+  (`node.scalar_navigation = True`) — the two promotions skip a marked node — and at a
+  DIRECT definition body it wraps the accessor in `CAST(... AS VARCHAR)`, an identity on
+  `fhirpath_text`'s own result that keeps the define-materialisation heuristic from
+  rewrapping it. The wrap is root-only on purpose: a nested navigation keeps its inline
+  form so chained-path flattening is untouched. `_is_definition_body` is an identity check
+  against `context._definition_cql_asts[current]`, never a shape heuristic.
+  NOT this card, and do NOT "fix" it by relaxing single-element detection: `_is_list_typed_ast`
+  must NOT blanket-return False for `singleton from <List<List<T>>>` (it is a list — the
+  clinical `(singleton from { { "Code A" } }) ~ (… "Code B")` transport case depends on it).
+  Corpus impact measured translation-only: the only defines whose AST matches the class are
+  CMS122 "Lowest Glycemic Status Assessment Reading on Most Recent Day", CMS128 "IPSD" and
+  CMS137 "First SUD Episode During Measurement Period" (plus duplicate library versions) and
+  their SQL is BYTE-IDENTICAL before/after — every one of them is a `First(<query> return
+  {tuple})` whose accessor lowers to `json_extract_string`, never a bare `fhirpath_text`.
+  Tests: `duckdb/tests/integration/test_fhir4_91_indexer_scalar_result.py` (both spellings,
+  the DUCKDB COLUMN TYPE as the shape assertion, `Count({…})`, `Length`, and the
+  genuine-list guards).
 
 - **A fold's accumulator is typed by its starting value (FHIR4-76, 2026-11-27)**: the
   anchor of a fold's working table is `CAST(<starting value> AS T)` with T from the
