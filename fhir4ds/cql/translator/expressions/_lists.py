@@ -2814,6 +2814,24 @@ class ListsMixin:
                 ],
             )
 
+        def _shared(shared_key, inline_cols: SQLExpression) -> SQLExpression:
+            """FHIR4-109: one evaluation per DEFINE, shared by every consumer.
+
+            A define denotes one value, but this aggregate is built once per
+            consumer and runs over a CTE whose row order is undefined, so the
+            consumers each got their own permutation of the same list and
+            positional consumers disagreed (`"Ids"[0]` in two defines). Share
+            ONE materialized evaluation instead — see
+            `OperatorsMixin._share_define_list`. Falls back to the inline
+            operand when the CTE cannot be attached (no definition scope).
+            """
+            share = getattr(self, "_share_define_list", None)
+            if share is not None:
+                shared = share(shared_key, inline_cols)
+                if shared is not None:
+                    return shared
+            return inline_cols
+
         # Bare retrieve (list of resources) -> per-patient resource list.
         if isinstance(node, Retrieve):
             return _patient_list(self.translate(node, usage=ExprUsage.LIST))
@@ -2824,7 +2842,10 @@ class ListsMixin:
         if isinstance(node, Identifier):
             meta = self.context.definition_meta.get(node.name)
             if meta is not None and getattr(meta, "has_resource", False):
-                return _patient_list(SQLIdentifier(name=node.name, quoted=True))
+                return _shared(
+                    (node.name, "resource"),
+                    _patient_list(SQLIdentifier(name=node.name, quoted=True)),
+                )
             if (
                 meta is not None
                 and (
@@ -2835,7 +2856,11 @@ class ListsMixin:
             ):
                 # Element-rows value CTE: LIST()-aggregate the value column
                 # rows per patient.
-                return _patient_list(SQLIdentifier(name=node.name, quoted=True), col=meta.value_column or "value")
+                _col = meta.value_column or "value"
+                return _shared(
+                    (node.name, _col),
+                    _patient_list(SQLIdentifier(name=node.name, quoted=True), col=_col),
+                )
 
         # Retrieve union (`Length([Observation] union [Condition])`) —
         # resolve resource-define aliases to their retrieves, then LIST the

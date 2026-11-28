@@ -323,24 +323,60 @@ def test_two_operand_list_operators_are_deterministic_at_default_threads():
                     )
 
 
-def test_in_contains_keep_their_single_inline_list_operand():
-    """`in`/`contains` were measured CLEAN in both forms — do not re-shape them.
+def test_in_contains_carry_one_shared_list_operand_fhir4_109():
+    """`in`/`contains` carry ONE list operand — now the SHARED per-define one.
 
-    `CQLListContainsEq(<inline correlated aggregate>, 'c1')` returned the same
-    answer in 3000/3000 executions at threads=4 and threads=8, so its lowering
-    keeps the inline aggregate (no value CTE, no SQL churn on the membership
-    surface that real measures use).
+    SUPERSEDES the pre-FHIR4-109 pin ("keep their single INLINE ``list()``
+    aggregate"), and the supersession is a doctrine change, not a relaxation:
+
+    * FHIR4-72's finding still holds — `in`/`contains` take a SINGLE list, so
+      they were measured clean with an inline aggregate and must not be
+      DOUBLE-hoisted. That is what the assertions below keep.
+    * FHIR4-109 established that a multi-row define's list is evaluated ONCE
+      PER DEFINE, because per-consumer evaluation returns a different
+      PERMUTATION of the same rows each time (DuckDB's order for a
+      hash-deduped CTE is thread-schedule dependent), and two consumers then
+      silently disagree. So the membership operand is now a correlated lookup
+      into the define's `_cse_deflist_…` value CTE, and the aggregate lives
+      there — exactly one per define.
+
+    Net effect for `in`/`contains`: still ONE list operand, still no aggregate
+    in the operator SELECT, and now provably the same list every other
+    consumer of that define sees.
     """
     for label, _sql, bodies, rows in _run_both_engines():
         body = bodies.get("OneContains")
         assert body is not None, f"{label}: missing CTE for 'OneContains'"
-        assert "list(" in body, (
-            f"{label}: 'in' should keep its single correlated list() operand: {body!r}"
+        assert "list(" not in body, (
+            f"{label}: 'in' must not embed its own correlated list() aggregate "
+            f"(FHIR4-72 hazard, and a per-consumer evaluation is the FHIR4-109 "
+            f"defect): {body!r}"
         )
-        assert "_cse_" not in body, (
-            f"{label}: 'in' must not hoist its list operand: {body!r}"
+        referenced = set(re.findall(r'FROM "(_cse_[^"]+)"', body))
+        assert len(referenced) == 1, (
+            f"{label}: 'in' must carry exactly ONE hoisted list operand, got "
+            f"{sorted(referenced)}: {body!r}"
         )
-        assert rows[0]["p1"]["OneContains"] is True
+        (operand_cte,) = referenced
+        assert operand_cte.startswith("_cse_deflist_Ids"), (
+            f"{label}: 'in' must read the define's shared list CTE, not "
+            f"{operand_cte!r}: {body!r}"
+        )
+        hoisted = bodies.get(operand_cte)
+        assert hoisted is not None, f"{label}: dangling hoist {operand_cte!r}"
+        assert hoisted.count("list(") == 1, (
+            f"{label}: the shared list CTE must hold exactly one list() "
+            f"aggregate: {hoisted!r}"
+        )
+        # The answer is still the list's content, and every repetition agrees.
+        for run_index, row in enumerate(rows):
+            assert row["p1"]["OneContains"] is True, (
+                f"{label}: execution {run_index} of {_RUNS}: 'c1' in Ids must be "
+                f"TRUE — c1 IS an element of the define"
+            )
+            assert row["p2"]["OneContains"] is False, (
+                f"{label}: execution {run_index} of {_RUNS}: p2 has no Conditions"
+            )
 
 
 def test_intersect_content_is_not_truncated_by_repetition():

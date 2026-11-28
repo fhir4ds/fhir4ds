@@ -639,8 +639,55 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
 
         # 3. Definition CTEs in dependency order
         seen_lower: dict[str, str] = {}  # lower(name) -> original name
+        _patients_emitted = any(
+            cte.name.lower() == "_patients" for cte in cte_defs
+        )
+
+        def _ensure_patients_cte() -> None:
+            """Emit the `_patients` CTE once, before anything that reads it.
+
+            Hoisted value CTEs (`_cse_…`) are per-patient and therefore read
+            `_patients`; they are emitted during step 3, which is BEFORE the
+            final-definition section that used to append `_patients`. Emitting
+            them first without this produced a forward reference
+            (`Catalog Error: Table with name _patients does not exist`).
+            """
+            nonlocal _patients_emitted
+            if _patients_emitted:
+                return
+            cte_defs.append(CTEDefinition(
+                name="_patients",
+                query=self._build_patients_cte(
+                    None,
+                    patient_scope="literal",
+                    include_patient_demographics=False,
+                ),
+            ))
+            _patients_emitted = True
+
         for name in ordered_names:
             expr = definitions[name]
+            # 3a. Hoisted per-patient VALUE CTEs registered under this
+            # definition (FHIR4-72 correlated-list operands, FHIR4-109 shared
+            # define lists) MUST be emitted immediately before the definition
+            # that references them — the population builder has always done
+            # this; without it this definition-only path emitted a dangling
+            # `_cse_…` reference (Catalog Error: table does not exist).
+            # Scoped to `_cse_` on purpose: the `_let_` promotion mechanism is
+            # a separate concern of the population path and its emission here
+            # would change unrelated SQL.
+            for let_cte_name, let_cte_body in list(
+                self._context._let_variable_ctes.get(name, {}).items()
+            ):
+                if not let_cte_name.startswith("_cse_"):
+                    continue
+                quoted_let = f'"{let_cte_name}"'
+                if quoted_let.lower() not in seen_lower:
+                    _ensure_patients_cte()
+                    seen_lower[quoted_let.lower()] = quoted_let
+                    cte_defs.append(CTEDefinition(
+                        name=quoted_let, query=let_cte_body, materialized=True,
+                    ))
             cte_name = self._unique_cte_name(name, seen_lower)
             # Wrap bare expressions in SELECT so they form valid CTE bodies
             if isinstance(expr, (SQLIdentifier, SQLQualifiedIdentifier)) and (
@@ -682,12 +729,7 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
         final_expr = definitions[final_name]
         final_inline = "_pt." in final_expr.to_sql()
         if final_inline:
-            patients_query = self._build_patients_cte(
-                None,
-                patient_scope="literal",
-                include_patient_demographics=False,
-            )
-            cte_defs.append(CTEDefinition(name="_patients", query=patients_query))
+            _ensure_patients_cte()
             final_select_ast = SQLSelect(
                 from_clause=SQLAlias(
                     expr=SQLIdentifier(name="_patients"), alias="_pt"

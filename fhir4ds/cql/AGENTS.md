@@ -9008,3 +9008,83 @@ Quantity, so this operand must be a temporal" branch — every step lowered to
   measures (us-core CMS145, CMS506: identical SQL length, different CTE order
   across processes), and a hand-rolled `WITH`-member sort does not fully
   normalise them, so an unpinned corpus diff shows 2 phantom measures.
+
+## A DEFINE's materialized list is evaluated ONCE (FHIR4-109)
+
+A define denotes ONE value (CQL). The translator MATERIALIZES a multi-row
+define's list **per consumer**, and `list()` over a CTE whose row order is
+undefined — the retrieve CTE is `SELECT DISTINCT …` — is free to return a
+different PERMUTATION at each evaluation site (DuckDB's order for a
+hash-deduped source is thread-schedule dependent). Every list is a complete
+permutation, `Count` is always right (length is invariant), and every
+POSITIONAL consumer silently disagrees with its sibling:
+`define "A": "Ids"[0]` and `define "B": "Ids"[0]` answered different elements
+in 44 of 120 executions at the default thread count and 0 of 200 at
+`threads=1`. FIVE consumers of one define emitted the same aggregate five
+times.
+
+The fix shares ONE evaluation (`OperatorsMixin._share_define_list`,
+`expressions/_operators.py`): the list is evaluated once per patient into a
+MATERIALIZED `_cse_deflist_<define>_<column>_<n>` value CTE and every consumer
+reads a correlated lookup. It is NOT an `ORDER BY` inside the aggregate —
+that is a stop-gap: it leaves the redundant re-evaluation (5x the work) and the
+whole class open (`string_agg` reproduces the defect).
+
+Load-bearing details:
+
+- **The reuse key is the DEFINE (+ the column), not the scope.**
+  `_register_value_cte` keys on `(scope_name, rendered_operand)`, and `"Ids"[0]`
+  in `A`, in `B` and in `I0` are three scopes, so a per-scope CTE is never
+  shared. Worse, `A` and `B` are separate CTEs.
+- **Placement: register under EVERY consuming definition's scope with the SAME
+  name.** The emission loop emits a let-CTE immediately before its owner and
+  skips names already emitted (`seen_lower`), so whichever consumer is emitted
+  FIRST carries the CTE and no reference can be a forward one — independent of
+  the order definitions were translated in.
+- **One mechanism, FOUR builders.** The per-patient list of an element-rows
+  define was built independently by the list-operator path
+  (`_lists._list_operator_full_list_source`), the aggregate path
+  (`_functions._element_rows_define_list`), the resource-rows path
+  (`_functions._definition_resource_rows_list`) and `First`/`Last` over a
+  resource define (`_functions._translate_first_last_over_cte`, which now
+  delegates to the resource-rows path). All four key on the define, so a
+  `Count` and a `First` of the same define read ONE CTE.
+- **ROW-scoped operands are REFUSED** (`_list_operand_is_hoistable`, the
+  FHIR4-72 rule: every free alias root must be `_pt`). An aggregate written
+  INSIDE a query correlates to the query alias (`… WHERE _lst_src.patient_id =
+  C.patient_id`) and cannot bind under the value CTE's `FROM "_patients"`, so
+  it keeps its inline evaluation. CMS117's two defines are aggregated that way
+  and are deliberately NOT shared — do not "fix" them by relaxing the rule.
+- **The definition-only path now emits value CTEs.** `translate_library_to_sql`
+  never drained `_let_variable_ctes`, so a hoisted `_cse_…` reference dangled
+  (`Catalog Error: Table with name _cse_deflist_… does not exist`). It now
+  emits the `_cse_`-prefixed entries before their owner (and `_patients`
+  before them; it used to append `_patients` after all definitions). Scoped to
+  `_cse_` on purpose — the `_let_` promotion mechanism is a population-path
+  concern.
+- **A shape test is not a meaning test.** `IndexOf`'s rows-to-list coercion
+  keys on `isinstance(source_arg, SQLSubquery)`; the shared list IS a subquery
+  (a correlated lookup), so the coercion re-wrapped it into
+  `list([the whole list])` and every `IndexOf` answered -1. It is now skipped
+  explicitly when the gate fired (`_multi_row_list is not None`).
+
+Tests: `duckdb/tests/integration/test_fhir4_109_define_is_one_value.py` (the
+card's gate: two consumers agree, 0..n-1 index every element, and ONE
+`list(_lst_src.value)` in the SQL) and
+`test_fhir4_109_define_list_is_shared.py` (resource defines indexed twice,
+`First`/`Last`, aggregate + list-operator sharing, and the row-scoped
+refusal). `test_fhir4_72_list_operand_determinism.py`'s
+`in`/`contains` pin was SUPERSEDED: those operators still carry ONE list
+operand and still must not be double-hoisted, but that operand is now the
+shared define CTE, not a per-consumer aggregate.
+
+Measured (this tree, `threads=8`, 200 executions of one translated population
+SQL, positive control = the same harness with the mechanism disabled):
+element-rows define 66-96/200 disagreeing -> 0/200 and 5 aggregates -> 1;
+resource define indexed 71-79/200 -> 0/200; `First`/`Last` over a resource
+define 89-90/200 -> 0/200; aggregate + `First` sharing 6 -> 1. At
+`threads=1` the control is 0/200 (the race needs parallel execution). Corpus:
+121 measures translated with the mechanism ON and OFF in ONE process —
+exactly ONE measure changes (us-core CMS136, +242 bytes, the same aggregate
+moved into a CTE); qi-core-2025 47/47 and us-core-2025 74/74 at 100% with
+per-patient/per-column equality on the changed measure.

@@ -6525,7 +6525,20 @@ class OperatorsMixin:
         while cte_name in existing:
             _cse_counters[scope_name] += 1
             cte_name = f"_cse_{safe_scope[:32]}_{_cse_counters[scope_name]}"
-        existing[cte_name] = SQLSelect(
+        existing[cte_name] = self._value_cte_body(operand)
+        operand_keys[(scope_name, rendered_operand)] = cte_name
+        return cte_name
+
+    @staticmethod
+    def _value_cte_body(operand: SQLExpression) -> SQLSelect:
+        """Body of a per-patient value CTE: ``SELECT _pt.patient_id, <expr> AS value``.
+
+        One row per patient, so a correlated lookup
+        ``(SELECT value FROM <cte> AS _lv WHERE _lv.patient_id = _pt.patient_id)``
+        reads the operand WITHOUT re-evaluating it. Shared by every hoisting
+        path (``_register_value_cte`` and ``_share_define_list``).
+        """
+        return SQLSelect(
             columns=[
                 SQLQualifiedIdentifier(parts=["_pt", "patient_id"]),
                 SQLAlias(expr=operand, alias="value"),
@@ -6535,8 +6548,124 @@ class OperatorsMixin:
                 alias="_pt",
             ),
         )
-        operand_keys[(scope_name, rendered_operand)] = cte_name
-        return cte_name
+
+    def _share_define_list(
+        self, shared_key: Tuple[str, str], operand: SQLExpression
+    ) -> Optional[SQLExpression]:
+        """FHIR4-109: evaluate a define's materialized element list ONCE, for everyone.
+
+        A define denotes ONE value (CQL), but the translator MATERIALIZES a
+        multi-row define's list at every consumer of it: five consumers of
+        ``define Ids: ([Condition] C return C.id) X`` emitted the same
+        ``COALESCE((SELECT list(_lst_src.value) FROM "Ids" …), [])`` aggregate
+        five times. The aggregate runs over a CTE whose row order is UNDEFINED
+        (the retrieve CTE is ``SELECT DISTINCT …``), so each evaluation is free
+        to return its own — equally correct — PERMUTATION. Every list is then a
+        complete permutation of the same data, ``Count`` is always right, and
+        any POSITIONAL consumer silently disagrees with its sibling:
+        ``define A: "Ids"[0]`` and ``define B: "Ids"[0]`` answered different
+        elements in 44 of 120 executions (DuckDB's order for a hash-deduped
+        source is thread-schedule dependent; 0/N at ``threads=1``).
+
+        The fix is to share ONE evaluation, not to impose an order: an
+        ``ORDER BY`` inside the aggregate would leave the redundant
+        re-evaluation (and the whole class open — ``string_agg`` reproduces the
+        same defect). The list is evaluated once per patient into a
+        MATERIALIZED value CTE and every consumer reads a correlated lookup.
+
+        Placement is the reason this is not just ``_register_value_cte``:
+        that helper's reuse key is ``(scope_name, rendered_operand)``, and
+        ``"Ids"[0]`` in ``A``, in ``B`` and in ``I0`` are three different
+        scopes, so a per-scope CTE is never shared. Here the key is the DEFINE,
+        and the CTE is registered under EVERY consuming definition's scope with
+        the SAME name — the emission loop's ``seen_lower`` guard emits it once,
+        attached to the earliest consumer, so the reference is never a forward
+        one regardless of the order definitions happen to be translated in.
+
+        Returns ``None`` when the operand cannot be shared: no definition
+        scope to attach the CTE to, a body being built inside a function
+        promotion CTE (row-scoped, and its let-CTE dict is discarded), or an
+        operand that is ROW-scoped rather than per-patient (it would not bind
+        under the ``_patients`` FROM that the value CTE introduces). The caller
+        then keeps its inline operand — this is a correctness fix for sharing,
+        never a requirement for the consumer to work at all.
+
+        The key is the DEFINE (plus the column it is materialized from), so the
+        three separate builders of this shape — the list-operator path, the
+        aggregate path (``_element_rows_define_list``) and the resource-rows
+        path (``_definition_resource_rows_list``) — all resolve to ONE CTE.
+        Their inline operands differ only in the inner alias spelling, which is
+        why the first registration is authoritative: whatever body was built
+        first evaluates this define's list, and every later caller reads it.
+        The key is scoped to the LIBRARY being translated because one
+        translator instance can be reused (`translate_library` resets the
+        context per library), and a same-named define in the next library is a
+        different value.
+        """
+        scope_name = getattr(self.context, "_current_definition", None)
+        if not scope_name:
+            return None
+        if getattr(self.context, "_building_function_promotion_cte", False):
+            return None
+        # A ROW-scoped operand is correlated to a query alias, not to the
+        # patient — hoisting it into a `FROM "_patients"` CTE would not bind.
+        # `_list_operand_is_hoistable` is the existing definition of
+        # "self-contained enough to evaluate once per patient" (every free
+        # alias root must be `_pt`), so reuse it rather than restating it.
+        nodes = self._sql_unique_nodes(operand)
+        if not nodes or not self._list_operand_is_hoistable(nodes):
+            return None
+
+        registry = getattr(self.context, "_shared_list_cte_bodies", None)
+        if registry is None:
+            registry = {}
+            self.context._shared_list_cte_bodies = registry
+        counters = getattr(self.context, "_shared_list_cte_counters", None)
+        if counters is None:
+            counters = {}
+            self.context._shared_list_cte_counters = counters
+
+        library = "{}@{}".format(
+            getattr(self.context, "library_name", None) or "",
+            getattr(self.context, "library_version", None) or "",
+        )
+        registry_key = (library, shared_key[0], shared_key[1])
+        entry = registry.get(registry_key)
+        if entry is not None:
+            cte_name, body = entry
+        else:
+            base = _re.sub(r"[^A-Za-z0-9_]+", "_", "_".join(shared_key)).strip("_") or "def"
+            counters[base] = counters.get(base, 0) + 1
+            cte_name = f"_cse_deflist_{base[:32]}_{counters[base]}"
+            body = self._value_cte_body(operand)
+            registry[registry_key] = (cte_name, body)
+
+        # Register under EVERY consuming definition's scope: the emission pass
+        # emits a let-CTE immediately before its owner and skips names it has
+        # already emitted, so whichever consumer is emitted FIRST carries the
+        # CTE and no reference can be a forward one.
+        scope_ctes = self.context._let_variable_ctes.setdefault(scope_name, {})
+        scope_ctes.setdefault(cte_name, body)
+
+        lookup = SQLSubquery(query=SQLSelect(
+            columns=[SQLIdentifier(name="value")],
+            from_clause=SQLAlias(
+                expr=SQLIdentifier(name=cte_name, quoted=True),
+                alias="_lv",
+            ),
+            where=SQLBinaryOp(
+                operator="=",
+                left=SQLQualifiedIdentifier(parts=["_lv", "patient_id"]),
+                right=SQLQualifiedIdentifier(parts=[
+                    self.context.resource_alias or "_pt", "patient_id",
+                ]),
+            ),
+        ))
+        # The lookup's SELECT-list shape (`value`, unqualified) is not
+        # recognisably list-producing, so carry the type explicitly — every
+        # consumer and every population wrap reads `result_type`.
+        lookup.result_type = "List<Any>"
+        return lookup
 
     def _hoist_list_union_operand(self, operand: SQLExpression) -> SQLExpression:
         """Hoist a LARGE list-union operand into a per-patient value CTE.

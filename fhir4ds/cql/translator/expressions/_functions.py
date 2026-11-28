@@ -1478,10 +1478,20 @@ class FunctionsMixin:
     def _element_rows_define_list(self, name: str, meta) -> Optional[SQLExpression]:
         """Per-patient element LIST for an element-rows (PATIENT_MULTI_VALUE)
         define CTE — CQL-19 `_list_operator_full_list_source` shape, but keyed
-        on the define's value column so aggregate consumers see every row."""
+        on the define's value column so aggregate consumers see every row.
+
+        FHIR4-109: shared with every other consumer of the same define
+        (`_share_define_list`) so the aggregate path and the list-operator path
+        are ONE evaluation. That helper refuses ROW-scoped operands (its
+        existing hoistability rule: a free alias root other than `_pt` would
+        not bind under the value CTE's `FROM "_patients"`), so an aggregate
+        written INSIDE a query keeps its own inline evaluation correlated to
+        the query alias — CMS117's two defines are aggregated that way and are
+        therefore deliberately NOT shared.
+        """
         _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
         value_col = getattr(meta, "value_column", None) or "value"
-        return SQLFunctionCall(
+        inline = SQLFunctionCall(
             name="COALESCE",
             args=[
                 SQLSubquery(query=SQLSelect(
@@ -1501,6 +1511,12 @@ class FunctionsMixin:
                 SQLArray(elements=[]),
             ],
         )
+        share = getattr(self, "_share_define_list", None)
+        if share is not None:
+            shared = share((name, value_col), inline)
+            if shared is not None:
+                return shared
+        return inline
 
     def _translate_quantity_list_aggregate(
         self,
@@ -1948,7 +1964,7 @@ class FunctionsMixin:
                 cte_name = self._definition_resource_cte_name(arg.name)
                 if cte_name is not None:
                     return self._translate_first_last_over_cte(
-                        cte_name, first=name.lower() == "first"
+                        cte_name, first=name.lower() == "first", define_name=arg.name
                     )
 
         # CQL Message (§22.15): intercept before generic arg translation so
@@ -2491,7 +2507,11 @@ class FunctionsMixin:
             # ANSWER. Materialize the whole per-patient element list instead
             # (FHIR4-65 doctrine: consumers materialize, the define keeps its
             # row CTE) and skip the rows-to-list wrap that keys off the
-            # scalar-subquery shape.
+            # scalar-subquery shape. SKIP IT EXPLICITLY (FHIR4-109): the wrap
+            # is shape-based (`isinstance(source_arg, SQLSubquery)`), and the
+            # materialized list is now a CORRELATED VALUE LOOKUP — also a
+            # subquery — so a shape test alone re-wraps the list into
+            # `list([the whole list])` and every IndexOf answers -1.
             _multi_row_list = None
             _gate = getattr(self, "_multi_row_define_list", None)
             if _gate is not None and func.arguments:
@@ -2519,7 +2539,7 @@ class FunctionsMixin:
                         func.arguments[0], usage=ExprUsage.SCALAR
                     )
                     _list_typed_define_ref = True
-            if not _list_typed_define_ref:
+            if not _list_typed_define_ref and _multi_row_list is None:
                 if isinstance(source_arg, SQLSubquery) and isinstance(source_arg.query, SQLSelect):
                     index_args[0] = _query_rows_as_index_list(source_arg.query)
                 elif isinstance(source_arg, SQLSelect):
@@ -4035,12 +4055,18 @@ class FunctionsMixin:
         is not a resource-backed definition. Used by list-position consumers
         (Indexer, method-form first()/last()) so the alias surfaces the whole
         list instead of a scalarized row (CQL 1.5 Appendix B Property/Query).
+
+        FHIR4-109: shared with every other consumer of the same define
+        (`_share_define_list`) — this aggregate was built once per consumer,
+        and it runs over a CTE whose row order is undefined, so two indexers of
+        the same resource define each got their own permutation of the list
+        (measured 87/200 executions disagreeing at ``threads=8``).
         """
         cte_name = self._definition_resource_cte_name(name)
         if cte_name is None:
             return None
         _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
-        return SQLSubquery(query=SQLSelect(
+        inline = SQLSubquery(query=SQLSelect(
             columns=[SQLFunctionCall(
                 name="list",
                 args=[SQLQualifiedIdentifier(parts=["sub", "resource"])],
@@ -4054,15 +4080,39 @@ class FunctionsMixin:
                 right=SQLQualifiedIdentifier(parts=[_outer_pid, "patient_id"]),
             ),
         ))
+        share = getattr(self, "_share_define_list", None)
+        if share is not None:
+            shared = share((name, "resource"), inline)
+            if shared is not None:
+                return shared
+        return inline
 
-    def _translate_first_last_over_cte(self, cte_name: str, first: bool) -> SQLExpression:
+    def _translate_first_last_over_cte(
+        self, cte_name: str, first: bool, define_name: str | None = None
+    ) -> SQLExpression:
         """First/Last over a resource-backed definition CTE (CQL Appendix B).
 
         Mirrors :meth:`_translate_first_last_over_retrieve` but sources the
         definition's CTE directly, so ``First(ObsList)`` extracts the first
         element of the per-patient resource list instead of a scalarized
         LIMIT-1 row.
+
+        FHIR4-109: the ``list(<rows>.resource)`` aggregate is materialized ONCE
+        per define (`_share_define_list`), like every other positional consumer
+        of it, so two First/Last consumers cannot see two different
+        permutations of the same define. Sharing is achieved by REUSING
+        ``_definition_resource_rows_list`` — the same per-patient list the
+        Indexer path uses — rather than building a fourth copy of the aggregate.
+        ``define_name`` is required to key it; without it the historical inline
+        shape is kept.
         """
+        if define_name is not None:
+            rows_list = self._definition_resource_rows_list(define_name)
+            if rows_list is not None:
+                return SQLFunctionCall(
+                    name="list_extract",
+                    args=[rows_list, SQLLiteral(value=1 if first else -1)],
+                )
         _outer_pid = self.context.resource_alias or self.context.patient_alias or "_pt"
         extracted = SQLFunctionCall(
             name="list_extract",
