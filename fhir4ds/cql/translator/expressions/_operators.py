@@ -5,6 +5,7 @@ import dataclasses
 import json
 import logging
 import re as _re
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 _logger = logging.getLogger(__name__)
@@ -2915,6 +2916,33 @@ class OperatorsMixin:
             else_clause=result,
         )
 
+    def _inline_navigation_conforms_to_list(self, expr: BinaryExpression) -> bool | None:
+        """FHIR4-90: does an inline NAVIGATION conform to a ``List<T>`` target?
+
+        ``Patient.name.given as List<String>`` asks whether a navigation is the list the FHIR
+        schema already says it is, so the answer is static: True / False when the schema types
+        the navigation as a multi-valued element whose element type conforms / does not conform
+        to ``T``. None for anything else — a define reference (its own declared type decides),
+        a single-valued path, a chain the schema cannot type — so those keep the runtime check.
+        """
+        if isinstance(expr.left, Identifier):
+            return None
+        target_name = str(self._type_specifier_name(expr.right) or "")
+        if not target_name.startswith("List<"):
+            return None
+        # ``_navigation_list_element_type`` is defined on the LIBRARY translator's inference
+        # mixin and reads nothing but ``self._context``. The expression translator holds that
+        # very context as ``self.context``, so the one definition is called through a
+        # one-attribute view of it instead of being copied here.
+        from ...translator.inference import InferenceMixin
+
+        element = InferenceMixin._navigation_list_element_type(
+            SimpleNamespace(_context=self.context), expr.left
+        )
+        if element is None:
+            return None
+        return self._structural_type_conforms(f"List<{element}>", target_name)
+
     def _translate_binary_expression(self, expr: BinaryExpression, boolean_context: bool = False) -> SQLExpression:
         """
         Translate a CQL binary expression to SQL.
@@ -2952,6 +2980,10 @@ class OperatorsMixin:
         # Must be handled BEFORE generic operand translation because the right operand
         # is a NamedTypeSpecifier that translates to SQLNull() in the generic path.
         if operator == "is" and isinstance(expr.right, _STRUCTURAL_TYPE_SPECIFIER_TYPES):
+            # FHIR4-90: `Patient.name.given is List<String>` is answered by the schema.
+            conforms = self._inline_navigation_conforms_to_list(expr)
+            if conforms is not None:
+                return SQLLiteral(value=bool(conforms))
             return self._translate_is_type_check(expr)
 
         # CQL §12.1: Tuple equality/inequality requires element-wise comparison
@@ -3510,6 +3542,17 @@ class OperatorsMixin:
                 if isinstance(left, SQLFunctionCall) and left.name == "CQLMessage":
                     return _strict_cast_result(left)
 
+                # FHIR4-90: an inline navigation cast to the list type it already has IS
+                # that list. The runtime check below tested the FIRST element's JSON for a
+                # `resourceType` (a crash on a plain string) and would have kept only that
+                # element even if it had not.
+                conforms = self._inline_navigation_conforms_to_list(expr)
+                if conforms is not None:
+                    if not conforms:
+                        return _strict_cast_result(SQLNull(), SQLLiteral(value=False))
+                    list_value = _promote_fhirpath_text_list(left)
+                    if list_value is not left or _is_list_returning_sql(left):
+                        return _strict_cast_result(list_value, SQLLiteral(value=True))
                 type_check = self._translate_is_type_check(
                     BinaryExpression(operator="is", left=expr.left, right=expr.right)
                 )

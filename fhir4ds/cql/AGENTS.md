@@ -317,6 +317,23 @@
 
 ## Known Fragile Areas
 
+- **An inline navigation cast to `List<T>` is the list it already is (FHIR4-90,
+  2026-11-28)**: `Patient.name.given as List<String>` (and `is List<String>`) is answered
+  by the SCHEMA, not at runtime. `_operators.py::_inline_navigation_conforms_to_list` asks
+  the library translator's `_navigation_list_element_type` (FHIR4-89) for the navigation's
+  element type and compares `List<element>` with the target: a conforming cast is the
+  promoted list itself (`_promote_fhirpath_text_list`, the same value the define stores), a
+  non-conforming one is NULL, and `is` is a literal Boolean. The previous lowering probed
+  the runtime value with `json_extract_string(fhirpath_text(…), '$.resourceType') =
+  'List<T>'`: it read the FIRST element as JSON, so the cast crashed the whole population
+  query on plain strings (`Invalid Input Error: Malformed JSON … Input: "Jane"`) and, had it
+  not crashed, would have answered that first element instead of the list. A single-valued
+  or choice-typed navigation has no element type to compare and keeps the previous lowering.
+  NOT covered here: the same cast on a DEFINE REFERENCE (`"G" as List<String>` still tests
+  the first element — card WP-20), a choice-typed navigation inline
+  (`Patient.extension.value as List<String>` — card WP-22), and a resource define
+  (`"Obs" as List<FHIR.Observation>` is still a binder error).
+
 - **A Quantity list is aggregated unit-aware, whatever spelling carries its type
   (FHIR4-108, 2026-11-28)**: `_functions.py::_list_element_is_quantity` recognises both
   `List<Quantity>` and `List<FHIR.Quantity>` (definition metadata keeps the authored
