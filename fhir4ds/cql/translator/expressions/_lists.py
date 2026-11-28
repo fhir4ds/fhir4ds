@@ -108,25 +108,36 @@ from ...translator.fhirpath_builder import (
 
 
 def _stored_list_define_is_a_list(meta: Any, body_ast: Any) -> bool:
-    """FHIR4-81: does a stored-list define hold a LIST for the indexer to index?
+    """FHIR4-81/101: does a stored-list define hold a LIST for the indexer to index?
 
-    A stored-list define keeps its whole value in ONE CTE row per patient. For the indexer that
-    value is a list, and is indexed as one, when its element type is known (``List<String>``,
-    a list literal, a typed list cast) or when the define's body is not property navigation (a
-    query with a ``return`` clause, a list function).
+    A stored-list define keeps its whole value in ONE CTE row per patient, and — by the meaning
+    of the marker — that value IS the element list: a list literal, a typed list cast, a query's
+    ``return`` values, or the elements of a multi-valued FHIR property. ``Indexer(source
+    List<T>, index Integer) T`` (CQL 1.5 §17.6) is therefore the only signature that applies:
+    element 0 is the whole element, element 1 does not exist. The answer is "a list" for every
+    body we can see (``body_ast is not None``), and the element-type branch above is only a
+    fast path.
 
-    Navigation used to be the whole exception; since FHIR4-89 it is only the UNTYPEABLE part of
-    it. A navigation define now carries its element type (``Patient.name.given`` is
-    ``List<String>``) and is therefore claimed by the element-type branch above. What still
-    falls through is a chain whose root is not a FHIR type name — ``define Fam:
-    First([Patient]).name.family`` stays ``List<Any>`` — and that spelling keeps the string
-    Indexer (the CQL-12 doctrine, pinned by
-    ``test_cql_string_indexer_over_scalar_string_define``).
+    FHIR4-81 could not say that, because it could not TYPE a navigation define, so it carved
+    navigation out ("the element type is known, or the body is not a Property"). FHIR4-89
+    removed the reason (a navigation define now carries its element type; the FHIR4-89 sibling
+    ``Patient.name.family`` is ``List<String>`` — 0..1 in R4, flattened through the repeated
+    ``name`` — and ``First([Patient]).name.family`` is that same element). FHIR4-101 removed the
+    carve-out: it was not a guard, it was the DEFECT, because the classes typing still leaves
+    ``List<Any>`` (an untypeable chain, a single-valued navigation such as ``Patient.active``)
+    fell through to ``Indexer(array_extract(value, 1), i)`` and answered a CHARACTER:
 
-    So this OR-half is NOT dead code left over from the typing gap: it is the only thing keeping
-    untypeable chains on the string Indexer, and deleting it would turn ``Fam[0]`` from a
-    character slice (wrong, but defined) into a binder error. Revisit only when the chain root
-    can itself be typed.
+        define "Fam": First([Patient]).name.family      "Fam"[0]  'M'   -> 'Montavon'
+        define "Flag": Patient.active                   "Flag"[0] 't'   -> 'true'
+        define "ExtV": Patient.extension.value          "ExtV"[0] 'h'   -> 'hello'
+
+    The feared failure mode (a binder error) does not exist: the value column holds a list, so
+    ``LIST_EXTRACT`` reads element i+1 and out-of-range/negative indexes stay NULL. A genuine
+    scalar String define is untouched — it is not a stored-list define, so it never reaches this
+    function and keeps the character ``Indexer`` (``'Montavon'[1]`` is still 'o').
+
+    A stored-list define with NO recorded body keeps the string Indexer: with nothing known about
+    the body we do not claim a list we cannot see.
     """
     cql_type = str(getattr(meta, "cql_type", "") or "")
     element_type = ""
@@ -134,7 +145,7 @@ def _stored_list_define_is_a_list(meta: Any, body_ast: Any) -> bool:
         element_type = cql_type[5:-1].split(".")[-1]
     if element_type and element_type != "Any":
         return True
-    return body_ast is not None and not isinstance(body_ast, Property)
+    return body_ast is not None
 
 
 class ListsMixin:

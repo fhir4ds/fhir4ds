@@ -398,15 +398,27 @@ define RegexChain:
 
 
 def test_cql_string_indexer_over_scalar_string_define() -> None:
-    """CQL §17.6: bracket indexing a scalar String-valued define.
+    """CQL §17.6: WHICH indexer signature a define reference takes.
 
-    Regression for the CQL-12 SKEPTIC finding where the RESOURCE_ROWS
-    list-index branch fired on ``has_resource`` alone: scalar defines whose
-    expression contains a Retrieve (``First([Patient]).name.family``) were
-    list-indexed over a one-element resource list, so any index > 0
-    returned NULL instead of the character. Scalar sources must route
-    through the public string ``Indexer`` macro; genuine row-list defines
-    (``define Obs: [Observation]``) must keep the list-index lowering.
+    Two regressions are pinned here together, because telling them apart is the
+    whole point:
+
+    * CQL-12 SKEPTIC — the RESOURCE_ROWS list-index branch fired on
+      ``has_resource`` alone, so a define whose expression merely CONTAINS a
+      retrieve was indexed over a one-element resource list. A genuine row-list
+      define (``define Obs: [Observation]``) must keep the list-index lowering.
+    * FHIR4-101 — the opposite error for the same shape. ``define Fam:
+      First([Patient]).name.family`` is a STORED-LIST define (its value column
+      holds the element list) with a ``List<Any>`` meta, and the FHIR4-81
+      "navigation is the exception" carve-out sent it to the String ``Indexer``:
+      ``Fam[0]`` answered 'M' (a character of 'Montavon') and ``Fam[3]`` 't'.
+      It is a LIST — the FHIR4-89 sibling ``Patient.name.family`` is typed
+      ``List<String>`` (0..1 in R4, flattened through the repeated ``name``) and
+      ``First([Patient]).name.family`` is that same element — so index 0 is the
+      element and any index >= 1 is NULL. EXPECTATION MOVED WITH THE FIX.
+
+    A genuinely scalar String define is the case that really needs the character
+    indexer, and it keeps it (``S[1]`` is 'o').
     """
     cql = """library StringIndexerScalar version '1.0.0'
 using FHIR version '4.0.1'
@@ -417,23 +429,27 @@ define FamFirst: Fam[0]
 define FamNullIndex: Fam[null]
 define FamOutOfRange: Fam[99]
 define FamNegative: Fam[-1]
+define S: 'Montavon'
+define SFirst: S[0]
+define SSecond: S[1]
 define Obs: [Observation]
 define ObsFirstStatus: Obs[0].status
 """
     translated = translate_cql(cql)
 
-    # Scalar string source -> public Indexer macro (null on out-of-range).
+    # Stored-list navigation define -> element indexing (FHIR4-101).
     scalar_sql = translated["FamThird"].to_sql()
-    assert "Indexer(" in scalar_sql
-    assert "list_extract" not in scalar_sql
+    assert "Indexer(" not in scalar_sql
+    assert "list_extract" in scalar_sql.lower()
+    # A genuinely scalar String define -> the public Indexer macro.
+    string_sql = translated["SSecond"].to_sql()
+    assert "Indexer(" in string_sql
+    assert "list_extract" not in string_sql.lower()
     # Genuine RESOURCE_ROWS define keeps the per-patient list indexing.
     rows_sql = translated["ObsFirstStatus"].to_sql()
     assert "list_extract" in rows_sql
 
-    # End-to-end over retrieved data: the scalar string define must yield
-    # the indexed character on both the native and Python-only engines.
-    import duckdb as _duckdb
-
+    # End-to-end over retrieved data, on both the native and Python-only engines.
     from fhir4ds.cql import FHIRDataLoader, evaluate_measure
 
     cql_path = _tmp_cql_path("string_indexer_scalar.cql")
@@ -444,6 +460,8 @@ define ObsFirstStatus: Obs[0].status
         "fam_null_index": "FamNullIndex",
         "fam_out_of_range": "FamOutOfRange",
         "fam_negative": "FamNegative",
+        "s_first": "SFirst",
+        "s_second": "SSecond",
     }
     for cpp in (False, True):
         con = (
@@ -462,13 +480,18 @@ define ObsFirstStatus: Obs[0].status
             )
             df = evaluate_measure(str(cql_path), con, output_columns=output_columns)
             row = df.iloc[0]
-            assert row["fam_third"] == "t", row.to_dict()
-            assert row["fam_first"] == "M", row.to_dict()
+            # FHIR4-101: element 0 is the element; 3 is out of range.
+            assert row["fam_first"] == "Montavon", row.to_dict()
+            assert row["fam_third"] is None or df["fam_third"].isna().iloc[0]
             assert row["fam_null_index"] is None or df["fam_null_index"].isna().iloc[0]
             assert row["fam_out_of_range"] is None or df["fam_out_of_range"].isna().iloc[0]
             assert row["fam_negative"] is None or df["fam_negative"].isna().iloc[0]
+            # a scalar String define keeps character indexing
+            assert row["s_first"] == "M", row.to_dict()
+            assert row["s_second"] == "o", row.to_dict()
         finally:
             con.close()
+
 
 def _tmp_cql_path(name: str):
     import tempfile

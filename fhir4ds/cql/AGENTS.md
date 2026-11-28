@@ -422,12 +422,30 @@
   RESOLVED for navigation defines by FHIR4-89 (4cd9420f5ab), 2026-11-27: a
   stored-list navigation define now carries its element type
   (`define Given: Patient.name.given` is `List<String>`), so `Given[0]` is
-  **'Joel'**, not 'J', and the element-type branch above claims it. STILL a
-  known limit, and now the ONLY one: a chain whose root is not a FHIR type name
-  (`define Fam: First([Patient]).name.family`) stays `List<Any>` and keeps the
-  string Indexer — deleting the `body is not Property` half of
-  `_stored_list_define_is_a_list` would turn `Fam[0]` from a character slice into
-  a binder error. Revisit when the chain root can be typed.
+  **'Joel'**, not 'J', and the element-type branch above claims it.
+  CLOSED by FHIR4-101 (2026-11-27): the `body is not Property` half turned out
+  to be the DEFECT, not a guard. The classes typing still leaves `List<Any>` —
+  an untypeable chain and a single-valued navigation — fell through to
+  `Indexer(array_extract(value, 1), i)` and answered a CHARACTER:
+  `define Fam: First([Patient]).name.family` → `Fam[0]` 'M' (now **'Montavon'**),
+  `define Flag: Patient.active` → 't' (now **'true'**),
+  `define ExtV: Patient.extension.value` → 'h' (now **'hello'**). The feared
+  binder error does not exist: the value column holds a list, so `LIST_EXTRACT`
+  reads element i+1 and out-of-range/negative indexes stay NULL. `Fam` IS the
+  FHIR4-89 sibling `Patient.name.family` (0..1 in R4, flattened through the
+  repeated `name`), which is already `List<String>` — so the list reading is the
+  consistent one. `_stored_list_define_is_a_list` now claims every stored-list
+  define whose body it can see; a NO-BODY define keeps the string Indexer.
+  A genuine scalar String define never reaches it and keeps the character
+  Indexer (`'Montavon'[1]` is still 'o'). Pinned by
+  `duckdb/tests/integration/test_fhir4_101_stored_list_indexer.py` (values AND
+  SQL shape, both engines) and by the re-pinned
+  `test_cql_string_indexer_over_scalar_string_define` /
+  `test_stored_list_define_classifier`.
+  The `bare in ("Any", "List<Any>")` arm of `_is_string_index_source` is now
+  unreachable in every shape probed (matrix + 5 constructed Any-typed scalar
+  spellings); it is kept as the null-safe fallback for an Any-typed NON-stored
+  scalar, not deleted on "could not construct it".
 
 - **A navigation over a SINGLE element is a SCALAR (FHIR4-91, 2026-11-27)**: the indexer
   answers one element (CQL 1.5 §17.6 `Indexer(source List<T>, index Integer) T`), so
