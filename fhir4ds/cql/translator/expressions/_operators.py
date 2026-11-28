@@ -1708,14 +1708,30 @@ class OperatorsMixin:
         if isinstance(operand, Identifier):
             meta = self.context.definition_meta.get(operand.name)
             if meta:
-                # CQL-04 EXPLORER QA-003: a value-bearing primitive define
-                # (`define F: Patient.active`) may be stored as a per-patient
-                # element list (navigation lowering) yet still contribute its
-                # VALUE under CQL 3VL. Fall back to the definition AST's
-                # inferred element type so Boolean values validate; List<Any>
-                # alone must not veto a statically Boolean define.
+                # CQL-04 EXPLORER QA-003 / FHIR4-100: a value-bearing primitive
+                # define (`define F: Patient.active`) may be stored as a
+                # per-patient element list (navigation lowering) yet still
+                # contribute its VALUE under CQL 3VL, so `List<Any>` alone must
+                # not veto a statically Boolean define -- the ELEMENT type is
+                # what every static validator here asks for.
+                #
+                # METADATA FIRST (FHIR4-89/91 gave a navigation define its
+                # element type): a `List<T>` with a real T IS the answer, so the
+                # AST re-derivation is not consulted at all. Only `List<Any>` --
+                # the shapes the typing deliberately leaves untyped -- still
+                # re-derives, and those are exactly:
+                #   * a single-valued navigation (`Patient.active`,
+                #     `Patient.birthDate`, `Patient.gender`,
+                #     `Patient.multipleBirthInteger`): the stored value is a
+                #     one-element list, so the meta cannot say the type, and the
+                #     FHIR schema lookup below supplies the element type;
+                #   * an untypeable chain (`First([Patient]).name.family`),
+                #     which derives nothing and keeps `List<Any>`.
                 cql_type = str(meta.cql_type)
                 if cql_type.startswith("List<"):
+                    declared_element = cql_type[5:-1].strip() if cql_type.endswith(">") else "Any"
+                    if declared_element not in ("", "Any"):
+                        return cql_type
                     ast_defs = getattr(self.context, "_definition_cql_asts", {})
                     ast_def = ast_defs.get(operand.name)
                     if ast_def is not None and ast_def is not operand:
