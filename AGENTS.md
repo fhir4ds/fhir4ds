@@ -6604,6 +6604,30 @@ holds, but the case is not exercising what its name claims.
 Verification on the strict-mode tree: `--suite us-core --skip-errors` 73/73,
 `--suite qi-core --skip-errors` 47/47, CQL conformance 1706/1706.
 
+## A file lifted from a stale worktree silently reverts whatever landed since (2026-11-28)
+
+Two agents worked the same repo from different bases in one session: one on `2e2888d3ee0`, the
+other on `1b97b1afe04`. When the first one's finished files were copied into a worktree at the
+second's tip, its `_lists.py` was **older than a fix that had already landed**, so the copy
+REVERTED that fix — and the suite reported **25 failures in the OTHER card's tests**
+(`test_fhir4_107_filtered_navigation.py`), not in the card under test.
+
+Rules that follow, and they are cheap:
+
+* **Merge, never copy.** `git diff` the agent's files against ITS base, then
+  `git apply --3way` that patch onto the target. A three-way apply keeps both sides' hunks;
+  a copy keeps only the newer mtime.
+* **Read the failing test NAMES before believing the exit code.** A failure cluster in a
+  different card's file is the tell that the integration clobbered it, not that the fix under
+  test is bad. Every failing test here was a filtered-navigation test; zero were FHIR4-92 tests.
+* Ask an agent for its **base commit** in its report. "Measured on the working tree" is not a
+  base, and a report that omits it cannot be integrated safely.
+* After any such merge, run the pins of BOTH cards plus the neighbours that touch the same file
+  (here: FHIR4-70/72/109) — that is what proved the merge kept both fixes.
+
+This is the same family as the staging hazard above, one level up: staging a shared FILE swept
+another agent's uncommitted hunks in; copying a whole file swept a committed fix out.
+
 ## A claim about a COMMIT must come from a clean worktree at that commit (2026-11-26)
 
 Learned the hard way. A peer reported that dev tip `8bc1fb35672` failed 12 translator
