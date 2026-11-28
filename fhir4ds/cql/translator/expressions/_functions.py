@@ -346,6 +346,20 @@ _FHIR_TO_CQL_TYPE_NAMES = {
     "time": "Time",
 }
 
+
+def _list_element_is_quantity(cql_type: str) -> bool:
+    """True for a list of Quantity in either type spelling (FHIR4-108).
+
+    The definition metadata keeps the authored spelling, so the same element type
+    arrives as ``List<Quantity>`` or as ``List<FHIR.Quantity>``; a model prefix is
+    not part of the element type.
+    """
+    if not (cql_type.startswith("List<") and cql_type.endswith(">")):
+        return False
+    element = cql_type[5:-1].strip()
+    return element.rsplit(".", 1)[-1].lower() == "quantity"
+
+
 class FunctionsMixin:
     """Mixin providing function reference, exists, and age translations."""
 
@@ -3021,7 +3035,6 @@ class FunctionsMixin:
                 meta is not None
                 and getattr(meta, "stores_list_value", False)
                 and not meta.has_resource
-                and cql_type != "List<Quantity>"
             ):
                 source_sql = self.translate(arg, usage=ExprUsage.SCALAR)
                 # Iteration 7 QA-011: expand/collapse stored-list defines
@@ -3043,6 +3056,18 @@ class FunctionsMixin:
                         name="from_json",
                         args=[source_sql, SQLLiteral(value='["VARCHAR"]')],
                     )
+                # FHIR4-108: a Quantity list is summed and compared UNIT-aware.
+                # The stored value column is a VARCHAR[] of Quantity JSON text,
+                # so the plain list_* aggregates below would order that text as
+                # text — and a stored Quantity list used to leave this branch by
+                # its element type, which dropped the aggregate onto a SQL row
+                # aggregate over the scalar subquery (BinderException GROUP BY).
+                if _list_element_is_quantity(cql_type):
+                    _quantity = self._translate_list_aggregate_dispatch(
+                        name, source_sql, {"Quantity"},
+                    )
+                    if _quantity is not None:
+                        return _quantity
                 if name.lower() == "count":
                     filtered = SQLFunctionCall(
                         name="list_filter",
@@ -3098,6 +3123,13 @@ class FunctionsMixin:
                 ) else ""
                 _inner = _FHIR_TO_CQL_TYPE_NAMES.get(_inner.lower(), _inner)
                 _row_elems = {_inner} if _inner else None
+                if _row_elems is not None and _list_element_is_quantity(cql_type):
+                    # FHIR4-108: `List<FHIR.Quantity>` is the same element type as
+                    # `List<Quantity>`. Left in its authored spelling it was not
+                    # recognised as a Quantity, so Sum fell to a SQL row aggregate
+                    # (BinderException GROUP BY) and Min/Max ordered the Quantity
+                    # JSON as text.
+                    _row_elems = {"Quantity"}
                 if _row_elems is None:
                     _def_ast = getattr(self.context, "_definition_cql_asts", {}).get(arg.name)
                     if _def_ast is not None:
@@ -3159,7 +3191,7 @@ class FunctionsMixin:
                     )
                     if _dispatched is not None:
                         return _dispatched
-            if cql_type == "List<Quantity>":
+            if _list_element_is_quantity(cql_type):
                 definition_ast = getattr(self.context, "_definition_cql_asts", {}).get(arg.name)
                 if definition_ast is not None:
                     source_sql = self.translate(definition_ast, usage=ExprUsage.SCALAR)

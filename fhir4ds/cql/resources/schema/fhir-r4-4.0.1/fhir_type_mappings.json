@@ -23,7 +23,8 @@
     "precomputed_path_udf_overrides": {
         "period": "fhirpath_text",
         "effective": "fhirpath_text",
-        "performed": "fhirpath_text"
+        "performed": "fhirpath_text",
+        "valueQuantity": "fhirpath_text"
     },
     "default_precomputed_paths": [
         "status",

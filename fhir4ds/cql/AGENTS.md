@@ -317,6 +317,33 @@
 
 ## Known Fragile Areas
 
+- **A Quantity list is aggregated unit-aware, whatever spelling carries its type
+  (FHIR4-108, 2026-11-28)**: `_functions.py::_list_element_is_quantity` recognises both
+  `List<Quantity>` and `List<FHIR.Quantity>` (definition metadata keeps the authored
+  spelling), and the stored-list and element-rows branches of `_translate_aggregate_pre`
+  dispatch such defines through `_translate_list_aggregate_dispatch(…, {"Quantity"})` —
+  `list_reduce` with `quantityAdd` / `quantityCompare`, converted across units. Excluding
+  them (the old `cql_type != "List<Quantity>"` gate) dropped the aggregate onto a SQL ROW
+  aggregate over the define's demoted scalar: `SUM(TRY_CAST((SELECT sub.value …) AS DOUBLE))`
+  beside the patient column is `Binder Error: column "patient_id" must appear in the GROUP BY
+  clause`, and the `FHIR.Quantity` spelling reached `list_min`/`list_max`/`list_sum` over
+  Quantity JSON TEXT. A Quantity list must never reach those list aggregates or a row
+  aggregate. The dispatch sits AFTER the expand/collapse `from_json` conversion (a
+  JSON-array-text value column must be parsed first) and leaves `Count` as it was.
+  **A Quantity-typed precomputed column must hold the OBJECT, not a number.** The retrieve
+  precompute mapped `Quantity -> fhirpath_number`, which is NULL for a Quantity object on both
+  engines, so `[Observation] O return O.valueQuantity as Quantity` answered Count 0 and null
+  aggregates SILENTLY (`parse_quantity(CAST(NULL AS VARCHAR))`). `valueQuantity` is now
+  overridden to `fhirpath_text` in `precomputed_path_udf_overrides` of BOTH
+  `fhir_type_mappings.json` copies (the versioned schema and the legacy `resources/fhir/r4`),
+  the file's existing mechanism; the general `Quantity -> fhirpath_number` mapping is
+  unchanged, and `get_udf_for_element` still uses it outside the precompute — measure before
+  changing it. TRAP: a multi-path precomputed column is registered under the JOINED string of
+  its paths (`cte_builder.py`), which `ColumnRegistry.lookup` never matches, so such a column
+  is dead and navigation falls back to `fhirpath_text` — a coincident `.value` consumer made
+  the cast above look correct in an earlier probe. Tests:
+  `duckdb/tests/integration/test_fhir4_108_quantity_list_aggregates.py`.
+
 - **A filtered navigation is ONE navigation (FHIR4-107, 2026-11-28)**: a query
   whose only clause is a `where` over a navigation — the every-day
   `Patient.extension.where(url = '…').value` — lowers to ONE FHIRPath call on the
@@ -8990,7 +9017,7 @@ REUSES `_FOLD_ACCUMULATOR_SQL_TYPES` so the two answers cannot drift.
   stays JSON text anyway. Do not "unify" the two without re-running DQM.
 - Shape asserted, not just value: `CAST(NULL AS VARCHAR[])` also answers NULL
   for `"L"[0]`, so a value-only assertion passes on the broken form.
-- **Known sibling gap, carded separately (FHIR4-108), do NOT attribute it
+- **Known sibling gap, carded separately (FHIR4-108; RESOLVED 2026-11-28), do not attribute it
   here:** `Sum(<stored-list define>)` with a **Quantity** element type lowers to
   a SQL row aggregate `SUM(TRY_CAST(<scalar subquery> AS DOUBLE))` instead of
   the `list_sum(list_transform(...))` path the Integer case takes, so it
