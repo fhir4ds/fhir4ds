@@ -394,6 +394,33 @@ _FOLD_NUMERIC_WIDENING = {
 }
 
 
+def _list_element_sql_type(element_cql_type: str | None) -> str:
+    """The DuckDB ARRAY type of a statically declared list element type (FHIR4-99).
+
+    A ``(null as List<T>)`` definition stores the whole element list in its value column, and
+    that column used to be cast to ``VARCHAR[]`` no matter what ``T`` said.  The definition's
+    META was right (``List<Integer>``, fixed by FHIR4-75) while the column was text, so any
+    consumer that took one element and did arithmetic with it was adding VARCHAR to a number:
+
+        "L"[0] + 1                      -> Binder Error: '+(VARCHAR, INTEGER_LITERAL)'
+        ("L") N return N + 1            -> the same
+
+    There is no data to transport here — the list is statically null — so the only thing the
+    column type can carry is the element type the cast just declared, and it should carry it.
+    Element types that this translator transports as JSON TEXT (``Quantity``, ``Interval<T>``,
+    ``Concept``, ``Any``, a tuple, ...) keep ``VARCHAR[]``: that is the representation their
+    consumers already decode, and inventing a native type for them would change the transport
+    rather than the type.  Reuses the fold-accumulator table so the two answers cannot drift.
+    """
+    base = str(element_cql_type or "").strip()
+    if "<" in base:  # Interval<Date>, List<Integer>, Choice<...> — the JSON-text family
+        return "VARCHAR[]"
+    sql_type = _FOLD_ACCUMULATOR_SQL_TYPES.get(base)
+    if sql_type is None:
+        return "VARCHAR[]"
+    return f"{sql_type}[]"
+
+
 def _fold_accumulator_sql_type(
     start_cql_type: str | None, body_cql_type: str | None
 ) -> str | None:

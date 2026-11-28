@@ -2296,8 +2296,16 @@ class CQLToSQLTranslator(CTEManagerMixin, CorrelationMixin, IncludeHandlerMixin,
                 from ..translator.context import RowShape as _CastRowShape
                 shape = _CastRowShape.PATIENT_SCALAR
                 if _typed_list_cast_is_null(definition.expression):
-                    # Keep the stored null list-typed, like any other stored list.
-                    result = SQLCast(expression=SQLNull(), target_type="VARCHAR[]")
+                    # Keep the stored null list-typed, like any other stored list — and give the
+                    # column the ELEMENT type the cast declared (FHIR4-99). It used to be
+                    # VARCHAR[] for every T, so `"L"[0] + 1` for `(null as List<Integer>)` was
+                    # `+(VARCHAR, INTEGER_LITERAL)` and binder-failed even though the META said
+                    # List<Integer>. Element types transported as JSON text keep VARCHAR[].
+                    from .expressions._utils import _list_element_sql_type
+                    result = SQLCast(
+                        expression=SQLNull(),
+                        target_type=_list_element_sql_type(_typed_list_element),
+                    )
 
             # CQL-19 EXPLORER QA-001: an alias define (`define B: A`) whose
             # target is a stored-list define is itself a stored-list define —

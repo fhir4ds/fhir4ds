@@ -8889,6 +8889,45 @@ and `fhir4ds/cql/duckdb/tests/integration/test_fhir4_94_convert_quantity.py`
 (which pins the SQL text, the values, the nulls, and the CQL-06 UCUM Julian
 factors so a future re-route cannot silently re-implement them).
 
+## FHIR4-99 — a declared element type the COLUMN contradicts is worse than no type
+
+A `(null as List<T>)` definition stores the whole element list in its value
+column. FHIR4-75 made the META right (`List<Integer>`, `stores_list_value`,
+`PATIENT_SCALAR`) but the column was hard-coded `CAST(NULL AS VARCHAR[])` for
+every `T`, so the declared type and the physical type disagreed:
+
+    define "L": (null as List<Integer>)
+    "L" -> SELECT _pt.patient_id, CAST(NULL AS VARCHAR[]) AS value ...
+
+Every consumer that took one element and did arithmetic then added VARCHAR to a
+number — `"L"[0] + 1` and `("L") N return N + 1` both died with
+`Binder Error: No function matches '+(VARCHAR, INTEGER_LITERAL)'`. A
+statically null list has no data to transport, so the only thing its column type
+can carry is the element type the cast just declared; `_utils._list_element_sql_type`
+now emits it (`INTEGER[]`, `BIGINT[]`, `BOOLEAN[]`, `DECIMAL(38,8)[]`) and
+REUSES `_FOLD_ACCUMULATOR_SQL_TYPES` so the two answers cannot drift.
+
+- **Element types transported as JSON TEXT deliberately keep `VARCHAR[]`**:
+  `Quantity`, `Interval<T>`, `Concept`, `Any`, tuples, and String (whose text IS
+  the representation). Their consumers already decode text, so giving them a
+  native array type would change the TRANSPORT, not the type. Pinned in
+  `test_fhir4_99_typed_null_list_element_type.py` precisely so "make it typed"
+  cannot quietly become "make everything typed".
+- **`_fold_list_start_sql` (`_utils.py`) is a DIFFERENT site and still anchors
+  folds with `VARCHAR[]`.** That is load-bearing: the corpus's only typed-null
+  list starts are `null as List<Interval<Date>>` in
+  `CumulativeMedicationDuration` (CMS122/CMS1017/CMS832), an element type that
+  stays JSON text anyway. Do not "unify" the two without re-running DQM.
+- Shape asserted, not just value: `CAST(NULL AS VARCHAR[])` also answers NULL
+  for `"L"[0]`, so a value-only assertion passes on the broken form.
+- **Known sibling gap, carded separately (FHIR4-108), do NOT attribute it
+  here:** `Sum(<stored-list define>)` with a **Quantity** element type lowers to
+  a SQL row aggregate `SUM(TRY_CAST(<scalar subquery> AS DOUBLE))` instead of
+  the `list_sum(list_transform(...))` path the Integer case takes, so it
+  binder-fails on `GROUP BY patient_id` AND would answer NULL anyway (a Quantity
+  does not `TRY_CAST` to DOUBLE). It reproduces with `({} as List<Quantity>)`,
+  which this change never touches, so it is not a regression from FHIR4-99.
+
 ## FHIR4-83 — a fold accumulator's CQL type is its STARTING VALUE's type
 
 `({1, 2, 3}) X aggregate R starting 0 'mg': R + 1 'mg'` answered NULL: the fold
