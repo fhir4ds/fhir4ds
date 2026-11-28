@@ -6796,6 +6796,15 @@ class OperatorsMixin:
             nodes = self._sql_unique_nodes(operand)
             if not nodes:
                 return left, right
+            # FHIR4-91: a scalar navigation over a single element (`X[i].id`,
+            # `First(X).id`) embeds the per-patient element list in its
+            # `LIST_EXTRACT(<list>, i)` source but the RESULT is one scalar, so it is
+            # not a list operand at all — hoisting it would hand the operator a value
+            # CTE typed `List<Any>` and route `"Rows"[1].id = 'c2'` to the LIST
+            # equality macro over a VARCHAR.
+            if getattr(operand, "scalar_navigation", False):
+                operands.append((operand, nodes, 0))
+                continue
             operands.append((operand, nodes, self._correlated_list_aggregate_count(nodes)))
 
         if not operands[0][2] and not operands[1][2]:

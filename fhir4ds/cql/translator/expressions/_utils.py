@@ -136,6 +136,53 @@ def _promote_source_trail(node):
     return node
 
 
+def _navigation_source_is_single_element(source) -> bool:
+    """True when a navigation source statically yields AT MOST ONE element.
+
+    ``X[i]`` (Indexer), ``First(X)``, ``Last(X)`` and ``singleton from X`` select one element
+    (or null) out of a collection, so a property access over one of them is a SCALAR
+    navigation: ``"Rows"[1].id`` is the id of ONE resource, exactly as ``Patient.gender`` is
+    one value. CQL 1.5 §17.6 Indexer returns ``T``, not ``List<T>``.
+
+    Two independent classifiers assumed "navigation body ⇒ multi-valued FHIR element" and
+    mistyped every such define (FHIR4-91):
+
+    * the define-materialisation heuristic in ``translator.py`` treats a bare 2-arg
+      ``fhirpath_text`` body as a dynamic multi-valued property and rewraps it as the list
+      projection ``from_json(fhirpath(...), '["VARCHAR"]')`` (``List<Any>`` plus
+      ``stores_list_value``), so ``"Rows"[1].id`` projected ``['c2']`` instead of ``'c2'``;
+    * ``_is_list_typed_ast`` (``_temporal_intervals.py``) claimed the same navigation as a
+      list OPERAND, so ``"Rows"[1].id = 'c2'`` lowered to a LIST comparison over a VARCHAR
+      and raised ``BinderException: array_length(VARCHAR)``.
+
+    Both callers consult THIS predicate, so one definition of "single element" serves them.
+    """
+    from ...parser.ast_nodes import (
+        FirstExpression,
+        FunctionRef,
+        IndexerExpression,
+        LastExpression,
+        SingletonExpression,
+        UnaryExpression,
+    )
+
+    if isinstance(
+        source, (IndexerExpression, FirstExpression, LastExpression, SingletonExpression)
+    ):
+        return True
+    if isinstance(source, UnaryExpression):
+        operator = (getattr(source, "operator", "") or "").strip().lower()
+        if operator in {"singleton from", "singletonfrom"}:
+            return True
+    if isinstance(source, FunctionRef):
+        # ``singleton from X`` parses as a UnaryExpression; the FUNCTION spellings
+        # (``SingletonFrom(X)``, ``First(X)``, ``Last(X)``) arrive as FunctionRef.
+        name = (getattr(source, "name", "") or "").strip().lower()
+        if name in {"singletonfrom", "first", "last"}:
+            return True
+    return False
+
+
 def _promote_fhirpath_text_list(node):
     """Rewrite a scalar 2-arg ``fhirpath_text(...)`` call to its list-valued
     projection ``from_json(fhirpath(...), '["VARCHAR"]')``.
@@ -148,6 +195,13 @@ def _promote_fhirpath_text_list(node):
     ("the right side may be multi-valued (e.g., claimItem.diagnosisSequence)").
     """
     from ...translator.types import SQLLiteral
+
+    # FHIR4-91: a navigation over a SINGLE element (`X[i].id`, `First(X).id`,
+    # `(singleton from X).id`) is a scalar, not a dynamic multi-valued property. The
+    # property translator marks it; promoting it would wrap a scalar into a one-element
+    # list (`Length("Rows"[1].id)` answered 1 — the list length — instead of 2).
+    if getattr(node, "scalar_navigation", False):
+        return node
 
     if (
         isinstance(node, SQLFunctionCall)
